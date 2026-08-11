@@ -37,6 +37,8 @@ jobs:
         id: update
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ matrix.repo_name }}
         run: |
           cd pkg_dir
 
@@ -150,11 +152,7 @@ jobs:
               ;;
             linux-cachyos-cjktty)
               eval "$info"
-              # 从 info 中提取 CHANGED 变量
-              # 因为 info 格式为 "TYPE=cachyos;CHANGED=true/false"，我们需要解析
-              # 但我们可以直接使用之前设置的 changed 变量，因为它在 eval 之前已经定义
-              # 不过 info 中的 changed 可能被覆盖，所以我们保留之前设置的 changed
-              # 这里不再修改 changed
+              # 使用之前已经设置好的 changed 变量
               ;;
             snd-pcsp-dkms)
               eval "$info"
@@ -176,7 +174,8 @@ jobs:
               su builder -c "makepkg --printsrcinfo > .SRCINFO"
               git add PKGBUILD .SRCINFO
               git commit -m "chore: auto update PKGBUILD & .SRCINFO" || true
-              git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git HEAD || true
+              # 使用外部环境变量构建正确的仓库 URL
+              git push https://x-access-token:${GH_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.git HEAD || true
             fi
             echo "changed=true" >> $GITHUB_OUTPUT
           else
@@ -187,9 +186,10 @@ jobs:
           # 赋予脚本执行权限
           chmod +x /tmp/update_version.sh
 
+          # 执行脚本，传入当前仓库名
           /tmp/update_version.sh "${{ matrix.repo_name }}" || true
 
-          # 注意：由于脚本中已经处理了所有逻辑并输出了 changed，这里不再需要额外的 updpkgsums 等
+          # 注意：脚本内已处理所有逻辑，此处无需额外操作
 
       - name: 云端编译 `.pkg.tar.zst`
         if: steps.update.outputs.changed == 'true'
