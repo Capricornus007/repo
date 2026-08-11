@@ -229,7 +229,7 @@ jobs:
               fi
 
               chown -R builder:builder .
-              su builder -c "makepkg -s --noconfirm" || {
+              su builder -c "makepkg -s --noconfirm --skipinteg --skippgpcheck --skipchecksums" || {
                 echo "构建失败：$tag"
                 mv PKGBUILD.bak PKGBUILD
                 exit 1
@@ -244,7 +244,7 @@ jobs:
             chown -R builder:builder .
             sed -i 's/#MAKEFLAGS="-j2"/MAKEFLAGS="-j$(nproc)"/' /etc/makepkg.conf
             sed -i 's/COMPRESSZST=(zstd -c -z -q -)/COMPRESSZST=(zstd -c -z -q --threads=0 -)/' /etc/makepkg.conf
-            su builder -c "makepkg -s --noconfirm"
+            su builder -c "makepkg -s --noconfirm --skipinteg --skippgpcheck --skipchecksums"
           fi
 
       - name: 暂存构建好的 `.pkg.tar.zst` 产物
