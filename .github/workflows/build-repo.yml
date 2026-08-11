@@ -183,6 +183,22 @@ jobs:
               fi
               echo "构建版本：$tag"
               tag_part="${tag#cachyos-}"
+
+              # ---- 根据版本类型下载对应的 config 并追加 CJK 支持 ----
+              if [[ "$tag" == *"-rc"* ]]; then
+                config_url="https://github.com/CachyOS/linux-cachyos/raw/refs/heads/master/linux-cachyos-rc/config"
+              else
+                config_url="https://github.com/CachyOS/linux-cachyos/raw/refs/heads/master/linux-cachyos/config"
+              fi
+              echo "下载 config 文件：$config_url"
+              curl -s -o config "$config_url" || {
+                echo "错误：下载 config 失败"
+                exit 1
+              }
+              echo "CONFIG_FONT_CJK_16x16=y" >> config
+              echo "CONFIG_FONT_CJK_32x32=y" >> config
+
+              # ---- 解析版本信息 ----
               if [[ "$tag_part" == *"-rc"* ]]; then
                 major="${tag_part%-rc*}"
                 rcver="rc${tag_part#*-rc}"
@@ -224,6 +240,7 @@ jobs:
             build_version "$RELEASE_TAG"
             build_version "$RC_TAG"
           else
+            # 其他包的单次构建（原逻辑）
             chown -R builder:builder .
             sed -i 's/#MAKEFLAGS="-j2"/MAKEFLAGS="-j$(nproc)"/' /etc/makepkg.conf
             sed -i 's/COMPRESSZST=(zstd -c -z -q -)/COMPRESSZST=(zstd -c -z -q --threads=0 -)/' /etc/makepkg.conf
