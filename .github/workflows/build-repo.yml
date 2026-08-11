@@ -8,6 +8,11 @@ on:
     - cron: '0 0 * * *'
   workflow_dispatch:
 
+# 自动取消正在运行的同分支旧任务
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-packages:
     runs-on: ubuntu-latest
@@ -68,7 +73,6 @@ jobs:
           current_pkgver="$pkgver"
           changed=false
 
-          # 检测逻辑直接写在 case 中，不通过函数返回复杂结构
           case "$REPO_NAME" in
             linux-zencjk)
               latest_tag=$(curl -s "https://api.github.com/repos/zen-kernel/zen-kernel/tags" | jq -r '.[0].name')
@@ -94,16 +98,13 @@ jobs:
               ;;
 
             linux-cachyos-cjktty)
-              # 获取所有 cachyos-7. 开头的 release tag
               all_tags=$(curl -s "https://api.github.com/repos/CachyOS/linux/releases" | jq -r '.[].tag_name | select(test("^cachyos-7\\."))')
               release_tag=$(echo "$all_tags" | grep -v '\-rc' | sort -V | tail -n1)
               rc_tag=$(echo "$all_tags" | grep '\-rc' | sort -V | tail -n1)
 
-              # 保存版本信息供后续构建使用
               echo "RELEASE_TAG=$release_tag" > /tmp/cachyos_versions
               echo "RC_TAG=$rc_tag" >> /tmp/cachyos_versions
 
-              # 检测是否有更新（正式版或 RC 版与当前不同）
               changed_local=false
               if [ -n "$release_tag" ]; then
                 ver_part="${release_tag#cachyos-}"
@@ -146,15 +147,12 @@ jobs:
               ;;
           esac
 
-          # 根据 changed 执行后续操作
           if [ "$changed" = "true" ]; then
-            # 对于非 cachyos 包，更新校验和并提交
             if [ "$REPO_NAME" != "linux-cachyos-cjktty" ]; then
               su builder -c "updpkgsums" || true
               su builder -c "makepkg --printsrcinfo > .SRCINFO"
               git add PKGBUILD .SRCINFO
               git commit -m "chore: auto update PKGBUILD & .SRCINFO" || true
-              # 推送时使用环境变量
               git push https://x-access-token:${GH_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.git HEAD || true
             fi
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -186,17 +184,29 @@ jobs:
 
               # ---- 根据版本类型下载对应的 config 并追加 CJK 支持 ----
               if [[ "$tag" == *"-rc"* ]]; then
-                config_url="https://github.com/CachyOS/linux-cachyos/raw/refs/heads/master/linux-cachyos-rc/config"
+                config_url="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos-rc/config"
               else
-                config_url="https://github.com/CachyOS/linux-cachyos/raw/refs/heads/master/linux-cachyos/config"
+                config_url="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos/config"
               fi
               echo "下载 config 文件：$config_url"
-              curl -s -o config "$config_url" || {
-                echo "错误：下载 config 失败"
-                exit 1
-              }
-              echo "CONFIG_FONT_CJK_16x16=y" >> config
-              echo "CONFIG_FONT_CJK_32x32=y" >> config
+              curl -s -o config "$config_url" || { echo "错误：下载 config 失败"; exit 1; }
+              # 无损追加 CJK 字体支持
+              if ! grep -q "CONFIG_FONT_CJK_16x16=y" config; then
+                echo "CONFIG_FONT_CJK_16x16=y" >> config
+              fi
+              if ! grep -q "CONFIG_FONT_CJK_32x32=y" config; then
+                echo "CONFIG_FONT_CJK_32x32=y" >> config
+              fi
+
+              # ---- 根据 tag 决定使用哪个补丁（7.1 或 7.2） ----
+              if [[ "$tag" == *"7.2"* ]]; then
+                patch_version="7.2-rc7"
+              else
+                patch_version="7.1"
+              fi
+              patch_url="https://raw.githubusercontent.com/Capricornus007/cjktty-patches/master/v7.x/cjktty-${patch_version}.patch"
+              echo "下载补丁文件：$patch_url"
+              curl -s -L -o "0001-cjktty.patch" "$patch_url" || { echo "错误：下载补丁失败"; exit 1; }
 
               # ---- 解析版本信息 ----
               if [[ "$tag_part" == *"-rc"* ]]; then
@@ -217,6 +227,8 @@ jobs:
               cp PKGBUILD PKGBUILD.bak
               sed -i "s/^pkgver=.*/pkgver=$pkgver/" PKGBUILD
               sed -i "s/^_srcname=.*/_srcname=$srcname/" PKGBUILD
+              # ---- 修改补丁 source 行，使用本地文件 ----
+              sed -i 's|^[[:space:]]*"0001-cjktty.patch::.*|  "0001-cjktty.patch"|' PKGBUILD
               if [[ "$tag" == *"-rc"* ]]; then
                 sed -i "s/^_major=.*/_major=$major/" PKGBUILD
                 sed -i "s/^_minor=.*/#_minor=/" PKGBUILD
@@ -229,7 +241,7 @@ jobs:
               fi
 
               chown -R builder:builder .
-              su builder -c "makepkg -s --noconfirm --skipinteg --skippgpcheck --skipchecksums" || {
+              su builder -c "makepkg -s --noconfirm --skipinteg" || {
                 echo "构建失败：$tag"
                 mv PKGBUILD.bak PKGBUILD
                 exit 1
@@ -244,7 +256,7 @@ jobs:
             chown -R builder:builder .
             sed -i 's/#MAKEFLAGS="-j2"/MAKEFLAGS="-j$(nproc)"/' /etc/makepkg.conf
             sed -i 's/COMPRESSZST=(zstd -c -z -q -)/COMPRESSZST=(zstd -c -z -q --threads=0 -)/' /etc/makepkg.conf
-            su builder -c "makepkg -s --noconfirm --skipinteg --skippgpcheck --skipchecksums"
+            su builder -c "makepkg -s --noconfirm"
           fi
 
       - name: 暂存构建好的 `.pkg.tar.zst` 产物
