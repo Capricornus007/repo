@@ -75,11 +75,15 @@ jobs:
                 echo "TYPE=lts;VERSION=$latest_ver"
                 ;;
               linux-cachyos-cjktty)
-                latest_tag=$(curl -s "https://api.github.com/repos/CachyOS/linux/tags" | jq -r '.[0].name')
+                latest_tag=$(curl -s "https://api.github.com/repos/CachyOS/linux/tags" | jq -r '.[].name | select(startswith("cachyos-7."))' | sort -V | tail -n1)
+                if [ -z "$latest_tag" ]; then
+                  echo "错误：未找到 7.x 系列的 tag" >&2
+                  exit 1
+                fi
                 tag_part="${latest_tag#cachyos-}"
                 if [[ "$tag_part" == *"-rc"* ]]; then
                   major="${tag_part%-rc*}"
-                  rcver="rc${tag_part#*-rc}"
+                  rcver="rc$(echo "$tag_part" | grep -oP '(?<=-rc)[0-9]+')"
                   echo "TYPE=cachyos-rc;MAJOR=$major;RCVER=$rcver"
                 else
                   ver_part="${tag_part%-*}"
@@ -90,7 +94,7 @@ jobs:
                 fi
                 ;;
               snd-pcsp-dkms)
-                latest_ver=$(curl -s "https://www.kernel.org/releases.json" | jq -r '.releases[] | select(.stable == true) | .version' | sort -V | tail -n1)
+                latest_ver=$(curl -s "https://www.kernel.org/releases.json" | jq -r '.latest_stable.version')
                 echo "TYPE=snd;VERSION=$latest_ver"
                 ;;
               *)
@@ -193,7 +197,8 @@ jobs:
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add PKGBUILD .SRCINFO
             git commit -m "chore: auto update PKGBUILD & .SRCINFO" || true
-            git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git main || true
+            # 推送时使用 HEAD 而非固定分支名
+            git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git HEAD || true
           else
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
@@ -205,7 +210,8 @@ jobs:
           chown -R builder:builder .
           sed -i 's/#MAKEFLAGS="-j2"/MAKEFLAGS="-j$(nproc)"/' /etc/makepkg.conf
           sed -i 's/COMPRESSZST=(zstd -c -z -q -)/COMPRESSZST=(zstd -c -z -q --threads=0 -)/' /etc/makepkg.conf
-          su builder -c "makepkg -syn --noconfirm"
+          # 修正 makepkg 参数（-y 是 pacman 选项，makepkg 不支持）
+          su builder -c "makepkg -s --noconfirm"
 
       - name: 暂存构建好的 `.pkg.tar.zst` 产物
         if: steps.update.outputs.changed == 'true'
