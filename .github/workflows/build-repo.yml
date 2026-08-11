@@ -1,6 +1,9 @@
 name: Build Pacman Repository
 
 on:
+  push:
+    branches:
+      - master
   schedule:
     - cron: '0 0 * * *'
   workflow_dispatch:
@@ -36,10 +39,18 @@ jobs:
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           cd pkg_dir
+
+          # 解决 Git 安全目录问题
+          git config --global --add safe.directory "$PWD"
+
+          # 建立普通用户
           useradd builder -m || true
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           chown -R builder:builder .
 
+          # ------------------------------------------------------------
+          # 1. 版本检测与 PKGBUILD 修改脚本
+          # ------------------------------------------------------------
           cat > /tmp/update_version.sh << 'EOF'
           #!/bin/bash
           set -e
@@ -164,11 +175,18 @@ jobs:
           esac
           EOF
 
+          # 赋予脚本执行权限
+          chmod +x /tmp/update_version.sh
+
           /tmp/update_version.sh "${{ matrix.repo_name }}" || true
 
+          # ------------------------------------------------------------
+          # 2. 更新校验和与 .SRCINFO
+          # ------------------------------------------------------------
           su builder -c "updpkgsums" || true
           su builder -c "makepkg --printsrcinfo > .SRCINFO"
 
+          # 检查是否有改动
           if git status --porcelain | grep -q .; then
             echo "changed=true" >> $GITHUB_OUTPUT
             git config user.name "github-actions[bot]"
