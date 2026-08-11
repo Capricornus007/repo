@@ -1,0 +1,293 @@
+name: Build Pacman Repository
+
+on:
+  schedule:
+    - cron: '0 0 * * *'   # 每天自动检查并构建
+  workflow_dispatch:      # 支持手动触发
+
+jobs:
+  build-packages:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        repo_name: [snd-pcsp-dkms, linux-zencjk, linux-ltscjk, linux-cachyos-cjktty]
+
+    container:
+      image: archlinux:base-devel
+      options: --privileged
+
+    steps:
+      - name: 释放 Runner 磁盘空间 (防止内核编译磁盘爆满)
+        run: |
+          rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
+
+      - name: 初始化 Arch Linux 环境
+        run: |
+          pacman -Syu --noconfirm git jq curl sudo devtools pacman-contrib
+
+      - name: 拉取对应的套件仓库
+        run: |
+          git clone https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git pkg_dir
+
+      - name: 检查上游/AUR 更新并自动 Bump PKGBUILD
+        id: update
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          cd pkg_dir
+
+          # 建立普通用户 (Arch 严禁 root 直接执行 makepkg/updpkgsums)
+          useradd builder -m || true
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+          chown -R builder:builder .
+
+          # ------------------------------------------------------------
+          # 1. 根据仓库名执行版本检测与 PKGBUILD 修改
+          #    这里包含了所有仓库的逻辑，包括 snd-pcsp-dkms 的最新稳定版追踪
+          # ------------------------------------------------------------
+          cat > /tmp/update_version.sh << 'EOF'
+          #!/bin/bash
+          set -e
+
+          REPO_NAME="$1"
+          PKGBUILD="PKGBUILD"
+          if [ ! -f "$PKGBUILD" ]; then
+            echo "错误：找不到 PKGBUILD" >&2
+            exit 1
+          fi
+
+          # 读取当前版本 (仅读取变量，不执行任何函数)
+          source "$PKGBUILD"
+          current_pkgver="$pkgver"
+
+          # ---------- 各仓库版本获取函数 ----------
+          get_latest_info() {
+            case "$REPO_NAME" in
+              linux-zencjk)
+                # 从 zen-kernel tags 获取最新版本，格式 v7.1.8-zen1 → 7.1.8.zen1
+                latest_tag=$(curl -s "https://api.github.com/repos/zen-kernel/zen-kernel/tags" | jq -r '.[0].name')
+                latest_ver=$(echo "$latest_tag" | sed 's/^v//' | sed 's/-/./')
+                echo "TYPE=zen;VERSION=$latest_ver"
+                ;;
+              linux-ltscjk)
+                # 从 kernel.org 获取 6.12.x 最新版本
+                latest_ver=$(curl -s "https://www.kernel.org/releases.json" | jq -r '.releases[] | select(.version | startswith("6.12.")) | .version' | sort -V | tail -n1)
+                echo "TYPE=lts;VERSION=$latest_ver"
+                ;;
+              linux-cachyos-cjktty)
+                # 获取 CachyOS 最新 tag
+                latest_tag=$(curl -s "https://api.github.com/repos/CachyOS/linux/tags" | jq -r '.[0].name')
+                # 去除前缀 "cachyos-"
+                tag_part="${latest_tag#cachyos-}"   # 例如 "7.2-rc8" 或 "7.1.9-1"
+                # 判断是否包含 "-rc"
+                if [[ "$tag_part" == *"-rc"* ]]; then
+                  # RC 版本，格式如 7.2-rc8
+                  major="${tag_part%-rc*}"          # 7.2
+                  rcver="rc${tag_part#*-rc}"        # rc8
+                  echo "TYPE=cachyos-rc;MAJOR=$major;RCVER=$rcver"
+                else
+                  # 正式版本，格式如 7.1.9-1
+                  ver_part="${tag_part%-*}"         # 7.1.9
+                  tagrel="${tag_part##*-}"          # 1
+                  major="${ver_part%.*}"            # 7.1
+                  minor="${ver_part##*.}"           # 9
+                  echo "TYPE=cachyos-release;MAJOR=$major;MINOR=$minor;TAGREL=$tagrel;VERSION=$ver_part"
+                fi
+                ;;
+              snd-pcsp-dkms)
+                # 获取最新稳定版内核（非 RC）
+                latest_ver=$(curl -s "https://www.kernel.org/releases.json" | jq -r '.releases[] | select(.stable == true) | .version' | sort -V | tail -n1)
+                echo "TYPE=snd;VERSION=$latest_ver"
+                ;;
+              *)
+                echo "未知仓库: $REPO_NAME" >&2
+                exit 1
+            esac
+          }
+
+          info=$(get_latest_info)
+          if [ -z "$info" ]; then
+            echo "获取版本信息失败" >&2
+            exit 1
+          fi
+
+          # ---------- 根据不同类型更新 PKGBUILD ----------
+          case "$REPO_NAME" in
+            linux-zencjk)
+              eval "$info"   # 得到 VERSION
+              if [ "$current_pkgver" != "$VERSION" ]; then
+                echo "检测到新版本: $VERSION (当前 $current_pkgver)"
+                sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$PKGBUILD"
+                exit 0   # 表示有更新
+              else
+                echo "当前已是最新版本 $current_pkgver"
+                exit 1
+              fi
+              ;;
+            linux-ltscjk)
+              eval "$info"
+              if [ "$current_pkgver" != "$VERSION" ]; then
+                echo "检测到新版本: $VERSION (当前 $current_pkgver)"
+                sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$PKGBUILD"
+                exit 0
+              else
+                echo "当前已是最新版本 $current_pkgver"
+                exit 1
+              fi
+              ;;
+            linux-cachyos-cjktty)
+              # 解析 info
+              if [[ "$info" == TYPE=cachyos-rc* ]]; then
+                # RC 版本
+                eval "$info"  # 得到 MAJOR, RCVER
+                expected_pkgver="${MAJOR}${RCVER}"   # 例如 7.2rc8
+                if [ "$current_pkgver" != "$expected_pkgver" ]; then
+                  echo "检测到新 RC 版本: $expected_pkgver (当前 $current_pkgver)"
+                  # 设置 _major
+                  sed -i "s/^_major=.*/_major=$MAJOR/" "$PKGBUILD"
+                  # 强制注释 _minor 行（无论是否已注释）
+                  sed -i "s/^_minor=.*/#_minor=/" "$PKGBUILD"
+                  # 强制取消注释并设置 _rcver（无论之前是否注释）
+                  sed -i "s/^#_rcver=.*/_rcver=$RCVER/; s/^_rcver=.*/_rcver=$RCVER/" "$PKGBUILD"
+                  # 修改 pkgver
+                  sed -i "s/^pkgver=.*/pkgver=$expected_pkgver/" "$PKGBUILD"
+                  # 修改 _srcname
+                  sed -i "s/^_srcname=.*/_srcname=cachyos-${MAJOR}-${RCVER}/" "$PKGBUILD"
+                  exit 0
+                else
+                  echo "当前已是最新 RC 版本 $current_pkgver"
+                  exit 1
+                fi
+              else
+                # 正式版本
+                eval "$info"  # 得到 MAJOR, MINOR, TAGREL, VERSION
+                if [ "$current_pkgver" != "$VERSION" ]; then
+                  echo "检测到新正式版本: $VERSION (当前 $current_pkgver)"
+                  # 设置 _major
+                  sed -i "s/^_major=.*/_major=$MAJOR/" "$PKGBUILD"
+                  # 强制取消注释并设置 _minor（无论之前是否注释）
+                  sed -i "s/^#_minor=.*/_minor=$MINOR/; s/^_minor=.*/_minor=$MINOR/" "$PKGBUILD"
+                  # 强制注释 _rcver（无论之前是否注释）
+                  sed -i "s/^_rcver=.*/#_rcver=/" "$PKGBUILD"
+                  # 设置 _tagrel
+                  sed -i "s/^_tagrel=.*/_tagrel=$TAGREL/" "$PKGBUILD"
+                  # 修改 pkgver
+                  sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$PKGBUILD"
+                  # 修改 _srcname
+                  sed -i "s/^_srcname=.*/_srcname=cachyos-${MAJOR}.${MINOR}-${TAGREL}/" "$PKGBUILD"
+                  exit 0
+                else
+                  echo "当前已是最新正式版本 $current_pkgver"
+                  exit 1
+                fi
+              fi
+              ;;
+            snd-pcsp-dkms)
+              eval "$info"   # 得到 VERSION
+              if [ "$current_pkgver" != "$VERSION" ]; then
+                echo "检测到新稳定内核版本: $VERSION (当前 $current_pkgver)"
+                sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$PKGBUILD"
+                exit 0
+              else
+                echo "当前已是最新稳定版本 $current_pkgver"
+                exit 1
+              fi
+              ;;
+          esac
+          EOF
+
+          # 执行版本更新脚本，忽略返回码（无更新时返回非0，但我们仍然继续）
+          /tmp/update_version.sh "${{ matrix.repo_name }}" || true
+
+          # ------------------------------------------------------------
+          # 2. 更新校验和与 .SRCINFO (原有逻辑)
+          # ------------------------------------------------------------
+          su builder -c "updpkgsums" || true
+          su builder -c "makepkg --printsrcinfo > .SRCINFO"
+
+          # 检查是否有改动
+          if git status --porcelain | grep -q .; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add PKGBUILD .SRCINFO
+            git commit -m "chore: auto update PKGBUILD & .SRCINFO" || true
+
+            git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git main || true
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      # ================== 后续原有步骤保持不变 ==================
+      - name: 云端编译 `.pkg.tar.zst`
+        if: steps.update.outputs.changed == 'true'
+        run: |
+          cd pkg_dir
+          chown -R builder:builder .
+
+          # 设定多线程编译与 CPU 全核 ZSTD 压缩
+          sed -i 's/#MAKEFLAGS="-j2"/MAKEFLAGS="-j$(nproc)"/' /etc/makepkg.conf
+          sed -i 's/COMPRESSZST=(zstd -c -z -q -)/COMPRESSZST=(zstd -c -z -q --threads=0 -)/' /etc/makepkg.conf
+
+          # 自动安装缺少的 makedepends 并开始打包
+          su builder -c "makepkg -syn --noconfirm"
+
+      - name: 暂存构建好的 `.pkg.tar.zst` 产物
+        if: steps.update.outputs.changed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.repo_name }}
+          path: pkg_dir/*.pkg.tar.zst
+
+  deploy-repo:
+    needs: build-packages
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+
+    steps:
+      - name: 安装工具
+        run: |
+          pacman -Syu --noconfirm github-cli
+
+      - name: 下载所有子 Job 构建好的 `.pkg.tar.zst`
+        uses: actions/download-artifact@v4
+        with:
+          path: artifact-downloads
+
+      - name: 检查是否有构建产物
+        id: check_artifacts
+        run: |
+          if [ -z "$(find artifact-downloads -name '*.pkg.tar.zst' -print -quit)" ]; then
+            echo "没有构建产物，跳过部署"
+            echo "has_artifacts=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_artifacts=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 整合并更新 repo.db 数据库
+        if: steps.check_artifacts.outputs.has_artifacts == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p deploy
+          find artifact-downloads -name "*.pkg.tar.zst" -exec cp {} deploy/ \;
+          cd deploy
+          # 下载现有的数据库（文件名改为 junlin03-aur.db*）
+          gh release download current-repo --repo ${{ github.repository }} -p "junlin03-aur.db*" --clobber || true
+          # 执行 repo-add，输出 junlin03-aur.db.tar.gz
+          repo-add -n -R junlin03-aur.db.tar.gz *.pkg.tar.zst
+
+      - name: 部署至 GitHub Releases
+        if: steps.check_artifacts.outputs.has_artifacts == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: current-repo
+          name: "Custom Personal Repository"
+          prerelease: false
+          files: |
+            deploy/*.pkg.tar.zst
+            deploy/junlin03-aur.db*
+            deploy/junlin03-aur.files*
