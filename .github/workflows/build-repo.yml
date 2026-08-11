@@ -51,122 +51,102 @@ jobs:
           chown -R builder:builder .
 
           # ------------------------------------------------------------
-          # 1. 版本检测与 PKGBUILD 修改脚本
+          # 版本检测与 PKGBUILD 修改脚本（完全重写）
           # ------------------------------------------------------------
           cat > /tmp/update_version.sh << 'EOF'
           #!/bin/bash
           set -e
+
           REPO_NAME="$1"
           PKGBUILD="PKGBUILD"
           if [ ! -f "$PKGBUILD" ]; then
             echo "错误：找不到 PKGBUILD" >&2
             exit 1
           fi
+
           source "$PKGBUILD"
           current_pkgver="$pkgver"
-
-          # 初始化 changed 标志
           changed=false
 
-          get_latest_info() {
-            case "$REPO_NAME" in
-              linux-zencjk)
-                latest_tag=$(curl -s "https://api.github.com/repos/zen-kernel/zen-kernel/tags" | jq -r '.[0].name')
-                latest_ver=$(echo "$latest_tag" | sed 's/^v//' | sed 's/-/./')
-                echo "TYPE=zen;VERSION=$latest_ver"
-                ;;
-              linux-ltscjk)
-                latest_ver=$(curl -s "https://www.kernel.org/releases.json" | jq -r '.releases[] | select(.version | startswith("6.12.")) | .version' | sort -V | tail -n1)
-                echo "TYPE=lts;VERSION=$latest_ver"
-                ;;
-              linux-cachyos-cjktty)
-                # 获取所有 cachyos-7. 开头的 release tag
-                all_tags=$(curl -s "https://api.github.com/repos/CachyOS/linux/releases" | jq -r '.[].tag_name | select(test("^cachyos-7\\."))')
-                # 提取正式版和 RC 版
-                release_tag=$(echo "$all_tags" | grep -v '\-rc' | sort -V | tail -n1)
-                rc_tag=$(echo "$all_tags" | grep '\-rc' | sort -V | tail -n1)
-                # 保存到文件供后续构建使用
-                echo "RELEASE_TAG=$release_tag" > /tmp/cachyos_versions
-                echo "RC_TAG=$rc_tag" >> /tmp/cachyos_versions
-                # 判断是否有更新
-                changed=false
-                if [ -n "$release_tag" ]; then
-                  ver_part="${release_tag#cachyos-}"
-                  ver_part="${ver_part%-*}"
-                  if [ "$ver_part" != "$current_pkgver" ]; then
-                    changed=true
-                  fi
-                fi
-                if [ "$changed" = "false" ] && [ -n "$rc_tag" ]; then
-                  ver_part="${rc_tag#cachyos-}"
-                  rc_ver="${ver_part%-*}"
-                  rc_ver="${rc_ver//-/}"
-                  if [ "$rc_ver" != "$current_pkgver" ]; then
-                    changed=true
-                  fi
-                fi
-                if [ "$changed" = "true" ]; then
-                  echo "检测到更新：正式版 $release_tag, RC版 $rc_tag"
-                else
-                  echo "当前已是最新版本"
-                fi
-                # 不修改 PKGBUILD，只输出 changed 标志
-                echo "TYPE=cachyos;CHANGED=$changed"
-                ;;
-              snd-pcsp-dkms)
-                latest_ver=$(curl -s "https://www.kernel.org/releases.json" | jq -r '.latest_stable.version')
-                echo "TYPE=snd;VERSION=$latest_ver"
-                ;;
-              *)
-                echo "未知仓库: $REPO_NAME" >&2
-                exit 1
-            esac
-          }
-
-          info=$(get_latest_info)
-          if [ -z "$info" ]; then
-            echo "获取版本信息失败" >&2
-            exit 1
-          fi
-
+          # 检测逻辑直接写在 case 中，不通过函数返回复杂结构
           case "$REPO_NAME" in
             linux-zencjk)
-              eval "$info"
-              if [ "$current_pkgver" != "$VERSION" ]; then
-                echo "检测到新版本: $VERSION (当前 $current_pkgver)"
-                sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$PKGBUILD"
+              latest_tag=$(curl -s "https://api.github.com/repos/zen-kernel/zen-kernel/tags" | jq -r '.[0].name')
+              latest_ver=$(echo "$latest_tag" | sed 's/^v//' | sed 's/-/./')
+              if [ "$current_pkgver" != "$latest_ver" ]; then
+                echo "检测到新版本: $latest_ver (当前 $current_pkgver)"
+                sed -i "s/^pkgver=.*/pkgver=$latest_ver/" "$PKGBUILD"
                 changed=true
               else
                 echo "当前已是最新版本 $current_pkgver"
               fi
               ;;
+
             linux-ltscjk)
-              eval "$info"
-              if [ "$current_pkgver" != "$VERSION" ]; then
-                echo "检测到新版本: $VERSION (当前 $current_pkgver)"
-                sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$PKGBUILD"
+              latest_ver=$(curl -s "https://www.kernel.org/releases.json" | jq -r '.releases[] | select(.version | startswith("6.12.")) | .version' | sort -V | tail -n1)
+              if [ "$current_pkgver" != "$latest_ver" ]; then
+                echo "检测到新版本: $latest_ver (当前 $current_pkgver)"
+                sed -i "s/^pkgver=.*/pkgver=$latest_ver/" "$PKGBUILD"
                 changed=true
               else
                 echo "当前已是最新版本 $current_pkgver"
               fi
               ;;
+
             linux-cachyos-cjktty)
-              eval "$info"
-              # 使用之前已经设置好的 changed 变量
+              # 获取所有 cachyos-7. 开头的 release tag
+              all_tags=$(curl -s "https://api.github.com/repos/CachyOS/linux/releases" | jq -r '.[].tag_name | select(test("^cachyos-7\\."))')
+              release_tag=$(echo "$all_tags" | grep -v '\-rc' | sort -V | tail -n1)
+              rc_tag=$(echo "$all_tags" | grep '\-rc' | sort -V | tail -n1)
+
+              # 保存版本信息供后续构建使用
+              echo "RELEASE_TAG=$release_tag" > /tmp/cachyos_versions
+              echo "RC_TAG=$rc_tag" >> /tmp/cachyos_versions
+
+              # 检测是否有更新（正式版或 RC 版与当前不同）
+              changed_local=false
+              if [ -n "$release_tag" ]; then
+                ver_part="${release_tag#cachyos-}"
+                ver_part="${ver_part%-*}"
+                if [ "$ver_part" != "$current_pkgver" ]; then
+                  changed_local=true
+                fi
+              fi
+              if [ "$changed_local" = "false" ] && [ -n "$rc_tag" ]; then
+                ver_part="${rc_tag#cachyos-}"
+                rc_ver="${ver_part%-*}"
+                rc_ver="${rc_ver//-/}"
+                if [ "$rc_ver" != "$current_pkgver" ]; then
+                  changed_local=true
+                fi
+              fi
+
+              if [ "$changed_local" = "true" ]; then
+                echo "检测到更新：正式版 $release_tag, RC版 $rc_tag"
+                changed=true
+              else
+                echo "当前已是最新版本"
+              fi
               ;;
+
             snd-pcsp-dkms)
-              eval "$info"
-              if [ "$current_pkgver" != "$VERSION" ]; then
-                echo "检测到新稳定内核版本: $VERSION (当前 $current_pkgver)"
-                sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$PKGBUILD"
+              latest_ver=$(curl -s "https://www.kernel.org/releases.json" | jq -r '.latest_stable.version')
+              if [ "$current_pkgver" != "$latest_ver" ]; then
+                echo "检测到新稳定内核版本: $latest_ver (当前 $current_pkgver)"
+                sed -i "s/^pkgver=.*/pkgver=$latest_ver/" "$PKGBUILD"
                 changed=true
               else
                 echo "当前已是最新稳定版本 $current_pkgver"
               fi
               ;;
+
+            *)
+              echo "未知仓库: $REPO_NAME" >&2
+              exit 1
+              ;;
           esac
 
-          # 根据 changed 决定是否执行后续操作
+          # 根据 changed 执行后续操作
           if [ "$changed" = "true" ]; then
             # 对于非 cachyos 包，更新校验和并提交
             if [ "$REPO_NAME" != "linux-cachyos-cjktty" ]; then
@@ -174,7 +154,7 @@ jobs:
               su builder -c "makepkg --printsrcinfo > .SRCINFO"
               git add PKGBUILD .SRCINFO
               git commit -m "chore: auto update PKGBUILD & .SRCINFO" || true
-              # 使用外部环境变量构建正确的仓库 URL
+              # 推送时使用环境变量
               git push https://x-access-token:${GH_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.git HEAD || true
             fi
             echo "changed=true" >> $GITHUB_OUTPUT
@@ -183,25 +163,18 @@ jobs:
           fi
           EOF
 
-          # 赋予脚本执行权限
           chmod +x /tmp/update_version.sh
-
-          # 执行脚本，传入当前仓库名
           /tmp/update_version.sh "${{ matrix.repo_name }}" || true
-
-          # 注意：脚本内已处理所有逻辑，此处无需额外操作
 
       - name: 云端编译 `.pkg.tar.zst`
         if: steps.update.outputs.changed == 'true'
         run: |
           cd pkg_dir
 
-          # 判断是否为 cachyos 包
           if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ] && [ -f /tmp/cachyos_versions ]; then
             source /tmp/cachyos_versions
             echo "准备构建两个版本：正式版 $RELEASE_TAG，RC版 $RC_TAG"
 
-            # 定义构建函数
             build_version() {
               local tag=$1
               if [ -z "$tag" ]; then
@@ -209,12 +182,11 @@ jobs:
                 return
               fi
               echo "构建版本：$tag"
-              # 从 tag 提取版本信息
               tag_part="${tag#cachyos-}"
               if [[ "$tag_part" == *"-rc"* ]]; then
                 major="${tag_part%-rc*}"
                 rcver="rc${tag_part#*-rc}"
-                rcver="${rcver%-*}"   # 去掉末尾的 -1 等
+                rcver="${rcver%-*}"
                 pkgver="${major}${rcver}"
                 srcname="cachyos-${major}-${rcver}"
               else
@@ -226,10 +198,7 @@ jobs:
                 srcname="cachyos-${major}.${minor}-${tagrel}"
               fi
 
-              # 备份 PKGBUILD
               cp PKGBUILD PKGBUILD.bak
-
-              # 修改 PKGBUILD
               sed -i "s/^pkgver=.*/pkgver=$pkgver/" PKGBUILD
               sed -i "s/^_srcname=.*/_srcname=$srcname/" PKGBUILD
               if [[ "$tag" == *"-rc"* ]]; then
@@ -243,24 +212,18 @@ jobs:
                 sed -i "s/^_tagrel=.*/_tagrel=$tagrel/" PKGBUILD
               fi
 
-              # 运行 makepkg
               chown -R builder:builder .
               su builder -c "makepkg -s --noconfirm" || {
                 echo "构建失败：$tag"
                 mv PKGBUILD.bak PKGBUILD
                 exit 1
               }
-
-              # 恢复 PKGBUILD
               mv PKGBUILD.bak PKGBUILD
             }
 
-            # 构建正式版和 RC 版
             build_version "$RELEASE_TAG"
             build_version "$RC_TAG"
-
           else
-            # 其他包的单次构建（原逻辑）
             chown -R builder:builder .
             sed -i 's/#MAKEFLAGS="-j2"/MAKEFLAGS="-j$(nproc)"/' /etc/makepkg.conf
             sed -i 's/COMPRESSZST=(zstd -c -z -q -)/COMPRESSZST=(zstd -c -z -q --threads=0 -)/' /etc/makepkg.conf
