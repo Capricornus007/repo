@@ -132,37 +132,24 @@ jobs:
                 exit 1
               fi
               ;;
-            linux-cachyos-cjktty)
-              if [[ "$info" == TYPE=cachyos-rc* ]]; then
-                eval "$info"
-                expected_pkgver="${MAJOR}${RCVER}"
-                if [ "$current_pkgver" != "$expected_pkgver" ]; then
-                  echo "检测到新 RC 版本: $expected_pkgver (当前 $current_pkgver)"
-                  sed -i "s/^_major=.*/_major=$MAJOR/" "$PKGBUILD"
-                  sed -i "s/^_minor=.*/#_minor=/" "$PKGBUILD"
-                  sed -i "s/^#_rcver=.*/_rcver=$RCVER/; s/^_rcver=.*/_rcver=$RCVER/" "$PKGBUILD"
-                  sed -i "s/^pkgver=.*/pkgver=$expected_pkgver/" "$PKGBUILD"
-                  sed -i "s/^_srcname=.*/_srcname=cachyos-${MAJOR}-${RCVER}/" "$PKGBUILD"
-                  exit 0
-                else
-                  echo "当前已是最新 RC 版本 $current_pkgver"
-                  exit 1
-                fi
+              linux-cachyos-cjktty)
+                # 直接获取最新 tag（GitHub API 按发布时间降序）
+                latest_tag=$(curl -s "https://api.github.com/repos/CachyOS/linux/tags" | jq -r '.[0].name')
+              if [ -z "$latest_tag" ]; then
+                echo "错误：无法获取最新 tag" >&2
+                exit 1
+              fi
+              tag_part="${latest_tag#cachyos-}"
+              if [[ "$tag_part" == *"-rc"* ]]; then
+                major="${tag_part%-rc*}"
+                rcver="rc$(echo "$tag_part" | grep -oP '(?<=-rc)[0-9]+')"
+                echo "TYPE=cachyos-rc;MAJOR=$major;RCVER=$rcver"
               else
-                eval "$info"
-                if [ "$current_pkgver" != "$VERSION" ]; then
-                  echo "检测到新正式版本: $VERSION (当前 $current_pkgver)"
-                  sed -i "s/^_major=.*/_major=$MAJOR/" "$PKGBUILD"
-                  sed -i "s/^#_minor=.*/_minor=$MINOR/; s/^_minor=.*/_minor=$MINOR/" "$PKGBUILD"
-                  sed -i "s/^_rcver=.*/#_rcver=/" "$PKGBUILD"
-                  sed -i "s/^_tagrel=.*/_tagrel=$TAGREL/" "$PKGBUILD"
-                  sed -i "s/^pkgver=.*/pkgver=$VERSION/" "$PKGBUILD"
-                  sed -i "s/^_srcname=.*/_srcname=cachyos-${MAJOR}.${MINOR}-${TAGREL}/" "$PKGBUILD"
-                  exit 0
-                else
-                  echo "当前已是最新正式版本 $current_pkgver"
-                  exit 1
-                fi
+                ver_part="${tag_part%-*}"
+                tagrel="${tag_part##*-}"
+                major="${ver_part%.*}"
+                minor="${ver_part##*.}"
+                echo "TYPE=cachyos-release;MAJOR=$major;MINOR=$minor;TAGREL=$tagrel;VERSION=$ver_part"
               fi
               ;;
             snd-pcsp-dkms)
@@ -223,6 +210,8 @@ jobs:
   deploy-repo:
     needs: build-packages
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # 允许创建 Release 和上传文件
     container:
       image: archlinux:base-devel
 
