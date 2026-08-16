@@ -198,6 +198,20 @@ jobs:
                 echo "CONFIG_FONT_CJK_32x32=y" >> config
               fi
 
+              # 追加 dae 運行支援
+              if ! grep -q "CONFIG_NET_CLS_ACT=y" config; then
+                echo "CONFIG_NET_CLS_ACT=y" >> config
+              fi
+              if ! grep -q "CONFIG_NET_CLS_BPF=y" config; then
+                echo "CONFIG_NET_CLS_BPF=y" >> config
+              fi
+              if ! grep -q "CONFIG_BPF_TC=y" config; then
+                echo "CONFIG_BPF_TC=y" >> config
+              fi
+              if ! grep -q "CONFIG_NET_SCH_CLSACT=y" config; then
+                echo "CONFIG_NET_SCH_CLSACT=y" >> config
+              fi
+
               # ---- 根据 tag 决定使用哪个补丁（7.1 或 7.2） ----
               if [[ "$tag" == *"7.2"* ]]; then
                 patch_version="7.2-rc7"
