@@ -213,8 +213,8 @@ jobs:
                 major="${tag_part%-rc*}"
                 rcver="rc${tag_part#*-rc}"
                 rcver="${rcver%-*}"
-                pkgver="${major}${rcver}"
-                srcname="cachyos-${major}-${rcver}"
+                srcname="${tag}"
+                srcname="${tag}"
               else
                 ver_part="${tag_part%-*}"
                 tagrel="${tag_part##*-}"
