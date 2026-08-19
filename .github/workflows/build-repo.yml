@@ -167,20 +167,24 @@ jobs:
       - name: 云端编译 `.pkg.tar.zst`
         if: steps.update.outputs.changed == 'true'
         run: |
-          cd pkg_dir
-
           if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ] && [ -f /tmp/cachyos_versions ]; then
             source /tmp/cachyos_versions
             echo "准备构建两个版本：正式版 $RELEASE_TAG，RC版 $RC_TAG"
+            root_dir="$PWD"
+            rm -rf pkg_dir-release pkg_dir-rc
+            cp -a pkg_dir pkg_dir-release
+            cp -a pkg_dir pkg_dir-rc
 
             build_version() {
               local tag=$1
+              local workdir=$2
               if [ -z "$tag" ]; then
                 echo "跳过空版本"
                 return
               fi
               echo "构建版本：$tag"
               tag_part="${tag#cachyos-}"
+              cd "$root_dir/$workdir"
 
               # ---- 根据版本类型下载对应的 config 并追加 CJK 支持 ----
               if [[ "$tag" == *"-rc"* ]]; then
@@ -227,7 +231,8 @@ jobs:
                 major="${tag_part%-rc*}"
                 rcver="rc${tag_part#*-rc}"
                 rcver="${rcver%-*}"
-                srcname="${tag}"
+                tagrel="${tag_part##*-}"
+                pkgver="${major}.${rcver}"
                 srcname="${tag}"
               else
                 ver_part="${tag_part%-*}"
@@ -241,12 +246,13 @@ jobs:
               cp PKGBUILD PKGBUILD.bak
               sed -i "s/^pkgver=.*/pkgver=$pkgver/" PKGBUILD
               sed -i "s/^_srcname=.*/_srcname=$srcname/" PKGBUILD
-              # ---- 修改补丁 source 行，使用本地文件 ----
-              sed -i 's|^[[:space:]]*"0001-cjktty.patch::.*|  "0001-cjktty.patch"|' PKGBUILD
+              # ---- 修改 cjktty patch source 行，使用当前版本下载的本地文件 ----
+              sed -i -E 's|^[[:space:]]*"\$\{_cjktty_source\}/v7\.x/cjktty-[^"]+\.patch"[[:space:]]*$|    "0001-cjktty.patch"|' PKGBUILD
               if [[ "$tag" == *"-rc"* ]]; then
                 sed -i "s/^_major=.*/_major=$major/" PKGBUILD
                 sed -i "s/^_minor=.*/#_minor=/" PKGBUILD
                 sed -i "s/^#_rcver=.*/_rcver=$rcver/; s/^_rcver=.*/_rcver=$rcver/" PKGBUILD
+                sed -i "s/^_tagrel=.*/_tagrel=$tagrel/" PKGBUILD
               else
                 sed -i "s/^_major=.*/_major=$major/" PKGBUILD
                 sed -i "s/^_minor=.*/_minor=$minor/" PKGBUILD
@@ -255,7 +261,7 @@ jobs:
               fi
 
               chown -R builder:builder .
-              su builder -c "makepkg -s --noconfirm --skipinteg" || {
+              su builder -c "makepkg -s --noconfirm --skipinteg -f" || {
                 echo "构建失败：$tag"
                 mv PKGBUILD.bak PKGBUILD
                 exit 1
@@ -263,10 +269,11 @@ jobs:
               mv PKGBUILD.bak PKGBUILD
             }
 
-            build_version "$RELEASE_TAG"
-            build_version "$RC_TAG"
+            build_version "$RELEASE_TAG" pkg_dir-release
+            build_version "$RC_TAG" pkg_dir-rc
           else
             # 其他包的单次构建（原逻辑）
+            cd pkg_dir
             chown -R builder:builder .
             sed -i 's/#MAKEFLAGS="-j2"/MAKEFLAGS="-j$(nproc)"/' /etc/makepkg.conf
             sed -i 's/COMPRESSZST=(zstd -c -z -q -)/COMPRESSZST=(zstd -c -z -q --threads=0 -)/' /etc/makepkg.conf
@@ -278,10 +285,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pkg-${{ matrix.repo_name }}
-          path: pkg_dir/*.pkg.tar.zst
+          path: |
+            pkg_dir/*.pkg.tar.zst
+            pkg_dir-release/*.pkg.tar.zst
+            pkg_dir-rc/*.pkg.tar.zst
 
   deploy-repo:
     needs: build-packages
+    if: always() && needs.build-packages.result != 'cancelled'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -297,6 +308,8 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifact-downloads
+          pattern: pkg-*
+          merge-multiple: true
 
       - name: 检查是否有构建产物
         id: check_artifacts
