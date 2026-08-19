@@ -49,6 +49,8 @@ jobs:
 
           # 解决 Git 安全目录问题
           git config --global --add safe.directory "$PWD"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
           # 建立普通用户
           useradd builder -m || true
@@ -72,6 +74,7 @@ jobs:
           source "$PKGBUILD"
           current_pkgver="$pkgver"
           changed=false
+          cp "$PKGBUILD" /tmp/PKGBUILD.before-update
 
           case "$REPO_NAME" in
             linux-zencjk)
@@ -149,7 +152,24 @@ jobs:
 
           if [ "$changed" = "true" ]; then
             if [ "$REPO_NAME" != "linux-cachyos-cjktty" ]; then
-              su builder -c "updpkgsums" || true
+              # kernel.org occasionally resets large HTTP/2 downloads. Remove
+              # partial archives and retry before declaring an update usable.
+              sums_updated=false
+              for attempt in 1 2 3 4 5; do
+                rm -f linux-*.tar.xz
+                if su builder -c "updpkgsums"; then
+                  sums_updated=true
+                  break
+                fi
+                echo "更新校验和失败（第 ${attempt}/5 次），稍后重试"
+                sleep $((attempt * 5))
+              done
+              if [ "$sums_updated" != "true" ]; then
+                cp /tmp/PKGBUILD.before-update "$PKGBUILD"
+                echo "无法可靠下载新源码，跳过本次更新"
+                echo "changed=false" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
               su builder -c "makepkg --printsrcinfo > .SRCINFO"
               git add PKGBUILD .SRCINFO
               git commit -m "chore: auto update PKGBUILD & .SRCINFO" || true
