@@ -531,3 +531,40 @@ jobs:
             deploy/*.pkg.tar.zst
             deploy/junlin03-aur.db*
             deploy/junlin03-aur.files*
+
+      - name: 清理已替换的旧版本包
+        if: steps.check_artifacts.outputs.has_artifacts == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          # 只建立「本轮新产物」的包名集合，其他包即使仍在 Release 里也不碰。
+          declare -A package_names=()
+          while IFS= read -r -d '' pkg; do
+            name=$(pacman -Qp --print-format '%n' "$pkg")
+            [ -n "$name" ] && package_names["$name"]=1
+          done < <(find deploy -maxdepth 1 -type f -name '*.pkg.tar.zst' -print0)
+
+          mapfile -t new_assets < <(find deploy -maxdepth 1 -type f -name '*.pkg.tar.zst' -printf '%f\n')
+          mapfile -t release_assets < <(gh release view "$REPO_RELEASE_TAG" --repo "$GH_REPO" --json assets --jq '.assets[].name')
+
+          for asset in "${release_assets[@]}"; do
+            [[ "$asset" == *.pkg.tar.zst ]] || continue
+            keep=0
+            for new_asset in "${new_assets[@]}"; do
+              if [ "$asset" = "$new_asset" ]; then keep=1; break; fi
+            done
+            [ "$keep" = 1 ] && continue
+
+            # Arch 包文件名从右至左固定是 arch、pkgrel、pkgver；pkgver 禁止包含连字号，
+            # 因此这样取出的包名不会把 `foo` 与 `foo-headers` 混为一谈。
+            stem=${asset%.pkg.tar.zst}
+            stem=${stem%-*}
+            stem=${stem%-*}
+            asset_pkgname=${stem%-*}
+            [ -n "${package_names[$asset_pkgname]+x}" ] || continue
+            echo "删除 $asset_pkgname 的旧资产: $asset"
+            gh release delete-asset "$REPO_RELEASE_TAG" "$asset" --repo "$GH_REPO" --yes
+          done
