@@ -313,6 +313,25 @@ jobs:
 
             linux-ltscjk)
               sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
+              # cjktty 补丁按版本线取仓库里最新的一份。
+              # 教训：6.12.104 在 bit_cursor() 里加了字形索引夹紧，钉死在
+              # cjktty-6.12.101.patch 上会 hunk #5 FAILED，prepare() 直接中断。
+              # 这里不做「套不上就跳过」，套不上就让 job 红掉——宁可缺一次包，
+              # 也不要出一颗没有 CJK 字体的内核。
+              lts_series=$(echo "$NEW_PKGVER" | cut -d. -f1,2)
+              lts_esc="${lts_series//./\\.}"
+              cur_patch=$(grep -oE 'cjktty-[0-9]+\.[0-9]+(\.[0-9]+)?\.patch' PKGBUILD | head -n1 || true)
+              newest=$(gh_api "https://api.github.com/repos/${REPO_OWNER}/cjktty-patches/contents/v${lts_series%%.*}.x" \
+                       | jq -r '.[].name' \
+                       | grep -E "^cjktty-${lts_esc}(\.[0-9]+)?\.patch$" | sort -V | tail -n1 || true)
+              if [ -z "$newest" ]; then
+                echo "::warning::cjktty-patches 里找不到 $lts_series 线的补丁，仍用 ${cur_patch:-原样}"
+              elif [ -n "$cur_patch" ] && [ "$newest" != "$cur_patch" ]; then
+                echo "cjktty 补丁 $cur_patch -> $newest"
+                sed -i "s|$cur_patch|$newest|" PKGBUILD
+              else
+                echo "cjktty 补丁已是最新：${cur_patch:-?}"
+              fi
               ;;
 
             snd-pcsp-dkms)
