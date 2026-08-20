@@ -518,6 +518,8 @@ jobs:
           gh release download "$REPO_RELEASE_TAG" --repo "${{ github.repository }}" \
              -p "junlin03-aur.db*" -p "junlin03-aur.files*" --clobber || true
           repo-add -n -R junlin03-aur.db.tar.gz ./*.pkg.tar.zst
+          # repo-add 会为数据库留下 *.old 本地备份；它们不应成为仓库入口或 Release 资产。
+          rm -f junlin03-aur.db.tar.gz.old junlin03-aur.files.tar.gz.old
           ls -lh
 
       - name: 部署至 GitHub Releases
