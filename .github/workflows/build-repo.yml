@@ -467,7 +467,7 @@ jobs:
 
       - name: 暂存构建好的 `.pkg.tar.zst` 产物
         if: steps.plan.outputs.build == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ matrix.key }}
           path: pkg_dir/*.pkg.tar.zst
@@ -487,7 +487,7 @@ jobs:
         run: pacman -Syu --noconfirm github-cli
 
       - name: 下载所有子 Job 构建好的 `.pkg.tar.zst`
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true
         with:
           path: artifact-downloads
@@ -524,7 +524,7 @@ jobs:
 
       - name: 部署至 GitHub Releases
         if: steps.check_artifacts.outputs.has_artifacts == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: current-repo
           name: "Custom Personal Repository"
