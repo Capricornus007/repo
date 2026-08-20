@@ -13,13 +13,34 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  REPO_RELEASE_TAG: current-repo
+
 jobs:
   build-packages:
     runs-on: ubuntu-latest
+    # GitHub 单一 job 硬上限为 360 分钟；提前 20 分钟主动失败，日志才留得下来
+    timeout-minutes: 340
     strategy:
       fail-fast: false
       matrix:
-        repo_name: [snd-pcsp-dkms, linux-zencjk, linux-ltscjk, linux-cachyos-cjktty]
+        include:
+          - key: snd-pcsp-dkms
+            repo_name: snd-pcsp-dkms
+            variant: none
+          - key: linux-zencjk
+            repo_name: linux-zencjk
+            variant: none
+          - key: linux-ltscjk
+            repo_name: linux-ltscjk
+            variant: none
+          # CachyOS 正式版与 RC 拆成两个独立 job：一个 job 编不完两个完整内核
+          - key: linux-cachyos-cjktty-release
+            repo_name: linux-cachyos-cjktty
+            variant: release
+          - key: linux-cachyos-cjktty-rc
+            repo_name: linux-cachyos-cjktty
+            variant: rc
 
     container:
       image: archlinux:base-devel
@@ -29,286 +50,409 @@ jobs:
       - name: 释放 Runner 磁盘空间
         run: |
           rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
+          df -h / || true
 
       - name: 初始化 Arch Linux 环境
         run: |
-          pacman -Syu --noconfirm git jq curl sudo devtools pacman-contrib
+          set -euo pipefail
+          pacman -Syu --noconfirm git jq curl sudo devtools pacman-contrib gnupg
 
-      - name: 拉取对应的套件仓库
-        run: |
-          git clone https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git pkg_dir
+          # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
+          # 结果最重的 CachyOS 内核是单线程编译的，必然撞 6 小时上限。
+          # 直接追加到文件末尾，比 sed 匹配注释行可靠（上游默认值改过好几次）。
+          {
+            echo ""
+            echo "# ---- CI overrides ----"
+            echo "MAKEFLAGS=\"-j$(nproc)\""
+            echo 'COMPRESSZST=(zstd -c -z -q --threads=0 -)'
+            echo 'COMPRESSXZ=(xz -c -z --threads=0 -)'
+          } >> /etc/makepkg.conf
+          echo "nproc=$(nproc)"
 
-      - name: 检查上游/AUR 更新并自动 Bump PKGBUILD
-        id: update
-        env:
-          GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
-          REPO_OWNER: ${{ github.repository_owner }}
-          REPO_NAME: ${{ matrix.repo_name }}
-        run: |
-          cd pkg_dir
-
-          # 解决 Git 安全目录问题
-          git config --global --add safe.directory "$PWD"
+          useradd builder -m || true
+          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          # 建立普通用户
-          useradd builder -m || true
-          echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-          chown -R builder:builder .
+      - name: 拉取对应的套件仓库
+        run: |
+          set -euo pipefail
+          git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir
+          git config --global --add safe.directory "$PWD/pkg_dir"
 
-          # ------------------------------------------------------------
-          # 版本检测与 PKGBUILD 修改脚本（完全重写）
-          # ------------------------------------------------------------
-          cat > /tmp/update_version.sh << 'EOF'
-          #!/bin/bash
-          set -e
-
-          REPO_NAME="$1"
-          PKGBUILD="PKGBUILD"
-          if [ ! -f "$PKGBUILD" ]; then
-            echo "错误：找不到 PKGBUILD" >&2
-            exit 1
+      - name: 导入源码签名公钥
+        run: |
+          set -uo pipefail
+          cd pkg_dir
+          keys=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s\n" "${validpgpkeys[@]:-}"' \
+                 | grep -Eo '^[0-9A-Fa-f]{40}$' || true)
+          if [ -z "$keys" ]; then
+            echo "本套件没有 validpgpkeys，跳过"
+            echo "PGP_OK=1" >> "$GITHUB_ENV"
+            exit 0
           fi
 
-          source "$PKGBUILD"
-          current_pkgver="$pkgver"
-          changed=false
-          cp "$PKGBUILD" /tmp/PKGBUILD.before-update
+          export GNUPGHOME=/home/builder/.gnupg
+          install -d -o builder -g builder -m 700 "$GNUPGHOME"
+          all_ok=1
+          for k in $keys; do
+            ok=0
+            # 1) kernel.org 官方公钥库（HTTPS，不需要 dirmngr，最稳）
+            longid="${k: -16}"
+            if curl -sfL "https://git.kernel.org/pub/scm/docs/kernel/pgpkeys.git/plain/keys/${longid}.asc" \
+                 -o /tmp/key.asc && su builder -c "gpg --batch --import /tmp/key.asc"; then
+              ok=1
+            fi
+            # 2) pacman 自带的 Arch 开发者钥匙圈（heftig 等）
+            if [ "$ok" = 0 ] && pacman-key --export "$k" > /tmp/key.asc 2>/dev/null \
+                 && [ -s /tmp/key.asc ] && su builder -c "gpg --batch --import /tmp/key.asc"; then
+              ok=1
+            fi
+            # 3) 公共 keyserver
+            if [ "$ok" = 0 ]; then
+              for ks in hkps://keyserver.ubuntu.com hkps://keys.openpgp.org; do
+                if su builder -c "gpg --batch --keyserver $ks --recv-keys $k"; then ok=1; break; fi
+              done
+            fi
+            if [ "$ok" = 1 ]; then
+              echo "已匯入 $k"
+            else
+              echo "::warning::无法导入公钥 $k"
+              all_ok=0
+            fi
+          done
+          echo "PGP_OK=$all_ok" >> "$GITHUB_ENV"
 
-          case "$REPO_NAME" in
+      - name: 检测目标版本并决定是否需要构建
+        id: plan
+        env:
+          PKG: ${{ matrix.repo_name }}
+          VARIANT: ${{ matrix.variant }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          cd pkg_dir
+
+          skip() { echo "跳过构建：$1"; echo "build=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          # api.github.com 未认证只有 60 次/小时，Runner 共用出口 IP 时经常直接 403，
+          # 所有 API 调用一律带 token（GITHUB_TOKEN 就够，5000 次/小时）
+          gh_api() { curl -sfL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$@"; }
+
+
+          eval "$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
+                  printf "CUR_PKGVER=%q\nCUR_PKGREL=%q\nPKGBASE=%q\n" \
+                         "$pkgver" "$pkgrel" "${pkgbase:-${pkgname[0]}}"')"
+          echo "当前 PKGBUILD: pkgbase=$PKGBASE pkgver=$CUR_PKGVER pkgrel=$CUR_PKGREL"
+
+          TARGET_PKGVER=""
+          TARGET_PKGREL="$CUR_PKGREL"
+          CACHY_TAG=""
+
+          case "$PKG" in
             linux-zencjk)
-              latest_tag=$(curl -s "https://api.github.com/repos/zen-kernel/zen-kernel/tags" | jq -r '.[0].name')
-              latest_ver=$(echo "$latest_tag" | sed 's/^v//' | sed 's/-/./')
-              if [ "$current_pkgver" != "$latest_ver" ]; then
-                echo "检测到新版本: $latest_ver (当前 $current_pkgver)"
-                sed -i "s/^pkgver=.*/pkgver=$latest_ver/" "$PKGBUILD"
-                changed=true
+              # 只认 *-zen* 且非 rc 的 tag，再用 sort -V 取最高。
+              # 原来取 API 的 .[0]，2026-08-20 那次直接抓到 v7.1.9-lqx1，
+              # 结果 zen 的 release 里没有 lqx 补丁，updpkgsums 连 404 五次后静默跳过。
+              tags=$(gh_api "https://api.github.com/repos/zen-kernel/zen-kernel/tags?per_page=100" \
+                     | jq -r '.[].name' | grep -E '^v[0-9]+\.[0-9]+(\.[0-9]+)?-zen[0-9]+$' || true)
+              [ -n "$tags" ] || skip "拿不到 zen-kernel tag 列表"
+              latest_tag=$(printf '%s\n' "$tags" | sed 's/^v//' | sort -V | tail -n1)
+              TARGET_PKGVER="${latest_tag%-zen*}.zen${latest_tag##*-zen}"
+              ;;
+
+            linux-ltscjk)
+              TARGET_PKGVER=$(curl -sfL "https://www.kernel.org/releases.json" \
+                | jq -r '.releases[] | select(.version | startswith("6.12.")) | .version' \
+                | sort -V | tail -n1)
+              [ -n "$TARGET_PKGVER" ] || skip "拿不到 6.12 longterm 版本号"
+              ;;
+
+            snd-pcsp-dkms)
+              TARGET_PKGVER=$(curl -sfL "https://www.kernel.org/releases.json" | jq -r '.latest_stable.version')
+              [ -n "$TARGET_PKGVER" ] || skip "拿不到 latest_stable 版本号"
+              ;;
+
+            linux-cachyos-cjktty)
+              all_tags=$(gh_api "https://api.github.com/repos/CachyOS/linux/releases?per_page=100" \
+                         | jq -r '.[].tag_name | select(test("^cachyos-[0-9]+\\."))' || true)
+              [ -n "$all_tags" ] || skip "拿不到 CachyOS/linux release 列表"
+              rel_tag=$(printf '%s\n' "$all_tags" | grep -v -- '-rc' | sort -V | tail -n1)
+              rc_tag=$(printf '%s\n' "$all_tags" | grep -- '-rc'   | sort -V | tail -n1)
+              echo "正式版 tag=$rel_tag / RC tag=$rc_tag"
+
+              rel_base="${rel_tag#cachyos-}"; rel_base="${rel_base%-*}"   # 7.2.0
+              rel_series="${rel_base%.*}"                                 # 7.2
+
+              if [ "$VARIANT" = "rc" ]; then
+                [ -n "$rc_tag" ] || skip "没有可用的 RC tag"
+                rc_base="${rc_tag#cachyos-}"; rc_base="${rc_base%-*}"      # 7.2-rc7
+                rc_series="${rc_base%-rc*}"                                # 7.2
+                # RC 只有在版本线高于正式版时才有意义。7.2 正式版已发布后，
+                # 7.2-rc7 就是废版本，再编三个小时纯属浪费。
+                newest=$(printf '%s\n%s\n' "$rc_series" "$rel_series" | sort -V | tail -n1)
+                if [ "$rc_series" = "$rel_series" ] || [ "$newest" != "$rc_series" ]; then
+                  skip "RC $rc_tag 的版本线 $rc_series 不高于正式版 $rel_series，已被取代"
+                fi
+                CACHY_TAG="$rc_tag"
+                rcver="rc${rc_base##*-rc}"
+                TARGET_PKGVER="${rc_series}.${rcver}"
               else
-                echo "当前已是最新版本 $current_pkgver"
+                [ -n "$rel_tag" ] || skip "没有可用的正式版 tag"
+                CACHY_TAG="$rel_tag"
+                TARGET_PKGVER="$rel_base"
+              fi
+              # CachyOS 的 tag 尾号即 pkgrel（本地历史产物 7.2.rc6-1 / 7.2.rc6-2 就是这么来的）
+              TARGET_PKGREL="${CACHY_TAG##*-}"
+              ;;
+
+            *)
+              echo "未知仓库: $PKG" >&2; exit 1 ;;
+          esac
+
+          echo "目标版本: $TARGET_PKGVER-$TARGET_PKGREL"
+
+          # 真正的「要不要构建」判据：产物是否已经发布到 release。
+          # 原来靠 pkgver 字符串比对，CachyOS 那条 (rc 的 7.2 != pkgver 7.2.0) 永远为真，
+          # 于是每天重编两个完整内核，天天撞上限。
+          assets=$(gh_api "https://api.github.com/repos/${GH_REPO}/releases/tags/${REPO_RELEASE_TAG}" \
+                   | jq -r '.assets[].name' 2>/dev/null || true)
+          if printf '%s\n' "$assets" | grep -q "^${PKGBASE}-${TARGET_PKGVER}-${TARGET_PKGREL}-"; then
+            skip "${PKGBASE}-${TARGET_PKGVER}-${TARGET_PKGREL} 已在 release 里"
+          fi
+
+          {
+            echo "build=true"
+            echo "pkgver=$TARGET_PKGVER"
+            echo "pkgrel=$TARGET_PKGREL"
+            echo "cachy_tag=$CACHY_TAG"
+            echo "pkgbase=$PKGBASE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: 改写 PKGBUILD（版本、config、cjktty 补丁）
+        if: steps.plan.outputs.build == 'true'
+        env:
+          PKG: ${{ matrix.repo_name }}
+          VARIANT: ${{ matrix.variant }}
+          NEW_PKGVER: ${{ steps.plan.outputs.pkgver }}
+          NEW_PKGREL: ${{ steps.plan.outputs.pkgrel }}
+          CACHY_TAG: ${{ steps.plan.outputs.cachy_tag }}
+          GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -euo pipefail
+          cd pkg_dir
+          cp PKGBUILD /tmp/PKGBUILD.orig
+          gh_api() { curl -sfL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$@"; }
+          # 只有使用者点名的这两个内核要强制改 config；ltscjk / dkms 套件保持原样
+          case "$PKG" in linux-zencjk|linux-cachyos-cjktty) INJECT=1 ;; *) INJECT=0 ;; esac
+
+          # ---------- 共用：把 CJK + dae 需要的内核选项强制写进 config ----------
+          # 用「先删同名行再追加」而不是单纯 >> ，避免 config 里出现
+          # 「# CONFIG_X is not set」和「CONFIG_X=y」两行并存。
+          # 注意：CONFIG_NET_SCH_CLSACT / CONFIG_BPF_TC 在 mainline 并不存在
+          # （clsact 由 NET_SCH_INGRESS 提供，模块别名 sch_clsact），
+          # 照写不会报错但会被 kconfig 丢掉，所以额外补上真正生效的符号。
+          if [ "$INJECT" = 1 ]; then
+          {
+            echo ''
+            echo '# ==== injected by build-repo.yml (CI only, never committed) ===='
+            echo '_ci_force_config() {'
+            echo '  local _cfg="$1" _opt'
+            echo "  if ! grep -q 'FONT_CJK_16x16' lib/fonts/Kconfig 2>/dev/null; then"
+            echo '    echo "错误：cjktty 补丁没有套用成功（lib/fonts/Kconfig 找不到 FONT_CJK_16x16）" >&2'
+            echo '    return 1'
+            echo '  fi'
+            echo '  for _opt in CONFIG_FONT_CJK_16x16 CONFIG_FONT_CJK_32x32 \'
+            echo '              CONFIG_NET_CLS_ACT CONFIG_NET_CLS_BPF \'
+            echo '              CONFIG_NET_SCH_CLSACT CONFIG_BPF_TC \'
+            echo '              CONFIG_NET_SCH_INGRESS CONFIG_NET_ACT_BPF \'
+            echo '              CONFIG_BPF_SYSCALL CONFIG_BPF_JIT CONFIG_DEBUG_INFO_BTF; do'
+            echo '    sed -i -E "/^(# )?${_opt}[ =]/d" "$_cfg"'
+            echo "    printf '%s=y\\n' \"\$_opt\" >> \"\$_cfg\""
+            echo '  done'
+            echo '  echo "已强制写入 CJK 字体 + dae/BPF 内核选项"'
+            echo '}'
+          } >> PKGBUILD
+          # 在 prepare() 里 `cp ../config .config` 之前插入调用（此时补丁已套用完）
+          sed -i -E 's|^([[:space:]]*)cp \.\./config \.config$|\1_ci_force_config ../config\n&|' PKGBUILD
+          grep -n '_ci_force_config ../config' PKGBUILD
+          fi
+
+          case "$PKG" in
+            linux-zencjk)
+              sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
+              # Arch 的 linux-zen config 按 <pkgver>-<pkgrel> 打 tag；没有对应 tag 时退回 main
+              # PKGBUILD 里原本写的是 ${pkgver}-${pkgrel} 模板，能解析就别动它，
+              # 否则会把写死的 tag 提交回 linux-zencjk 仓库，本地 yay 也跟着受害。
+              cfg_tag="${NEW_PKGVER}-${NEW_PKGREL}"
+              if curl -sfI "https://gitlab.archlinux.org/archlinux/packaging/packages/linux-zen/-/raw/${cfg_tag}/config.x86_64" >/dev/null; then
+                echo "Arch gitlab tag ${cfg_tag} 存在，沿用 PKGBUILD 原本的模板"
+              else
+                echo "::warning::Arch gitlab 还没有 tag ${cfg_tag}，本次临时用 main 分支的 config，且不回推 PKGBUILD"
+                sed -i -E "s|(config::https://gitlab\\.archlinux\\.org/archlinux/packaging/packages/linux-zen/-/raw/)[^/]+(/config\\.x86_64)|\\1main\\2|" PKGBUILD
+                touch /tmp/skip_push
+              fi
+              grep -n 'gitlab.archlinux.org' PKGBUILD
+
+              # cjktty 补丁：只在「版本线变了」时才改 URL，同一条线上不动已验证过的钉子
+              cur_patch=$(grep -oE 'cjktty-[0-9]+\.[0-9]+(\.[0-9]+)?\.patch' PKGBUILD | head -n1 || true)
+              new_series="${NEW_PKGVER%.*}"; new_series="${new_series%.*}"
+              cur_series=$(echo "$cur_patch" | sed -E 's/^cjktty-([0-9]+\.[0-9]+).*/\1/')
+              if [ -n "$cur_patch" ] && [ "$cur_series" != "$new_series" ]; then
+                cand=$(gh_api "https://api.github.com/repos/bigshans/cjktty-patches/contents/v${new_series%%.*}.x" \
+                       | jq -r '.[].name' | grep -E "^cjktty-${new_series//./\\.}(\.[0-9]+)?\.patch$" | sort -V | tail -n1 || true)
+                if [ -n "$cand" ]; then
+                  echo "cjktty 补丁 $cur_patch -> $cand（版本线 $cur_series -> $new_series）"
+                  sed -i "s|$cur_patch|$cand|" PKGBUILD
+                else
+                  echo "::warning::bigshans/cjktty-patches 里找不到 $new_series 的补丁，仍用 $cur_patch"
+                fi
               fi
               ;;
 
             linux-ltscjk)
-              latest_ver=$(curl -s "https://www.kernel.org/releases.json" | jq -r '.releases[] | select(.version | startswith("6.12.")) | .version' | sort -V | tail -n1)
-              if [ "$current_pkgver" != "$latest_ver" ]; then
-                echo "检测到新版本: $latest_ver (当前 $current_pkgver)"
-                sed -i "s/^pkgver=.*/pkgver=$latest_ver/" "$PKGBUILD"
-                changed=true
-              else
-                echo "当前已是最新版本 $current_pkgver"
-              fi
-              ;;
-
-            linux-cachyos-cjktty)
-              all_tags=$(curl -s "https://api.github.com/repos/CachyOS/linux/releases" | jq -r '.[].tag_name | select(test("^cachyos-7\\."))')
-              release_tag=$(echo "$all_tags" | grep -v '\-rc' | sort -V | tail -n1)
-              rc_tag=$(echo "$all_tags" | grep '\-rc' | sort -V | tail -n1)
-
-              echo "RELEASE_TAG=$release_tag" > /tmp/cachyos_versions
-              echo "RC_TAG=$rc_tag" >> /tmp/cachyos_versions
-
-              changed_local=false
-              if [ -n "$release_tag" ]; then
-                ver_part="${release_tag#cachyos-}"
-                ver_part="${ver_part%-*}"
-                if [ "$ver_part" != "$current_pkgver" ]; then
-                  changed_local=true
-                fi
-              fi
-              if [ "$changed_local" = "false" ] && [ -n "$rc_tag" ]; then
-                ver_part="${rc_tag#cachyos-}"
-                rc_ver="${ver_part%-*}"
-                rc_ver="${rc_ver//-/}"
-                if [ "$rc_ver" != "$current_pkgver" ]; then
-                  changed_local=true
-                fi
-              fi
-
-              if [ "$changed_local" = "true" ]; then
-                echo "检测到更新：正式版 $release_tag, RC版 $rc_tag"
-                changed=true
-              else
-                echo "当前已是最新版本"
-              fi
+              sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
               ;;
 
             snd-pcsp-dkms)
-              latest_ver=$(curl -s "https://www.kernel.org/releases.json" | jq -r '.latest_stable.version')
-              if [ "$current_pkgver" != "$latest_ver" ]; then
-                echo "检测到新稳定内核版本: $latest_ver (当前 $current_pkgver)"
-                sed -i "s/^pkgver=.*/pkgver=$latest_ver/" "$PKGBUILD"
-                changed=true
-              else
-                echo "当前已是最新稳定版本 $current_pkgver"
-              fi
+              sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
               ;;
 
-            *)
-              echo "未知仓库: $REPO_NAME" >&2
-              exit 1
+            linux-cachyos-cjktty)
+              tag_part="${CACHY_TAG#cachyos-}"
+              base="${tag_part%-*}"
+              if [ "$VARIANT" = "rc" ]; then
+                series="${base%-rc*}"
+                rcver="rc${base##*-rc}"
+                sed -i "s/^_major=.*/_major=$series/"    PKGBUILD
+                sed -i "s/^_minor=.*/#_minor=/"          PKGBUILD
+                sed -i "s/^#_rcver=.*/_rcver=$rcver/; s/^_rcver=.*/_rcver=$rcver/" PKGBUILD
+                config_url="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos-rc/config"
+              else
+                case "$base" in
+                  *.*.*) series="${base%.*}"; minor="${base##*.}" ;;
+                  *)     series="$base";      minor="0" ;;
+                esac
+                sed -i "s/^_major=.*/_major=$series/"  PKGBUILD
+                sed -i "s/^_minor=.*/_minor=$minor/"   PKGBUILD
+                sed -i "s/^_rcver=.*/#_rcver=/"        PKGBUILD
+                config_url="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos/config"
+              fi
+              sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/"          PKGBUILD
+              sed -i "s/^pkgrel=.*/pkgrel=$NEW_PKGREL/"          PKGBUILD
+              sed -i "s/^_tagrel=.*/_tagrel=${CACHY_TAG##*-}/"   PKGBUILD
+              # _srcname 直接用 tag：tarball 就叫 <tag>.tar.gz，不必再拼一遍
+              sed -i "s/^_srcname=.*/_srcname=$CACHY_TAG/"       PKGBUILD
+
+              # 「根据情况」挑 config：CachyOS 两个打包目录的版本线不一定跟得上我们要构建的 tag
+              # （现状：linux-cachyos 还停在 7.1.8，而 CachyOS/linux 的 release tag 已经是 7.2.0）。
+              # 拿错版本线的 config 只会让 make olddefconfig 用默认值填一大堆新符号，
+              # 编得出来但不是本意，所以优先挑版本线对得上的那一份。
+              _cfg_major() {
+                curl -sfL "https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/$1/PKGBUILD" \
+                  | sed -nE 's/^_major=([0-9.]+).*/\1/p' | head -n1
+              }
+              rel_maj=$(_cfg_major linux-cachyos || true)
+              rc_maj=$(_cfg_major linux-cachyos-rc || true)
+              echo "CachyOS 打包目录版本线：linux-cachyos=${rel_maj:-?}  linux-cachyos-rc=${rc_maj:-?}  本次要=$series"
+              if [ -n "$rel_maj" ] && [ "$series" = "$rel_maj" ]; then
+                config_url="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos/config"
+              elif [ -n "$rc_maj" ] && [ "$series" = "$rc_maj" ]; then
+                config_url="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos-rc/config"
+              else
+                echo "::warning::CachyOS 两个打包目录都不是 $series 线，沿用默认 $config_url"
+              fi
+
+              echo "下载 config: $config_url"
+              curl -sfL -o config "$config_url"
+              grep -m1 'Kernel Configuration' config || true
+
+              # cjktty 补丁：优先 cjktty-<series>.patch，没有就退到同线最高的 -rcN
+              avail=$(gh_api "https://api.github.com/repos/Capricornus007/cjktty-patches/contents/v${series%%.*}.x" \
+                      | jq -r '.[].name' || true)
+              esc="${series//./\\.}"
+              pick=$(printf '%s\n' "$avail" | grep -E "^cjktty-${esc}(\.[0-9]+)?\.patch$" | sort -V | tail -n1 || true)
+              [ -n "$pick" ] || pick=$(printf '%s\n' "$avail" | grep -E "^cjktty-${esc}-rc[0-9]+\.patch$" | sort -V | tail -n1 || true)
+              [ -n "$pick" ] || { echo "错误：cjktty-patches 里找不到 $series 的补丁"; exit 1; }
+              echo "选用 cjktty 补丁: $pick"
+              curl -sfL -o 0001-cjktty.patch \
+                "https://raw.githubusercontent.com/Capricornus007/cjktty-patches/master/v${series%%.*}.x/$pick"
+              sed -i -E 's|^[[:space:]]*"\$\{_cjktty_source\}/v[0-9]+\.x/cjktty-[^"]+\.patch"[[:space:]]*$|    "0001-cjktty.patch"|' PKGBUILD
+              curl -sfL -o cjktty-add-cjk32x32-font-data.patch \
+                "https://raw.githubusercontent.com/Capricornus007/cjktty-patches/master/cjktty-add-cjk32x32-font-data.patch"
+              sed -i -E 's|^[[:space:]]*"\$\{_cjktty_source\}/cjktty-add-cjk32x32-font-data\.patch"[[:space:]]*$|    "cjktty-add-cjk32x32-font-data.patch"|' PKGBUILD
               ;;
           esac
 
-          if [ "$changed" = "true" ]; then
-            if [ "$REPO_NAME" != "linux-cachyos-cjktty" ]; then
-              # kernel.org occasionally resets large HTTP/2 downloads. Remove
-              # partial archives and retry before declaring an update usable.
-              sums_updated=false
-              for attempt in 1 2 3 4 5; do
-                rm -f linux-*.tar.xz
-                if su builder -c "updpkgsums"; then
-                  sums_updated=true
-                  break
-                fi
-                echo "更新校验和失败（第 ${attempt}/5 次），稍后重试"
-                sleep $((attempt * 5))
-              done
-              if [ "$sums_updated" != "true" ]; then
-                cp /tmp/PKGBUILD.before-update "$PKGBUILD"
-                echo "无法可靠下载新源码，跳过本次更新"
-                echo "changed=false" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-              su builder -c "makepkg --printsrcinfo > .SRCINFO"
-              git add PKGBUILD .SRCINFO
-              git commit -m "chore: auto update PKGBUILD & .SRCINFO" || true
-              git push https://x-access-token:${GH_TOKEN}@github.com/${REPO_OWNER}/${REPO_NAME}.git HEAD || true
-            fi
-            echo "changed=true" >> $GITHUB_OUTPUT
-          else
-            echo "changed=false" >> $GITHUB_OUTPUT
-          fi
-          EOF
+          echo "==== PKGBUILD 版本区 ===="
+          grep -nE '^(pkgver|pkgrel|_major|_minor|_rcver|_tagrel|_srcname)=' PKGBUILD || true
 
-          chmod +x /tmp/update_version.sh
-          /tmp/update_version.sh "${{ matrix.repo_name }}" || true
+      - name: 更新校验和并回推 PKGBUILD
+        if: steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty'
+        env:
+          PKG: ${{ matrix.repo_name }}
+          GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
+          REPO_OWNER: ${{ github.repository_owner }}
+        run: |
+          set -uo pipefail
+          cd pkg_dir
+          chown -R builder:builder .
+          # kernel.org 偶尔会 reset 大文件的 HTTP/2 连接，删掉半截文件重试
+          sums_updated=false
+          for attempt in 1 2 3 4 5; do
+            rm -f linux-*.tar.xz linux-*.tar.xz.part
+            if su builder -c "updpkgsums"; then sums_updated=true; break; fi
+            echo "更新校验和失败（第 ${attempt}/5 次），稍后重试"
+            sleep $((attempt * 10))
+          done
+          if [ "$sums_updated" != "true" ]; then
+            echo "::error::无法可靠下载新源码，本次不构建"
+            exit 1
+          fi
+          su builder -c "makepkg --printsrcinfo > .SRCINFO"
+
+          # 回推时不能带上 CI 注入的 _ci_force_config，用原始 PKGBUILD 重放版本改动
+          cp PKGBUILD /tmp/PKGBUILD.ci
+          if [ -f /tmp/skip_push ]; then
+            echo "本次改动含临时性内容，不回推 PKGBUILD"
+          else
+            sed -i '/^# ==== injected by build-repo\.yml/,$d' PKGBUILD
+            sed -i -E '/^[[:space:]]*_ci_force_config \.\.\/config$/d' PKGBUILD
+            printf '%s\n' "$(cat PKGBUILD)" > PKGBUILD   # 去掉注入留下的尾端空行
+            git add PKGBUILD .SRCINFO
+            git commit -m "chore: auto update PKGBUILD & .SRCINFO" || true
+            git push "https://x-access-token:${GH_TOKEN}@github.com/${REPO_OWNER}/${PKG}.git" HEAD || true
+          fi
+          # 推完再把注入版换回来给 makepkg 用
+          cp /tmp/PKGBUILD.ci PKGBUILD
+          chown -R builder:builder .
 
       - name: 云端编译 `.pkg.tar.zst`
-        if: steps.update.outputs.changed == 'true'
+        if: steps.plan.outputs.build == 'true'
         run: |
-          if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ] && [ -f /tmp/cachyos_versions ]; then
-            source /tmp/cachyos_versions
-            echo "准备构建两个版本：正式版 $RELEASE_TAG，RC版 $RC_TAG"
-            root_dir="$PWD"
-            rm -rf pkg_dir-release pkg_dir-rc
-            cp -a pkg_dir pkg_dir-release
-            cp -a pkg_dir pkg_dir-rc
-
-            build_version() {
-              local tag=$1
-              local workdir=$2
-              if [ -z "$tag" ]; then
-                echo "跳过空版本"
-                return
-              fi
-              echo "构建版本：$tag"
-              tag_part="${tag#cachyos-}"
-              cd "$root_dir/$workdir"
-
-              # ---- 根据版本类型下载对应的 config 并追加 CJK 支持 ----
-              if [[ "$tag" == *"-rc"* ]]; then
-                config_url="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos-rc/config"
-              else
-                config_url="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos/config"
-              fi
-              echo "下载 config 文件：$config_url"
-              curl -s -o config "$config_url" || { echo "错误：下载 config 失败"; exit 1; }
-              # 无损追加 CJK 字体支持
-              if ! grep -q "CONFIG_FONT_CJK_16x16=y" config; then
-                echo "CONFIG_FONT_CJK_16x16=y" >> config
-              fi
-              if ! grep -q "CONFIG_FONT_CJK_32x32=y" config; then
-                echo "CONFIG_FONT_CJK_32x32=y" >> config
-              fi
-
-              # 追加 dae 運行支援
-              if ! grep -q "CONFIG_NET_CLS_ACT=y" config; then
-                echo "CONFIG_NET_CLS_ACT=y" >> config
-              fi
-              if ! grep -q "CONFIG_NET_CLS_BPF=y" config; then
-                echo "CONFIG_NET_CLS_BPF=y" >> config
-              fi
-              if ! grep -q "CONFIG_BPF_TC=y" config; then
-                echo "CONFIG_BPF_TC=y" >> config
-              fi
-              if ! grep -q "CONFIG_NET_SCH_CLSACT=y" config; then
-                echo "CONFIG_NET_SCH_CLSACT=y" >> config
-              fi
-
-              # ---- 根据 tag 决定使用哪个补丁（7.1 或 7.2） ----
-              if [[ "$tag" == *"7.2"* ]]; then
-                patch_version="7.2-rc7"
-              else
-                patch_version="7.1"
-              fi
-              patch_url="https://raw.githubusercontent.com/Capricornus007/cjktty-patches/master/v7.x/cjktty-${patch_version}.patch"
-              echo "下载补丁文件：$patch_url"
-              curl -s -L -o "0001-cjktty.patch" "$patch_url" || { echo "错误：下载补丁失败"; exit 1; }
-
-              # ---- 解析版本信息 ----
-              if [[ "$tag_part" == *"-rc"* ]]; then
-                major="${tag_part%-rc*}"
-                rcver="rc${tag_part#*-rc}"
-                rcver="${rcver%-*}"
-                tagrel="${tag_part##*-}"
-                pkgver="${major}.${rcver}"
-                srcname="${tag}"
-              else
-                ver_part="${tag_part%-*}"
-                tagrel="${tag_part##*-}"
-                major="${ver_part%.*}"
-                minor="${ver_part##*.}"
-                pkgver="${ver_part}"
-                srcname="cachyos-${major}.${minor}-${tagrel}"
-              fi
-
-              cp PKGBUILD PKGBUILD.bak
-              sed -i "s/^pkgver=.*/pkgver=$pkgver/" PKGBUILD
-              sed -i "s/^_srcname=.*/_srcname=$srcname/" PKGBUILD
-              # ---- 修改 cjktty patch source 行，使用当前版本下载的本地文件 ----
-              sed -i -E 's|^[[:space:]]*"\$\{_cjktty_source\}/v7\.x/cjktty-[^"]+\.patch"[[:space:]]*$|    "0001-cjktty.patch"|' PKGBUILD
-              if [[ "$tag" == *"-rc"* ]]; then
-                sed -i "s/^_major=.*/_major=$major/" PKGBUILD
-                sed -i "s/^_minor=.*/#_minor=/" PKGBUILD
-                sed -i "s/^#_rcver=.*/_rcver=$rcver/; s/^_rcver=.*/_rcver=$rcver/" PKGBUILD
-                sed -i "s/^_tagrel=.*/_tagrel=$tagrel/" PKGBUILD
-              else
-                sed -i "s/^_major=.*/_major=$major/" PKGBUILD
-                sed -i "s/^_minor=.*/_minor=$minor/" PKGBUILD
-                sed -i "s/^_rcver=.*/#_rcver=/" PKGBUILD
-                sed -i "s/^_tagrel=.*/_tagrel=$tagrel/" PKGBUILD
-              fi
-
-              chown -R builder:builder .
-              su builder -c "makepkg -s --noconfirm --skipinteg -f" || {
-                echo "构建失败：$tag"
-                mv PKGBUILD.bak PKGBUILD
-                exit 1
-              }
-              mv PKGBUILD.bak PKGBUILD
-            }
-
-            build_version "$RELEASE_TAG" pkg_dir-release
-            build_version "$RC_TAG" pkg_dir-rc
-          else
-            # 其他包的单次构建（原逻辑）
-            cd pkg_dir
-            chown -R builder:builder .
-            sed -i 's/#MAKEFLAGS="-j2"/MAKEFLAGS="-j$(nproc)"/' /etc/makepkg.conf
-            sed -i 's/COMPRESSZST=(zstd -c -z -q -)/COMPRESSZST=(zstd -c -z -q --threads=0 -)/' /etc/makepkg.conf
-            su builder -c "makepkg -s --noconfirm"
+          set -uo pipefail
+          cd pkg_dir
+          chown -R builder:builder .
+          flags="-s --noconfirm -f"
+          if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ]; then
+            # CachyOS 的 config / 补丁是 CI 现抓的，校验和对不上，跳过完整性检查
+            flags="$flags --skipinteg"
+          elif [ "${PGP_OK:-1}" != "1" ]; then
+            echo "::warning::有公钥没导入成功，本次跳过 PGP 校验（校验和仍然检查）"
+            flags="$flags --skippgpcheck"
           fi
+          echo "makepkg $flags"
+          su builder -c "makepkg $flags"
+          ls -lh ./*.pkg.tar.zst
 
       - name: 暂存构建好的 `.pkg.tar.zst` 产物
-        if: steps.update.outputs.changed == 'true'
+        if: steps.plan.outputs.build == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: pkg-${{ matrix.repo_name }}
-          path: |
-            pkg_dir/*.pkg.tar.zst
-            pkg_dir-release/*.pkg.tar.zst
-            pkg_dir-rc/*.pkg.tar.zst
+          name: pkg-${{ matrix.key }}
+          path: pkg_dir/*.pkg.tar.zst
+          if-no-files-found: error
 
   deploy-repo:
     needs: build-packages
@@ -321,11 +465,11 @@ jobs:
 
     steps:
       - name: 安装工具
-        run: |
-          pacman -Syu --noconfirm github-cli
+        run: pacman -Syu --noconfirm github-cli
 
       - name: 下载所有子 Job 构建好的 `.pkg.tar.zst`
         uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           path: artifact-downloads
           pattern: pkg-*
@@ -334,10 +478,12 @@ jobs:
       - name: 检查是否有构建产物
         id: check_artifacts
         run: |
-          if [ -z "$(find artifact-downloads -name '*.pkg.tar.zst' -print -quit)" ]; then
+          mkdir -p artifact-downloads
+          if [ -z "$(find artifact-downloads -name '*.pkg.tar.zst' -print -quit 2>/dev/null)" ]; then
             echo "没有构建产物，跳过部署"
             echo "has_artifacts=false" >> $GITHUB_OUTPUT
           else
+            find artifact-downloads -name '*.pkg.tar.zst' -printf '%f\n'
             echo "has_artifacts=true" >> $GITHUB_OUTPUT
           fi
 
@@ -346,11 +492,14 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           mkdir -p deploy
           find artifact-downloads -name "*.pkg.tar.zst" -exec cp {} deploy/ \;
           cd deploy
-          gh release download current-repo --repo ${{ github.repository }} -p "junlin03-aur.db*" --clobber || true
-          repo-add -n -R junlin03-aur.db.tar.gz *.pkg.tar.zst
+          gh release download "$REPO_RELEASE_TAG" --repo "${{ github.repository }}" \
+             -p "junlin03-aur.db*" -p "junlin03-aur.files*" --clobber || true
+          repo-add -n -R junlin03-aur.db.tar.gz ./*.pkg.tar.zst
+          ls -lh
 
       - name: 部署至 GitHub Releases
         if: steps.check_artifacts.outputs.has_artifacts == 'true'
