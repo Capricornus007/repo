@@ -125,10 +125,17 @@ jobs:
         run: |
           set -euo pipefail
           install -d -o builder -g builder /build/aur-deps
-          for aur_pkg in mpeghdec quirc svt-jpeg-xs-git; do
+          # ffmpeg-full-git 的完整功能集合依赖多个 AUR 库；Arch 官方仓库
+          # 不提供它们。opencv4 需要官方 ffmpeg 作为构建依赖，但最终产物
+          # 只上传 ffmpeg-full-git，不会安装或替换 runner 上的 ffmpeg。
+          pacman -Syu --noconfirm --needed ffmpeg
+          for aur_pkg in \
+            chromaprint-fftw davs2 flite1 lcevcdec libaribcaption libklvanc \
+            openapv opencv4 rockchip-mpp shine uavs3d vo-amrwbenc vvenc \
+            xavs l-smash xavs2 xevd xeve mpeghdec quirc svt-jpeg-xs-git; do
             git clone --depth=1 "https://aur.archlinux.org/${aur_pkg}.git" "/build/aur-deps/${aur_pkg}"
             chown -R builder:builder "/build/aur-deps/${aur_pkg}"
-            (cd "/build/aur-deps/${aur_pkg}" && su builder -c 'makepkg -si --noconfirm --needed')
+            (cd "/build/aur-deps/${aur_pkg}" && su builder -c 'makepkg -si --noconfirm --needed --asdeps')
           done
 
       - name: 云端编译 ffmpeg-full-git
@@ -136,8 +143,11 @@ jobs:
         run: |
           set -euo pipefail
           cd pkg_dir
+          # AUR 快照的 pkgver 可能落后于刚抓取的 FFmpeg HEAD；把检测结果
+          # 写回工作区，保证包文件名、元数据与实际源码版本一致。
+          sed -i -E "s/^pkgver=.*/pkgver=${{ steps.ffmpeg_plan.outputs.pkgver }}/" PKGBUILD
           chown -R builder:builder .
-          su builder -c 'makepkg -s --noconfirm -f --skippgpcheck'
+          su builder -c 'makepkg -s --noconfirm -f --skippgpcheck --nodeps'
           ls -lh ./*.pkg.tar.zst
 
       - name: 导入源码签名公钥
