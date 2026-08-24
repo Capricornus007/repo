@@ -62,6 +62,47 @@ jobs:
           set -euo pipefail
           pacman -Syu --noconfirm git jq curl sudo devtools pacman-contrib gnupg
 
+          if [ "${{ matrix.repo_name }}" = 'ffmpeg-full-git' ]; then
+            # 与维护者本机相同的第三方仓库清单。完整功能版 ffmpeg 的依赖
+            # 由这些仓库提供；只有 mpeghdec、quirc、svt-jpeg-xs-git 仍从 AUR 构建。
+            install -d /etc/pacman.d
+            printf '%s\n' \
+              'Server = https://geo-mirror.chaotic.cx/$repo/$arch' \
+              'Server = https://cdn-mirror.chaotic.cx/$repo/$arch' \
+              > /etc/pacman.d/chaotic-mirrorlist
+            printf '%s\n' 'Server = https://repo.archlinuxcn.org/$arch' \
+              > /etc/pacman.d/archlinuxcn-mirrorlist
+            printf '%s\n' \
+              'Server = https://repository.arch4edu.org/$arch' \
+              'Server = https://mirrors.nju.edu.cn/arch4edu/$arch' \
+              > /etc/pacman.d/arch4edu-mirrorlist
+            printf '%s\n' \
+              'Server = https://ftp.f3l.de/~martchus/$repo/os/$arch' \
+              'Server = https://martchus.no-ip.biz/repo/arch/$repo/os/$arch' \
+              > /etc/pacman.d/ownstuff-mirrorlist
+            printf '%s\n' 'Server = https://archlinux.repo.063240.xyz/$arch/' \
+              > /etc/pacman.d/linuxrepos-mirrorlist
+            cat >> /etc/pacman.conf <<'PACMAN_REPOS'
+
+          [chaotic-aur]
+          SigLevel = Never
+          Include = /etc/pacman.d/chaotic-mirrorlist
+          [archlinuxcn]
+          SigLevel = Never
+          Include = /etc/pacman.d/archlinuxcn-mirrorlist
+          [arch4edu]
+          SigLevel = Never
+          Include = /etc/pacman.d/arch4edu-mirrorlist
+          [linuxrepos]
+          SigLevel = Never
+          Include = /etc/pacman.d/linuxrepos-mirrorlist
+          [ownstuff]
+          SigLevel = Never
+          Include = /etc/pacman.d/ownstuff-mirrorlist
+          PACMAN_REPOS
+            pacman -Syu --noconfirm --needed
+          fi
+
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
           # 结果最重的 CachyOS 内核是单线程编译的，必然撞 6 小时上限。
           # 直接追加到文件末尾，比 sed 匹配注释行可靠（上游默认值改过好几次）。
@@ -125,14 +166,7 @@ jobs:
         run: |
           set -euo pipefail
           install -d -o builder -g builder /build/aur-deps
-          # ffmpeg-full-git 的完整功能集合依赖多个 AUR 库；Arch 官方仓库
-          # 不提供它们。opencv4 需要官方 ffmpeg 作为构建依赖，但最终产物
-          # 只上传 ffmpeg-full-git，不会安装或替换 runner 上的 ffmpeg。
-          pacman -Syu --noconfirm --needed ffmpeg
-          for aur_pkg in \
-            chromaprint-fftw davs2 flite1 lcevcdec libaribcaption libklvanc \
-            openapv opencv4 rockchip-mpp shine uavs3d vo-amrwbenc vvenc \
-            xavs l-smash xavs2 xevd xeve mpeghdec quirc svt-jpeg-xs-git; do
+          for aur_pkg in mpeghdec quirc svt-jpeg-xs-git; do
             git clone --depth=1 "https://aur.archlinux.org/${aur_pkg}.git" "/build/aur-deps/${aur_pkg}"
             chown -R builder:builder "/build/aur-deps/${aur_pkg}"
             (cd "/build/aur-deps/${aur_pkg}" && su builder -c 'makepkg -si --noconfirm --needed --asdeps')
