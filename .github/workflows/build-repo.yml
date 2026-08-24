@@ -41,6 +41,11 @@ jobs:
           - key: linux-cachyos-cjktty-rc
             repo_name: linux-cachyos-cjktty
             variant: rc
+          # ffmpeg-full-git 啟用 nonfree（包含 libfdk-aac 等）。依仓库所有者要求，
+          # 构建产物与其他套件一起发布到公开的 current-repo Release。
+          - key: ffmpeg-full-git
+            repo_name: ffmpeg-full-git
+            variant: nonfree
 
     container:
       image: archlinux:base-devel
@@ -77,10 +82,66 @@ jobs:
       - name: 拉取对应的套件仓库
         run: |
           set -euo pipefail
-          git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir
+          if [ "${{ matrix.repo_name }}" = "ffmpeg-full-git" ]; then
+            git clone https://aur.archlinux.org/ffmpeg-full-git.git pkg_dir
+          else
+            git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir
+          fi
           git config --global --add safe.directory "$PWD/pkg_dir"
 
+      - name: 检测 ffmpeg-full-git 上游版本
+        if: matrix.repo_name == 'ffmpeg-full-git'
+        id: ffmpeg_plan
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          cd pkg_dir
+          eval "$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "CUR_PKGVER=%q\\nCUR_PKGREL=%q\\nPKGBASE=%q\\n" "$pkgver" "$pkgrel" "${pkgbase:-${pkgname[0]}}"')"
+
+          # 只过滤源码 blob，保留完整提交与标签历史，严格复用 AUR pkgver() 算法。
+          git clone --filter=blob:none https://github.com/FFmpeg/FFmpeg.git /tmp/ffmpeg-version
+          latest_pkgver=$(printf '%s.r%s.g%s' \
+            "$(git -C /tmp/ffmpeg-version describe --tags --long | awk -F- '{ sub(/^n/, "", $1); print $1 }')" \
+            "$(git -C /tmp/ffmpeg-version describe --tags --match N | awk -F- '{ print $2 }')" \
+            "$(git -C /tmp/ffmpeg-version rev-parse --short HEAD)")
+          echo "当前 PKGBUILD=$CUR_PKGVER，源码目标=$latest_pkgver"
+
+          assets=$(curl -sfL \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H 'Accept: application/vnd.github+json' \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/${REPO_RELEASE_TAG}" \
+            | jq -r '.assets[].name' 2>/dev/null || true)
+          if printf '%s\n' "$assets" | grep -q "^${PKGBASE}-${latest_pkgver}-${CUR_PKGREL}-"; then
+            echo "${PKGBASE}-${latest_pkgver}-${CUR_PKGREL} 已在公开 Release 里"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "build=true" >> "$GITHUB_OUTPUT"
+          echo "pkgver=$latest_pkgver" >> "$GITHUB_OUTPUT"
+
+      - name: 构建 ffmpeg-full-git 的 AUR 依赖
+        if: matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          install -d -o builder -g builder /build/aur-deps
+          for aur_pkg in mpeghdec quirc svt-jpeg-xs-git; do
+            git clone --depth=1 "https://aur.archlinux.org/${aur_pkg}.git" "/build/aur-deps/${aur_pkg}"
+            chown -R builder:builder "/build/aur-deps/${aur_pkg}"
+            (cd "/build/aur-deps/${aur_pkg}" && su builder -c 'makepkg -si --noconfirm --needed')
+          done
+
+      - name: 云端编译 ffmpeg-full-git
+        if: matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          cd pkg_dir
+          chown -R builder:builder .
+          su builder -c 'makepkg -s --noconfirm -f --skippgpcheck'
+          ls -lh ./*.pkg.tar.zst
+
       - name: 导入源码签名公钥
+        if: matrix.repo_name != 'ffmpeg-full-git'
         run: |
           set -uo pipefail
           cd pkg_dir
@@ -124,6 +185,7 @@ jobs:
           echo "PGP_OK=$all_ok" >> "$GITHUB_ENV"
 
       - name: 检测目标版本并决定是否需要构建
+        if: matrix.repo_name != 'ffmpeg-full-git'
         id: plan
         env:
           PKG: ${{ matrix.repo_name }}
@@ -230,7 +292,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: 改写 PKGBUILD（版本、config、cjktty 补丁）
-        if: steps.plan.outputs.build == 'true'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'
         env:
           PKG: ${{ matrix.repo_name }}
           VARIANT: ${{ matrix.variant }}
@@ -408,7 +470,7 @@ jobs:
           grep -nE '^(pkgver|pkgrel|_major|_minor|_rcver|_tagrel|_srcname)=' PKGBUILD || true
 
       - name: 更新校验和并回推 PKGBUILD
-        if: steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -448,7 +510,7 @@ jobs:
           chown -R builder:builder .
 
       - name: 云端编译 `.pkg.tar.zst`
-        if: steps.plan.outputs.build == 'true'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'
         run: |
           set -uo pipefail
           cd pkg_dir
@@ -466,7 +528,7 @@ jobs:
           ls -lh ./*.pkg.tar.zst
 
       - name: 暂存构建好的 `.pkg.tar.zst` 产物
-        if: steps.plan.outputs.build == 'true'
+        if: (matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true') || (matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true')
         uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ matrix.key }}
