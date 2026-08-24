@@ -147,7 +147,7 @@ jobs:
           # 写回工作区，保证包文件名、元数据与实际源码版本一致。
           sed -i -E "s/^pkgver=.*/pkgver=${{ steps.ffmpeg_plan.outputs.pkgver }}/" PKGBUILD
           chown -R builder:builder .
-          su builder -c 'makepkg -s --noconfirm -f --skippgpcheck --nodeps'
+          su builder -c 'makepkg -s --noconfirm -f --skippgpcheck'
           ls -lh ./*.pkg.tar.zst
 
       - name: 导入源码签名公钥
