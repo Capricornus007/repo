@@ -46,6 +46,11 @@ jobs:
           - key: ffmpeg-full-git
             repo_name: ffmpeg-full-git
             variant: nonfree
+          # kew-git：命令行音乐播放器，纯 git VCS 包，PKGBUILD 从 AUR 取，
+          # 版本由上游 codeberg HEAD 决定，无需改写或回推 PKGBUILD。
+          - key: kew-git
+            repo_name: kew-git
+            variant: none
 
     container:
       image: archlinux:base-devel
@@ -123,11 +128,13 @@ jobs:
       - name: 拉取对应的套件仓库
         run: |
           set -euo pipefail
-          if [ "${{ matrix.repo_name }}" = "ffmpeg-full-git" ]; then
-            git clone https://aur.archlinux.org/ffmpeg-full-git.git pkg_dir
-          else
-            git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir
-          fi
+          # ffmpeg-full-git 与 kew-git 直接取 AUR 的 PKGBUILD；其余套件取维护者自己的仓库
+          case "${{ matrix.repo_name }}" in
+            ffmpeg-full-git|kew-git)
+              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
+            *)
+              git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir ;;
+          esac
           git config --global --add safe.directory "$PWD/pkg_dir"
 
       - name: 检测 ffmpeg-full-git 上游版本
@@ -310,6 +317,17 @@ jobs:
               fi
               # CachyOS 的 tag 尾号即 pkgrel（本地历史产物 7.2.rc6-1 / 7.2.rc6-2 就是这么来的）
               TARGET_PKGREL="${CACHY_TAG##*-}"
+              ;;
+
+            kew-git)
+              # -git 包：目标 pkgver 完全由上游 HEAD 决定，忠实复刻 PKGBUILD 的 pkgver()
+              KEW_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "$url"')
+              rm -rf /tmp/kew-src
+              git clone "$KEW_URL" /tmp/kew-src || skip "clone kew 上游失败"
+              kew_tag=$(git -C /tmp/kew-src tag | sort | tail -n1)
+              kew_hash=$(git -C /tmp/kew-src rev-parse --short HEAD)
+              [ -n "$kew_hash" ] || skip "拿不到 kew 上游 HEAD"
+              TARGET_PKGVER=$(printf '%s.%s' "$kew_tag" "$kew_hash" | sed 's/[:\/\-]//g')
               ;;
 
             *)
@@ -514,7 +532,7 @@ jobs:
           grep -nE '^(pkgver|pkgrel|_major|_minor|_rcver|_tagrel|_srcname)=' PKGBUILD || true
 
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -651,8 +669,8 @@ jobs:
           # 只建立「本轮新产物」的包名集合，其他包即使仍在 Release 里也不碰。
           declare -A package_names=()
           while IFS= read -r -d '' pkg; do
-            name=$(pacman -Qp --print-format '%n' "$pkg")
-            [ -n "$name" ] && package_names["$name"]=1
+            name=$(pacman -Qp "$pkg" 2>/dev/null | awk 'NR==1{print $1}' || true)
+            [ -n "$name" ] && package_names["$name"]=1 || true
           done < <(find deploy -maxdepth 1 -type f -name '*.pkg.tar.zst' -print0)
 
           mapfile -t new_assets < <(find deploy -maxdepth 1 -type f -name '*.pkg.tar.zst' -printf '%f\n')
