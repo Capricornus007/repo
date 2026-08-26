@@ -653,6 +653,7 @@ jobs:
             case "$f" in *:*) mv "$f" "${f//:/./}"; echo "renamed: $f -> ${f//:/./}" ;; esac
           done
       - name: 上传产物到 artifact
+        if: (matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true') || (matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true')
         uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ matrix.key }}
