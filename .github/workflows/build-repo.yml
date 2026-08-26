@@ -51,6 +51,17 @@ jobs:
           - key: kew-git
             repo_name: kew-git
             variant: none
+          # mpv-git：视频播放器 git 版。PKGBUILD/find-deps.py/mpv.install 三个文件
+          # 直接维护在本仓库 mpv-git/ 目录（与维护者本机 yay cache 相同的打包文件），
+          # 版本由上游 mpv-player/mpv HEAD 决定，无需改写或回推。
+          - key: mpv-git
+            repo_name: mpv-git
+            variant: none
+          # oh-my-pi-git：AI coding agent（omp）。纯 git VCS 包，PKGBUILD 从 AUR 取，
+          # 版本由上游 can1357/oh-my-pi HEAD 决定，无需改写或回推 PKGBUILD。
+          - key: oh-my-pi-git
+            repo_name: oh-my-pi-git
+            variant: none
 
     container:
       image: archlinux:base-devel
@@ -128,10 +139,14 @@ jobs:
       - name: 拉取对应的套件仓库
         run: |
           set -euo pipefail
-          # ffmpeg-full-git 与 kew-git 直接取 AUR 的 PKGBUILD；其余套件取维护者自己的仓库
+          # ffmpeg-full-git / kew-git / oh-my-pi-git 直接取 AUR 的 PKGBUILD；
+          # mpv-git 的打包文件维护在本仓库 mpv-git/ 目录；
+          # 其余套件取维护者自己的仓库
           case "${{ matrix.repo_name }}" in
-            ffmpeg-full-git|kew-git)
+            ffmpeg-full-git|kew-git|oh-my-pi-git)
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
+            mpv-git)
+              cp -r "${{ github.workspace }}/mpv-git" pkg_dir ;;
             *)
               git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir ;;
           esac
@@ -328,6 +343,27 @@ jobs:
               kew_hash=$(git -C /tmp/kew-src rev-parse --short HEAD)
               [ -n "$kew_hash" ] || skip "拿不到 kew 上游 HEAD"
               TARGET_PKGVER=$(printf '%s.%s' "$kew_tag" "$kew_hash" | sed 's/[:\/\-]//g')
+              ;;
+
+            mpv-git|oh-my-pi-git)
+              # -git 包：目标 pkgver 完全由上游 HEAD 决定。
+              # 复刻各包 PKGBUILD 的 pkgver()：
+              #   mpv-git: git describe --long --tags --abbrev=7 --exclude 'git-release'
+              #            | sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/^v//g'  (带 epoch=1)
+              #   oh-my-pi-git: git describe --tags --long --abbrev=7
+              #            | sed 's/\([^--]*\)-g/r\1/;s/-/./g'
+              SRC_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
+                        for s in "${source[@]}"; do printf "%s\n" "$s"; done | grep -oE "https[^+]*\.git" | head -n1')
+              rm -rf /tmp/gitpkg-src
+              git clone "$SRC_URL" /tmp/gitpkg-src || skip "clone $PKG 上游失败"
+              if [ "$PKG" = "mpv-git" ]; then
+                TARGET_PKGVER=$(git -C /tmp/gitpkg-src describe --long --tags --abbrev=7 --exclude 'git-release' \
+                  | sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/^v//g')
+              else
+                TARGET_PKGVER=$(git -C /tmp/gitpkg-src describe --tags --long --abbrev=7 \
+                  | sed 's/\([^--]*\)-g/r\1/;s/-/./g')
+              fi
+              [ -n "$TARGET_PKGVER" ] || skip "拿不到 $PKG 上游版本"
               ;;
 
             *)
@@ -532,7 +568,7 @@ jobs:
           grep -nE '^(pkgver|pkgrel|_major|_minor|_rcver|_tagrel|_srcname)=' PKGBUILD || true
 
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
