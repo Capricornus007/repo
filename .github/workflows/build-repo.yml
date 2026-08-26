@@ -643,6 +643,16 @@ jobs:
 
       - name: 暂存构建好的 `.pkg.tar.zst` 产物
         if: (matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true') || (matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true')
+        run: |
+          set -euo pipefail
+          # epoch 包（如 mpv-git-1:0.41.0-…）文件名含冒号，GitHub artifact
+          # 路径禁止 ':' → 上传前把冒号换成点号；repo-add 读 .PKGINFO，
+          # 文件名不影响 repo.db 的版本记录，pacman -U 也不受影响。
+          for f in pkg_dir/*.pkg.tar.zst; do
+            [ -e "$f" ] || continue
+            case "$f" in *:*) mv "$f" "${f//:/./}"; echo "renamed: $f -> ${f//:/./}" ;; esac
+          done
+      - name: 上传产物到 artifact
         uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ matrix.key }}
