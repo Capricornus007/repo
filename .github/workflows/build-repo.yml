@@ -77,6 +77,11 @@ jobs:
         run: |
           set -euo pipefail
           pacman -Syu --noconfirm git jq curl sudo devtools pacman-contrib gnupg
+          # oh-my-pi 的 rust natives（audiopus_sys 等）用 cmake+Ninja generator，
+          # AUR PKGBUILD 的 makedepends 漏列 ninja，容器預設沒有 → 補裝
+          if [ "${{ matrix.repo_name }}" = 'oh-my-pi-git' ]; then
+            pacman -Sy --noconfirm --needed ninja
+          fi
 
           if [ "${{ matrix.repo_name }}" = 'ffmpeg-full-git' ]; then
             # 与维护者本机相同的第三方仓库清单。完整功能版 ffmpeg 的依赖
@@ -146,7 +151,14 @@ jobs:
             ffmpeg-full-git|kew-git|oh-my-pi-git)
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
             mpv-git)
-              cp -r "${{ github.workspace }}/mpv-git" pkg_dir ;;
+              # 本 workflow 没有 checkout step（其他包都是 clone 来的），
+              # mpv-git 的三个打包文件直接从本仓库 master 分支的 raw URL 抓
+              mkdir pkg_dir
+              base="https://raw.githubusercontent.com/${{ github.repository }}/master/mpv-git"
+              for f in PKGBUILD find-deps.py mpv.install; do
+                curl -sfL "$base/$f" -o "pkg_dir/$f"
+              done
+              chmod +x pkg_dir/find-deps.py ;;
             *)
               git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir ;;
           esac
