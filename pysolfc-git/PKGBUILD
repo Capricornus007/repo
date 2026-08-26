@@ -1,0 +1,66 @@
+# Maintainer: Capricornus007 (auto-build via Capricornus007/repo)
+# Based on the Arch extra 'pysolfc' PKGBUILD by Jaroslav Lichtblau,
+# Carl Smedstad and Eric Bélanger; switched to the upstream git tree.
+pkgname=pysolfc-git
+pkgver=3.6.1.r23.g7a3d146
+pkgrel=1
+pkgdesc="PySol (Fan Club edition) is an exciting collection of more than 1000 solitaire games (git version)"
+arch=('any')
+url="https://github.com/shlomif/PySolFC"
+license=('GPL-3.0-or-later')
+depends=(
+  'pysolfc-cardsets'
+  'python'
+  'python-attrs'
+  'python-configobj'
+  'python-pillow'
+  'python-pygame'
+  'python-pysol_cards'
+  'tk'
+)
+makedepends=(
+  'git'
+  'python-build'
+  'python-installer'
+  'python-setuptools'
+  'python-wheel'
+)
+optdepends=(
+  'python-kivy: Kivy based interface'
+)
+provides=('pysolfc')
+conflicts=('pysolfc')
+source=("git+https://github.com/shlomif/PySolFC.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd PySolFC
+  # Only match release tags (pysolfc-<version>) so Android CI tags are ignored.
+  git describe --tags --long --abbrev=7 --match 'pysolfc-[0-9]*' \
+    | sed 's/^pysolfc-//; s/\([^-]*-g\)/r\1/; s/-/./g'
+}
+
+prepare() {
+  cd PySolFC
+  mv pysol.py pysol
+  sed -i 's/pysol\.py/pysol/' \
+    MANIFEST.in \
+    data/pysol.desktop \
+    setup.py \
+    tests/lib/pysol_tests/test_version_flag.py
+}
+
+build() {
+  cd PySolFC
+  python -m build --wheel --no-isolation
+}
+
+check() {
+  cd PySolFC
+  python -m unittest discover -v
+}
+
+package() {
+  cd PySolFC
+  python -m installer --destdir="$pkgdir" dist/*.whl
+}

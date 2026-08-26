@@ -62,6 +62,12 @@ jobs:
           - key: oh-my-pi-git
             repo_name: oh-my-pi-git
             variant: none
+          # pysolfc-git：千余种纸牌接龙游戏合集（git 版）。AUR 无 -git 包，
+          # PKGBUILD 维护在本仓库 pysolfc-git/ 目录（以 Arch extra 的
+          # pysolfc 打包为蓝本，源码切到上游 git），版本由上游 HEAD 决定。
+          - key: pysolfc-git
+            repo_name: pysolfc-git
+            variant: none
 
     container:
       image: archlinux:base-devel
@@ -150,6 +156,11 @@ jobs:
           case "${{ matrix.repo_name }}" in
             ffmpeg-full-git|kew-git|oh-my-pi-git)
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
+            pysolfc-git)
+              # 同 mpv-git：打包文件维护在本仓库 pysolfc-git/ 目录
+              mkdir pkg_dir
+              curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/pysolfc-git/PKGBUILD" \
+                -o pkg_dir/PKGBUILD ;;
             mpv-git)
               # 本 workflow 没有 checkout step（其他包都是 clone 来的），
               # mpv-git 的三个打包文件直接从本仓库 master 分支的 raw URL 抓
@@ -357,13 +368,15 @@ jobs:
               TARGET_PKGVER=$(printf '%s.%s' "$kew_tag" "$kew_hash" | sed 's/[:\/\-]//g')
               ;;
 
-            mpv-git|oh-my-pi-git)
+            mpv-git|oh-my-pi-git|pysolfc-git)
               # -git 包：目标 pkgver 完全由上游 HEAD 决定。
               # 复刻各包 PKGBUILD 的 pkgver()：
               #   mpv-git: git describe --long --tags --abbrev=7 --exclude 'git-release'
               #            | sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/^v//g'  (带 epoch=1)
               #   oh-my-pi-git: git describe --tags --long --abbrev=7
               #            | sed 's/\([^--]*\)-g/r\1/;s/-/./g'
+              #   pysolfc-git: git describe --tags --long --abbrev=7 --match 'pysolfc-[0-9]*'
+              #            | sed 's/^pysolfc-//;s/\([^-]*-g\)/r\1/;s/-/./g'
               # source 数组元素形如 "git+https://github.com/mpv-player/mpv"：
               # 剥掉 git+ 前缀，去掉可能的 ::branch 片段与尾部注释，容忍没有 .git 后缀
               SRC_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
@@ -375,6 +388,9 @@ jobs:
               if [ "$PKG" = "mpv-git" ]; then
                 TARGET_PKGVER=$(git -C /tmp/gitpkg-src describe --long --tags --abbrev=7 --exclude 'git-release' \
                   | sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/^v//g')
+              elif [ "$PKG" = "pysolfc-git" ]; then
+                TARGET_PKGVER=$(git -C /tmp/gitpkg-src describe --tags --long --abbrev=7 --match 'pysolfc-[0-9]*' \
+                  | sed 's/^pysolfc-//; s/\([^-]*-g\)/r\1/; s/-/./g')
               else
                 TARGET_PKGVER=$(git -C /tmp/gitpkg-src describe --tags --long --abbrev=7 \
                   | sed 's/\([^--]*\)-g/r\1/;s/-/./g')
@@ -584,7 +600,7 @@ jobs:
           grep -nE '^(pkgver|pkgrel|_major|_minor|_rcver|_tagrel|_srcname)=' PKGBUILD || true
 
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
