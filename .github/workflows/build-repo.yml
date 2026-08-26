@@ -364,8 +364,12 @@ jobs:
               #            | sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/^v//g'  (带 epoch=1)
               #   oh-my-pi-git: git describe --tags --long --abbrev=7
               #            | sed 's/\([^--]*\)-g/r\1/;s/-/./g'
+              # source 数组元素形如 "git+https://github.com/mpv-player/mpv"：
+              # 剥掉 git+ 前缀，去掉可能的 ::branch 片段与尾部注释，容忍没有 .git 后缀
               SRC_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
-                        for s in "${source[@]}"; do printf "%s\n" "$s"; done | grep -oE "https[^+]*\.git" | head -n1')
+                        for s in "${source[@]}"; do printf "%s\n" "$s"; done' \
+                | sed -E 's/^git\+//; s/#[^:]*$//; s/^[^:]*:://' \
+                | grep -E '^https?://' | head -n1)
               rm -rf /tmp/gitpkg-src
               git clone "$SRC_URL" /tmp/gitpkg-src || skip "clone $PKG 上游失败"
               if [ "$PKG" = "mpv-git" ]; then
