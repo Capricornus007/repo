@@ -650,7 +650,14 @@ jobs:
           # 文件名不影响 repo.db 的版本记录，pacman -U 也不受影响。
           for f in pkg_dir/*.pkg.tar.zst; do
             [ -e "$f" ] || continue
-            case "$f" in *:*) mv "$f" "${f//:/./}"; echo "renamed: $f -> ${f//:/./}" ;; esac
+            case "$f" in *:*)
+              # 注意：bash 的 ${f//:/./} 会把 ':' 替换成 './'（实测），
+              # 目标路径多出斜杠导致 mv 失败；改用 sed 逐字替换。
+              new=$(printf '%s' "$f" | sed 's/:/./g')
+              mv "$f" "$new"
+              echo "renamed: $f -> $new"
+              ;;
+            esac
           done
       - name: 上传产物到 artifact
         if: (matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true') || (matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true')
