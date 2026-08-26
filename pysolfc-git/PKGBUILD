@@ -48,6 +48,14 @@ prepare() {
     data/pysol.desktop \
     setup.py \
     tests/lib/pysol_tests/test_version_flag.py
+
+  # 官方 release tarball 自带 data/html（约1100个帮助页），但 git tree 没有：
+  # DataLoader 启动时强制读取 <datadir>/html/license.html，缺了直接
+  # "OSError: DataLoader could not find" 起不来。上游 Makefile 的
+  # `make rules` 会用 html-src/gen-html.py 现场生成整棵 data/html。
+  if [ ! -f data/html/license.html ]; then
+    make rules
+  fi
 }
 
 build() {
