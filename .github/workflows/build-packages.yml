@@ -261,7 +261,7 @@ jobs:
 
           eval "$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
                   printf "CUR_PKGVER=%q\nCUR_PKGREL=%q\nCUR_EPOCH=%q\nPKGBASE=%q\n" \
-                         "$pkgver" "$pkgrel" "${epoch:-0}" "${pkgbase:-${pkgname[0]}}')"
+                         "$pkgver" "$pkgrel" "${epoch:-0}" "${pkgbase:-${pkgname[0]}}"')"
           echo "当前 PKGBUILD: pkgbase=$PKGBASE pkgver=$CUR_PKGVER pkgrel=$CUR_PKGREL epoch=$CUR_EPOCH"
 
           TARGET_PKGVER=""
