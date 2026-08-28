@@ -82,7 +82,7 @@ jobs:
       - name: 初始化 Arch Linux 环境
         run: |
           set -euo pipefail
-          pacman -Syu --noconfirm git jq curl sudo devtools pacman-contrib gnupg
+          pacman -Syu --noconfirm git jq curl sudo devtools pacman-contrib gnupg github-cli
           # oh-my-pi 的 rust natives（audiopus_sys 等）用 cmake+Ninja generator，
           # AUR PKGBUILD 的 makedepends 漏列 ninja，容器預設沒有 → 補裝
           if [ "${{ matrix.repo_name }}" = 'oh-my-pi-git' ]; then
@@ -631,10 +631,12 @@ jobs:
                 ;;
             esac
           done
-          # kernel.org 偶尔会 reset 大文件的 HTTP/2 连接，删掉半截文件重试
+          # kernel.org 偶尔会 reset 大文件的 HTTP/2 连接，删掉半截文件重试。
+          # 注意：第一次不能删——上面可能刚从 kernel-sources-cache 拿到完整文件。
           sums_updated=false
           for attempt in 1 2 3 4 5; do
-            rm -f linux-*.tar.xz linux-*.tar.xz.part
+            [ "$attempt" -eq 1 ] || rm -f linux-*.tar.xz linux-*.tar.xz.part
+            rm -f linux-*.tar.xz.part
             if su builder -c "updpkgsums"; then sums_updated=true; break; fi
             echo "更新校验和失败（第 ${attempt}/5 次），稍后重试"
             sleep $((attempt * 30))
