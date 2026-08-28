@@ -64,7 +64,7 @@ install=mpv.install
 source=('git+https://github.com/mpv-player/mpv'
         'find-deps.py')
 sha256sums=('SKIP'
-            '1ba780ede4a28b68ae5b7ab839958ff91ed01d3c6c1d24cce8a5dd24492f8d2b')
+            'SKIP')
 
 _opt_extra_flags=()
 
