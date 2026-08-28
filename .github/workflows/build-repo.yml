@@ -1,17 +1,27 @@
 name: Build Pacman Repository
 
+# 定时任务是每小时一次。绝大多数轮次里「检测目标版本并决定是否需要构建」会算出
+# 没有新版本，几分钟就整轮跳过；只有上游真的发了新版才会进入编译，所以频率高
+# 不等于开销大。
+#
+# 注意 concurrency 的写法：内核包（尤其 linux-cachyos-cjktty）单个要编 150 分钟
+# 以上，远超一小时。如果定时任务也带 cancel-in-progress，每到整点就会把正在编的
+# run 掐死，永远编不出成品。所以这里只让 push 取消旧 run（推代码时旧 run 用的是
+# 过时的 workflow，留着没意义），定时触发的一律排队等待。
+
 on:
   push:
     branches:
       - master
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 * * * *'
   workflow_dispatch:
 
-# 自动取消正在运行的同分支旧任务
+# push / 手动触发会取消同分支正在运行的旧任务；schedule 不取消，改为排队，
+# 避免整点打断长时间的内核编译。
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 env:
   REPO_RELEASE_TAG: current-repo
@@ -139,6 +149,10 @@ jobs:
             echo "MAKEFLAGS=\"-j$(nproc)\""
             echo 'COMPRESSZST=(zstd -c -z -q --threads=0 -)'
             echo 'COMPRESSXZ=(xz -c -z --threads=0 -)'
+            # Arch 默认开着 debug，于是每个包都会多出一份 -debug 包。
+            # 我们不需要它：没人装，只是白白占 Release 空间和编译时间。
+            # OPTIONS+= 而不是直接赋值，保留上游其余默认项（strip/lto/purge 等）。
+            echo 'OPTIONS+=(!debug)'
           } >> /etc/makepkg.conf
           # makepkg 用 curl 下载源码，kernel.org 大文件常断连；
           # 设 120s 超时 + 3 次自动重试，再结合下游重试循环足够稳定
@@ -685,6 +699,20 @@ jobs:
         if: (matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true') || (matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true')
         run: |
           set -euo pipefail
+          # 兼底：makepkg.conf 里的 OPTIONS+=(!debug) 已经按住了 debug 包，但若哪个
+          # PKGBUILD 自己写了 options=(debug)，它的优先级更高。这里直接删掉，
+          # 保证 -debug 包永远不会进 artifact 和 Release。
+          # 用 .PKGINFO 里的真实包名判定，而不是拿文件名匆匆匹配 *-debug-*，
+          # 免得误伤将来可能出现的、名字里恰好带 debug 字样的正常包。
+          for f in pkg_dir/*.pkg.tar.zst; do
+            [ -e "$f" ] || continue
+            name=$(pacman -Qp "$f" 2>/dev/null | awk 'NR==1{print $1}' || true)
+            case "$name" in *-debug)
+              echo "丢弃 debug 包: $f"
+              rm -f "$f"
+              ;;
+            esac
+          done
           # epoch 包（如 mpv-git-1:0.41.0-…）文件名含冒号，GitHub artifact
           # 路径禁止 ':' → 上传前把冒号换成点号；repo-add 读 .PKGINFO，
           # 文件名不影响 repo.db 的版本记录，pacman -U 也不受影响。
@@ -742,6 +770,7 @@ jobs:
 
       - name: 整合并更新 repo.db 数据库
         if: steps.check_artifacts.outputs.has_artifacts == 'true'
+        id: build_db
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -749,9 +778,28 @@ jobs:
           mkdir -p deploy
           find artifact-downloads -name "*.pkg.tar.zst" -exec cp {} deploy/ \;
           cd deploy
-          gh release download "$REPO_RELEASE_TAG" --repo "${{ github.repository }}" \
-             -p "junlin03-aur.db*" -p "junlin03-aur.files*" --clobber || true
+          # 记下旧数据库是否真的拿到了。拿不到时 repo-add 会凭空建一个只含本轮
+          # 产物的新库，那样下面的清理步骤会把 Release 里其他包全判成垃圾。
+          if gh release download "$REPO_RELEASE_TAG" --repo "${{ github.repository }}" \
+               -p "junlin03-aur.db*" -p "junlin03-aur.files*" --clobber \
+             && [ -s junlin03-aur.db.tar.gz ]; then
+            echo "db_restored=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::没能取回旧数据库，本轮只做增量添加，不清理任何旧资产"
+            echo "db_restored=false" >> "$GITHUB_OUTPUT"
+          fi
           repo-add -n -R junlin03-aur.db.tar.gz ./*.pkg.tar.zst
+
+          # 历史遗留的 -debug 条目要从库里摘掉，否则 pacman 仍会列出它们，
+          # 而对应的包文件马上就要被清理掉，变成「看得见装不上」。
+          mapfile -t debug_entries < <(
+            tar -xzOf junlin03-aur.db.tar.gz --wildcards '*/desc' 2>/dev/null \
+              | awk '/^%NAME%$/{getline;print}' | grep -- '-debug$' || true)
+          if [ "${#debug_entries[@]}" -gt 0 ]; then
+            echo "从数据库摘除 debug 条目: ${debug_entries[*]}"
+            repo-remove junlin03-aur.db.tar.gz "${debug_entries[@]}"
+          fi
+
           # repo-add 会为数据库留下 *.old 本地备份；它们不应成为仓库入口或 Release 资产。
           rm -f junlin03-aur.db.tar.gz.old junlin03-aur.files.tar.gz.old
           ls -lh
@@ -768,39 +816,38 @@ jobs:
             deploy/junlin03-aur.db*
             deploy/junlin03-aur.files*
 
-      - name: 清理已替换的旧版本包
-        if: steps.check_artifacts.outputs.has_artifacts == 'true'
+      - name: 清理旧版本与多余的包资产
+        if: steps.check_artifacts.outputs.has_artifacts == 'true' && steps.build_db.outputs.db_restored == 'true'
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
-          # 只建立「本轮新产物」的包名集合，其他包即使仍在 Release 里也不碰。
-          declare -A package_names=()
-          while IFS= read -r -d '' pkg; do
-            name=$(pacman -Qp "$pkg" 2>/dev/null | awk 'NR==1{print $1}' || true)
-            [ -n "$name" ] && package_names["$name"]=1 || true
-          done < <(find deploy -maxdepth 1 -type f -name '*.pkg.tar.zst' -print0)
+          # 以刚上传的数据库为唯一准绳：%FILENAME% 列出的才是 pacman 能看见的包，
+          # 其余 .pkg.tar.zst 资产全是旧版本或已摘除的 debug 包，白占空间。
+          # 这比「只看本轮构建了哪些包名」可靠：哪轮清理漏了，下一轮会自动补上。
+          mapfile -t db_files < <(
+            tar -xzOf deploy/junlin03-aur.db.tar.gz --wildcards '*/desc' \
+              | awk '/^%FILENAME%$/{getline;print}')
+          if [ "${#db_files[@]}" -eq 0 ]; then
+            echo "::error::数据库里一个 %FILENAME% 都读不到，为安全起见不清理"
+            exit 1
+          fi
 
-          mapfile -t new_assets < <(find deploy -maxdepth 1 -type f -name '*.pkg.tar.zst' -printf '%f\n')
-          mapfile -t release_assets < <(gh release view "$REPO_RELEASE_TAG" --repo "$GH_REPO" --json assets --jq '.assets[].name')
+          # 库里的文件名可能带 epoch 冒号（mpv-git-1:0.41…），而 GitHub 资产名里的
+          # 冒号已在上传前换成点号，比较前先统一成点号。
+          declare -A keep=()
+          for f in "${db_files[@]}"; do
+            keep["${f//:/.}"]=1
+          done
+
+          mapfile -t release_assets < <(
+            gh release view "$REPO_RELEASE_TAG" --repo "$GH_REPO" --json assets --jq '.assets[].name')
 
           for asset in "${release_assets[@]}"; do
             [[ "$asset" == *.pkg.tar.zst ]] || continue
-            keep=0
-            for new_asset in "${new_assets[@]}"; do
-              if [ "$asset" = "$new_asset" ]; then keep=1; break; fi
-            done
-            [ "$keep" = 1 ] && continue
-
-            # Arch 包文件名从右至左固定是 arch、pkgrel、pkgver；pkgver 禁止包含连字号，
-            # 因此这样取出的包名不会把 `foo` 与 `foo-headers` 混为一谈。
-            stem=${asset%.pkg.tar.zst}
-            stem=${stem%-*}
-            stem=${stem%-*}
-            asset_pkgname=${stem%-*}
-            [ -n "${package_names[$asset_pkgname]+x}" ] || continue
-            echo "删除 $asset_pkgname 的旧资产: $asset"
+            [ -n "${keep[$asset]+x}" ] && continue
+            echo "删除数据库已不引用的资产: $asset"
             gh release delete-asset "$REPO_RELEASE_TAG" "$asset" --repo "$GH_REPO" --yes
           done
