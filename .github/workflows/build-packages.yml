@@ -748,7 +748,12 @@ jobs:
             echo "::warning::没能取回旧数据库，本轮只做增量添加，不清理任何旧资产"
             echo "db_restored=false" >> "$GITHUB_OUTPUT"
           fi
-          repo-add -n -R junlin03-aur.db.tar.gz ./*.pkg.tar.zst
+          # 刻意不用 -n/--new：它看到同名同版本就整条跳过，连依赖变了也不管。
+          # mpv-git 就是这么坏的——PKGBUILD 把 jack2 换成虚拟包 jack 后重编，
+          # 包文件更新了，数据库条目还停在旧的一次构建，pacman 于是仍想装 jack2，
+          # 跟本机的 pipewire-jack 撞成无解冲突。
+          # -p/--prevent-downgrade 保留了真正需要的那道保护：版本变低时拒绝写入。
+          repo-add -R -p junlin03-aur.db.tar.gz ./*.pkg.tar.zst
 
           # 历史遗留的 -debug 条目要从库里摘掉，否则 pacman 仍会列出它们，
           # 而对应的包文件马上就要被清理掉，变成「看得见装不上」。
