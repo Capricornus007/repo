@@ -260,9 +260,9 @@ jobs:
 
 
           eval "$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
-                  printf "CUR_PKGVER=%q\nCUR_PKGREL=%q\nPKGBASE=%q\n" \
-                         "$pkgver" "$pkgrel" "${pkgbase:-${pkgname[0]}}"')"
-          echo "当前 PKGBUILD: pkgbase=$PKGBASE pkgver=$CUR_PKGVER pkgrel=$CUR_PKGREL"
+                  printf "CUR_PKGVER=%q\nCUR_PKGREL=%q\nCUR_EPOCH=%q\nPKGBASE=%q\n" \
+                         "$pkgver" "$pkgrel" "${epoch:-0}" "${pkgbase:-${pkgname[0]}}')"
+          echo "当前 PKGBUILD: pkgbase=$PKGBASE pkgver=$CUR_PKGVER pkgrel=$CUR_PKGREL epoch=$CUR_EPOCH"
 
           TARGET_PKGVER=""
           TARGET_PKGREL="$CUR_PKGREL"
@@ -375,10 +375,16 @@ jobs:
           # 真正的「要不要构建」判据：产物是否已经发布到 release。
           # 原来靠 pkgver 字符串比对，CachyOS 那条 (rc 的 7.2 != pkgver 7.2.0) 永远为真，
           # 于是每天重编两个完整内核，天天撞上限。
+          #
+          # epoch 包（mpv-git epoch=1）的资产名是 mpv-git-1.0.41.0-…——makepkg 拼出的
+          # 「1:0.41.0…」里的冒号在上传前被统一换成了点号。比对必须带上「1.」前缀，
+          # 否则永远匹配不上，每个整点都会白编一次。
+          EPOCH_PART=""
+          if [ "$CUR_EPOCH" != "0" ]; then EPOCH_PART="${CUR_EPOCH}."; fi
           assets=$(gh_api "https://api.github.com/repos/${GH_REPO}/releases/tags/${REPO_RELEASE_TAG}" \
                    | jq -r '.assets[].name' 2>/dev/null || true)
-          if printf '%s\n' "$assets" | grep -q "^${PKGBASE}-${TARGET_PKGVER}-${TARGET_PKGREL}-"; then
-            skip "${PKGBASE}-${TARGET_PKGVER}-${TARGET_PKGREL} 已在 release 里"
+          if printf '%s\n' "$assets" | grep -q "^${PKGBASE}-${EPOCH_PART}${TARGET_PKGVER}-${TARGET_PKGREL}-"; then
+            skip "${PKGBASE}-${EPOCH_PART}${TARGET_PKGVER}-${TARGET_PKGREL} 已在 release 里"
           fi
 
           {
