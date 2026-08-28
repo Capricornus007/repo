@@ -1,0 +1,39 @@
+name: Build Kernels
+
+# 内核套件：编译一次动辄 150 分钟以上，linux-cachyos-cjktty 更久。
+# 上游内核一天最多发一版，每天查一次足够，跑太勤只是重复做同样的版本检测。
+#
+# concurrency 里保留 cancel-in-progress 只对 push / 手动触发生效：推代码时正在
+# 跑的那个 run 用的是旧 workflow，留着没意义。定时触发的一律排队，否则新一轮
+# 会把还在编译的内核掐死，永远出不了成品。
+
+on:
+  push:
+    branches:
+      - master
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: build-kernels-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-packages.yml
+    permissions:
+      contents: write
+    # 可重用 workflow 默认拿不到调用方的 secrets，必须显式继承，
+    # 否则 PERSONAL_BUILD_TOKEN 为空、回推 PKGBUILD 会静默失败。
+    secrets: inherit
+    with:
+      timeout_minutes: 340
+      packages: |
+        [
+          {"key": "snd-pcsp-dkms", "repo_name": "snd-pcsp-dkms", "variant": "none"},
+          {"key": "linux-zencjk", "repo_name": "linux-zencjk", "variant": "none"},
+          {"key": "linux-ltscjk", "repo_name": "linux-ltscjk", "variant": "none"},
+          {"key": "linux-cachyos-cjktty-release", "repo_name": "linux-cachyos-cjktty", "variant": "release"},
+          {"key": "linux-cachyos-cjktty-rc", "repo_name": "linux-cachyos-cjktty", "variant": "rc"}
+        ]

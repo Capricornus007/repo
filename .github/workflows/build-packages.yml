@@ -1,27 +1,22 @@
-name: Build Pacman Repository
+name: Build Pacman Repository (reusable)
 
-# 定时任务是每小时一次。绝大多数轮次里「检测目标版本并决定是否需要构建」会算出
-# 没有新版本，几分钟就整轮跳过；只有上游真的发了新版才会进入编译，所以频率高
-# 不等于开销大。
-#
-# 注意 concurrency 的写法：内核包（尤其 linux-cachyos-cjktty）单个要编 150 分钟
-# 以上，远超一小时。如果定时任务也带 cancel-in-progress，每到整点就会把正在编的
-# run 掐死，永远编不出成品。所以这里只让 push 取消旧 run（推代码时旧 run 用的是
-# 过时的 workflow，留着没意义），定时触发的一律排队等待。
+# 这是一个「可重用 workflow」：本身不会自己触发，由 build-kernels.yml 和
+# build-git-packages.yml 调用，各自传入不同的套件清单和构建频率。
+# 打包与发布的全部逻辑只写在这一份文件里，两条流水线共用，避免复制粘贴
+# 出现两份逐渐走偏的实现。
 
 on:
-  push:
-    branches:
-      - master
-  schedule:
-    - cron: '0 * * * *'
-  workflow_dispatch:
-
-# push / 手动触发会取消同分支正在运行的旧任务；schedule 不取消，改为排队，
-# 避免整点打断长时间的内核编译。
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+  workflow_call:
+    inputs:
+      packages:
+        description: '套件矩阵（JSON 数组，元素含 key / repo_name / variant）'
+        required: true
+        type: string
+      timeout_minutes:
+        description: '单个套件的构建超时（分钟）'
+        required: false
+        type: number
+        default: 340
 
 env:
   REPO_RELEASE_TAG: current-repo
@@ -29,55 +24,11 @@ env:
 jobs:
   build-packages:
     runs-on: ubuntu-latest
-    # GitHub 单一 job 硬上限为 360 分钟；提前 20 分钟主动失败，日志才留得下来
-    timeout-minutes: 340
+    timeout-minutes: ${{ inputs.timeout_minutes }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - key: snd-pcsp-dkms
-            repo_name: snd-pcsp-dkms
-            variant: none
-          - key: linux-zencjk
-            repo_name: linux-zencjk
-            variant: none
-          - key: linux-ltscjk
-            repo_name: linux-ltscjk
-            variant: none
-          # CachyOS 正式版与 RC 拆成两个独立 job：一个 job 编不完两个完整内核
-          - key: linux-cachyos-cjktty-release
-            repo_name: linux-cachyos-cjktty
-            variant: release
-          - key: linux-cachyos-cjktty-rc
-            repo_name: linux-cachyos-cjktty
-            variant: rc
-          # ffmpeg-full-git 啟用 nonfree（包含 libfdk-aac 等）。依仓库所有者要求，
-          # 构建产物与其他套件一起发布到公开的 current-repo Release。
-          - key: ffmpeg-full-git
-            repo_name: ffmpeg-full-git
-            variant: nonfree
-          # kew-git：命令行音乐播放器，纯 git VCS 包，PKGBUILD 从 AUR 取，
-          # 版本由上游 codeberg HEAD 决定，无需改写或回推 PKGBUILD。
-          - key: kew-git
-            repo_name: kew-git
-            variant: none
-          # mpv-git：视频播放器 git 版。PKGBUILD/find-deps.py/mpv.install 三个文件
-          # 直接维护在本仓库 mpv-git/ 目录（与维护者本机 yay cache 相同的打包文件），
-          # 版本由上游 mpv-player/mpv HEAD 决定，无需改写或回推。
-          - key: mpv-git
-            repo_name: mpv-git
-            variant: none
-          # oh-my-pi-git：AI coding agent（omp）。纯 git VCS 包，PKGBUILD 从 AUR 取，
-          # 版本由上游 can1357/oh-my-pi HEAD 决定，无需改写或回推 PKGBUILD。
-          - key: oh-my-pi-git
-            repo_name: oh-my-pi-git
-            variant: none
-          # pysolfc-git：千余种纸牌接龙游戏合集（git 版）。AUR 无 -git 包，
-          # PKGBUILD 维护在本仓库 pysolfc-git/ 目录（以 Arch extra 的
-          # pysolfc 打包为蓝本，源码切到上游 git），版本由上游 HEAD 决定。
-          - key: pysolfc-git
-            repo_name: pysolfc-git
-            variant: none
+        include: ${{ fromJSON(inputs.packages) }}
 
     container:
       image: archlinux:base-devel
@@ -739,6 +690,15 @@ jobs:
     needs: build-packages
     if: always() && needs.build-packages.result != 'cancelled'
     runs-on: ubuntu-latest
+    # 内核流水线和 -git 流水线都会跑到这一步，而这一步是「下载数据库 → 追加
+    # 条目 → 上传覆盖」。两边同时进行的话，后上传的那份会把先上传的条目抹掉，
+    # 包文件还在 Release 里但数据库不认，pacman 就看不见。
+    #
+    # group 里刻意不含 github.workflow：两条流水线必须落进同一个组，GitHub 才
+    # 会让它们排队而不是并行。cancel-in-progress 关掉，等前一个写完再写。
+    concurrency:
+      group: deploy-repo-database
+      cancel-in-progress: false
     permissions:
       contents: write
     container:

@@ -1,0 +1,40 @@
+name: Build Git Packages
+
+# VCS（-git）套件：跟着上游 HEAD 走，oh-my-pi-git 一天能蹦好几个小版本号，
+# 所以每小时查一次。绝大多数轮次里「检测目标版本并决定是否需要构建」发现
+# 版本没变，几分钟就整轮跳过，开销很小。
+#
+# 这些包单个只要几分钟到二十来分钟，跟内核分开跑就不会被内核堵在队列后面。
+# 因为不存在「跑到下一个整点还没编完」的情况，cancel-in-progress 可以放心
+# 开着：真撞上了，取消旧的换新的反而更合理。
+
+on:
+  push:
+    branches:
+      - master
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: build-git-packages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-packages.yml
+    permissions:
+      contents: write
+    # 可重用 workflow 默认拿不到调用方的 secrets，必须显式继承，
+    # 否则 PERSONAL_BUILD_TOKEN 为空、回推 PKGBUILD 会静默失败。
+    secrets: inherit
+    with:
+      timeout_minutes: 180
+      packages: |
+        [
+          {"key": "ffmpeg-full-git", "repo_name": "ffmpeg-full-git", "variant": "nonfree"},
+          {"key": "kew-git", "repo_name": "kew-git", "variant": "none"},
+          {"key": "mpv-git", "repo_name": "mpv-git", "variant": "none"},
+          {"key": "oh-my-pi-git", "repo_name": "oh-my-pi-git", "variant": "none"},
+          {"key": "pysolfc-git", "repo_name": "pysolfc-git", "variant": "none"}
+        ]
