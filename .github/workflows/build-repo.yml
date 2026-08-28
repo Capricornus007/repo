@@ -612,6 +612,25 @@ jobs:
           set -uo pipefail
           cd pkg_dir
           chown -R builder:builder .
+          # 优先从 kernel-sources-cache 下载 tarball（GitHub CDN 稳定）
+          # 文件若已存在，updpkgsums 会跳过下载，只算校验和
+          CACHE_REPO=Capricornus007/kernel-sources-cache
+          for url in $(bash -c 'source PKGBUILD >/dev/null 2>&1; printf "%s\n" "${source[@]}"'); do
+            case "$url" in
+              https://www.kernel.org/pub/linux/kernel/*.tar.xz)
+                fname="${url##*/}"
+                if [ -f "$fname" ]; then
+                  echo "✅ $fname 已存在，跳过缓存"
+                  continue
+                fi
+                echo "尝试从缓存下载 $fname ..."
+                gh release download "kernel-sources" --repo "$CACHE_REPO" -p "$fname" -D . 2>/dev/null || true
+                if [ -f "$fname" ]; then
+                  echo "✅ 从缓存成功下载 $fname ($(stat -c%s "$fname") 字节)"
+                fi
+                ;;
+            esac
+          done
           # kernel.org 偶尔会 reset 大文件的 HTTP/2 连接，删掉半截文件重试
           sums_updated=false
           for attempt in 1 2 3 4 5; do
