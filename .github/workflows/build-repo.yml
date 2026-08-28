@@ -140,6 +140,9 @@ jobs:
             echo 'COMPRESSZST=(zstd -c -z -q --threads=0 -)'
             echo 'COMPRESSXZ=(xz -c -z --threads=0 -)'
           } >> /etc/makepkg.conf
+          # makepkg 用 curl 下载源码，kernel.org 大文件常断连；
+          # 设 120s 超时 + 3 次自动重试，再结合下游重试循环足够稳定
+          echo 'CURL_OPTIONS="--connect-timeout 30 --max-time 300 --retry 5 --retry-delay 15"' >> /etc/makepkg.conf
           echo "nproc=$(nproc)"
 
           useradd builder -m || true
@@ -615,7 +618,7 @@ jobs:
             rm -f linux-*.tar.xz linux-*.tar.xz.part
             if su builder -c "updpkgsums"; then sums_updated=true; break; fi
             echo "更新校验和失败（第 ${attempt}/5 次），稍后重试"
-            sleep $((attempt * 10))
+            sleep $((attempt * 30))
           done
           if [ "$sums_updated" != "true" ]; then
             echo "::error::无法可靠下载新源码，本次不构建"
