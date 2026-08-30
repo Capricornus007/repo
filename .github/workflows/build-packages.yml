@@ -132,6 +132,10 @@ jobs:
               # Xext/xkeyboard/，不替换的话 package_common() 会 install 报错中断
               if [ "${{ matrix.repo_name }}" = "xlibre-xserver-git" ]; then
                 sed -i 's|"xkb/README.compiled"|"Xext/xkeyboard/README.compiled"|' pkg_dir/PKGBUILD
+                # AUR 版的 common 拆分包只 provides xlibre-xserver-common，而
+                # xorg-xwayland 等套件 depends xorg-server-common——补上 provides，
+                # 否则装了 xlibre 后这些套件的依赖永远无法满足
+                sed -i '/provides=("${_pkgbase}-common=/a\  provides+=("xorg-server-common=${pkgver%%.r*}")' pkg_dir/PKGBUILD
               fi ;;
             pysolfc-git|protonvpn-cli-community-git)
               mkdir pkg_dir
