@@ -32,6 +32,7 @@ jobs:
       timeout_minutes: 180
       packages: |
         [
+          {"key": "dae-git", "repo_name": "dae-git", "variant": "none"},
           {"key": "ffmpeg-full-git", "repo_name": "ffmpeg-full-git", "variant": "nonfree"},
           {"key": "kew-git", "repo_name": "kew-git", "variant": "none"},
           {"key": "mpv-git", "repo_name": "mpv-git", "variant": "none"},
