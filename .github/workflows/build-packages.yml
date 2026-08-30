@@ -127,7 +127,12 @@ jobs:
             ffmpeg-full-git|kew-git|oh-my-pi-git)
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
             xlibre-xserver-git|xlibre-input-libinput-git)
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
+              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
+              # AUR PKGBUILD 引用的 xkb/README.compiled 在上游已被挪到
+              # Xext/xkeyboard/，不替换的话 package_common() 会 install 报错中断
+              if [ "${{ matrix.repo_name }}" = "xlibre-xserver-git" ]; then
+                sed -i 's|"xkb/README.compiled"|"Xext/xkeyboard/README.compiled"|' pkg_dir/PKGBUILD
+              fi ;;
             pysolfc-git|protonvpn-cli-community-git)
               mkdir pkg_dir
               curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}/PKGBUILD" \
@@ -458,6 +463,8 @@ jobs:
           set -euo pipefail
           install -d -o builder -g builder /build/xlibre-server
           git clone "https://aur.archlinux.org/xlibre-xserver-git.git" /build/xlibre-server/xlibre-xserver-git
+          # 同「拉取」步骤：上游把 xkb/README.compiled 挪到了 Xext/xkeyboard/
+          sed -i 's|"xkb/README.compiled"|"Xext/xkeyboard/README.compiled"|' /build/xlibre-server/xlibre-xserver-git/PKGBUILD
           chown -R builder:builder /build/xlibre-server
           cd /build/xlibre-server/xlibre-xserver-git
           # 驱动编译只需要 server/common/devel 三个拆分包。makepkg 没有「只打
