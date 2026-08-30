@@ -36,5 +36,8 @@ jobs:
           {"key": "kew-git", "repo_name": "kew-git", "variant": "none"},
           {"key": "mpv-git", "repo_name": "mpv-git", "variant": "none"},
           {"key": "oh-my-pi-git", "repo_name": "oh-my-pi-git", "variant": "none"},
-          {"key": "pysolfc-git", "repo_name": "pysolfc-git", "variant": "none"}
+          {"key": "protonvpn-cli-community-git", "repo_name": "protonvpn-cli-community-git", "variant": "none"},
+          {"key": "pysolfc-git", "repo_name": "pysolfc-git", "variant": "none"},
+          {"key": "xlibre-input-libinput-git", "repo_name": "xlibre-input-libinput-git", "variant": "none"},
+          {"key": "xlibre-xserver-git", "repo_name": "xlibre-xserver-git", "variant": "none"}
         ]
