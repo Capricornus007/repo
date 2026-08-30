@@ -460,10 +460,10 @@ jobs:
           git clone "https://aur.archlinux.org/xlibre-xserver-git.git" /build/xlibre-server/xlibre-xserver-git
           chown -R builder:builder /build/xlibre-server
           cd /build/xlibre-server/xlibre-xserver-git
-          # 驱动编译只需要 server/common/devel 三个拆分包，xvfb/xephyr/xnest 用不上，
-          # bootstrap 用户点名不要——--pkg 只打包要装的三个
-          su builder -c 'makepkg -s --noconfirm -f \
-            --pkg xlibre-xserver-git,xlibre-xserver-common-git,xlibre-xserver-devel-git'
+          # 驱动编译只需要 server/common/devel 三个拆分包。makepkg 没有「只打
+          # 一部分拆分包」的选项，七个全打也很快（只是重复跑几遍 meson install），
+          # 下面安装时只装这三个。
+          su builder -c 'makepkg -s --noconfirm -f'
           # AUR 的 xlibre-xserver-git 自带循环依赖：server 拆分包 depends
           # xlibre-input-libinput（正是本 job 要编的驱动）。容器里装它时声明
           # 假定已满足即可，用户机器上两者都在我们自己的仓库里，不冲突。
@@ -724,13 +724,13 @@ jobs:
             echo "::warning::有公钥没导入成功，本次跳过 PGP 校验（校验和仍然检查）"
             flags="$flags --skippgpcheck"
           fi
-          if [ "${{ matrix.repo_name }}" = "xlibre-xserver-git" ]; then
-            # 拆分打包里带一个 bootstrap 变体，用户点名不要；--pkg 只出
-            # 截图点名的六个子包
-            flags="$flags --pkg=xlibre-xserver-git,xlibre-xserver-common-git,xlibre-xserver-devel-git,xlibre-xserver-xephyr-git,xlibre-xserver-xnest-git,xlibre-xserver-xvfb-git"
-          fi
           echo "makepkg $flags"
           su builder -c "makepkg $flags"
+          if [ "${{ matrix.repo_name }}" = "xlibre-xserver-git" ]; then
+            # 拆分打包里带一个 bootstrap 变体，用户点名不要。makepkg 没有
+            # 「只打一部分拆分包」的选项，躲不掉打包这一步，打完直接丢弃
+            rm -fv xlibre-xserver-bootstrap-git-*.pkg.tar.zst
+          fi
           ls -lh ./*.pkg.tar.zst
 
       - name: 暂存构建好的 `.pkg.tar.zst` 产物

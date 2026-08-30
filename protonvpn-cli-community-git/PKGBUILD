@@ -20,7 +20,9 @@ conflicts=("protonvpn-cli" "protonvpn-gui" "${pkgname%-git}" "${_oldpkgname}")
 replaces=("${_oldpkgname}")
 source=("git+${url}")
 sha256sums=('SKIP')
-_src_name=linux-cli-community
+# makepkg 的 git source 目录取 URL 的 basename（protonvpn-cli-community），
+# 不是上游原来的仓库名 linux-cli-community
+_src_name=protonvpn-cli-community
 
 pkgver() {
 	cd "${_src_name}"
