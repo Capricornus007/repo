@@ -440,6 +440,12 @@ jobs:
               TARGET_PKGVER=$(printf '%s.r%s.%s' "${tag#"$tagprefix"}" "$rev" "$hash")
               ;;
 
+            android-ndk-23|android-ndk-27)
+              # 固定版本包：pkgver 写死在各自仓库的 PKGBUILD 里，
+              # 首次构建入库后 plan 的 release 资产比对应会永远跳过
+              TARGET_PKGVER="$CUR_PKGVER"
+              ;;
+
             *)
               echo "未知仓库: $PKG" >&2; exit 1 ;;
           esac
@@ -670,6 +676,15 @@ jobs:
               esc="${series//./\\.}"
               pick=$(printf '%s\n' "$avail" | grep -E "^cjktty-${esc}(\.[0-9]+)?\.patch$" | sort -V | tail -n1 || true)
               [ -n "$pick" ] || pick=$(printf '%s\n' "$avail" | grep -E "^cjktty-${esc}-rc[0-9]+\.patch$" | sort -V | tail -n1 || true)
+              if [ -z "$pick" ]; then
+                # 跨线回退：rc 线的内核往往还能套上一线的 rc 补丁
+                #（实测 7.3-rc1 可干净套 7.2-rc7 的补丁）。取整个 v<major>.x 里
+                # sort -V 最新的一个，并留下警告便于追查。
+                pick=$(printf '%s\n' "$avail" | grep -E '^cjktty-.*\.patch$' | sort -V | tail -n1 || true)
+                if [ -n "$pick" ]; then
+                  echo "::warning::$series 没有专属 cjktty 补丁，跨线回退到 $pick（若 hunk 失败请先补 cjktty-patches）"
+                fi
+              fi
               [ -n "$pick" ] || { echo "错误：cjktty-patches 里找不到 $series 的补丁"; exit 1; }
               echo "选用 cjktty 补丁: $pick"
               curl -sfL -o 0001-cjktty.patch \
@@ -685,7 +700,7 @@ jobs:
           grep -nE '^(pkgver|pkgrel|_major|_minor|_rcver|_tagrel|_srcname)=' PKGBUILD || true
 
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -745,6 +760,26 @@ jobs:
           cp /tmp/PKGBUILD.ci PKGBUILD
           chown -R builder:builder .
 
+      - name: 预下载 NDK 镜像源码
+        if: (matrix.repo_name == 'android-ndk-23' || matrix.repo_name == 'android-ndk-27') && steps.plan.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          cd pkg_dir
+          # makepkg 的 CURL_OPTIONS（max-time 300）撑不住 ~700MB 的下载；
+          # 把源码包先放进 PKGBUILD 同目录，makepkg 会直接复用不再下载。
+          zip_url=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
+                    for u in "${source[@]}"; do printf "%s\n" "$u"; done'             | grep -E '^https://github\.com/.*/releases/download/' | head -n1)
+          [ -n "$zip_url" ] || { echo "PKGBUILD 里找不到镜像源码 URL"; exit 1; }
+          fname="${zip_url##*/}"
+          if [ -f "$fname" ]; then
+            echo "$fname 已存在，跳过下载"
+          else
+            echo "下载 $fname ..."
+            curl -fL --retry 5 --retry-delay 15 --connect-timeout 30 -o "$fname" "$zip_url"
+          fi
+          ls -lh "$fname"
+          chown -R builder:builder .
+
       - name: 云端编译 `.pkg.tar.zst`
         if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'
         run: |
@@ -761,6 +796,20 @@ jobs:
           fi
           echo "makepkg $flags"
           su builder -c "makepkg $flags"
+          if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ] && [ "${{ matrix.variant }}" = "rc" ]; then
+            # RC 產物檔名插入 -rc（如 linux-cachyos-cjktty-rc-7.3.rc1-1-…），
+            # 包內 pkgname 保持 linux-cachyos-cjktty 不變：repo-add 條目照常
+            # 以版本號換代（vercmp 7.3.rc1 < 7.3.0，正式版發佈後自然回位），
+            # 而清理步驟據檔名區分 rc/正式兩類，各自保留最新一份。
+            for f in linux-cachyos-cjktty*-*.pkg.tar.zst; do
+              [ -e "$f" ] || continue
+              case "$f" in *-rc-*) continue ;; esac
+              base="${f%%-[0-9]*}"   # linux-cachyos-cjktty 或 …-headers
+              rest="${f#"$base"}"
+              mv -v "$f" "${base}-rc${rest}"
+            done
+            ls -lh linux-cachyos-cjktty*.pkg.tar.zst
+          fi
           if [ "${{ matrix.repo_name }}" = "xlibre-xserver-git" ]; then
             # 拆分打包里带一个 bootstrap 变体，用户点名不要。makepkg 没有
             # 「只打一部分拆分包」的选项，躲不掉打包这一步，打完直接丢弃
@@ -931,6 +980,36 @@ jobs:
 
           mapfile -t release_assets < <(
             gh release view "$REPO_RELEASE_TAG" --repo "$GH_REPO" --json assets --jq '.assets[].name')
+
+          # rc/正式版互保：當 DB 條目是 -rc 檔（RC 版本號更高而換掉了正式版條目），
+          # 同家族最新的一份「非 -rc」資產額外保留，便於回退安裝；
+          # 反向（DB 已是正式版）不保護 -rc 檔——正式版已涵蓋它，正常清理。
+          declare -A rc_family=()
+          for f in "${db_files[@]}"; do
+            case "${f//:/.}" in
+              *-rc-*) base="${f%%-rc-*}"; rc_family["$base"]=1 ;;
+            esac
+          done
+          if [ "${#rc_family[@]}" -gt 0 ]; then
+            declare -A newest_plain=()
+            for asset in "${release_assets[@]}"; do
+              [[ "$asset" == *.pkg.tar.zst ]] || continue
+              case "$asset" in *-rc-*) continue ;; esac
+              for base in "${!rc_family[@]}"; do
+                [[ "$asset" == "$base-"* ]] || continue
+                ver=$(printf '%s' "${asset#"$base"-}" | cut -d- -f1)
+                if [ -z "${newest_plain[$base]+x}" ]                    || [ "$(vercmp "$ver" "${newest_plain[$base]%%-*}")" = "1" ]; then
+                  newest_plain[$base]="$asset"
+                fi
+                break
+              done
+            done
+            for base in "${!newest_plain[@]}"; do
+              if [ -n "${keep[${newest_plain[$base]}]+x}" ]; then continue; fi
+              echo "RC 在库，保留同家族最新正式版资产: ${newest_plain[$base]}"
+              keep["${newest_plain[$base]}"]=1
+            done
+          fi
 
           for asset in "${release_assets[@]}"; do
             [[ "$asset" == *.pkg.tar.zst ]] || continue

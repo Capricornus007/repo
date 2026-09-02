@@ -40,5 +40,7 @@ jobs:
           {"key": "protonvpn-cli-community-git", "repo_name": "protonvpn-cli-community-git", "variant": "none"},
           {"key": "pysolfc-git", "repo_name": "pysolfc-git", "variant": "none"},
           {"key": "xlibre-input-libinput-git", "repo_name": "xlibre-input-libinput-git", "variant": "none"},
-          {"key": "xlibre-xserver-git", "repo_name": "xlibre-xserver-git", "variant": "none"}
+          {"key": "xlibre-xserver-git", "repo_name": "xlibre-xserver-git", "variant": "none"},
+          {"key": "android-ndk-23", "repo_name": "android-ndk-23", "variant": "none"},
+          {"key": "android-ndk-27", "repo_name": "android-ndk-27", "variant": "none"}
         ]
