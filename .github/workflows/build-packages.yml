@@ -128,14 +128,20 @@ jobs:
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
             xlibre-xserver-git|xlibre-input-libinput-git)
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              # AUR PKGBUILD 引用的 xkb/README.compiled 在上游已被挪到
-              # Xext/xkeyboard/，不替换的话 package_common() 会 install 报错中断
               if [ "${{ matrix.repo_name }}" = "xlibre-xserver-git" ]; then
+                # AUR PKGBUILD 引用的 xkb/README.compiled 在上游已被挪到
+                # Xext/xkeyboard/，不替换的话 package_common() 会 install 报错中断
                 sed -i 's|"xkb/README.compiled"|"Xext/xkeyboard/README.compiled"|' pkg_dir/PKGBUILD
                 # AUR 版的 common 拆分包只 provides xlibre-xserver-common，而
                 # xorg-xwayland 等套件 depends xorg-server-common——补上 provides，
                 # 否则装了 xlibre 后这些套件的依赖永远无法满足
                 sed -i '/provides=("${_pkgbase}-common=/a\  provides+=("xorg-server-common=${pkgver%%.r*}")' pkg_dir/PKGBUILD
+              else
+                # AUR 版只 provides xf86-input-libinput，而 xlibre-xserver-git 与
+                # xlibre-meta depends 的是 xlibre-input-libinput——不补 provides
+                # 的话，yay 升级 xserver 时会报「xlibre-input-libinput-git
+                # 不满足依赖」（2026-09 实测踩过）
+                sed -i '/^provides=/a\  provides+=("xlibre-input-libinput=${pkgver%%.r*}")' pkg_dir/PKGBUILD
               fi ;;
             pysolfc-git|protonvpn-cli-community-git)
               mkdir pkg_dir
