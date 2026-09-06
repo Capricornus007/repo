@@ -53,6 +53,8 @@ jobs:
           if [ "${{ matrix.repo_name }}" = 'ffmpeg-full-git' ]; then
             # 与维护者本机相同的第三方仓库清单。完整功能版 ffmpeg 的依赖
             # 由这些仓库提供；只有 mpeghdec、quirc、svt-jpeg-xs-git 仍从 AUR 构建。
+            # linuxrepos（archlinux.repo.063240.xyz）已移除：域名权威 DNS 挂了
+            # （lame delegation），且该仓库里根本没有 ffmpeg 依赖的任何包。
             install -d /etc/pacman.d
             printf '%s\n' \
               'Server = https://geo-mirror.chaotic.cx/$repo/$arch' \
@@ -68,8 +70,6 @@ jobs:
               'Server = https://ftp.f3l.de/~martchus/$repo/os/$arch' \
               'Server = https://martchus.no-ip.biz/repo/arch/$repo/os/$arch' \
               > /etc/pacman.d/ownstuff-mirrorlist
-            printf '%s\n' 'Server = https://archlinux.repo.063240.xyz/$arch/' \
-              > /etc/pacman.d/linuxrepos-mirrorlist
             cat >> /etc/pacman.conf <<'PACMAN_REPOS'
 
           [chaotic-aur]
@@ -81,9 +81,6 @@ jobs:
           [arch4edu]
           SigLevel = Never
           Include = /etc/pacman.d/arch4edu-mirrorlist
-          [linuxrepos]
-          SigLevel = Never
-          Include = /etc/pacman.d/linuxrepos-mirrorlist
           [ownstuff]
           SigLevel = Never
           Include = /etc/pacman.d/ownstuff-mirrorlist
