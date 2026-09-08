@@ -153,6 +153,11 @@ jobs:
               for f in PKGBUILD dae.install; do
                 curl -sfL "$base/$f" -o "pkg_dir/$f"
               done ;;
+            u1s1-bin)
+              # 官方預編譯 TUI（自帶 Node 運行時的便攜 tarball）。PKGBUILD 維護在
+              # 獨立倉庫 Capricornus007/u1s1-bin（android-ndk 模式），
+              # 版本偵測走 u1s1.io/releases/LATEST，校驗和由 updpkgsums 更新回推
+              git clone "https://github.com/${{ github.repository_owner }}/u1s1-bin.git" pkg_dir ;;
             mpv-git)
               # 本 workflow 没有 checkout step（其他包都是 clone 来的），
               # mpv-git 的三个打包文件直接从本仓库 master 分支的 raw URL 抓
@@ -449,6 +454,24 @@ jobs:
               TARGET_PKGVER="$CUR_PKGVER"
               ;;
 
+            u1s1-bin)
+              # 固定版本包 + 官方 LATEST 檔：版本號直接從 u1s1.io/releases/LATEST
+              # 讀（純文字，如 1.9.0）。拿不到時不構建（skip），避免用過期版本
+              # 蓋掉已有資產。
+              latest=$(curl -fsSL --connect-timeout 15 "https://u1s1.io/releases/LATEST" 2>/dev/null || true)
+              case "$latest" in
+                *[!0-9.]*|"") skip "拿不到 u1s1.io LATEST 版本號" ;;
+              esac
+              if [ "$latest" != "$CUR_PKGVER" ]; then
+                # 新版本：改寫 PKGBUILD 的 pkgver 由後續步驟處理——但本 case 是
+                # 「固定版本包」模式（同 android-ndk），版本改寫在拉取的副本上
+                # 由「改写 PKGBUILD」步驟前先 sed。這裡先輸出目標版本。
+                TARGET_PKGVER="$latest"
+              else
+                TARGET_PKGVER="$CUR_PKGVER"
+              fi
+              ;;
+
             *)
               echo "未知仓库: $PKG" >&2; exit 1 ;;
           esac
@@ -725,6 +748,15 @@ jobs:
               # 插在 _ci_force_config 之前：此时 prepare() 里补丁已套用完、源码树就位
               sed -i -E 's|^([[:space:]]*)_ci_force_config \.\./config$|\1_ci_fix_gud_fortify\n&|' PKGBUILD
               grep -n '^[[:space:]]*_ci_fix_gud_fortify$' PKGBUILD
+              ;;
+            u1s1-bin)
+              # 新版本時把 pkgver 換成 LATEST 讀到的值；pkgrel 保持 1。
+              # PKGBUILD 的 source URL 是字面 ${pkgver} 模板字串。sed 替換端
+              # 不能寫 \1$NEW_PKGVER——sed 會把 \1 後的 $N 解析成第 N 個捕獲組
+              # 造成替換失效；用單引號字面 + 變數拼接最穩。
+              sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
+              sed -i 's/u1s1-cli-${pkgver}/u1s1-cli-'"${NEW_PKGVER}"'/g' PKGBUILD
+              grep -n 'u1s1-cli-' PKGBUILD
               ;;
           esac
 

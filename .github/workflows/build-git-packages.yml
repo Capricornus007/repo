@@ -42,5 +42,6 @@ jobs:
           {"key": "xlibre-input-libinput-git", "repo_name": "xlibre-input-libinput-git", "variant": "none"},
           {"key": "xlibre-xserver-git", "repo_name": "xlibre-xserver-git", "variant": "none"},
           {"key": "android-ndk-23", "repo_name": "android-ndk-23", "variant": "none"},
-          {"key": "android-ndk-27", "repo_name": "android-ndk-27", "variant": "none"}
+          {"key": "android-ndk-27", "repo_name": "android-ndk-27", "variant": "none"},
+          {"key": "u1s1-bin", "repo_name": "u1s1-bin", "variant": "none"}
         ]
