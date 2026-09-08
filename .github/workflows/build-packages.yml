@@ -464,10 +464,15 @@ jobs:
           # 否则永远匹配不上，每个整点都会白编一次。
           EPOCH_PART=""
           if [ "$CUR_EPOCH" != "0" ]; then EPOCH_PART="${CUR_EPOCH}."; fi
+          # rc 变体的产物文件名在打包后被插入 -rc- 中缀（见「云端编译」步骤的 mv），
+          # 资产比对必须带上同样的中缀，否则 rc 永远匹配不上、每天白编一次
+          # 3 小时的内核（2026-09-07 实测：7.3.rc1-2 已在 release 里仍全程重编）。
+          asset_prefix="${PKGBASE}-${EPOCH_PART}"
+          if [ "$VARIANT" = "rc" ]; then asset_prefix="${PKGBASE}-rc-${EPOCH_PART}"; fi
           assets=$(gh_api "https://api.github.com/repos/${GH_REPO}/releases/tags/${REPO_RELEASE_TAG}" \
                    | jq -r '.assets[].name' 2>/dev/null || true)
-          if printf '%s\n' "$assets" | grep -q "^${PKGBASE}-${EPOCH_PART}${TARGET_PKGVER}-${TARGET_PKGREL}-"; then
-            skip "${PKGBASE}-${EPOCH_PART}${TARGET_PKGVER}-${TARGET_PKGREL} 已在 release 里"
+          if printf '%s\n' "$assets" | grep -q "^${asset_prefix}${TARGET_PKGVER}-${TARGET_PKGREL}-"; then
+            skip "${asset_prefix}${TARGET_PKGVER}-${TARGET_PKGREL} 已在 release 里"
           fi
 
           {
@@ -696,6 +701,30 @@ jobs:
               curl -sfL -o cjktty-add-cjk32x32-font-data.patch \
                 "https://raw.githubusercontent.com/Capricornus007/cjktty-patches/master/cjktty-add-cjk32x32-font-data.patch"
               sed -i -E 's|^[[:space:]]*"\$\{_cjktty_source\}/cjktty-add-cjk32x32-font-data\.patch"[[:space:]]*$|    "cjktty-add-cjk32x32-font-data.patch"|' PKGBUILD
+
+              # ---------- gud fortify 假阳性规避（CI-only，随 _ci_force_config 一起注入） ----------
+              # 7.3-rc2 起 gud_connector.c 新增 memchr(mode, '\0', 16) 校验 TV mode 名
+              # （上游 da1ea35fea67）。clang 22 + ThinLTO 在连结期把
+              # __struct_size(&buf[i*16]) 折叠成小于 16 的常量，ld.lld 对 gud.o 报
+              # __read_overflow "dontcall-error"。运行期恒安全：buf 是 kmalloc(256)，
+              # gud_usb_get -> usb_control_msg 的返回上限就是传入的 len，故
+              # num_modes ≤ 16、i*16+16 ≤ 256——纯编译期假阳性。
+              # 换成 __builtin_memchr 绕过 fortify 内联检查，语义不变；
+              # 上游哪天改掉这行，下面的 grep 不中、注入自动变 no-op。
+              {
+                echo '_ci_fix_gud_fortify() {'
+                echo '  local f="drivers/gpu/drm/gud/gud_connector.c"'
+                echo '  [ -f "$f" ] || return 0'
+                echo '  grep -q "__builtin_memchr(mode, " "$f" && return 0'
+                echo '  grep -q "memchr(mode, " "$f" || return 0'
+                echo '  sed -i "s/memchr(mode, /__builtin_memchr(mode, /" "$f"'
+                echo '  grep -q "__builtin_memchr(mode, " "$f" || { echo "错误：gud fortify 规避失败" >&2; return 1; }'
+                echo '  echo "gud: memchr -> __builtin_memchr（规避 clang ThinLTO fortify 假阳性）"'
+                echo '}'
+              } >> PKGBUILD
+              # 插在 _ci_force_config 之前：此时 prepare() 里补丁已套用完、源码树就位
+              sed -i -E 's|^([[:space:]]*)_ci_force_config \.\./config$|\1_ci_fix_gud_fortify\n&|' PKGBUILD
+              grep -n '^[[:space:]]*_ci_fix_gud_fortify$' PKGBUILD
               ;;
           esac
 
