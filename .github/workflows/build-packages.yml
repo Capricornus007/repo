@@ -167,6 +167,19 @@ jobs:
                 curl -sfL "$base/$f" -o "pkg_dir/$f"
               done
               chmod +x pkg_dir/find-deps.py ;;
+            codex-desktop-git)
+              # 從 AUR 克隆。此包的版本由 build 時下載的 deb 中的 build-info.json 確定，
+              # CI 無法完整重現，因此僅在發布關卡檢查是否已有相同版本。
+              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
+            element-desktop-nightly-bin)
+              # 從本倉庫獲取 PKGBUILD 和腳本。
+              # 版本號從 packages.element.io 的 nightly 目錄獲取。
+              mkdir pkg_dir
+              base="https://raw.githubusercontent.com/${{ github.repository }}/master/element-desktop-nightly-bin"
+              for f in PKGBUILD element-desktop-nightly.sh; do
+                curl -sfL "$base/$f" -o "pkg_dir/$f"
+              done
+              chmod +x pkg_dir/element-desktop-nightly.sh ;;
             *)
               git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir ;;
           esac
@@ -472,6 +485,32 @@ jobs:
               fi
               ;;
 
+            codex-desktop-git)
+              # codex-desktop-git 版本來自 OpenAI APT deb，無法預測。
+              # CI 會在 makepkg 時執行 pkgver() 取得版本，這裡只能設置
+              # build=true，讓構建階段處理版本號。
+              # 如果 release 中已有同樣 pkgver，表示不需要重建；但我們無法預知，
+              # 所以總是嘗試構建。
+              TARGET_PKGVER="$CUR_PKGVER"
+              ;;
+
+            element-desktop-nightly-bin)
+              # element-desktop-nightly-bin 版本由日期+流水號組成，如 2026091001。
+              # 從 Element 的 Debian nightly 目錄獲取最新版本。
+              latest=$(curl -fsSL "https://packages.element.io/debian/pool/main/e/element-nightly/" 2>/dev/null \
+                       | grep -oE 'element-nightly_[0-9]+_(amd64|arm64)\.deb' \
+                       | sed 's/element-nightly_//;s/_[a-z]*\.deb//' \
+                       | sort -V | tail -n1 || true)
+              case "$latest" in
+                *[!0-9.]*|"") skip "拿不到 Element nightly 版本號" ;;
+              esac
+              if [ "$latest" != "$CUR_PKGVER" ]; then
+                TARGET_PKGVER="$latest"
+              else
+                TARGET_PKGVER="$CUR_PKGVER"
+              fi
+              ;;
+
             *)
               echo "未知仓库: $PKG" >&2; exit 1 ;;
           esac
@@ -758,13 +797,24 @@ jobs:
               sed -i 's/u1s1-cli-${pkgver}/u1s1-cli-'"${NEW_PKGVER}"'/g' PKGBUILD
               grep -n 'u1s1-cli-' PKGBUILD
               ;;
+            element-desktop-nightly-bin)
+              # 元素 nightly 包：更新 pkgver 為新的日期版本號。
+              # PKGBUILD source URL 使用 ${pkgver} 模板，直接更新 pkgver 即可。
+              sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
+              grep -n '^pkgver=' PKGBUILD
+              ;;
+            codex-desktop-git)
+              # codex-desktop-git 由 AUR 提供，CI 無法預先知悉 build 時下載的 deb 版本。
+              # 此處不修改 PKGBUILD，讓 makepkg 的 pkgver() 在 build 時自動設定版本。
+              :
+              ;;
           esac
 
           echo "==== PKGBUILD 版本区 ===="
           grep -nE '^(pkgver|pkgrel|_major|_minor|_rcver|_tagrel|_srcname)=' PKGBUILD || true
 
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
