@@ -45,6 +45,5 @@ jobs:
           {"key": "android-ndk-27", "repo_name": "android-ndk-27", "variant": "none"},
           {"key": "u1s1-bin", "repo_name": "u1s1-bin", "variant": "none"},
           {"key": "codex-desktop-git", "repo_name": "codex-desktop-git", "variant": "none"},
-          {"key": "element-desktop-nightly-bin", "repo_name": "element-desktop-nightly-bin", "variant": "none"},
-          {"key": "nashira-bin", "repo_name": "nashira-bin", "variant": "none"}
+          {"key": "element-desktop-nightly-bin", "repo_name": "element-desktop-nightly-bin", "variant": "none"}
         ]

@@ -190,11 +190,6 @@ jobs:
                 curl -sfL "$base/$f" -o "pkg_dir/$f"
               done
               chmod +x pkg_dir/element-desktop-nightly.sh ;;
-            nashira-bin)
-              # 從本倉庫獲取 PKGBUILD（in-tree 模式）；源是 Nashira release 的 .deb
-              mkdir pkg_dir
-              base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-bin"
-              curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
             *)
               git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir ;;
           esac
@@ -569,23 +564,6 @@ jobs:
               fi
               ;;
 
-            nashira-bin)
-              # 版本 = Nashira 最新 release tag（去 v 前綴），如 0.1.0。
-              # 公開倉庫的 releases/latest 端點免鑑權；tag 與 .deb 檔名都由
-              # Nashira 的 release workflow 生成（v<pkgver> / nashira_<pkgver>_amd64.deb）。
-              latest=$(curl -fsSL --connect-timeout 15 --retry 3 --retry-delay 10 \
-                         "https://api.github.com/repos/Capricornus007/nashira/releases/latest" 2>/dev/null \
-                       | jq -r '.tag_name // empty' 2>/dev/null | sed 's/^v//' || true)
-              case "$latest" in
-                *[!0-9a-zA-Z.]*|"") skip "拿不到 Nashira 最新版本号" ;;
-              esac
-              if [ "$latest" != "$CUR_PKGVER" ]; then
-                TARGET_PKGVER="$latest"
-              else
-                TARGET_PKGVER="$CUR_PKGVER"
-              fi
-              ;;
-
             *)
               echo "未知仓库: $PKG" >&2; exit 1 ;;
           esac
@@ -878,11 +856,6 @@ jobs:
               sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
               grep -n '^pkgver=' PKGBUILD
               ;;
-            nashira-bin)
-              # source URL 用 ${pkgver} 模板（releases/download/v${pkgver}/…），改 pkgver 即可
-              sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
-              grep -n '^pkgver=' PKGBUILD
-              ;;
             codex-desktop-git)
               # codex-desktop-git 由 AUR 提供，CI 無法預先知悉 build 時下載的 deb 版本。
               # 此處不修改 PKGBUILD，讓 makepkg 的 pkgver() 在 build 時自動設定版本。
@@ -894,7 +867,7 @@ jobs:
           grep -nE '^(pkgver|pkgrel|_major|_minor|_rcver|_tagrel|_srcname)=' PKGBUILD || true
 
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-bin'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -1017,9 +990,6 @@ jobs:
             # nightly deb 天天换，PKGBUILD 里写死的 sha256 必然失配；源是
             # Element 官方 HTTPS 仓库，跳过校验和不损失信任（用户指示：
             # sums 能跳过就跳过）
-            flags="$flags --skipchecksums"
-          elif [ "${{ matrix.repo_name }}" = "nashira-bin" ]; then
-            # 源是自己倉庫 release 的 deb（HTTPS 直鏈），sums 用 SKIP
             flags="$flags --skipchecksums"
           elif [ "${PGP_OK:-1}" != "1" ]; then
             echo "::warning::有公钥没导入成功，本次跳过 PGP 校验（校验和仍然检查）"
