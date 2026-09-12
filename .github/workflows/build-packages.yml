@@ -496,12 +496,44 @@ jobs:
               ;;
 
             codex-desktop-git)
-              # codex-desktop-git 版本來自 OpenAI APT deb，無法預測。
-              # CI 會在 makepkg 時執行 pkgver() 取得版本，這裡只能設置
-              # build=true，讓構建階段處理版本號。
-              # 如果 release 中已有同樣 pkgver，表示不需要重建；但我們無法預知，
-              # 所以總是嘗試構建。
+              # 版本 = OpenAI deb 版本 + 上游 repo HEAD，pkgver() 构建时才拼装，
+              # 无法预知，所以 TARGET_PKGVER 维持现值；而下面的通用资产比对对它
+              # 永远不命中（比对的是 PKGBUILD 里写死的旧 pkgver），结果就是
+              # 每小时全量重编（下载 deb + 跑 install.sh，1~15 分钟白烧）。
+              # 这里直接探测 (deb 版本, 上游 HEAD)，与 release 里最新 codex
+              # 资产名记录的组合比对，两者都没变就跳过。探测失败时保持旧行为
+              # 照常构建——宁可多编，不可漏编。
               TARGET_PKGVER="$CUR_PKGVER"
+              _codex_url=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
+                        for s in "${source[@]}"; do printf "%s\n" "$s"; done' \
+                | sed -E 's/^[^:]*:://; s/^git\+//' \
+                | grep -E '^https?://' | head -n1)
+              _codex_head=$(git ls-remote "$_codex_url" HEAD 2>/dev/null \
+                | awk '{print substr($1,1,8); exit}')
+              _codex_deb=$(curl -fsSL --connect-timeout 15 \
+                  "https://persistent.oaistatic.com/codex-app-prod/linux/deb/dists/stable/main/binary-amd64/Packages" 2>/dev/null \
+                | awk '/^Package: chatgpt$/{f=1;next} f&&/^$/{f=0} f&&/^Version:/{print $2; exit}' || true)
+              if [ -z "$_codex_head" ] || [ -z "$_codex_deb" ]; then
+                echo "::warning::codex 上游探测失败（HEAD/deb 版本拿不到），照常构建"
+              else
+                _codex_assets=$(gh_api "https://api.github.com/repos/${GH_REPO}/releases/tags/${REPO_RELEASE_TAG}" \
+                  | jq -r '.assets[].name' 2>/dev/null || true)
+                _codex_last=$(printf '%s\n' "$_codex_assets" \
+                  | grep -E "^${PKGBASE}-[0-9].*\.r[0-9]+\.g[0-9a-f]{8}-" \
+                  | sort -V | tail -n1)
+                if [ -z "$_codex_last" ]; then
+                  echo "release 里还没有 codex 资产，照常构建"
+                else
+                  _codex_last_ver="${_codex_last#${PKGBASE}-}"
+                  _codex_last_ver="${_codex_last_ver%%-*}"
+                  _codex_last_deb=$(printf '%s' "$_codex_last_ver" | sed -E 's/\.r[0-9]+\.g[0-9a-f]{8}$//')
+                  _codex_last_head=$(printf '%s' "$_codex_last_ver" | sed -nE 's/.*\.g([0-9a-f]{8})$/\1/p')
+                  if [ "$_codex_deb" = "$_codex_last_deb" ] && [ "$_codex_head" = "$_codex_last_head" ]; then
+                    skip "codex 上游未变（deb $_codex_deb / HEAD $_codex_head，已发布 $_codex_last_ver）"
+                  fi
+                  echo "codex 上游有变：deb $_codex_last_deb -> $_codex_deb / HEAD $_codex_last_head -> $_codex_head"
+                fi
+              fi
               ;;
 
             element-desktop-nightly-bin)
@@ -895,12 +927,13 @@ jobs:
           cp /tmp/PKGBUILD.ci PKGBUILD
           chown -R builder:builder .
 
-      - name: 更新 Element nightly 校验和并回推 PKGBUILD
-        # element 不走上面通用的「更新校验和并回推」：那是给 AUR/独立仓库
-        # 的 git 工作区写的，element 的 pkg_dir 是普通目录、打包文件也在本
-        # 仓库子目录里。这里下载两个架构的 deb 重新算 sha256（版本天天变，
-        # PKGBUILD 里的旧 hash 对新 deb 必然校验失败），更新后回推本仓库，
-        # 让 plan 的版本比对下一轮直接命中。
+      - name: 回推 Element nightly PKGBUILD
+        # element 的 sha256sums 是写死的、随 nightly 天天过期——但源是
+        # Element 官方 HTTPS 仓库，校验和不构成额外信任，编译步骤直接
+        # --skipchecksums 跳过（sums 能跳过就跳过，不折腾）。这里只把新
+        # 版本号回推到本仓库，让 plan 的版本比对下一轮直接命中。其他包
+        # 回推的是各自 AUR/独立仓库；element 的打包文件在本仓库子目录里，
+        # 回推目标必须是本仓库。[skip ci] 避免 push 再触发一轮全量构建
         if: matrix.repo_name == 'element-desktop-nightly-bin' && steps.plan.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -908,40 +941,9 @@ jobs:
           NEW_PKGVER: ${{ steps.plan.outputs.pkgver }}
         run: |
           set -euo pipefail
-          cd pkg_dir
-          base="https://packages.element.io/debian/pool/main/e/element-nightly"
-          fetch_sum() {
-            local f="$1"
-            for attempt in 1 2 3; do
-              if curl -fsSL --connect-timeout 30 --retry 3 --retry-delay 15 \
-                   -o "/tmp/$f" "$base/$f"; then
-                sha256sum "/tmp/$f" | cut -d' ' -f1
-                return 0
-              fi
-              echo "下载 $f 失败（第 ${attempt}/3 次）" >&2
-              sleep 15
-            done
-            return 1
-          }
-          amd_sum=$(fetch_sum "element-nightly_${NEW_PKGVER}_amd64.deb") \
-            || { echo "::error::amd64 deb 下载失败，无法更新校验和"; exit 1; }
-          echo "amd64 sha256=$amd_sum"
-          sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('$amd_sum')/" PKGBUILD
-          # arm64 与 amd64 同批构建但偶尔错峰上架；缺货时保留旧 hash 只警告，
-          # 本仓库只发 x86_64 产物，不影响本次构建
-          if arm_sum=$(fetch_sum "element-nightly_${NEW_PKGVER}_arm64.deb"); then
-            echo "arm64 sha256=$arm_sum"
-            sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('$arm_sum')/" PKGBUILD
-          else
-            echo "::warning::arm64 deb 下载失败，aarch64 校验和保持旧值"
-          fi
-          grep -nE '^sha256sums' PKGBUILD
-          # 回推本仓库（element 的打包文件在本仓库 element-desktop-nightly-bin/，
-          # 其他包推的是各自 AUR/独立仓库，不能照搬）。[skip ci] 避免 push
-          # 再触发一轮全量构建
           rm -rf /tmp/repo-push
           git clone --depth=1 "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" /tmp/repo-push
-          cp PKGBUILD /tmp/repo-push/element-desktop-nightly-bin/PKGBUILD
+          cp pkg_dir/PKGBUILD /tmp/repo-push/element-desktop-nightly-bin/PKGBUILD
           cd /tmp/repo-push
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -984,6 +986,11 @@ jobs:
           if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ]; then
             # CachyOS 的 config / 补丁是 CI 现抓的，校验和对不上，跳过完整性检查
             flags="$flags --skipinteg"
+          elif [ "${{ matrix.repo_name }}" = "element-desktop-nightly-bin" ]; then
+            # nightly deb 天天换，PKGBUILD 里写死的 sha256 必然失配；源是
+            # Element 官方 HTTPS 仓库，跳过校验和不损失信任（用户指示：
+            # sums 能跳过就跳过）
+            flags="$flags --skipchecksums"
           elif [ "${PGP_OK:-1}" != "1" ]; then
             echo "::warning::有公钥没导入成功，本次跳过 PGP 校验（校验和仍然检查）"
             flags="$flags --skippgpcheck"
