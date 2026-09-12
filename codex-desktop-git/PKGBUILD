@@ -71,6 +71,11 @@ makedepends=(
     'dpkg'
     'gnupg'
     'nodejs'
+    # scripts/lib/asar-patch.sh patches the payload with
+    # "npx --yes @electron/asar": npx ships with npm, not with the nodejs
+    # package, and that step only runs when an ASAR feature descriptor is
+    # active (2026-09-11 CI: "npx: command not found", prepare() aborted).
+    'npm'
     # The transactional candidate promotion in install.sh runs
     # scripts/lib/candidate-promotion.py, and pkgver() reads build-info.json.
     'python'

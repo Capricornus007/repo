@@ -168,9 +168,19 @@ jobs:
               done
               chmod +x pkg_dir/find-deps.py ;;
             codex-desktop-git)
-              # 從 AUR 克隆。此包的版本由 build 時下載的 deb 中的 build-info.json 確定，
-              # CI 無法完整重現，因此僅在發布關卡檢查是否已有相同版本。
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
+              # 打包文件维护在本仓库 codex-desktop-git/ 目录，不再取 AUR：
+              # AUR 上游是 zadkiel 的仓，makedepends 没有 npm，而上游
+              # install.sh 的 scripts/lib/asar-patch.sh 用
+              # "npx --yes @electron/asar" 打补丁（npx 属于 npm 包，nodejs
+              # 不提供），ASAR descriptor 激活时 prepare() 直接炸
+              # （2026-09-11 三连红，exit 127）。此包的版本由 build 時下載的
+              # deb 中的 build-info.json 確定，CI 無法完整重現，因此僅在
+              # 發布關卡檢查是否已有相同版本。
+              mkdir pkg_dir
+              base="https://raw.githubusercontent.com/${{ github.repository }}/master/codex-desktop-git"
+              for f in PKGBUILD codex-desktop-git.install LicenseRef-OpenAI-Terms; do
+                curl -sfL "$base/$f" -o "pkg_dir/$f"
+              done ;;
             element-desktop-nightly-bin)
               # 從本倉庫獲取 PKGBUILD 和腳本。
               # 版本號從 packages.element.io 的 nightly 目錄獲取。
@@ -495,14 +505,25 @@ jobs:
               ;;
 
             element-desktop-nightly-bin)
-              # element-desktop-nightly-bin 版本由日期+流水號組成，如 2026091001。
-              # 從 Element 的 Debian nightly 目錄獲取最新版本。
-              latest=$(curl -fsSL "https://packages.element.io/debian/pool/main/e/element-nightly/" 2>/dev/null \
-                       | grep -oE 'element-nightly_[0-9]+_(amd64|arm64)\.deb' \
-                       | sed 's/element-nightly_//;s/_[a-z]*\.deb//' \
-                       | sort -V | tail -n1 || true)
+              # element-desktop-nightly-bin 版本由日期+流水號組成，如 2026091101。
+              # 首選 Element 官方 APT 元数据（纯文本小文件，权威且格式稳定）。
+              # pool 目录列表页在 runner 的数据中心 IP 上会被 Cloudflare 挑战页
+              # 挡掉，curl -f 失败又被 || true 吞掉，于是每轮都 skip
+              # 「拿不到 Element nightly 版本号」——release 里连一个 element
+              # 包都没有（2026-09-12 实测定位）。
+              latest=$(curl -fsSL --connect-timeout 15 --retry 3 --retry-delay 10 \
+                         "https://packages.element.io/debian/dists/default/main/binary-amd64/Packages" 2>/dev/null \
+                       | awk '/^Package: element-nightly$/{f=1;next} f&&/^$/{f=0} f&&/^Version:/{print $2; exit}' || true)
+              if [ -z "$latest" ]; then
+                echo "::warning::APT Packages 读取失败，退回 pool 目录列表页"
+                latest=$(curl -fsSL --connect-timeout 15 \
+                           "https://packages.element.io/debian/pool/main/e/element-nightly/" 2>/dev/null \
+                         | grep -oE 'element-nightly_[0-9]+_amd64\.deb' \
+                         | sed -E 's/^element-nightly_([0-9]+)_amd64\.deb$/\1/' \
+                         | sort -V | tail -n1 || true)
+              fi
               case "$latest" in
-                *[!0-9.]*|"") skip "拿不到 Element nightly 版本號" ;;
+                *[!0-9]*|"") skip "拿不到 Element nightly 版本号（APT 元数据与目录页均不可达）" ;;
               esac
               if [ "$latest" != "$CUR_PKGVER" ]; then
                 TARGET_PKGVER="$latest"
@@ -873,6 +894,65 @@ jobs:
           # 推完再把注入版换回来给 makepkg 用
           cp /tmp/PKGBUILD.ci PKGBUILD
           chown -R builder:builder .
+
+      - name: 更新 Element nightly 校验和并回推 PKGBUILD
+        # element 不走上面通用的「更新校验和并回推」：那是给 AUR/独立仓库
+        # 的 git 工作区写的，element 的 pkg_dir 是普通目录、打包文件也在本
+        # 仓库子目录里。这里下载两个架构的 deb 重新算 sha256（版本天天变，
+        # PKGBUILD 里的旧 hash 对新 deb 必然校验失败），更新后回推本仓库，
+        # 让 plan 的版本比对下一轮直接命中。
+        if: matrix.repo_name == 'element-desktop-nightly-bin' && steps.plan.outputs.build == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          NEW_PKGVER: ${{ steps.plan.outputs.pkgver }}
+        run: |
+          set -euo pipefail
+          cd pkg_dir
+          base="https://packages.element.io/debian/pool/main/e/element-nightly"
+          fetch_sum() {
+            local f="$1"
+            for attempt in 1 2 3; do
+              if curl -fsSL --connect-timeout 30 --retry 3 --retry-delay 15 \
+                   -o "/tmp/$f" "$base/$f"; then
+                sha256sum "/tmp/$f" | cut -d' ' -f1
+                return 0
+              fi
+              echo "下载 $f 失败（第 ${attempt}/3 次）" >&2
+              sleep 15
+            done
+            return 1
+          }
+          amd_sum=$(fetch_sum "element-nightly_${NEW_PKGVER}_amd64.deb") \
+            || { echo "::error::amd64 deb 下载失败，无法更新校验和"; exit 1; }
+          echo "amd64 sha256=$amd_sum"
+          sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('$amd_sum')/" PKGBUILD
+          # arm64 与 amd64 同批构建但偶尔错峰上架；缺货时保留旧 hash 只警告，
+          # 本仓库只发 x86_64 产物，不影响本次构建
+          if arm_sum=$(fetch_sum "element-nightly_${NEW_PKGVER}_arm64.deb"); then
+            echo "arm64 sha256=$arm_sum"
+            sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('$arm_sum')/" PKGBUILD
+          else
+            echo "::warning::arm64 deb 下载失败，aarch64 校验和保持旧值"
+          fi
+          grep -nE '^sha256sums' PKGBUILD
+          # 回推本仓库（element 的打包文件在本仓库 element-desktop-nightly-bin/，
+          # 其他包推的是各自 AUR/独立仓库，不能照搬）。[skip ci] 避免 push
+          # 再触发一轮全量构建
+          rm -rf /tmp/repo-push
+          git clone --depth=1 "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" /tmp/repo-push
+          cp PKGBUILD /tmp/repo-push/element-desktop-nightly-bin/PKGBUILD
+          cd /tmp/repo-push
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "PKGBUILD 无变化，不回推"
+          else
+            git add element-desktop-nightly-bin/PKGBUILD
+            git commit -m "chore: element-desktop-nightly-bin auto update to ${NEW_PKGVER} [skip ci]"
+            git push
+            echo "已回推 PKGBUILD 到本仓库 master"
+          fi
 
       - name: 预下载 NDK 镜像源码
         if: (matrix.repo_name == 'android-ndk-23' || matrix.repo_name == 'android-ndk-27') && steps.plan.outputs.build == 'true'
