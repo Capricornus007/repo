@@ -1,0 +1,19 @@
+# Maintainer: Capricornus007 <contact@capricornus007.com>
+# Nashira 的 pacman 包：直接消費上游 release 的 .deb（element-desktop-nightly-bin 同款）。
+# .deb 內含 jpackage app image（自帶 JRE 的 /opt/nashira）＋desktop entry＋圖標。
+pkgname=nashira-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Nashira — Matrix messenger for Android and Linux (Kotlin/Compose Multiplatform)"
+arch=('x86_64')
+url="https://github.com/Capricornus007/nashira"
+license=('AGPL-3.0-only')
+depends=('xdg-utils')
+provides=('nashira')
+conflicts=('nashira')
+source_x86_64=("https://github.com/Capricornus007/nashira/releases/download/v${pkgver}/nashira_${pkgver}_amd64.deb")
+sha256sums_x86_64=('SKIP')
+
+package() {
+    bsdtar -xOf "${srcdir}/nashira_${pkgver}_amd64.deb" data.tar.xz | bsdtar -xJf - -C "$pkgdir"
+}
