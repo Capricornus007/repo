@@ -1,0 +1,70 @@
+# Maintainer: Capricornus007 <contact@capricornus007.com>
+# Nashira 的從源碼構建版（-git）：clone 主倉 master HEAD，本地跑 Compose
+# Desktop 的 createDistributable，佈局鏡像上游 packaging/PKGBUILD
+# （/opt/nashira app image + desktop entry + hicolor 全尺寸圖標 +
+# /usr/bin/nashira 便利連結）。上游 release.yml 的 arch job 消費的是
+# release 產物（nashira）；這裡是獨立從源碼出包、跟著 master 走。
+
+pkgname=nashira-git
+pkgver=0.1.0.r74.gb1fcd2b
+pkgrel=1
+pkgdesc="Nashira — Matrix messenger for Android and Linux (Kotlin/Compose Multiplatform, built from master)"
+arch=('x86_64')
+url="https://github.com/Capricornus007/nashira"
+license=('AGPL-3.0-only')
+depends=('xdg-utils')
+makedepends=('git' 'jdk21-openjdk' 'unzip')
+provides=('nashira')
+conflicts=('nashira')
+options=('!strip' '!debug')
+source=('git+https://github.com/Capricornus007/nashira.git')
+sha256sums=('SKIP')
+
+pkgver() {
+  cd nashira
+  # v0.1.0-74-gb1fcd2b → 0.1.0.r74.gb1fcd2b（dae-git 同款轉換）
+  git describe --tags --long | sed 's/^v//; s/\([^-]*-g\)/r\1/; s/-/./g'
+}
+
+build() {
+  cd nashira
+  # 只建桌面 app image（不碰 androidApp；configuration 階段不需要 Android
+  # SDK——上游 release.yml 同一條命令在無 SDK 的 runner 上驗證過可行）。
+  # --no-daemon：容器/CI 友好，不留常駐 JVM
+  ./gradlew :desktopApp:createDistributable --no-daemon --console=plain
+}
+
+package() {
+  cd nashira
+  local dist="desktopApp/build/compose/binaries/main/app/nashira"
+  [ -d "$dist" ] || { echo "app image 不存在: $dist" >&2; return 1; }
+
+  install -dm755 "${pkgdir}/opt/nashira"
+  cp -a "${dist}/." "${pkgdir}/opt/nashira/"
+
+  # desktop entry：jpackage 的 app image 不含 .desktop（只在 deb/rpm 打包時
+  # 生成；上游 release 的 .pkg.tar.zst 同樣缺——真實缺口，這裡補上）。
+  # 以 deb 內 jpackage 生成的 nashira-nashira.desktop 為基準，修掉
+  # Categories=Unknown（desktop-file-spec 無此註冊類別）與絕對路徑 Icon
+  # （改用 hicolor 安裝的圖標名）
+  install -Dm644 /dev/null "${pkgdir}/usr/share/applications/nashira.desktop"
+  cat > "${pkgdir}/usr/share/applications/nashira.desktop" <<'EOF'
+[Desktop Entry]
+Name=Nashira
+Comment=Nashira — Matrix messenger for Android and Linux
+Exec=/opt/nashira/bin/nashira
+Icon=nashira
+Terminal=false
+Type=Application
+Categories=Network;InstantMessaging;Chat;
+EOF
+
+  # hicolor 全尺寸（16–512＋scalable SVG）：桌面環境按 DPI 挑最佳尺寸，
+  # 不會拿 512 硬縮成 16 的糊圖。X11 --add-opens（平鋪 WM 修復）已進
+  # app image 的 lib/app/nashira.cfg，app image 自帶 JRE，無需 java-runtime
+  install -dm755 "${pkgdir}/usr/share/icons/hicolor"
+  cp -a desktopApp/packaging/hicolor/hicolor/. "${pkgdir}/usr/share/icons/hicolor/"
+
+  install -dm755 "${pkgdir}/usr/bin"
+  ln -s /opt/nashira/bin/nashira "${pkgdir}/usr/bin/nashira"
+}

@@ -197,6 +197,12 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/freebuff-desktop-bin"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
+            nashira-git)
+              # 從本倉庫獲取 PKGBUILD（in-tree 模式）；源是 Nashira 主倉
+              # master HEAD，build 時 gradle 從源碼構建桌面 app image
+              mkdir pkg_dir
+              base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
+              curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
             *)
               git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir ;;
           esac
@@ -594,6 +600,24 @@ jobs:
                 TARGET_PKGVER="$CUR_PKGVER"
               fi
               ;;
+            nashira-git)
+              # 版本 = Nashira 主倉 master HEAD 的 git describe
+              # （v0.1.0-74-gb1fcd2b → 0.1.0.r74.gb1fcd2b）。與 ffmpeg-full-git
+              # 同款：blob 過濾克隆保留 tags，嚴格復現 PKGBUILD pkgver() 的算法
+              rm -rf /tmp/nashira-version
+              git clone --filter=blob:none https://github.com/Capricornus007/nashira.git /tmp/nashira-version
+              latest_pkgver=$(git -C /tmp/nashira-version describe --tags --long \
+                | sed 's/^v//; s/\([^-]*-g\)/r\1/; s/-/./g')
+              case "$latest_pkgver" in
+                *[!0-9a-zA-Z.+-r]*|"") skip "拿不到 Nashira HEAD 版本号" ;;
+              esac
+              echo "当前 PKGBUILD=$CUR_PKGVER，源码目标=$latest_pkgver"
+              if [ "$latest_pkgver" != "$CUR_PKGVER" ]; then
+                TARGET_PKGVER="$latest_pkgver"
+              else
+                TARGET_PKGVER="$CUR_PKGVER"
+              fi
+              ;;
 
             *)
               echo "未知仓库: $PKG" >&2; exit 1 ;;
@@ -893,6 +917,12 @@ jobs:
               sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
               grep -n '^pkgver=' PKGBUILD
               ;;
+            nashira-git)
+              # -git 包：版本跟 master HEAD 走（plan 已算好）；
+              # source 是 git repo，無 URL 模板要改，只換 pkgver
+              sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
+              grep -n '^pkgver=' PKGBUILD
+              ;;
             codex-desktop-git)
               # codex-desktop-git 由 AUR 提供，CI 無法預先知悉 build 時下載的 deb 版本。
               # 此處不修改 PKGBUILD，讓 makepkg 的 pkgver() 在 build 時自動設定版本。
@@ -904,7 +934,7 @@ jobs:
           grep -nE '^(pkgver|pkgrel|_major|_minor|_rcver|_tagrel|_srcname)=' PKGBUILD || true
 
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'freebuff-desktop-bin'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'freebuff-desktop-bin' && matrix.repo_name != 'nashira-git'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -964,14 +994,14 @@ jobs:
           cp /tmp/PKGBUILD.ci PKGBUILD
           chown -R builder:builder .
 
-      - name: 回推 in-tree 套件的 PKGBUILD（Element nightly / Freebuff desktop）
-        # 这两个包的打包文件都维护在本仓库子目录里（element-desktop-nightly-bin/、
-        # freebuff-desktop-bin/），源随版本滚动（nightly deb / AppImage），
-        # sha256 用 SKIP + --skipchecksums 跳过，不折腾 updpkgsums（用户指示：
-        # sums 能跳过就跳过）。这里只把新版本号回推到本仓库，让 plan 的版本
-        # 比对下一轮直接命中；通用回推步骤会把 PKGBUILD 推到不存在的独立仓库，
-        # 所以两者都在排除清单里。[skip ci] 避免 push 再触发一轮全量构建
-        if: (matrix.repo_name == 'element-desktop-nightly-bin' || matrix.repo_name == 'freebuff-desktop-bin') && steps.plan.outputs.build == 'true'
+      - name: 回推 in-tree 套件的 PKGBUILD（Element / Freebuff / Nashira）
+        # 这三个包的打包文件都维护在本仓库子目录里（element-desktop-nightly-bin/、
+        # freebuff-desktop-bin/、nashira-git/），源随版本滚动（nightly deb / AppImage /
+        # master HEAD），sha256 全为 SKIP，不折腾 updpkgsums（用户指示：sums 能跳
+        # 过就跳过）。这里只把新版本号回推到本仓库，让 plan 的版本比对下一轮直接
+        # 命中；通用回推步骤会把 PKGBUILD 推到不存在的独立仓库，所以都在排除
+        # 清单里。[skip ci] 避免 push 再触发一轮全量构建
+        if: (matrix.repo_name == 'element-desktop-nightly-bin' || matrix.repo_name == 'freebuff-desktop-bin' || matrix.repo_name == 'nashira-git') && steps.plan.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
