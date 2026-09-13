@@ -8,7 +8,7 @@
 
 pkgname=freebuff-desktop-bin
 pkgver=0.0.109
-pkgrel=1
+pkgrel=2
 pkgdesc="Freebuff Desktop — AI coding agent desktop app by Codebuff (Electron)"
 arch=('x86_64' 'aarch64')
 url="https://freebuff.com"
@@ -37,6 +37,12 @@ package() {
   # 无）由 wrapper 挂进 LD_LIBRARY_PATH —— 即 vendor AppRun 的原行为
   install -dm755 "${pkgdir}"/opt/freebuff
   cp -a "${_app}/." "${pkgdir}"/opt/freebuff/
+
+  # AppImage 內多個目錄本來就是 0700（AppRun 自提取場景下是當前用戶自己，
+  # 無感；系統級安裝後 owner=root，普通用戶連遍歷都不行 → 啟動即
+  # Permission denied，0.0.109-1 實測中招）。cp -a 原樣保留權限，這裡
+  # 歸一化：目錄 755、文件加 world 讀取位（X 只給目錄與已帶執行位的文件）
+  chmod -R u+rwX,go+rX,go-w "${pkgdir}"/opt/freebuff
 
   # 桌面入口：沿用 vendor 的 Exec 参数（--no-sandbox：chrome-sandbox 无
   # setuid，vendor 明确选择禁用 sandbox；--ozone-platform-hint=auto：X11/
