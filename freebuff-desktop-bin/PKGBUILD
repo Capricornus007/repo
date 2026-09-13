@@ -1,0 +1,68 @@
+# Maintainer: Capricornus007 <contact@capricornus007.com>
+# Freebuff Desktop 的 pacman 包：直接消费上游 AppImage（cursor-bin / windsurf-bin
+# 同款做法：--appimage-extract 解包进 /opt，不依赖 fuse2 运行时挂载）。
+# 注意：AUR 的 freebuff-bin 是同名 CLI（npm tarball，装 /usr/bin/freebuff），
+# 与这个 Electron 桌面端是两个产物，二进制名刻意错开避免文件冲突。
+# 版本线：GitHub 上的 freebuff-desktop-v* release；官方下载页
+# https://freebuff.com/api/desktop/download/linux 302 指向这里。
+
+pkgname=freebuff-desktop-bin
+pkgver=0.0.109
+pkgrel=1
+pkgdesc="Freebuff Desktop — AI coding agent desktop app by Codebuff (Electron)"
+arch=('x86_64' 'aarch64')
+url="https://freebuff.com"
+license=('Apache-2.0')
+depends=('alsa-lib' 'cups' 'dbus' 'expat' 'gtk3' 'hicolor-icon-theme' 'libdrm'
+         'libxkbcommon' 'mesa' 'nss' 'systemd-libs' 'wayland')
+provides=('freebuff-desktop')
+conflicts=('freebuff-desktop')
+options=('!strip' '!debug')
+source_x86_64=("https://github.com/CodebuffAI/codebuff-community/releases/download/freebuff-desktop-v${pkgver}/Freebuff-${pkgver}-linux-x86_64.AppImage")
+sha256sums_x86_64=('SKIP')
+source_aarch64=("https://github.com/CodebuffAI/codebuff-community/releases/download/freebuff-desktop-v${pkgver}/Freebuff-${pkgver}-linux-arm64.AppImage")
+sha256sums_aarch64=('SKIP')
+
+package() {
+  cd "$srcdir"
+  # AppImage 的 squashfs 段是 xz 压缩，bsdtar/libarchive 解不了；用官方
+  # runtime 的 --appimage-extract（纯解包，不执行应用代码，也无需 FUSE）
+  chmod +x Freebuff-${pkgver}-linux-*.AppImage
+  ./Freebuff-${pkgver}-linux-*.AppImage --appimage-extract > /dev/null
+
+  _app=squashfs-root
+
+  # 整棵 AppDir 落进 /opt：libffmpeg.so 等靠二进制自带的 RPATH=$ORIGIN
+  # 解析；usr/lib 里的旧版捆绑库（libappindicator/libgconf，Arch 仓库已
+  # 无）由 wrapper 挂进 LD_LIBRARY_PATH —— 即 vendor AppRun 的原行为
+  install -dm755 "${pkgdir}"/opt/freebuff
+  cp -a "${_app}/." "${pkgdir}"/opt/freebuff/
+
+  # 桌面入口：沿用 vendor 的 Exec 参数（--no-sandbox：chrome-sandbox 无
+  # setuid，vendor 明确选择禁用 sandbox；--ozone-platform-hint=auto：X11/
+  # Wayland 自适应）
+  install -Dm644 "${_app}/@codebufffreebuff-desktop.desktop" \
+    "${pkgdir}"/usr/share/applications/freebuff-desktop.desktop
+  sed -i -e 's|^Exec=.*|Exec=/usr/bin/freebuff-desktop %U|' \
+         -e 's|^Icon=.*|Icon=freebuff|' \
+         "${pkgdir}"/usr/share/applications/freebuff-desktop.desktop
+
+  install -Dm644 "${_app}/usr/share/icons/hicolor/512x512/apps/@codebufffreebuff-desktop.png" \
+    "${pkgdir}"/usr/share/icons/hicolor/512x512/apps/freebuff.png
+
+  install -Dm755 /dev/null "${pkgdir}"/usr/bin/freebuff-desktop
+  cat > "${pkgdir}"/usr/bin/freebuff-desktop <<'EOF'
+#!/bin/sh
+# vendor AppRun 的平替：AppRun 只做环境变量设置 + exec 内层二进制
+# （isEulaAccepted=1 写死，无实际 EULA 闸门）
+APPDIR=/opt/freebuff
+export LD_LIBRARY_PATH="${APPDIR}/usr/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+exec "${APPDIR}/@codebufffreebuff-desktop" --no-sandbox --ozone-platform-hint=auto "$@"
+EOF
+  chmod 755 "${pkgdir}"/usr/bin/freebuff-desktop
+
+  install -Dm644 "${_app}/LICENSE.electron.txt" \
+    "${pkgdir}"/usr/share/licenses/${pkgname}/LICENSE.electron.txt
+  install -Dm644 "${_app}/LICENSES.chromium.html" \
+    "${pkgdir}"/usr/share/licenses/${pkgname}/LICENSES.chromium.html
+}

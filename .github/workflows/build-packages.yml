@@ -190,6 +190,13 @@ jobs:
                 curl -sfL "$base/$f" -o "pkg_dir/$f"
               done
               chmod +x pkg_dir/element-desktop-nightly.sh ;;
+            freebuff-desktop-bin)
+              # 從本倉庫獲取 PKGBUILD（in-tree 模式，element 同款）；
+              # 源是上游 GitHub release 的 AppImage，版本偵測走
+              # freebuff.com 下載 API 的 302 轉址
+              mkdir pkg_dir
+              base="https://raw.githubusercontent.com/${{ github.repository }}/master/freebuff-desktop-bin"
+              curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
             *)
               git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir ;;
           esac
@@ -563,6 +570,30 @@ jobs:
                 TARGET_PKGVER="$CUR_PKGVER"
               fi
               ;;
+            freebuff-desktop-bin)
+              # Freebuff Desktop 版本線：官方下載 API 是 302 轉址，Location 即
+              # 最新 desktop release（freebuff-desktop-vX.Y.Z，托管在
+              # CodebuffAI/codebuff-community）。HEAD 請求不觸發 155MB 下載。
+              latest=$(curl -fsSI --connect-timeout 15 --retry 3 --retry-delay 10 \
+                         "https://freebuff.com/api/desktop/download/linux" 2>/dev/null \
+                       | tr -d '\r' \
+                       | awk 'tolower($1)=="location:"{print $2; exit}' \
+                       | sed -nE 's|.*/freebuff-desktop-v([0-9][0-9A-Za-z.+-]*)/.*$|\1|p' || true)
+              if [ -z "$latest" ]; then
+                # 退路：GitHub release 列表按 tag 前綴過濾
+                latest=$(gh_api "https://api.github.com/repos/CodebuffAI/codebuff-community/releases?per_page=100" \
+                           | jq -r '.[].tag_name | select(startswith("freebuff-desktop-v"))' 2>/dev/null \
+                           | sed 's/^freebuff-desktop-v//' | sort -V | tail -n1 || true)
+              fi
+              case "$latest" in
+                *[!0-9a-zA-Z.+-]*|"") skip "拿不到 Freebuff desktop 最新版本号" ;;
+              esac
+              if [ "$latest" != "$CUR_PKGVER" ]; then
+                TARGET_PKGVER="$latest"
+              else
+                TARGET_PKGVER="$CUR_PKGVER"
+              fi
+              ;;
 
             *)
               echo "未知仓库: $PKG" >&2; exit 1 ;;
@@ -856,6 +887,12 @@ jobs:
               sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
               grep -n '^pkgver=' PKGBUILD
               ;;
+            freebuff-desktop-bin)
+              # source URL 用 ${pkgver} 模板（releases/download/freebuff-desktop-v${pkgver}/…），
+              # 改 pkgver 即可；sha256 是 SKIP，無需更新
+              sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
+              grep -n '^pkgver=' PKGBUILD
+              ;;
             codex-desktop-git)
               # codex-desktop-git 由 AUR 提供，CI 無法預先知悉 build 時下載的 deb 版本。
               # 此處不修改 PKGBUILD，讓 makepkg 的 pkgver() 在 build 時自動設定版本。
@@ -867,7 +904,7 @@ jobs:
           grep -nE '^(pkgver|pkgrel|_major|_minor|_rcver|_tagrel|_srcname)=' PKGBUILD || true
 
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'freebuff-desktop-bin'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -927,31 +964,32 @@ jobs:
           cp /tmp/PKGBUILD.ci PKGBUILD
           chown -R builder:builder .
 
-      - name: 回推 Element nightly PKGBUILD
-        # element 的 sha256sums 是写死的、随 nightly 天天过期——但源是
-        # Element 官方 HTTPS 仓库，校验和不构成额外信任，编译步骤直接
-        # --skipchecksums 跳过（sums 能跳过就跳过，不折腾）。这里只把新
-        # 版本号回推到本仓库，让 plan 的版本比对下一轮直接命中。其他包
-        # 回推的是各自 AUR/独立仓库；element 的打包文件在本仓库子目录里，
-        # 回推目标必须是本仓库。[skip ci] 避免 push 再触发一轮全量构建
-        if: matrix.repo_name == 'element-desktop-nightly-bin' && steps.plan.outputs.build == 'true'
+      - name: 回推 in-tree 套件的 PKGBUILD（Element nightly / Freebuff desktop）
+        # 这两个包的打包文件都维护在本仓库子目录里（element-desktop-nightly-bin/、
+        # freebuff-desktop-bin/），源随版本滚动（nightly deb / AppImage），
+        # sha256 用 SKIP + --skipchecksums 跳过，不折腾 updpkgsums（用户指示：
+        # sums 能跳过就跳过）。这里只把新版本号回推到本仓库，让 plan 的版本
+        # 比对下一轮直接命中；通用回推步骤会把 PKGBUILD 推到不存在的独立仓库，
+        # 所以两者都在排除清单里。[skip ci] 避免 push 再触发一轮全量构建
+        if: (matrix.repo_name == 'element-desktop-nightly-bin' || matrix.repo_name == 'freebuff-desktop-bin') && steps.plan.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
           NEW_PKGVER: ${{ steps.plan.outputs.pkgver }}
+          PKG: ${{ matrix.repo_name }}
         run: |
           set -euo pipefail
           rm -rf /tmp/repo-push
           git clone --depth=1 "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" /tmp/repo-push
-          cp pkg_dir/PKGBUILD /tmp/repo-push/element-desktop-nightly-bin/PKGBUILD
+          cp pkg_dir/PKGBUILD "/tmp/repo-push/${PKG}/PKGBUILD"
           cd /tmp/repo-push
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if git diff --quiet; then
             echo "PKGBUILD 无变化，不回推"
           else
-            git add element-desktop-nightly-bin/PKGBUILD
-            git commit -m "chore: element-desktop-nightly-bin auto update to ${NEW_PKGVER} [skip ci]"
+            git add "${PKG}/PKGBUILD"
+            git commit -m "chore: ${PKG} auto update to ${NEW_PKGVER} [skip ci]"
             git push
             echo "已回推 PKGBUILD 到本仓库 master"
           fi
@@ -990,6 +1028,11 @@ jobs:
             # nightly deb 天天换，PKGBUILD 里写死的 sha256 必然失配；源是
             # Element 官方 HTTPS 仓库，跳过校验和不损失信任（用户指示：
             # sums 能跳过就跳过）
+            flags="$flags --skipchecksums"
+          elif [ "${{ matrix.repo_name }}" = "freebuff-desktop-bin" ]; then
+            # AppImage 隨版本滾動，PKGBUILD 的 sha256 全為 SKIP（源是 GitHub
+            # release 官方直鏈；與 element nightly 同策略）。SKIP 本可不跳，
+            # 保留 --skipchecksums 防日後補上實體 sums 後失配
             flags="$flags --skipchecksums"
           elif [ "${PGP_OK:-1}" != "1" ]; then
             echo "::warning::有公钥没导入成功，本次跳过 PGP 校验（校验和仍然检查）"
