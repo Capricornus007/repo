@@ -959,11 +959,14 @@ jobs:
 
       - name: 回推 in-tree 套件的 PKGBUILD（Element / Nashira）
         # 这两个包的打包文件都维护在本仓库子目录里（element-desktop-nightly-bin/、
-        # nashira-git/），源随版本滚动（nightly deb /
-        # master HEAD），sha256 全为 SKIP，不折腾 updpkgsums（用户指示：sums 能跳
-        # 过就跳过）。这里只把新版本号回推到本仓库，让 plan 的版本比对下一轮直接
-        # 命中；通用回推步骤会把 PKGBUILD 推到不存在的独立仓库，所以都在排除
-        # 清单里。[skip ci] 避免 push 再触发一轮全量构建
+        # nashira-git/），源随版本滚动（nightly deb / master HEAD），sha256 全为
+        # SKIP，不折腾 updpkgsums（用户指示：sums 能跳过就跳过）。这里只把新版本
+        # 号回推到本仓库，让 plan 的版本比对下一轮直接命中；通用回推步骤会把
+        # PKGBUILD 推到不存在的独立仓库，所以都在排除清单里。[skip ci] 避免 push
+        # 再触发一轮全量构建。同轮两个 job 并发回推会撞 master 的 ref 锁
+        # （自己 clone 之后 master 被对方推进，push 被拒而整个 job 变红）——
+        # 两个包改的文件不相交，失败就重新克隆最新 master 重放提交，
+        # 随机退避重试，最多 5 次
         if: (matrix.repo_name == 'element-desktop-nightly-bin' || matrix.repo_name == 'nashira-git') && steps.plan.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -972,19 +975,39 @@ jobs:
           PKG: ${{ matrix.repo_name }}
         run: |
           set -euo pipefail
-          rm -rf /tmp/repo-push
-          git clone --depth=1 "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" /tmp/repo-push
-          cp pkg_dir/PKGBUILD "/tmp/repo-push/${PKG}/PKGBUILD"
-          cd /tmp/repo-push
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet; then
-            echo "PKGBUILD 无变化，不回推"
-          else
-            git add "${PKG}/PKGBUILD"
-            git commit -m "chore: ${PKG} auto update to ${NEW_PKGVER} [skip ci]"
-            git push
-            echo "已回推 PKGBUILD 到本仓库 master"
+          # 并发回推竞态的处理见上方注释。循环里不 cd 进克隆目录（下一轮
+          # rm -rf 删的就是它），统一 git -C；push 单独放 if 里，让它的失败
+          # 走重试，而不是被 set -e 直接判死整个 step。
+          pushed=false
+          for attempt in 1 2 3 4 5; do
+            rm -rf /tmp/repo-push
+            git clone --depth=1 "https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git" /tmp/repo-push
+            cp pkg_dir/PKGBUILD "/tmp/repo-push/${PKG}/PKGBUILD"
+            git -C /tmp/repo-push config user.name "github-actions[bot]"
+            git -C /tmp/repo-push config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            if git -C /tmp/repo-push diff --quiet; then
+              echo "PKGBUILD 无变化，不回推"
+              pushed=true
+              break
+            fi
+            git -C /tmp/repo-push add "${PKG}/PKGBUILD"
+            git -C /tmp/repo-push commit -m "chore: ${PKG} auto update to ${NEW_PKGVER} [skip ci]"
+            if git -C /tmp/repo-push push; then
+              echo "已回推 PKGBUILD 到本仓库 master"
+              pushed=true
+              break
+            fi
+            echo "回推失败（第 ${attempt}/5 次）：master 多半刚被同轮其他 in-tree job 推进，"
+            echo "重新克隆最新 master 重放本轮改动（两个包的文件不相交，不会冲突）"
+            if [ "$attempt" -lt 5 ]; then
+              # 随机退避加 PID 抖动，错开竞争方的重试节奏，避免节拍同步反复对撞
+              sleep $(( ((RANDOM + $$) % 10) + 5 ))
+            fi
+          done
+
+          if [ "$pushed" != true ]; then
+            echo "::error::回推 PKGBUILD 到本仓库 master 连续 5 次失败"
+            exit 1
           fi
 
       - name: 预下载 NDK 镜像源码
