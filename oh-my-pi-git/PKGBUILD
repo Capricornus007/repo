@@ -6,10 +6,15 @@
 
 pkgname=oh-my-pi-git
 pkgver=v13.10.1.r5817130cd3
-# pkgrel=2：同 pkgver 的重製計數。CI 用「目標 pkgver-pkgrel」比对 release 里
-# 已有的产物来决定建不建，v18.2.0.r06f2c14b-1（坏的 bytecode 版）已经发出去了，
-# 不 bump 就会被判“已存在”而跳过。以后若同 pkgver 还要重製，继续 +1。
-pkgrel=2
+# pkgrel 保持 1：-git 包的 pkgver 由上面的 pkgver() 在構建時從上游 HEAD 算出，
+# makepkg 的 update_pkgver_and_pkgrel() 一發現 pkgver 變了就順帶把 PKGBUILD 裡的
+# pkgrel 重寫回 1，所以在這裡把 pkgrel 抬到 2 並不會讓產物檔名變成 -2。
+# 但 CI 的「目標版本比對」用的是 PKGBUILD 裡的 pkgrel（拿 <pkgver>-<pkgrel> 去
+# 对 release 已有的資產），所以 pkgrel 抬上去会讓它每小時都判定「產物不存在」
+# 而無限重構這個包（单次 ~15 分鐘的 rust 編譯）。2026-09-15 就是靠 temporarily
+# pkgrel=2 逼 CI 重跑了一次、把壞的 v18.2.0.r06f2c14b-1 產物蓋掉，隨後立即改回 1。
+# 日後要再強制重構：短期抬 pkgrel 跑一輪就改回來，或直接删 release 裡那個資產。
+pkgrel=1
 pkgdesc="AI Coding agent for the terminal — hash-anchored edits, optimized tool harness, LSP, Python, browser, subagents, and more (git build)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/can1357/oh-my-pi"
