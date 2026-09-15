@@ -88,6 +88,29 @@ jobs:
             pacman -Syu --noconfirm --needed
           fi
 
+          if [ "${{ matrix.kind }}" = 'kde' ]; then
+            # 把自有 junlin03-aur 掛成匿名 pacman 源。矩陣 job 並行，靠它看見
+            # 兄弟 job 已發布的 KDE 依賴產物（release 資產公開可取，實測
+            # …/current-repo/junlin03-aur.db 與包檔均 HTTP 200）。冷啟動時
+            # 依賴尚未發布 → plan 步跳過，靠每小時排程按依賴 DAG 逐層收斂。
+            {
+              echo ''
+              echo '[junlin03-aur]'
+              echo 'SigLevel = Never'
+              echo "Server = https://github.com/${{ github.repository }}/releases/download/current-repo"
+            } >> /etc/pacman.conf
+            pacman -Sy
+          fi
+
+          if [ "${{ matrix.repo_name }}" = 'kguiaddons-git' ]; then
+            # AUR kguiaddons-git 的 makedepends 有 pyside6 卻漏列提供
+            # /usr/bin/shiboken6 的 shiboken6-generator，編 Python bindings 時
+            # 「shiboken6: command not found」崩（用戶 Artix 本機 2026-09-15 實測，
+            # 連帶 kcolorscheme-git 等級聯崩）。CI 預裝補上；上游哪天補進
+            # makedepends 這行就是多裝一個已裝包，無害。
+            pacman -Sy --noconfirm shiboken6-generator
+          fi
+
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
           # 结果最重的 CachyOS 内核是单线程编译的，必然撞 6 小时上限。
           # 直接追加到文件末尾，比 sed 匹配注释行可靠（上游默认值改过好几次）。
@@ -209,7 +232,12 @@ jobs:
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
             *)
-              git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir ;;
+              if [ "${{ matrix.kind }}" = 'kde' ]; then
+                # KDE 家族 -git 包直接取 AUR 的 PKGBUILD（上游未改，無自有 fork）
+                git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
+              else
+                git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir
+              fi ;;
           esac
           git config --global --add safe.directory "$PWD/pkg_dir"
 
@@ -317,6 +345,7 @@ jobs:
         env:
           PKG: ${{ matrix.repo_name }}
           VARIANT: ${{ matrix.variant }}
+          KIND: ${{ matrix.kind }}
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
@@ -601,7 +630,41 @@ jobs:
               ;;
 
             *)
-              echo "未知仓库: $PKG" >&2; exit 1 ;;
+              if [ "${KIND:-}" = kde ]; then
+              # KDE 家族 -git：忠實複現 makepkg 的 pkgver()——整份 source
+              # ./PKGBUILD（用 bash -c 起乾淨子殼，避免本步 set -u 撞上 PKGBUILD
+              # 頂層 arch=($CARCH) 的未綁定變數）、按 source URL blobless 克隆
+              # （保留 commits/tags 給 rev-list/describe）、跑 PKGBUILD 自己的
+              # pkgver()。三形態（git describe / rev-list / RELEASE_SERVICE_VERSION）
+              # 統一處理，免逐包 case。
+              rm -rf /tmp/kde-ver; mkdir -p /tmp/kde-ver; cp PKGBUILD /tmp/kde-ver/
+              TARGET_PKGVER=$(bash -c '
+                cd /tmp/kde-ver || exit 1
+                source ./PKGBUILD >/dev/null 2>&1
+                url=$(for s in "${source[@]}"; do printf "%s\n" "$s"; done \
+                      | sed -E "s/^git\+//; s/#[^:]*$//; s/^[^:]*:://" \
+                      | grep -E "^https?://" | head -n1)
+                [ -n "$url" ] || exit 1
+                git clone --quiet --filter=blob:none "$url" "${pkgname%-git}" || exit 1
+                pkgver
+              ') || skip "跑 $PKG 的 pkgver() 失敗"
+              case "$TARGET_PKGVER" in
+                *[!0-9A-Za-z._+-]*|"") skip "拿不到 $PKG 上游版本（=$TARGET_PKGVER）" ;;
+              esac
+              # 依賴就緒門檻：家族 -git 依賴必須全部已發布到 junlin03-aur（init env
+              # 已把它掛成 pacman 源），否則跳過讓 job 綠。矩陣並行 + 每小時排程
+              # → 按依賴 DAG 逐層收斂（本家族最深 6 層，冷啟動約 7 輪填滿）。缺依賴
+              # 直接 makepkg -s 會紅，这里提前跳過。
+              fam_deps=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
+                          for d in "${depends[@]}" "${makedepends[@]}"; do printf "%s\n" "$d"; done' \
+                          | sed -E "s/[<>=].*//" | sort -u | grep -- "-git$" || true)
+              for d in $fam_deps; do
+                pacman -Si -- "$d" >/dev/null 2>&1 \
+                  || skip "KDE 依賴 $d 尚未發布到 junlin03-aur，本轮跳过等下轮"
+              done
+              else
+                echo "未知仓库: $PKG" >&2; exit 1
+              fi ;;
           esac
 
           echo "目标版本: $TARGET_PKGVER-$TARGET_PKGREL"
@@ -909,7 +972,7 @@ jobs:
           grep -nE '^(pkgver|pkgrel|_major|_minor|_rcver|_tagrel|_srcname)=' PKGBUILD || true
 
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.kind != 'kde'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
