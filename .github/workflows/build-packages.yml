@@ -99,7 +99,16 @@ jobs:
               echo 'SigLevel = Never'
               echo "Server = https://github.com/${{ github.repository }}/releases/download/current-repo"
             } >> /etc/pacman.conf
-            pacman -Sy
+            # 27 個 kde job 同時抓同一個 release 資產端點，GitHub 偶發 500
+            # （2026-09-15 冷啟動 kcompletion-git 實測）。重試幾次；仍失敗就
+            # 放過——junlin03-aur 沒同步到，plan 步的依賴門檻會把「查無依賴」
+            # 判成未就緒而跳過，正好是安全的冷啟動行為，不該讓整個 job 紅。
+            for _try in 1 2 3 4 5; do
+              pacman -Sy junlin03-aur && break
+              echo "同步 junlin03-aur 失敗（第 ${_try}/5 次），退避重試"
+              sleep $(( _try * 5 + RANDOM % 10 ))
+            done
+            true
           fi
 
           if [ "${{ matrix.repo_name }}" = 'kguiaddons-git' ]; then
