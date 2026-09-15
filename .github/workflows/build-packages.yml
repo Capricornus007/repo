@@ -115,14 +115,26 @@ jobs:
       - name: 拉取对应的套件仓库
         run: |
           set -euo pipefail
-          # ffmpeg-full-git / kew-git / oh-my-pi-git 直接取 AUR 的 PKGBUILD；
+          # ffmpeg-full-git / kew-git 直接取 AUR 的 PKGBUILD；
+          # oh-my-pi-git 改走 in-tree（本仓库 oh-my-pi-git/ 目录）：AUR 那份照上游
+          #   compile-binary.ts 里新加的 `bytecode: true` 编译，而本仓库的非 frozen
+          #   `bun install` 会把 yargs（内含 import.meta.resolve）打进 bundle，
+          #   bun 的 bytecode 路径带不动活的 import.meta，做出来的 omp 连
+          #   `omp --version` 都会立刻 SyntaxError: import.meta is only valid inside
+          #   modules（2026-09-15 v18.2.0.r06f2c14b 实测，详见该 PKGBUILD 注释）；
           # xlibre 两个包上游未改，同样直接取 AUR；
           # mpv-git 的打包文件维护在本仓库 mpv-git/ 目录；
           # pysolfc-git / protonvpn-cli-community-git 同理只取各自目录下的 PKGBUILD
           # （protonvpn 的上游 url 改成了 jonasjancarik 的续命 fork，不能取 AUR 版）
           case "${{ matrix.repo_name }}" in
-            ffmpeg-full-git|kew-git|oh-my-pi-git)
+            ffmpeg-full-git|kew-git)
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
+            oh-my-pi-git)
+              # 只要 PKGBUILD 一个文件（无 install hook）；pkgver 仍由 PKGBUILD 的
+              # pkgver() 在构建时从上游 HEAD 算出，CI 不回推本仓库这份
+              mkdir pkg_dir
+              curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/oh-my-pi-git/PKGBUILD" \
+                -o pkg_dir/PKGBUILD ;;
             xlibre-xserver-git|xlibre-input-libinput-git)
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
               if [ "${{ matrix.repo_name }}" = "xlibre-xserver-git" ]; then

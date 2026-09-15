@@ -1,0 +1,90 @@
+# 本目錄的 PKGBUILD 是 in-tree 維護（CI 從 raw.githubusercontent 抓這份，不再取
+# AUR 快照），原因是 AUR/上游的建置組合會產出「建置成功、一執行就掛」的 omp：
+# 見下方 prepare() 的 bytecode 迴避與 build() 末尾的實跑檢查。
+# 要跟 AUR 同步時：curl https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=oh-my-pi-git
+# 然後把 prepare()/build() 兩處的本地改動重放一次即可（其餘段落刻意保持逐字相同）。
+
+pkgname=oh-my-pi-git
+pkgver=v13.10.1.r5817130cd3
+# pkgrel=2：同 pkgver 的重製計數。CI 用「目標 pkgver-pkgrel」比对 release 里
+# 已有的产物来决定建不建，v18.2.0.r06f2c14b-1（坏的 bytecode 版）已经发出去了，
+# 不 bump 就会被判“已存在”而跳过。以后若同 pkgver 还要重製，继续 +1。
+pkgrel=2
+pkgdesc="AI Coding agent for the terminal — hash-anchored edits, optimized tool harness, LSP, Python, browser, subagents, and more (git build)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/can1357/oh-my-pi"
+license=('MIT')
+provides=('omp')
+conflicts=('omp')
+depends=('glibc' 'gcc-libs' 'bun')
+makedepends=('git' 'rust' 'rustup' 'cmake' 'make')
+options=('!lto' '!strip')
+
+source=("git+https://github.com/can1357/oh-my-pi.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "oh-my-pi"
+  git describe --tags --long --abbrev=7 | sed 's/\([^--]*\)-g/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd "oh-my-pi"
+  git submodule update --init --recursive
+
+  # ---- WORKAROUND：bun 的 --bytecode 與 import.meta 不相容（2026-09-15 踩到）----
+  # 上游 commit 16013e3ec（v18.2.0）把 packages/coding-agent/scripts/compile-binary.ts
+  # 的 Bun.build() 加了 `bytecode: true`（啟動 256ms→30ms）。但 bun 的 bytecode 路徑
+  # 只會靜態替換掉 import.meta.url/.dir/.main/.path/.dirname；bundle 裡只要還留下
+  # 任何「活的」import.meta（本套件走非 frozen 的 `bun install`，依賴樹比上游 release
+  # CI 多了 yargs，而 yargs/build/lib/utils/apply-extends.js 用了 import.meta.resolve），
+  # 該模組就會被當成非模組腳本求值，於是在 main() 之前丟出
+  #   SyntaxError: import.meta is only valid inside modules.
+  # 而且它連設定檔都還沒讀就死，所以使用者端無從自救。關掉 bytecode（回到 18.1.22
+  # 以來的行為）即可規避；上游若自行修好，這段 sed 自然失效、不影響建置。
+  local _cb="packages/coding-agent/scripts/compile-binary.ts"
+  if [ -f "$_cb" ] && grep -qE '^[[:space:]]*bytecode:[[:space:]]*true,' "$_cb"; then
+    sed -i -E 's/^([[:space:]]*)bytecode:[[:space:]]*true,/\1bytecode: false,/' "$_cb"
+    grep -qE '^[[:space:]]*bytecode:[[:space:]]*false,' "$_cb" || {
+      echo "FATAL: bytecode 迴避未生效（sed 未命中 $_cb）" >&2
+      exit 1
+    }
+    echo "INFO: 已關閉 bun --bytecode（迴避 live import.meta 造成的啟動即掛）"
+  else
+    echo "INFO: $_cb 內沒有 'bytecode: true' —— 上游已移除或改寫該選項，本次不套 workaround"
+  fi
+  # 兜底：bytecode 只要還從任何地方被打開，就可能重現同一個啟動即掛
+  if grep -rn --include='*.ts' --include='*.js' -E '^[[:space:]]*bytecode:[[:space:]]*true,' \
+       packages scripts 2>/dev/null; then
+    echo "FATAL: 仍有未關閉的 bytecode: true（見上列檔案），拒絕產出可能無法啟動的套件" >&2
+    exit 1
+  fi
+}
+
+build() {
+  cd "oh-my-pi"
+  bun install
+  rustup install nightly
+  rustup default nightly
+  bun run build:native
+  cd packages/coding-agent
+  bun run build
+  sha1sum dist/omp
+  pwd
+
+  # 產物必須「能跑」而不只是「能建」：上面那個 bytecode bug 就是 makepkg 全綠、
+  # 裝上去卻連 omp --version 都印不出來。用上游自己的 --smoke-test 當閘口
+  # （上游 ci:test:smoke 亦用同一旗標），壞版在這裡就會把 job 打紅。
+  ./dist/omp --version
+  ./dist/omp --smoke-test
+}
+
+package() {
+  pwd
+  sha1sum "${srcdir}/oh-my-pi/packages/coding-agent/dist/omp"
+  install -Dm755 "${srcdir}/oh-my-pi/packages/coding-agent/dist/omp" "${pkgdir}/usr/bin/omp"
+  sha1sum "${pkgdir}/usr/bin/omp"
+#  for _f in "oh-my-pi/src/oh-my-pi/packages/natives/native/pi_natives"*.node; do
+#    [[ -f "$_f" ]] && install -Dm755 "$_f" "${pkgdir}/usr/bin/$(basename "$_f")"
+#  done
+}
