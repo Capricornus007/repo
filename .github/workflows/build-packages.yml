@@ -111,13 +111,16 @@ jobs:
             true
           fi
 
-          if [ "${{ matrix.repo_name }}" = 'kguiaddons-git' ]; then
-            # AUR kguiaddons-git 的 makedepends 有 pyside6 卻漏列提供
-            # /usr/bin/shiboken6 的 shiboken6-generator，編 Python bindings 時
-            # 「shiboken6: command not found」崩（用戶 Artix 本機 2026-09-15 實測，
-            # 連帶 kcolorscheme-git 等級聯崩）。CI 預裝補上；上游哪天補進
-            # makedepends 這行就是多裝一個已裝包，無害。
-            pacman -Sy --noconfirm shiboken6-generator
+          if [ "${{ matrix.kind }}" = 'kde' ]; then
+            # 整個 KDE 家族的上游 CMake 都會自行探測 Python bindings：
+            #   find_package(Shiboken6) 需要 Shiboken6Config.cmake，由 `shiboken6`
+            #   包提供（不是 shiboken6-generator——後者只有 Shiboken6ToolsConfig.cmake）；
+            #   而編 generator 要 /usr/bin/shiboken6，由 `shiboken6-generator` 提供。
+            # AUR 的 makedepends 只列 pyside6，兩個都漏（且 pyside6 不拉 shiboken6），
+            # 2026-09-15/16 CI 實測 kcoreaddons-git / kwidgetsaddons-git / kguiaddons-git
+            # 全部 CMake Error find_package(Shiboken6)，層 1 卡死整條 kbreakout DAG。
+            # 兩個都預裝；無 Python bindings 的包多裝無害。
+            pacman -S --noconfirm --needed shiboken6 shiboken6-generator
           fi
 
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
