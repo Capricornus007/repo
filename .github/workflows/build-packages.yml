@@ -1027,8 +1027,21 @@ jobs:
           echo "==== PKGBUILD 版本区 ===="
           grep -nE '^(pkgver|pkgrel|_major|_minor|_rcver|_tagrel|_srcname)=' PKGBUILD || true
 
+      # tkg（mesa-tkg-git，Tk-Glitch 模板）必须整步跳过。它的 PKGBUILD 自带
+      # `plain '...'` ASCII logo、`msg2`/`warning` 提示，以及末尾的
+      # `trap exit_cleanup EXIT`——这些都在 source PKGBUILD 时执行，而且 Tk-Glitch
+      # 的 message 函数把 logo 与提示写到 **stdout**。updpkgsums 恰恰用
+      # `newsums=$(makepkg -g ...)` 捕获 stdout 当校验和，于是那一堆 ASCII art 被
+      # 当成 md5/sha512 写回 PKGBUILD，把 source 区之后的文件结构撕碎。
+      # 2026-09-16 CI 实测症状：PKGBUILD 由 716 行涨到 738 行、ASCII art 插在
+      # md5sums 上方，makepkg 第二次 source 直接 `Failed to source`（exit 6）；
+      # 本机用 file:// 假 git 源完整复现同一现象。
+      # 副作用评估：mesa 的 source 是 git（checksum=SKIP）+ LICENSE/llvm32.native
+      # 两个固定文件，PKGBUILD 里写死的 md5/sha512 已与上游文件逐字节一致
+      # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
+      # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.kind != 'kde'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.kind != 'kde' && matrix.kind != 'tkg'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
