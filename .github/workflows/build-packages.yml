@@ -671,12 +671,13 @@ jobs:
               # MESA_WHICH_LLVM=4 明確指定 stable llvm，避免 PKGBUILD 頂層互動提示。
               rm -rf /tmp/tkg-ver; mkdir -p /tmp/tkg-ver; cp PKGBUILD customization.cfg /tmp/tkg-ver/
               TARGET_PKGVER=$(MESA_WHICH_LLVM=4 bash -c '
+                plain(){ :; }; msg2(){ :; }; warning(){ :; }; remove_deps(){ :; }
                 cd /tmp/tkg-ver || exit 1
                 source ./customization.cfg >/dev/null 2>&1
                 source ./PKGBUILD >/dev/null 2>&1
                 _dir="${_mesa_srcdir:-mesa}"
                 url=$(for s in "${source[@]}"; do printf "%s\n" "$s"; done \
-                      | sed -E "s/^git\+//; s/#[^:]*$//; s/^[^:]*:://" \
+                      | sed -E "s/^[^:]*:://; s/^git\+//; s/#[^:]*$//" \
                       | grep -E "^https?://" | head -n1)
                 [ -n "$url" ] || exit 1
                 git clone --quiet --filter=blob:none "$url" "$_dir" || exit 1
@@ -697,7 +698,7 @@ jobs:
                 cd /tmp/kde-ver || exit 1
                 source ./PKGBUILD >/dev/null 2>&1
                 url=$(for s in "${source[@]}"; do printf "%s\n" "$s"; done \
-                      | sed -E "s/^git\+//; s/#[^:]*$//; s/^[^:]*:://" \
+                      | sed -E "s/^[^:]*:://; s/^git\+//; s/#[^:]*$//" \
                       | grep -E "^https?://" | head -n1)
                 [ -n "$url" ] || exit 1
                 git clone --quiet --filter=blob:none "$url" "${pkgname%-git}" || exit 1
