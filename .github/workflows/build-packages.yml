@@ -104,7 +104,11 @@ jobs:
             # 放過——junlin03-aur 沒同步到，plan 步的依賴門檻會把「查無依賴」
             # 判成未就緒而跳過，正好是安全的冷啟動行為，不該讓整個 job 紅。
             for _try in 1 2 3 4 5; do
-              pacman -Sy junlin03-aur && break
+              # 只同步資料庫：`pacman -Sy <target>` 會把 target 當「要安裝的包名」，
+              # 寫 repo 名會恆報 `target not found: junlin03-aur`（2026-09-16 CI 實測
+              # 5 次全紅、白燒 74 秒/job，27 個 kde job 並行合計浪費大量 runner）。
+              # 這裡要的只是同步 DB，沒有任何要安裝的包，所以不帶目標。
+              pacman -Sy --noconfirm && break
               echo "同步 junlin03-aur 失敗（第 ${_try}/5 次），退避重試"
               sleep $(( _try * 5 + RANDOM % 10 ))
             done
