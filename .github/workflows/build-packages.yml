@@ -112,18 +112,18 @@ jobs:
           fi
 
           if [ "${{ matrix.kind }}" = 'kde' ]; then
-            # 整個 KDE 家族的上游 CMakeLists 幾乎都有：
-            #   option(BUILD_PYTHON_BINDINGS ... ON)   # 預設 ON
-            #   if (BUILD_PYTHON_BINDINGS)
-            #     find_package(Python3 3.9 REQUIRED ...)
-            #     find_package(Shiboken6 REQUIRED)      # Shiboken6Config.cmake ← shiboken6
-            #     find_package(PySide6 REQUIRED)        # PySide6Config.cmake   ← pyside6
-            # 而 AUR 的 makedepends 只列 pyside6（kcoreaddons/kwidgetsaddons 連它都沒列），
-            # 三個都可能缺。2026-09-15/16 CI 實測：
-            #   只裝 shiboken6-generator → find_package(Shiboken6) 失敗
-            #   再裝 shiboken6          → 過 Shiboken6 但 find_package(PySide6) 失敗
-            # 三個都預裝；無 Python bindings 的包多裝無害。
-            pacman -S --noconfirm --needed shiboken6 shiboken6-generator pyside6
+            # 帶 Python bindings 的 KDE 框架（上游 CMakeLists 預設 BUILD_PYTHON_BINDINGS=ON）
+            # 在 configure 要的、以及 build() 生成 bindings 要的，一整套：
+            #   configure: find_package(Shiboken6)  → shiboken6（提供 Shiboken6Config.cmake）
+            #              find_package(PySide6)    → pyside6（提供 PySide6Config.cmake）
+            #   build:     /usr/bin/shiboken6       → shiboken6-generator
+            #              python3 -m build         → python-build
+            #              setuptools 後端          → python-setuptools
+            # AUR 的 makedepends 只有 kguiaddons 列全，kcoreaddons/kwidgetsaddons 一個都沒列，
+            # 2026-09-15/16 CI 逐層實測：缺 generator→find_package(Shiboken6) 紅；
+            # 補 shiboken6→find_package(PySide6) 紅；全補後 build() 才在
+            # 「python3 -m build」因缺 python-build 紅。整套一起預裝；無 bindings 的包多裝無害。
+            pacman -S --noconfirm --needed shiboken6 shiboken6-generator pyside6 python-build python-setuptools
           fi
 
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
