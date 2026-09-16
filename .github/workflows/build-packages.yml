@@ -126,6 +126,13 @@ jobs:
             pacman -S --noconfirm --needed shiboken6 shiboken6-generator pyside6 python-build python-setuptools
           fi
 
+          if [ "${{ matrix.kind }}" = 'tkg' ]; then
+            # mesa-tkg 的 customization.cfg 是 _lib32=true，需要 multilib 的 lib32-* 依賴。
+            # 容器只有 core/extra、預設 [multilib] 是註解掉的，補一段未註解的進去再同步。
+            printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
+            pacman -Sy --noconfirm
+          fi
+
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
           # 结果最重的 CachyOS 内核是单线程编译的，必然撞 6 小时上限。
           # 直接追加到文件末尾，比 sed 匹配注释行可靠（上游默认值改过好几次）。
@@ -246,6 +253,17 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
+            mesa-tkg-git)
+              # chaotic-aur 的 tkg mesa（Tk-Glitch 版 = AUR Lone_Wolf 基底 + tkg patches）。
+              # 提供 mesa / vulkan-* / lib32-* 全套拆分包。MESA_WHICH_LLVM（build 步設 4 =
+              # stable llvm）產生的是 llvm-libs>=8.0.0（無上限）——正是解除 llvm23 sysupgrade
+              # 卡點所需（chaotic 舊模板才會 <23.0.0）。PKGBUILD 會 source
+              # $_where/customization.cfg，故兩者必須同目錄；llvm32.native 在 source 陣列裡。
+              mkdir pkg_dir
+              _mesa_base="https://raw.githubusercontent.com/chaotic-aur/packages/main/mesa-tkg-git"
+              for _f in PKGBUILD customization.cfg llvm32.native LICENSE; do
+                curl -sfL "$_mesa_base/$_f" -o "pkg_dir/$_f"
+              done ;;
             *)
               if [ "${{ matrix.kind }}" = 'kde' ]; then
                 # KDE 家族 -git 包直接取 AUR 的 PKGBUILD（上游未改，無自有 fork）
@@ -361,6 +379,8 @@ jobs:
           PKG: ${{ matrix.repo_name }}
           VARIANT: ${{ matrix.variant }}
           KIND: ${{ matrix.kind }}
+          # mesa-tkg：4 = stable llvm（產生 llvm-libs>=8.0.0 無上限依賴，解 llvm23 卡點）
+          MESA_WHICH_LLVM: "4"
           GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
@@ -645,7 +665,27 @@ jobs:
               ;;
 
             *)
-              if [ "${KIND:-}" = kde ]; then
+              if [ "${KIND:-}" = tkg ]; then
+              # mesa-tkg-git：跑 PKGBUILD 自己的 pkgver()。它的 source 目錄名是
+              # _mesa_srcdir（mesa），pkgver() 進去做 `cat VERSION` + rev-list/rev-parse。
+              # MESA_WHICH_LLVM=4 明確指定 stable llvm，避免 PKGBUILD 頂層互動提示。
+              rm -rf /tmp/tkg-ver; mkdir -p /tmp/tkg-ver; cp PKGBUILD customization.cfg /tmp/tkg-ver/
+              TARGET_PKGVER=$(MESA_WHICH_LLVM=4 bash -c '
+                cd /tmp/tkg-ver || exit 1
+                source ./customization.cfg >/dev/null 2>&1
+                source ./PKGBUILD >/dev/null 2>&1
+                _dir="${_mesa_srcdir:-mesa}"
+                url=$(for s in "${source[@]}"; do printf "%s\n" "$s"; done \
+                      | sed -E "s/^git\+//; s/#[^:]*$//; s/^[^:]*:://" \
+                      | grep -E "^https?://" | head -n1)
+                [ -n "$url" ] || exit 1
+                git clone --quiet --filter=blob:none "$url" "$_dir" || exit 1
+                pkgver
+              ') || skip "跑 $PKG 的 pkgver() 失敗"
+              case "$TARGET_PKGVER" in
+                *[!0-9A-Za-z._+-]*|"") skip "拿不到 $PKG 上游版本（=$TARGET_PKGVER）" ;;
+              esac
+              elif [ "${KIND:-}" = kde ]; then
               # KDE 家族 -git：忠實複現 makepkg 的 pkgver()——整份 source
               # ./PKGBUILD（用 bash -c 起乾淨子殼，避免本步 set -u 撞上 PKGBUILD
               # 頂層 arch=($CARCH) 的未綁定變數）、按 source URL blobless 克隆
@@ -1122,6 +1162,9 @@ jobs:
 
       - name: 云端编译 `.pkg.tar.zst`
         if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'
+        env:
+          # mesa-tkg：4 = stable llvm（PKGBUILD 據此把依賴定為 llvm-libs>=8.0.0，無上限）
+          MESA_WHICH_LLVM: "4"
         run: |
           set -uo pipefail
           cd pkg_dir

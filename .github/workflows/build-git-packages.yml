@@ -29,7 +29,7 @@ jobs:
     # 否则 PERSONAL_BUILD_TOKEN 为空、回推 PKGBUILD 会静默失败。
     secrets: inherit
     with:
-      timeout_minutes: 180
+      timeout_minutes: 360
       packages: |
         [
           {"key": "dae-git", "repo_name": "dae-git", "variant": "none"},
@@ -47,6 +47,7 @@ jobs:
           {"key": "codex-desktop-git", "repo_name": "codex-desktop-git", "variant": "none"},
           {"key": "element-desktop-nightly-bin", "repo_name": "element-desktop-nightly-bin", "variant": "none"},
           {"key": "nashira-git", "repo_name": "nashira-git", "variant": "none"},
+          {"key": "mesa-tkg-git", "repo_name": "mesa-tkg-git", "variant": "none", "kind": "tkg"},
           {"key": "extra-cmake-modules-git", "repo_name": "extra-cmake-modules-git", "variant": "none", "kind": "kde"},
           {"key": "plasma-wayland-protocols-git", "repo_name": "plasma-wayland-protocols-git", "variant": "none", "kind": "kde"},
           {"key": "attica-git", "repo_name": "attica-git", "variant": "none", "kind": "kde"},
