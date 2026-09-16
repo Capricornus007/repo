@@ -112,15 +112,18 @@ jobs:
           fi
 
           if [ "${{ matrix.kind }}" = 'kde' ]; then
-            # 整個 KDE 家族的上游 CMake 都會自行探測 Python bindings：
-            #   find_package(Shiboken6) 需要 Shiboken6Config.cmake，由 `shiboken6`
-            #   包提供（不是 shiboken6-generator——後者只有 Shiboken6ToolsConfig.cmake）；
-            #   而編 generator 要 /usr/bin/shiboken6，由 `shiboken6-generator` 提供。
-            # AUR 的 makedepends 只列 pyside6，兩個都漏（且 pyside6 不拉 shiboken6），
-            # 2026-09-15/16 CI 實測 kcoreaddons-git / kwidgetsaddons-git / kguiaddons-git
-            # 全部 CMake Error find_package(Shiboken6)，層 1 卡死整條 kbreakout DAG。
-            # 兩個都預裝；無 Python bindings 的包多裝無害。
-            pacman -S --noconfirm --needed shiboken6 shiboken6-generator
+            # 整個 KDE 家族的上游 CMakeLists 幾乎都有：
+            #   option(BUILD_PYTHON_BINDINGS ... ON)   # 預設 ON
+            #   if (BUILD_PYTHON_BINDINGS)
+            #     find_package(Python3 3.9 REQUIRED ...)
+            #     find_package(Shiboken6 REQUIRED)      # Shiboken6Config.cmake ← shiboken6
+            #     find_package(PySide6 REQUIRED)        # PySide6Config.cmake   ← pyside6
+            # 而 AUR 的 makedepends 只列 pyside6（kcoreaddons/kwidgetsaddons 連它都沒列），
+            # 三個都可能缺。2026-09-15/16 CI 實測：
+            #   只裝 shiboken6-generator → find_package(Shiboken6) 失敗
+            #   再裝 shiboken6          → 過 Shiboken6 但 find_package(PySide6) 失敗
+            # 三個都預裝；無 Python bindings 的包多裝無害。
+            pacman -S --noconfirm --needed shiboken6 shiboken6-generator pyside6
           fi
 
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
