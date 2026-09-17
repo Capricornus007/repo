@@ -734,7 +734,24 @@ jobs:
                   || skip "KDE 依賴 $d 尚未發布到 junlin03-aur，本轮跳过等下轮"
               done
               else
-                echo "未知仓库: $PKG" >&2; exit 1
+              # 通用 -git 包（sway/wlroots/waybar 等 AUR VCS 包）：忠實複現
+              # makepkg 的 pkgver()——整份 source ./PKGBUILD、按 source URL
+              # blobless 克隆（保留 commits/tags）、跑 PKGBUILD 自己的 pkgver()。
+              # 與 kde 分支同款算法，差別只在沒有家族依賴門檻。
+              rm -rf /tmp/generic-ver; mkdir -p /tmp/generic-ver; cp PKGBUILD /tmp/generic-ver/
+              TARGET_PKGVER=$(bash -c '
+                cd /tmp/generic-ver || exit 1
+                source ./PKGBUILD >/dev/null 2>&1
+                url=$(for s in "${source[@]}"; do printf "%s\n" "$s"; done \
+                      | sed -E "s/^[^:]*:://; s/^git\+//; s/#[^:]*$//" \
+                      | grep -E "^https?://" | head -n1)
+                [ -n "$url" ] || exit 1
+                git clone --quiet --filter=blob:none "$url" "${pkgname%-git}" || exit 1
+                pkgver
+              ') || skip "跑 $PKG 的 pkgver() 失敗"
+              case "$TARGET_PKGVER" in
+                *[!0-9A-Za-z._+-]*|"") skip "拿不到 $PKG 上游版本（=$TARGET_PKGVER）" ;;
+              esac
               fi ;;
           esac
 
