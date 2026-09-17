@@ -271,9 +271,9 @@ jobs:
             *)
               # AUR 包或本仓库维护的 -git 包：
               # sway 系列包、wlroots、waybar 等从 AUR 获取
-              if [[ "$repo_name" =~ ^(sway|wlroots|waybar|i3status)-git$ ]]; then
+              if echo "${{ matrix.repo_name }}" | grep -qE '^(sway|wlroots|waybar|i3status)-git$'; then
                 git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              elif [[ "$repo_name" =~ ^(sway|wlroots|waybar|i3status)$ ]]; then
+              elif echo "${{ matrix.repo_name }}" | grep -qE '^(sway|wlroots|waybar|i3status)$'; then
                 # 官方稳定版包：从 Arch 官方 GitLab 获取 PKGBUILD
                 mkdir pkg_dir
                 _pkgbase="https://gitlab.archlinux.org/archlinux/packaging/packages/${{ matrix.repo_name }}"
