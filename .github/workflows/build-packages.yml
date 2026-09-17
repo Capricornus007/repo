@@ -134,7 +134,12 @@ jobs:
             # mesa-tkg 的 customization.cfg 是 _lib32=true，需要 multilib 的 lib32-* 依賴。
             # 容器只有 core/extra、預設 [multilib] 是註解掉的，補一段未註解的進去再同步。
             printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
-            pacman -Sy --noconfirm
+            # 必须 -Syu 全量升级，不能只 -Sy：mesa 编译期链接容器里的 llvm，
+            # base:base-devel 镜像的 llvm 是旧的（22.x），产出的 libGLX_mesa/
+            # libgallium 就写死 libLLVM.so.22.1。用户机器 llvm 升到 23 后这些库
+            # dlopen 失败 → GLX 初始化崩（2026-09-17 本机 kbreakout/kdeconnect
+            # "Could not initialize GLX" 即此）。全量升级让 CI 的 llvm 跟 extra 一致。
+            pacman -Syu --noconfirm
           fi
 
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
