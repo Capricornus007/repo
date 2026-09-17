@@ -276,6 +276,12 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
+            i3lock-color-git)
+              # AUR 版 makedepends 只有 git，但 configure 默认开 --enable-image
+              # 要 gif_lib.h，容器没有 giflib → build() 红（2026-09-17 实测
+              # "cannot find the gif_lib.h header"）。补进 makedepends。
+              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
+              sed -i "s/^makedepends=('git')/makedepends=('git' 'giflib')/" pkg_dir/PKGBUILD ;;
             *)
               # AUR 包或本仓库维护的 -git 包：
               # sway/wlroots/waybar/i3status 家族：-git 取 AUR、穩定版取 Arch
@@ -1255,7 +1261,20 @@ jobs:
             flags="$flags --skippgpcheck"
           fi
           echo "makepkg $flags"
-          su builder -c "makepkg $flags"
+          # 自有源从 GitHub Release 资产下载，偶发截断会让坏包进 pacman 缓存，
+          # makepkg -s 装依赖时死在 "is corrupted (invalid or corrupted package)"
+          # 且 --noconfirm 不会替它删缓存（2026-09-17 kguiaddons-git 实测：缓存里
+          # 的 extra-cmake-modules-git 损坏 → 依赖解析整体失败）。抓到就删掉重试一次。
+          if ! su builder -c "makepkg $flags" 2>&1 | tee /tmp/makepkg.log; then
+            bad=$(grep -oE '^:: File [^ ]+ is corrupted' /tmp/makepkg.log | awk '{print $3}' | sort -u || true)
+            if [ -n "$bad" ]; then
+              echo "删除损坏缓存包后重试：$bad"
+              rm -fv $bad
+              su builder -c "makepkg $flags"
+            else
+              exit 1
+            fi
+          fi
           if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ] && [ "${{ matrix.variant }}" = "rc" ]; then
             # RC 產物檔名插入 -rc（如 linux-cachyos-cjktty-rc-7.3.rc1-1-…），
             # 包內 pkgname 保持 linux-cachyos-cjktty 不變：repo-add 條目照常
