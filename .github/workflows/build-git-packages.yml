@@ -75,10 +75,10 @@ jobs:
           {"key": "kxmlgui-git", "repo_name": "kxmlgui-git", "variant": "none", "kind": "kde"},
           {"key": "libkdegames-git", "repo_name": "libkdegames-git", "variant": "none", "kind": "kde"},
           {"key": "sway-git", "repo_name": "sway-git", "variant": "none", "kind": "wayland"},
-          {"key": "swaybg-git", "repo_name": "swaybg-git", "variant": "none"},
-          {"key": "swayidle-git", "repo_name": "swayidle-git", "variant": "none"},
-          {"key": "swaylock-git", "repo_name": "swaylock-git", "variant": "none"},
-          {"key": "waybar-git", "repo_name": "waybar-git", "variant": "none"},
+          {"key": "swaybg-git", "repo_name": "swaybg-git", "variant": "none", "kind": "wayland"},
+          {"key": "swayidle-git", "repo_name": "swayidle-git", "variant": "none", "kind": "wayland"},
+          {"key": "swaylock-git", "repo_name": "swaylock-git", "variant": "none", "kind": "wayland"},
+          {"key": "waybar-git", "repo_name": "waybar-git", "variant": "none", "kind": "wayland"},
           {"key": "wlroots-git", "repo_name": "wlroots-git", "variant": "none", "kind": "wayland"},
           {"key": "kbreakout-git", "repo_name": "kbreakout-git", "variant": "none", "kind": "kde"}
         ]

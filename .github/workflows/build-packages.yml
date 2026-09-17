@@ -270,21 +270,26 @@ jobs:
               done ;;
             *)
               # AUR 包或本仓库维护的 -git 包：
-              # sway 系列包、wlroots、waybar 等从 AUR 获取
-              if echo "${{ matrix.repo_name }}" | grep -qE '^(sway|wlroots|waybar|i3status)-git$'; then
-                git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              elif echo "${{ matrix.repo_name }}" | grep -qE '^(sway|wlroots|waybar|i3status)$'; then
-                # 官方稳定版包：从 Arch 官方 GitLab 获取 PKGBUILD
-                mkdir pkg_dir
-                _pkgbase="https://gitlab.archlinux.org/archlinux/packaging/packages/${{ matrix.repo_name }}"
-                curl -sfL "${_pkgbase}/-/raw/master/PKGBUILD" -o pkg_dir/PKGBUILD
-              else
-                if [ "${{ matrix.kind }}" = 'kde' ]; then
-                  # KDE 家族 -git 包直接取 AUR 的 PKGBUILD（上游未改，無自有 fork）
+              # sway/wlroots/waybar/i3status 家族：-git 取 AUR、穩定版取 Arch
+              # 官方 GitLab。之前用完整名字白名單 (^(sway|wlroots|waybar|
+              # i3status)-git$) 漏了 swaybg/swayidle/swaylock-git，它們掉進
+              # 「clone 本倉自己維護的倉」分支，而那几个倉不存在 → git 索要
+              # 憑證 → CI 無 TTY 直接 exit 128（2026-09-17 實測三個 job 同因
+              # 紅）。改成只比對家族前綴，家族再加新包不必動這裡。
+              if echo "${{ matrix.repo_name }}" | grep -qE '^(sway|wlroots|waybar|i3status)'; then
+                if [ -n "${{ matrix.repo_name }}" ] && printf '%s' "${{ matrix.repo_name }}" | grep -qE -- '-git$'; then
                   git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
                 else
-                  git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir
+                  # 官方穩定版包（無 -git 後綴）：從 Arch 官方 GitLab 取 PKGBUILD
+                  mkdir pkg_dir
+                  _pkgbase="https://gitlab.archlinux.org/archlinux/packaging/packages/${{ matrix.repo_name }}"
+                  curl -sfL "${_pkgbase}/-/raw/master/PKGBUILD" -o pkg_dir/PKGBUILD
                 fi
+              elif [ "${{ matrix.kind }}" = 'kde' ]; then
+                # KDE 家族 -git 包直接取 AUR 的 PKGBUILD（上游未改，無自有 fork）
+                git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
+              else
+                git clone "https://github.com/${{ github.repository_owner }}/${{ matrix.repo_name }}.git" pkg_dir
               fi ;;
           esac
           git config --global --add safe.directory "$PWD/pkg_dir"
