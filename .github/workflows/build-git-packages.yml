@@ -98,6 +98,5 @@ jobs:
           {"key": "slurp-git", "repo_name": "slurp-git", "variant": "none", "kind": "aur"},
           {"key": "wl-clipboard-git", "repo_name": "wl-clipboard-git", "variant": "none", "kind": "aur"},
           {"key": "mako-git", "repo_name": "mako-git", "variant": "none", "kind": "aur"},
-          {"key": "wofi-git", "repo_name": "wofi-git", "variant": "none", "kind": "aur"},
           {"key": "kbreakout-git", "repo_name": "kbreakout-git", "variant": "none", "kind": "kde"}
         ]
