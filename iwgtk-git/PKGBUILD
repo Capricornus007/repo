@@ -1,0 +1,39 @@
+pkgname=iwgtk-git
+pkgver=0.9.r12.gc4e73d4
+pkgrel=1
+pkgdesc='Lightweight wireless networking GUI (front-end for iwd) - git version'
+arch=('x86_64')
+url='https://github.com/J-Lentz/iwgtk'
+license=('GPL-3.0-or-later')
+
+depends=(
+    'iwd>=1.29'
+    'gtk4>=4.12'
+    'qrencode'
+    'adwaita-icon-theme'
+)
+makedepends=(
+    'git'
+    'meson'
+    'scdoc'
+)
+provides=("iwgtk=${pkgver%%.r*}")
+conflicts=('iwgtk')
+
+source=("git+https://github.com/J-Lentz/iwgtk.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd iwgtk
+    git describe --long --tags --abbrev=7 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' ||
+    printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+build() {
+    arch-meson iwgtk build
+    meson compile -C build
+}
+
+package() {
+    meson install -C build --destdir "${pkgdir}"
+}

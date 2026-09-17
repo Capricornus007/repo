@@ -1,0 +1,78 @@
+# Maintainer: Capricornus007 <capricornus@outlook.com>
+# Contributor: q234 rty <q23456yuiop at gmail dot com>
+# Contributor: lilydjwg <lilydjwg@gmail.com>
+# Contributor: Christopher Snowhill <kode54@gmail.com>
+# Contributor: Adrian Perez de Castro <aperez@igalia.com>
+# Contributor: Antonin Décimo <antonin dot decimo at gmail dot com>
+#
+# 合併 fork（Capricornus007/wlroots 分支 hidpi-hdr）= 上游 master +
+#   ① HiDPI Xwayland xprop 縮放：lilydjwg 的 xwayland HiDPI scale（MR 733
+#      路線，配套 xorg-xwayland-hidpi-xprop）已 rebase 到當前 master，
+#      外加 q234rty 的 configure_notify / size-hints 修正與
+#      Revert WL_SURFACE_ERROR_INVALID_SIZE —— 同 AUR wlroots-hidpi-xprop-git
+#   ② kode54 hdr-metadata 5 筆：EDID HDR static metadata、僅宣告 EOTF 時
+#      也捕捉、windows_scrgb + extended_target_volume、per-surface HDR
+#      tone mapping、windows_bt2100 (color-management v3)
+#   ③ 無 systemd 依賴（seat 走 libseat/seatd）
+# 取代 AUR 的 wlroots-git / wlroots-hidpi-xprop-git /
+# wlroots-hidpi-xprop-hdr-metadata-git 三個包（provides 全列）。
+pkgname=wlroots-git
+_pkgname=wlroots
+pkgver=0.21.0.20260917.071500
+pkgrel=1
+license=(MIT)
+pkgdesc='Modular Wayland compositor library (merged fork: Xwayland HiDPI xprop scaling + EDID HDR metadata + per-surface tone mapping)'
+url=https://gitlab.freedesktop.org/wlroots/wlroots
+arch=(x86_64)
+provides=("libwlroots-${pkgver%.*.202*.*}.so" "wlroots=${pkgver%%.202*}" "wlroots-git" "wlroots-hidpi-xprop" "wlroots-hidpi-xprop-git")
+conflicts=(wlroots)
+depends=(
+	glslang
+	libinput
+	libdisplay-info
+	libliftoff
+	libxcb
+	opengl-driver
+	xcb-util-errors
+	xcb-util-renderutil
+	xcb-util-wm
+	'libpixman-1.so'
+	'libseat.so'
+	'libudev.so'
+	'libvulkan.so'
+	'libwayland-client.so'
+	'libwayland-server.so'
+	'libxkbcommon.so'
+	xorg-xwayland
+	lcms2)
+optdepends=('xorg-xwayland-hidpi-xprop-git: HiDPI Xwayland scaling, see https://gitlab.freedesktop.org/xorg/xserver/-/merge_requests/733')
+makedepends=(
+	git
+	meson
+	vulkan-headers
+	wayland-protocols
+	xorgproto)
+source=("${_pkgname}::git+https://github.com/Capricornus007/wlroots.git#branch=hidpi-hdr")
+sha512sums=('SKIP')
+
+pkgver () {
+  cd "${_pkgname}"
+  (
+     set -o pipefail
+     version=$(grep -zoP "project\([^)]*\)" meson.build | xargs --null echo | grep -oP "^\sversion:\s'\K[^-']*")
+     printf "${version}.%s" "$(TZ=UTC git log -1 --pretty='%cd' --date=format-local:%Y%m%d.%H%M%S)"
+  )
+}
+
+build () {
+  arch-meson \
+    -Dwerror=false \
+    -Dexamples=false \
+    "${_pkgname}" build
+  meson compile -C build
+}
+
+package () {
+  DESTDIR="${pkgdir}" meson install -C build
+  install -Dm644 "${_pkgname}/"LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
