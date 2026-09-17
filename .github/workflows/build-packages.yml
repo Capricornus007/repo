@@ -88,7 +88,7 @@ jobs:
             pacman -Syu --noconfirm --needed
           fi
 
-          if [ "${{ matrix.kind }}" = 'kde' ]; then
+          if [ "${{ matrix.kind }}" = 'kde' ] || [ "${{ matrix.kind }}" = 'wayland' ]; then
             # 把自有 junlin03-aur 掛成匿名 pacman 源。矩陣 job 並行，靠它看見
             # 兄弟 job 已發布的 KDE 依賴產物（release 資產公開可取，實測
             # …/current-repo/junlin03-aur.db 與包檔均 HTTP 200）。冷啟動時
@@ -734,10 +734,11 @@ jobs:
                   || skip "KDE 依賴 $d 尚未發布到 junlin03-aur，本轮跳过等下轮"
               done
               else
-              # 通用 -git 包（sway/wlroots/waybar 等 AUR VCS 包）：忠實複現
-              # makepkg 的 pkgver()——整份 source ./PKGBUILD、按 source URL
-              # blobless 克隆（保留 commits/tags）、跑 PKGBUILD 自己的 pkgver()。
-              # 與 kde 分支同款算法，差別只在沒有家族依賴門檻。
+              # 通用 AUR -git 包（sway/wlroots/waybar 等）：忠實複現 makepkg 的
+              # pkgver()——整份 source ./PKGBUILD（bash -c 起乾淨子殼，避免本步
+              # set -u 撞上 PKGBUILD 頂層未綁定變數）、按 source URL blobless 克隆
+              # （保留 commits/tags 給 rev-list/describe）、跑 PKGBUILD 自己的
+              # pkgver()。與 kde 分支同款算法。
               rm -rf /tmp/generic-ver; mkdir -p /tmp/generic-ver; cp PKGBUILD /tmp/generic-ver/
               TARGET_PKGVER=$(bash -c '
                 cd /tmp/generic-ver || exit 1
@@ -752,6 +753,19 @@ jobs:
               case "$TARGET_PKGVER" in
                 *[!0-9A-Za-z._+-]*|"") skip "拿不到 $PKG 上游版本（=$TARGET_PKGVER）" ;;
               esac
+              # 家族依賴門檻（wayland 家族用）：sway-git depends wlroots-git，後者
+              # 必須已發布到 junlin03-aur，否則 makepkg -s 直接紅（2026-09-17 實測
+              # 「error: target not found: wlroots-git」）。掛了 junlin03-aur 源的
+              # job 才能查到；沒掛的 kind 查不到會被誤跳，所以只在 wayland 生效。
+              if [ "${KIND:-}" = wayland ]; then
+                fam_deps=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
+                            for d in "${depends[@]}" "${makedepends[@]}"; do printf "%s\n" "$d"; done' \
+                            | sed -E "s/[<>=].*//" | sort -u | grep -- "-git$" || true)
+                for d in $fam_deps; do
+                  pacman -Si -- "$d" >/dev/null 2>&1 \
+                    || skip "Wayland 依賴 $d 尚未發布到 junlin03-aur，本轮跳过等下轮"
+                done
+              fi
               fi ;;
           esac
 
@@ -1073,7 +1087,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.kind != 'kde' && matrix.kind != 'tkg'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
