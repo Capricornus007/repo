@@ -75,6 +75,7 @@ build(){
         -DCMAKE_INSTALL_LIBEXECDIR=/usr/lib \
         -DCMAKE_INSTALL_SYSCONFDIR=/etc \
         -DUSE_SYSTEMD=OFF \
+	-DENABLE_SYSTEMD=OFF \
         -DEVENT_LOOP_BACKEND=libuv .
   ninja
 }
