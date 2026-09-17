@@ -1,0 +1,90 @@
+# Maintainer: Capricornus007 <Capricornus007 at proton dot me>
+# Co-Maintainer: Felix Yan <felixonmars@archlinux.org>
+# Contributor: csslayer <wengxt AT gmail com>
+#
+# 本倉 in-tree 維護版（基於 AUR fcitx5-git，2026-09-17）。
+#
+# 為什麼要偏離 AUR：這台機器是 Artix/OpenRC，系統裡根本沒有
+# libsystemd.so.0（只有 libelogind.so.0）。AUR 版 build() 寫的
+# -DENABLE_SYSTEMD=OFF 是個**不存在的選項**——fcitx5 上游（HEAD
+# b6497a59 實測 grep 全樹）只有 USE_SYSTEMD（CMakeLists.txt:37，預設
+# On）與 EVENT_LOOP_BACKEND，沒有任何 ENABLE_SYSTEMD。CMake 對未知
+# -D 只給一行無害警告照樣 configure，所以 AUR 那行從頭到尾是空轉：
+# EVENT_LOOP_BACKEND=auto 在「裝得下 systemd 的構建機」（Arch CI 容器）
+# 上永遠先命中 systemd 候選，src/lib/fcitx-utils/CMakeLists.txt:44
+# 就把 Systemd::Systemd 無條件鏈進 libFcitx5Utils。實測本倉 CI 產物
+# fcitx5-git-5.1.22.r10.gb6497a59-1 的 usr/lib/libFcitx5Utils.so.5.1.22
+# NEEDED libsystemd.so.0，而 .PKGINFO 連 systemd 依賴都沒宣告 →
+# OpenRC 機器上所有載入它的程式直接
+# "error while loading shared libraries: libsystemd.so.0"。
+#
+# 修法：-DEVENT_LOOP_BACKEND=libuv 明確指定事件迴圈後端（这才是真正的
+# 開關：auto 才會去探 systemd），外加 -DUSE_SYSTEMD=OFF 表態。後端定為
+# libuv 後，上游 CMakeLists.txt:105 會改走原生 libdbus 路線
+# （pkg_check_modules(DBus REQUIRED dbus-1)），libFcitx5Utils 改鏈
+# libuv.so + libdbus-1.so，全樹不再有任何 libsystemd 引用。因此
+# depends/makedepends 要補 libuv 與 dbus（configure 要 .pc、執行期要 .so）。
+#
+# pkgrel=2：上游 HEAD 未動、pkgver 與壞的 -1 資產相同，bump 號讓 CI
+# 的 release 資產比對判定「新版本」重建換代。
+
+_SPELL_EN_DICT_VER='20121020'
+_SPELL_EN_DICT_SHA256='c44a5d7847925eea9e4d2d04748d442cd28dd9299a0b572ef7d91eac4f5a6ceb'
+
+_pkgname=fcitx5
+pkgname=${_pkgname}-git
+pkgver=5.1.22.r10.gb6497a59
+pkgrel=2
+arch=('i686' 'x86_64')
+url="https://github.com/fcitx/fcitx5"
+license=('GPL')
+depends=('cairo' 'enchant' 'iso-codes' 'libgl' 'libxkbcommon-x11' 'pango' 'wayland'
+         'xcb-imdkit-git' 'xcb-util-wm' 'libxkbfile' 'fmt' 'gdk-pixbuf2'
+         'libuv' 'dbus')
+makedepends=('extra-cmake-modules' 'git' 'ninja' 'wayland-protocols' 'plasma-wayland-protocols' 'nlohmann-json'
+             'libuv' 'dbus')
+provides=($_pkgname)
+conflicts=($_pkgname)
+
+source=("git+$url.git"
+	"en_dict-${_SPELL_EN_DICT_VER}.tar.gz::http://download.fcitx-im.org/data/en_dict-${_SPELL_EN_DICT_VER}.tar.gz")
+sha256sums=('SKIP'
+            'c44a5d7847925eea9e4d2d04748d442cd28dd9299a0b572ef7d91eac4f5a6ceb')
+
+pkgver() {
+  cd fcitx5
+  git describe --long | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd fcitx5
+  git submodule update --init --recursive
+
+  cd src/modules/spell
+  cp "$srcdir/en_dict-${_SPELL_EN_DICT_VER}.tar.gz" .
+}
+
+build(){
+  cd fcitx5
+
+  # ENABLE_SYSTEMD 是 AUR 的幽靈選項（上游沒有），真正開關見檔頭註解。
+  cmake -GNinja \
+        -DCMAKE_INSTALL_PREFIX=/usr \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_LIBDIR=/usr/lib \
+        -DCMAKE_INSTALL_LIBEXECDIR=/usr/lib \
+        -DCMAKE_INSTALL_SYSCONFDIR=/etc \
+        -DUSE_SYSTEMD=OFF \
+        -DEVENT_LOOP_BACKEND=libuv .
+  ninja
+}
+
+check(){
+  cd fcitx5
+  ninja test
+}
+
+package() {
+  cd fcitx5
+  DESTDIR="$pkgdir" ninja install
+}

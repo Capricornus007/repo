@@ -281,6 +281,18 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
+            fcitx5-git)
+              # 本倉 in-tree 維護（2026-09-17）：AUR 版 build() 的
+              # -DENABLE_SYSTEMD=OFF 打的是不存在的選項名（上游只有
+              # USE_SYSTEMD / EVENT_LOOP_BACKEND），等於沒關——CI 容器裝得下
+              # systemd，auto 探測永遠命中 sdevent，libFcitx5Utils 就被鏈上
+              # libsystemd.so.0（實測 release 資產 5.1.22.r10.gb6497a59-1
+              # 如此）。Artix/OpenRC 沒有 libsystemd.so.0，用戶裝完直接
+              # "error while loading shared libraries"。in-tree 版改用
+              # -DEVENT_LOOP_BACKEND=libuv -DUSE_SYSTEMD=OFF 真正切走 libuv。
+              mkdir pkg_dir
+              base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
+              curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
             i3lock-color-git)
               # AUR 版 makedepends 只有 git，但 configure 默认开 --enable-image
               # 要 gif_lib.h，容器没有 giflib → build() 红（2026-09-17 实测
