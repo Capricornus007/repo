@@ -2,7 +2,7 @@
 # Adapted from AUR: https://aur.archlinux.org/packages/element-desktop-nightly-bin
 
 pkgname=element-desktop-nightly-bin
-pkgver=2026091601
+pkgver=2026091701
 pkgrel=1
 pkgdesc="All-in-one secure chat app for teams, friends and organisations (nightly .deb build)."
 arch=('x86_64' 'aarch64')
