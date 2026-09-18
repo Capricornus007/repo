@@ -146,7 +146,18 @@ jobs:
             # 无主 libLLVM.so.22.1 硬解）。加 Artix goblins 源，让容器 llvm/clang
             # 与目标机一致；lib32-* 同源，供 _lib32=true 的 lib32 mesa 使用。
             printf '\n[world-goblins]\nServer = https://artix.wheaton.edu/repos/world-goblins/os/$arch\n\n[lib32-goblins]\nServer = https://artix.wheaton.edu/repos/lib32-goblins/os/$arch\n' >> /etc/pacman.conf
-            pacman -Sy --noconfirm
+            # wheaton 是唯一承載 world-goblins/lib32-goblins 的 Artix 鏡像
+            # （rit/checkdomain/clarkson 實測 404，不承載 goblins）。它推送新包時
+            # 有同步瞬間 db 還沒落地 → 404「failed to synchronize all databases」
+            # （2026-09-18 04:03 實測；同日 14:xx 已 200）。無第二鏡像可退，
+            # 只能重試撐過幾分鐘的同步窗口。
+            synced=false
+            for attempt in 1 2 3 4 5; do
+              if pacman -Sy --noconfirm; then synced=true; break; fi
+              echo "goblins 源同步失败（第 ${attempt}/5 次），多半撞上 wheaton 推送窗口，退避重试"
+              sleep $(( attempt * 20 ))
+            done
+            [ "$synced" = true ] || { echo "::error::Artix goblins 源连续 5 次同步失败"; exit 1; }
             pacman -S --noconfirm --needed llvm llvm-libs clang compiler-rt lib32-llvm lib32-llvm-libs lib32-clang
             # 显式打印版本，便于日志核对（llvm-config 来自 Artix 的 llvm 包）
             llvm-config --version
