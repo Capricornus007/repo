@@ -145,7 +145,7 @@ jobs:
             # "Could not initialize GLX"、exit 134 即此；当时只能在机器上手放一份
             # 无主 libLLVM.so.22.1 硬解）。加 Artix goblins 源，让容器 llvm/clang
             # 与目标机一致；lib32-* 同源，供 _lib32=true 的 lib32 mesa 使用。
-            printf '\n[artix-world-goblins]\nServer = https://artix.wheaton.edu/repos/world-goblins/os/$arch\n\n[artix-lib32-goblins]\nServer = https://artix.wheaton.edu/repos/lib32-goblins/os/$arch\n' >> /etc/pacman.conf
+            printf '\n[world-goblins]\nServer = https://artix.wheaton.edu/repos/world-goblins/os/$arch\n\n[lib32-goblins]\nServer = https://artix.wheaton.edu/repos/lib32-goblins/os/$arch\n' >> /etc/pacman.conf
             pacman -Sy --noconfirm
             pacman -S --noconfirm --needed llvm llvm-libs clang compiler-rt lib32-llvm lib32-llvm-libs lib32-clang
             # 显式打印版本，便于日志核对（llvm-config 来自 Artix 的 llvm 包）
@@ -304,6 +304,15 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
+            sway-git)
+              # AUR PKGBUILD 用 arch-meson … -D sd-bus-provider=libsystemd 且 sway
+              # 上游 meson.build 写死 werror=true：容器 libinput 一旦比 sway 支持的
+              # 新（多出枚举值），ipc-json.c 的 switch 触发 -Wswitch → 被 -Werror
+              # 抬成硬错误，build() 红（2026-09-18 实测 LIBINPUT_CONFIG_SCROLL_C*）。
+              # 加 -Dwerror=false 关掉把警告当错误（meson 命令行选项覆盖项目默认值）。
+              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
+              sed -i 's/-D sd-bus-provider=libsystemd/-D sd-bus-provider=libsystemd -Dwerror=false/' pkg_dir/PKGBUILD
+              grep -n 'arch-meson' pkg_dir/PKGBUILD | head -3 ;;
             waybar-git)
               # AUR PKGBUILD 沒關 systemd，而 waybar 的 meson.build 是
               # `libsystemd = dependency('libsystemd', required: get_option('systemd'))`：
