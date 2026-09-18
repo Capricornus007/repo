@@ -304,6 +304,17 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
+            waybar-git)
+              # AUR PKGBUILD 沒關 systemd，而 waybar 的 meson.build 是
+              # `libsystemd = dependency('libsystemd', required: get_option('systemd'))`：
+              # 容器（Arch）有 libsystemd → 產物 usr/bin/waybar NEEDED
+              # libsystemd.so.0；Artix/OpenRC 沒有這個 so → 裝上直接
+              # "error while loading shared libraries: libsystemd.so.0"
+              # （2026-09-18 實測 objdump 該包）。加 -Dsystemd=disabled 真正切走，
+              # 同時不再安裝 systemd user unit。
+              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
+              sed -i "/local _meson_args=(/a\\    -Dsystemd=disabled" pkg_dir/PKGBUILD
+              grep -n -A3 'local _meson_args=(' pkg_dir/PKGBUILD | head -6 ;;
             i3lock-color-git)
               # AUR 版 makedepends 只有 git，但 configure 默认开 --enable-image
               # 要 gif_lib.h，容器没有 giflib → build() 红（2026-09-17 实测
