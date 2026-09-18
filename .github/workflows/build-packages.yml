@@ -134,12 +134,23 @@ jobs:
             # mesa-tkg 的 customization.cfg 是 _lib32=true，需要 multilib 的 lib32-* 依賴。
             # 容器只有 core/extra、預設 [multilib] 是註解掉的，補一段未註解的進去再同步。
             printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
-            # 必须 -Syu 全量升级，不能只 -Sy：mesa 编译期链接容器里的 llvm，
-            # base:base-devel 镜像的 llvm 是旧的（22.x），产出的 libGLX_mesa/
-            # libgallium 就写死 libLLVM.so.22.1。用户机器 llvm 升到 23 后这些库
-            # dlopen 失败 → GLX 初始化崩（2026-09-17 本机 kbreakout/kdeconnect
-            # "Could not initialize GLX" 即此）。全量升级让 CI 的 llvm 跟 extra 一致。
+            # 必须 -Syu 全量升级（容器镜像自带的是构建快照日的旧库）。
             pacman -Syu --noconfirm
+            # ── LLVM 对齐目标机（2026-09-18 实证根因）
+            # 产物装在使用者的 Artix 机器上，其 llvm/clang 是 Artix [world-goblins]
+            # 的 23.1.1（本机实测 llvm-libs 23.1.1-1，packager ndowens@artixlinux.org），
+            # 而 Arch extra 与 Artix [world] 都只有 22.1.8。mesa 在链接期把 LLVM
+            # soname 写死成 libLLVM.so.22.1，装到只有 libLLVM.so.23.1 的机器上
+            # dlopen 失败 → GLX 初始化崩（2026-09-17 本机 kbreakout/kdeconnect
+            # "Could not initialize GLX"、exit 134 即此；当时只能在机器上手放一份
+            # 无主 libLLVM.so.22.1 硬解）。加 Artix goblins 源，让容器 llvm/clang
+            # 与目标机一致；lib32-* 同源，供 _lib32=true 的 lib32 mesa 使用。
+            printf '\n[artix-world-goblins]\nServer = https://artix.wheaton.edu/repos/world-goblins/os/$arch\n\n[artix-lib32-goblins]\nServer = https://artix.wheaton.edu/repos/lib32-goblins/os/$arch\n' >> /etc/pacman.conf
+            pacman -Sy --noconfirm
+            pacman -S --noconfirm --needed llvm llvm-libs clang compiler-rt lib32-llvm lib32-llvm-libs lib32-clang
+            # 显式打印版本，便于日志核对（llvm-config 来自 Artix 的 llvm 包）
+            llvm-config --version
+            readlink -f /usr/lib/libLLVM.so
           fi
 
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
@@ -1310,6 +1321,22 @@ jobs:
             # 拆分打包里带一个 bootstrap 变体，用户点名不要。makepkg 没有
             # 「只打一部分拆分包」的选项，躲不掉打包这一步，打完直接丢弃
             rm -fv xlibre-xserver-bootstrap-git-*.pkg.tar.zst
+          fi
+          if [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ]; then
+            # ── LLVM soname 守门（防止本修复被静默回退）
+            # mesa 在链接期把 libLLVM.so.X 写死，产物必须与容器（= 目标机 Artix
+            # goblins 的 llvm）一致；否则装到机器上 dlopen 失败 → GLX 崩
+            # （2026-09-17 实证）。只信实测：解包产物、objdump 读 NEEDED 硬核对。
+            want="$(basename "$(readlink -f /usr/lib/libLLVM.so 2>/dev/null)" 2>/dev/null)"
+            chk="$PWD/.llvm-check"; rm -rf "$chk"; mkdir -p "$chk"
+            for f in ./*.pkg.tar.zst; do [ -e "$f" ] || continue; bsdtar -xf "$f" -C "$chk" 2>/dev/null; done
+            got="$(find "$chk" -name '*.so*' -type f -print0 | xargs -0 -r objdump -p 2>/dev/null | grep -o 'libLLVM\.so\.[0-9][0-9.]*' | sort -u | tr '\n' ' ')"
+            rm -rf "$chk"
+            echo "容器 llvm soname=[$want]  产物 NEEDED=[$got]"
+            case "$got" in
+              *"$want"*) echo "✓ mesa 产物 LLVM soname 与容器一致" ;;
+              *) echo "::error::mesa 产物链接的 libLLVM 与容器不一致（产物：$got ／ 容器：$want）——装到目标机会 GLX 崩"; exit 1 ;;
+            esac
           fi
           ls -lh ./*.pkg.tar.zst
 
