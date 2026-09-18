@@ -1,0 +1,62 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+#
+# Qoder CLI —— 中国大陆版（CN）。与国际版 qoder-cli 完全分开：
+#   国际版  源 qoder-ide.oss-accelerate.aliyuncs.com/qodercli   装usah /usr/bin/qodercli
+#   本版     源 static.qoder.com.cn/qoder-cli-cn                 装 /usr/bin/qoderclicn
+# 两者二进制名、入口名、下载域、账号体系都不同，可并存。
+#
+# 官方 CN 安装脚本（qoder.com.cn/install）与 AUR 的 qoder-cli-cn-bin 一样，
+# 都走「跑安装脚本 / 固定版本」的路子；这里跟国际版同款：直接按官方 manifest
+# 的 release 直链取 tarball，版本与校验和都有权威来源，CI 可全自动跟随上游。
+#
+# 源清单：https://static.qoder.com.cn/qoder-cli-cn/channels/manifest.json
+#   {"latest":"1.1.55",
+#    "files":[{"os":"linux","arch":"amd64",
+#              "url":".../releases/1.1.55/qoderclicn-linux-x64.tar.gz",
+#              "sha256":"..."}, ...]}
+# manifest 另有 amd64-baseline / *-musl 变体；这里取 glibc 优化版（官方脚本在
+# CPU 支持 sse4_2/popcnt/avx/avx2/bmi1/bmi2/fma 时选的也是它）。
+pkgname=qoder-cli-cn
+pkgver=1.1.55
+pkgrel=1
+pkgdesc="Qoder Agentic CLI - agentic AI coding tool from Alibaba (China build)"
+url="https://qoder.com.cn/cli"
+arch=('x86_64' 'aarch64')
+license=('custom:Qoder Product Service Terms')
+options=('!strip' '!debug')
+provides=('qoderclicn')
+# AUR 的 qoder-cli-cn-bin 装同一个 /usr/bin/qoderclicn
+conflicts=('qoder-cli-cn-bin')
+
+_case_arch() {
+  case "$1" in
+    x86_64)  printf 'x64' ;;
+    aarch64) printf 'arm64' ;;
+  esac
+}
+
+source=("LICENSE.html::https://qoder.com.cn/product-service")
+sha256sums=('SKIP')
+
+source_x86_64=("qoderclicn-${pkgver}-linux-x64.tar.gz::https://static.qoder.com.cn/qoder-cli-cn/releases/${pkgver}/qoderclicn-linux-x64.tar.gz")
+source_aarch64=("qoderclicn-${pkgver}-linux-arm64.tar.gz::https://static.qoder.com.cn/qoder-cli-cn/releases/${pkgver}/qoderclicn-linux-arm64.tar.gz")
+
+# 以下校验和取自官方 manifest.json 对应 arch 的 sha256 字段；
+# CI 的「改写 PKGBUILD」步骤升版时会同步更新（源 URL 是 ${pkgver} 模板，自动跟随）。
+sha256sums_x86_64=('7a92e24abb9d20f306f4315c9d7e29b988aba70ff52559d12b13dc3949914e00')
+sha256sums_aarch64=('20185ebdad53ef9126fb4020f4f0547b9938d620fdd6fd1452e33da9ad6691cc')
+
+package() {
+  # tarball 里除主程序外只有 sites-build.json / sites-verification.json 两个
+  # 建置期中继档（主程序零引用），不随包。
+  local bin
+  bin="$(find "$srcdir" -type f -name qoderclicn -print -quit)"
+  [ -n "$bin" ] || { echo "错误：解包后找不到 qoderclicn 二进制" >&2; return 1; }
+  install -Dm755 "$bin" "$pkgdir/usr/bin/qoderclicn"
+
+  # 与国际版 `qoder` 入口对应，CN 版给 `qoder-cn`（不与国际版 /usr/bin/qoder 冲突）。
+  ln -sfn qoderclicn "$pkgdir/usr/bin/qoder-cn"
+
+  install -Dm644 "$srcdir/LICENSE.html" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE.html"
+}

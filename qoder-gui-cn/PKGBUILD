@@ -1,0 +1,119 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+#
+# Qoder —— 圖形介面（GUI），中國大陸版（CN）。與國際版 qoder-gui-bin 全程分開：
+#   本版（CN）    source static.qoder.com.cn/qoder-app
+#                 裝 "/opt/Qoder CN/"（目錄名帶空格）、qoder-cn.desktop、
+#                 /usr/share/icons/hicolor/*/apps/qoder-cn.png
+#   qoder-gui-bin source center.qoder.sh / qoder-ide.oss-accelerate.aliyuncs.com
+#                 裝 /usr/share/qoder-ide/、qoder-ide.desktop、qoder-ide.png
+# 套件名、發佈目錄、RPM 檔名、主檔名、desktop 檔名、StartupWMClass、scheme handler
+# （qoder-cn vs qoder-ide/qoder）沒一項重疊，兩包可並存；也與命令列的
+# qoder-cli / qoder-cli-cn 互不干擾。
+#
+# 版本與校驗來源（權威）：
+#   GET https://static.qoder.com.cn/qoder-app/releases/latest/manifest.json
+#     {"schemaVersion":1,"version":"0.3.3","artifacts":[
+#        {"id":"linux-rpm-x64",
+#         "url":"https://static.qoder.com.cn/qoder-app/releases/0.3.3/Qoder-CN-linux-x86_64.rpm",
+#         "sha256":"513457aeccbc72e3277327ecccea076718a17fefc39f212813f59c0df661de61"}, …]}
+#   實測（2026-09-18）：manifest 的 sha256 與該 RPM 實算 sha256 逐字元吻合，CI 直接
+#   取欄位即可。releases/<ver>/<檔名> 路徑對舊版本（0.3.1 / 0.3.2）也 200，
+#   寫成 ${pkgver} 模板安全。
+#
+# 架構：只有 x86_64。manifest 的 linux _artifact 只列 linux-deb-x64 與
+#   linux-rpm-x64 兩項，没有任何 arm64 Linux 產物（mac 才有 arm64），
+#   故 arch 如實只標 x86_64。
+#
+# 不碰 /usr/bin（用戶裁決的命名地雷）：上游 RPM 裡本來就沒有 /usr/bin 條目
+#   （electron-builder 只在 deb 裡建 /usr/bin 連結），主檔是 "/opt/Qoder CN/qoder-cn"，
+#   而 /usr/bin/qoder-cn 這個名字已經由 qoder-cli-cn 的 symlink 佔用。
+#   本包只在 /usr/share/applications 放 qoder-cn.desktop，其 Exec 已是
+#   Exec="/opt/Qoder CN/qoder-cn" %U（上游自帶引號，路徑裡的空格因此不成問題）。
+#   注：CN 的 deb 版 Version 帶 epoch 1（electron-builder 為可降級玩的手法），
+#   與本包無關，這邊 pkgrel 從 1 起算，不照搬。
+
+pkgname=qoder-gui-cn
+pkgver=0.3.3
+pkgrel=1
+pkgdesc="Qoder - agent workbench for human and AI software teams (GUI, China build)"
+url="https://qoder.com.cn"
+arch=('x86_64')
+license=('custom:Qoder Product Service Terms')
+options=('!strip' '!debug')
+# 依賴按實測 NEEDED 逐條對應：readelf -d "/opt/Qoder CN/qoder-cn" 得 34 條，扣掉
+# glibc / gcc-libs 自帶的 6 條與包內自帶的 libffmpeg.so，剩 27 個外部 soname；
+# 與國際版 qoder-ide 的 NEEDED 集合逐條相同（實測 diff 為空），兩包依賴清單一致。
+depends=(
+  'alsa-lib'              # libasound.so.2
+  'at-spi2-core'          # libatk-bridge-2.0.so.0 + libatspi.so.0
+  'atk'                   # libatk-1.0.so.0
+  'cairo'                 # libcairo.so.2
+  'dbus'                  # libdbus-1.so.3
+  'desktop-file-utils'    # /usr/share/applications 的 update-desktop-database 觸發器
+  'expat'                 # libexpat.so.1
+  'gcc-libs'              # libgcc_s.so.1
+  'glibc'                 # libc.so.6 / libm.so.6 / libdl.so.2 / libpthread.so.0 / ld-linux
+  'glib2'                 # libglib-2.0.so.0 + libgobject-2.0.so.0 + libgio-2.0.so.0
+  'gtk3'                  # libgtk-3.so.0
+  'hicolor-icon-theme'    # 圖示落在 /usr/share/icons/hicolor/，需要有這個基底目錄
+  'libcups'               # libcups.so.2
+  'libx11'                # libX11.so.6
+  'libxcomposite'         # libXcomposite.so.1
+  'libxdamage'            # libXdamage.so.1
+  'libxext'               # libXext.so.6
+  'libxfixes'             # libXfixes.so.3
+  'libxrandr'             # libXrandr.so.2
+  'libxcb'                # libxcb.so.1
+  'libxkbcommon'          # libxkbcommon.so.0
+  'mesa'                  # libgbm.so.1 + libEGL/libGLESv2 的執行期實作
+  'nspr'                  # libnspr4.so
+  'nss'                   # libnss3.so + libnssutil3.so + libsmime3.so
+  'pango'                 # libpango-1.0.so.0
+  'shared-mime-info'      # desktop 註冊 x-scheme-handler/qoder-cn 需要 mime 資料庫觸發器
+  'systemd-libs'          # libudev.so.1（Artix 有獨立 systemd-libs，不需要 systemd）
+)
+# AUR 的 qoder-cn-bin（zxp19821005）裝 /usr/share/qoder-cn 並占用 virtual qoder-cn，
+# 還會在 /usr/bin/qoder-cn 放它的啟動腳本——與本包的 desktop 以及 qoder-cli-cn 的
+# /usr/bin/qoder-cn 都對撞，直接擋掉。
+conflicts=('qoder-cn' 'qoder-cn-bin')
+
+source=("LICENSE.html::https://qoder.com.cn/product-service")
+sha256sums=('SKIP')
+
+source_x86_64=("Qoder-CN-linux-x86_64-${pkgver}.rpm::https://static.qoder.com.cn/qoder-app/releases/${pkgver}/Qoder-CN-linux-x86_64.rpm")
+# 校驗和取自上面 manifest.json 中 id=linux-rpm-x64 的 sha256 欄位；CI 升版時同步改寫。
+sha256sums_x86_64=('513457aeccbc72e3277327ecccea076718a17fefc39f212813f59c0df661de61')
+
+package() {
+  local rpm="Qoder-CN-linux-x86_64-${pkgver}.rpm"
+  # bsdtar 直接吃 RPM（libarchive 的 rpm reader 會解出 cpio payload）。整棵樹原樣落地：
+  #   ./opt/Qoder CN/{qoder-cn,chrome-sandbox,resources/,locales/…}
+  #   ./usr/share/applications/qoder-cn.desktop
+  #   ./usr/share/icons/hicolor/<size>/apps/qoder-cn.png
+  # 目錄名「Qoder CN」中間那個空格是上游定的，不改名——改了就得重寫 desktop 的 Exec，
+  # 反而偏離上游；全程用引號變數處理。
+  bsdtar -xf "$srcdir/$rpm" -C "$pkgdir" || return 1
+
+  local dir="$pkgdir/opt/Qoder CN"
+  [ -x "$dir/qoder-cn" ] || { echo "错误：解包后找不到 /opt/Qoder CN/qoder-cn" >&2; return 1; }
+
+  # chrome-sandbox：上游這個檔案是 0755、**沒有** setuid 位（實測 RPM 內
+  # `-rwxr-xr-x`；國際版同一位置的檔案是 4755 setuid）。兩包各照上游原樣，
+  # 不統一強制成 setuid——CN 版走 unprivileged user namespace 的 sandbox 路徑。
+  local sbx="$dir/chrome-sandbox"
+  [ -f "$sbx" ] || { echo "错误：解包后找不到 chrome-sandbox" >&2; return 1; }
+  chmod 0755 "$sbx"
+  chmod 0755 "$dir/qoder-cn" "$dir/chrome_crashpad_handler"
+
+  # desktop 的 Exec 必須仍是帶引號的包內絕對路徑（本包不建 /usr/bin 連結，
+  # 圖形啟動全靠這一行）。上游寫對了，這裡只做防呆校驗，不改寫。
+  local dsk="$pkgdir/usr/share/applications/qoder-cn.desktop"
+  [ -f "$dsk" ] || { echo "错误：找不到 qoder-cn.desktop" >&2; return 1; }
+  grep -q 'Exec="/opt/Qoder CN/qoder-cn"' "$dsk" \
+    || { echo "错误：qoder-cn.desktop 的 Exec 不再是預期絕對路徑，請人工確認上游改動" >&2; return 1; }
+
+  # 上游自帶的 Electron/Chromium 授權檔留在 /opt 內（app 自己會讀），
+  # 另把服務條款放進 /usr/share/licenses，與本倉其它 qoder 包一致。
+  install -Dm644 "$srcdir/LICENSE.html" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE.html"
+}

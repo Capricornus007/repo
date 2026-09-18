@@ -284,6 +284,22 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
+            qoder-cli|qoder-cli-cn|qoder-gui-bin|qoder-gui-cn)
+              # Qoder 四包（國際/CN × 命令列/GUI）全部 in-tree 維護在本倉同名目錄，
+              # 只有 PKGBUILD 一個檔案：
+              #   qoder-cli     國際 CLI，源 qoder-ide.oss-accelerate…/qodercli，
+              #                 裝 /usr/bin/qodercli + symlink qoder
+              #   qoder-cli-cn  CN CLI，源 static.qoder.com.cn/qoder-cli-cn，
+              #                 裝 /usr/bin/qoderclicn + symlink qoder-cn
+              #   qoder-gui-bin 國際 GUI（VS Code fork 佈局），裝 /usr/share/qoder-ide
+              #   qoder-gui-cn  CN GUI（electron-builder 佈局），裝 "/opt/Qoder CN"
+              # 版本與校驗和都由各自官方端點驅動（見 plan 步驟）。不取 AUR：pakrohk
+              # 那幾份走 pkgver=latest + prepare() 裡 curl 滾動址，追不了版，國際 CLI
+              # 那份甚至固定恆紅（跑官方 install 腳本裝進 ~/.qoder/bin，$srcdir 等不到
+              # 檔）；zxp19821005 那份改成 system-electron 佈局，路徑與官方不同。
+              mkdir pkg_dir
+              base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
+              curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
             mesa-tkg-git)
               # chaotic-aur 的 tkg mesa（Tk-Glitch 版 = AUR Lone_Wolf 基底 + tkg patches）。
               # 提供 mesa / vulkan-* / lib32-* 全套拆分包。MESA_WHICH_LLVM（build 步設 4 =
@@ -482,6 +498,29 @@ jobs:
           # api.github.com 未认证只有 60 次/小时，Runner 共用出口 IP 时经常直接 403，
           # 所有 API 调用一律带 token（GITHUB_TOKEN 就够，5000 次/小时）
           gh_api() { curl -sfL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$@"; }
+
+          # Qoder 四包共用：把 PKGBUILD 裡的 <name>::…${pkgver}… 模板 URL 展開、
+          # 換成新版本號，再與官方 JSON 給的實際 URL 逐字比對。對不上就讓 job 紅——
+          # 上游改檔名或改路徑是要人來看的事，靜默出一個 404 的包或讓 makepkg
+          # 校驗和全盤失配都很難查（模板本身是 ${pkgver}，sed 只動 pkgver 那行）。
+          # 用法：check_url_template source_x86_64 "$官方url"
+          check_url_template() {
+            local _arr="$1" _want="$2" _got
+            _got=$(bash -c "source ./PKGBUILD >/dev/null 2>&1; printf '%s' \"\${${_arr}[0]:-}\"" \
+                   | sed -E 's/^[^:]*:://')
+            if [ -z "$_got" ]; then
+              echo "::error::$PKG 的 PKGBUILD 裡沒有 ${_arr} 條目"
+              exit 1
+            fi
+            _got="${_got//"$CUR_PKGVER"/$TARGET_PKGVER}"
+            if [ "$_got" != "$_want" ]; then
+              echo "::error::$PKG 的 source URL 模板與官方清單不符（上游改命名了？）"
+              echo "  模板解出: $_got"
+              echo "  官方 URL: $_want"
+              exit 1
+            fi
+            echo "URL 模板與官方一致：$_got"
+          }
 
 
           eval "$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
@@ -755,6 +794,85 @@ jobs:
               fi
               ;;
 
+            qoder-cli|qoder-cli-cn)
+              # Qoder 命令列兩包：官方 channels/manifest.json 同時給版本號與各 arch
+              # 校驗和，全程端點驅動。國際與 CN 兩份 manifest 就算版本号相同、sha 也
+              # 各異、檔名還差一個 cn（qodercli-* vs qoderclicn-*），必須各讀各的：
+              #   國際 https://qoder-ide.oss-accelerate.aliyuncs.com/qodercli/channels/manifest.json
+              #   CN   https://static.qoder.com.cn/qoder-cli-cn/channels/manifest.json
+              # files[] 裡同一 os 另有 amd64-baseline（無 AVX2 老 CPU）與 *-musl 變體，
+              # select 必須用「等於」而不是「開頭是」，否則會抓到 baseline。
+              case "$PKG" in
+                qoder-cli)    _qcli_manifest="https://qoder-ide.oss-accelerate.aliyuncs.com/qodercli/channels/manifest.json" ;;
+                qoder-cli-cn) _qcli_manifest="https://static.qoder.com.cn/qoder-cli-cn/channels/manifest.json" ;;
+              esac
+              _qcli=$(curl -fsSL --connect-timeout 15 --retry 3 --retry-delay 10 "$_qcli_manifest" 2>/dev/null || true)
+              [ -n "$_qcli" ] || skip "拿不到 $PKG 的 channels/manifest.json"
+              TARGET_PKGVER=$(printf '%s' "$_qcli" | jq -r '.latest // empty')
+              case "$TARGET_PKGVER" in ""|0|*[!0-9.]*) skip "拿不到 $PKG 版本號（=$TARGET_PKGVER）" ;; esac
+              _qcli_sha_x=$(printf '%s' "$_qcli" | jq -r '.files[] | select(.os=="linux" and .arch=="amd64") | .sha256' | head -n1)
+              _qcli_sha_a=$(printf '%s' "$_qcli" | jq -r '.files[] | select(.os=="linux" and .arch=="arm64") | .sha256' | head -n1)
+              _qcli_url_x=$(printf '%s' "$_qcli" | jq -r '.files[] | select(.os=="linux" and .arch=="amd64") | .url' | head -n1)
+              _qcli_url_a=$(printf '%s' "$_qcli" | jq -r '.files[] | select(.os=="linux" and .arch=="arm64") | .url' | head -n1)
+              printf '%s' "$_qcli_sha_x" | grep -Eq '^[0-9a-fA-F]{64}$' \
+                || skip "$PKG manifest 裡沒有 linux/amd64 的 sha256"
+              printf '%s' "$_qcli_url_x" | grep -q '^https://' \
+                || skip "$PKG manifest 裡沒有 linux/amd64 的 url"
+              if printf '%s' "$_qcli_sha_a" | grep -Eq '^[0-9a-fA-F]{64}$'; then
+                :
+              else
+                # 哪天上游不出 arm64 了：只更新 x86_64，aarch64 那行原樣留著並留警告。
+                # 矩陣只有 x86_64 runner，不該因此把 job 判紅。
+                _qcli_sha_a=""; _qcli_url_a=""
+                echo "::warning::$PKG manifest 缺 linux/arm64 的 sha256，PKGBUILD 的 aarch64 校驗和保持原值"
+              fi
+              check_url_template source_x86_64 "$_qcli_url_x"
+              if [ -n "$_qcli_url_a" ]; then check_url_template source_aarch64 "$_qcli_url_a"; fi
+              echo "sha_x86=$_qcli_sha_x" >> "$GITHUB_OUTPUT"
+              echo "sha_arm=$_qcli_sha_a" >> "$GITHUB_OUTPUT"
+              ;;
+
+            qoder-gui-bin)
+              # 國際版 GUI：IDE 內建更新檢查打的端點就是權威來源——productVersion 給
+              # 版本、sha256hash 給該 RPM 的校驗和（2026-09-18 實測與檔案實算 sha256
+              # 逐字吻合）。刻意不碰 download.qoder.com 的滾動址（沒有版本號、內容天天換）。
+              # 只有 x86_64：linux-arm64 通道是殭屍資料（實測回 name=0.2.7 且 url 指向
+              # qoder_amd64.deb），上游沒出 arm64 GUI，PKGBUILD 的 arch 如實只標 x86_64。
+              _qgui=$(curl -fsSL --connect-timeout 15 --retry 3 --retry-delay 10 \
+                        "https://center.qoder.sh/algo/api/update/linux-x64/stable/latest" 2>/dev/null || true)
+              [ -n "$_qgui" ] || skip "拿不到 Qoder IDE（國際版）更新端點回應"
+              TARGET_PKGVER=$(printf '%s' "$_qgui" | jq -r '.productVersion // .name // empty')
+              case "$TARGET_PKGVER" in ""|0|*[!0-9.]*) skip "拿不到 Qoder IDE 版本號（=$TARGET_PKGVER）" ;; esac
+              _qgui_sha=$(printf '%s' "$_qgui" | jq -r '.sha256hash // empty')
+              _qgui_url=$(printf '%s' "$_qgui" | jq -r '.url // empty')
+              printf '%s' "$_qgui_sha" | grep -Eq '^[0-9a-fA-F]{64}$' \
+                || skip "Qoder IDE 更新端點沒有可用 sha256hash"
+              printf '%s' "$_qgui_url" | grep -q '^https://' \
+                || skip "Qoder IDE 更新端點沒有可用 url"
+              check_url_template source_x86_64 "$_qgui_url"
+              echo "sha_x86=$_qgui_sha" >> "$GITHUB_OUTPUT"
+              ;;
+
+            qoder-gui-cn)
+              # CN 版 GUI：官方 https://static.qoder.com.cn/qoder-app/releases/latest/
+              # manifest.json，version 給版本、artifacts[id=linux-rpm-x64] 給校驗和與 URL。
+              # linux 產物只有 x64 的 deb/rpm 兩項（arm64 只在 mac 那側），故只發 x86_64。
+              # 與國際版同一類資料但端點、檔名、佈局全不同，兩包各自讀各自的。
+              _qcn=$(curl -fsSL --connect-timeout 15 --retry 3 --retry-delay 10 \
+                       "https://static.qoder.com.cn/qoder-app/releases/latest/manifest.json" 2>/dev/null || true)
+              [ -n "$_qcn" ] || skip "拿不到 Qoder CN 的 releases/latest/manifest.json"
+              TARGET_PKGVER=$(printf '%s' "$_qcn" | jq -r '.version // empty')
+              case "$TARGET_PKGVER" in ""|0|*[!0-9.]*) skip "拿不到 Qoder CN 版本號（=$TARGET_PKGVER）" ;; esac
+              _qcn_sha=$(printf '%s' "$_qcn" | jq -r '.artifacts[] | select(.id=="linux-rpm-x64") | .sha256' | head -n1)
+              _qcn_url=$(printf '%s' "$_qcn" | jq -r '.artifacts[] | select(.id=="linux-rpm-x64") | .url' | head -n1)
+              printf '%s' "$_qcn_sha" | grep -Eq '^[0-9a-fA-F]{64}$' \
+                || skip "Qoder CN manifest 裡沒有 linux-rpm-x64 的 sha256"
+              printf '%s' "$_qcn_url" | grep -q '^https://' \
+                || skip "Qoder CN manifest 裡沒有 linux-rpm-x64 的 url"
+              check_url_template source_x86_64 "$_qcn_url"
+              echo "sha_x86=$_qcn_sha" >> "$GITHUB_OUTPUT"
+              ;;
+
             *)
               if [ "${KIND:-}" = tkg ]; then
               # mesa-tkg-git：跑 PKGBUILD 自己的 pkgver()。它的 source 目錄名是
@@ -920,6 +1038,10 @@ jobs:
           VARIANT: ${{ matrix.variant }}
           NEW_PKGVER: ${{ steps.plan.outputs.pkgver }}
           NEW_PKGREL: ${{ steps.plan.outputs.pkgrel }}
+          # Qoder 四包用：plan 從各自官方端點讀回來的校驗和
+          # （x86_64 與 aarch64 各一條，拿不到的就是空字串）
+          NEW_SHA_X86: ${{ steps.plan.outputs.sha_x86 }}
+          NEW_SHA_ARM: ${{ steps.plan.outputs.sha_arm }}
           CACHY_TAG: ${{ steps.plan.outputs.cachy_tag }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
           REPO_OWNER: ${{ github.repository_owner }}
@@ -1140,6 +1262,24 @@ jobs:
               sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
               grep -n '^pkgver=' PKGBUILD
               ;;
+            qoder-cli|qoder-cli-cn|qoder-gui-bin|qoder-gui-cn)
+              # Qoder 四包：PKGBUILD 的 source 是「<檔名>-/${pkgver}/…」模板，sed 掉
+              # ^pkgver= 一行就自動跟著新版本取檔；校驗和由 plan 從官方端點讀回來後
+              # 逐行換掉（四包的 sha 都是 64 位十六進位、pkgver 只含數字與點號，
+              # 不會踩 u1s1-bin 那條「\1$N 被 sed 當成第 N 個捕獲組」的陷阱——
+              # 這裡根本不用捕獲組，整行替換）。
+              sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
+              if [ -n "${NEW_SHA_X86:-}" ]; then
+                sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('$NEW_SHA_X86')/" PKGBUILD
+              else
+                echo "::warning::$PKG 本次沒有拿到 x86_64 校驗和，PKGBUILD 維持原值"
+              fi
+              if [ -n "${NEW_SHA_ARM:-}" ]; then
+                sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('$NEW_SHA_ARM')/" PKGBUILD
+              fi
+              echo "==== $PKG 改寫結果 ===="
+              grep -nE '^(pkgver|sha256sums_x86_64|sha256sums_aarch64)=' PKGBUILD
+              ;;
             codex-desktop-git)
               # codex-desktop-git 由 AUR 提供，CI 無法預先知悉 build 時下載的 deb 版本。
               # 此處不修改 PKGBUILD，讓 makepkg 的 pkgver() 在 build 時自動設定版本。
@@ -1164,7 +1304,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'iwgtk-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'iwgtk-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -1224,17 +1364,20 @@ jobs:
           cp /tmp/PKGBUILD.ci PKGBUILD
           chown -R builder:builder .
 
-      - name: 回推 in-tree 套件的 PKGBUILD（Element / Nashira）
-        # 这两个包的打包文件都维护在本仓库子目录里（element-desktop-nightly-bin/、
-        # nashira-git/），源随版本滚动（nightly deb / master HEAD），sha256 全为
-        # SKIP，不折腾 updpkgsums（用户指示：sums 能跳过就跳过）。这里只把新版本
-        # 号回推到本仓库，让 plan 的版本比对下一轮直接命中；通用回推步骤会把
-        # PKGBUILD 推到不存在的独立仓库，所以都在排除清单里。[skip ci] 避免 push
-        # 再触发一轮全量构建。同轮两个 job 并发回推会撞 master 的 ref 锁
-        # （自己 clone 之后 master 被对方推进，push 被拒而整个 job 变红）——
-        # 两个包改的文件不相交，失败就重新克隆最新 master 重放提交，
-        # 随机退避重试，最多 5 次
-        if: (matrix.repo_name == 'element-desktop-nightly-bin' || matrix.repo_name == 'nashira-git') && steps.plan.outputs.build == 'true'
+      - name: 回推 in-tree 套件的 PKGBUILD（Element / Nashira / Qoder 四包）
+        # 这些包的打包文件都维护在本仓库子目录里（element-desktop-nightly-bin/、
+        # nashira-git/、qoder-cli/、qoder-cli-cn/、qoder-gui-bin/、qoder-gui-cn/），
+        # 源随版本滚动（nightly deb / master HEAD / 各官方 manifest），sha256 要么全为
+        # SKIP、要么由「改写 PKGBUILD」步驟從官方端點直接更新，都不折腾 updpkgsums
+        # （用户指示：sums 能跳过就跳过；Qoder 的源是 250MB 級大檔，讓 updpkgsums 再抓
+        # 一遍只是白燒一次頻寬）。這裡只把新版本號與校驗和回推到本倉庫，讓 plan 的版本
+        # 比對下一輪直接命中；通用回推步驟會把 PKGBUILD 推到不存在的獨立倉庫，所以都在
+        # 排除清單裡。[skip ci] 避免 push 再觸發一輪全量建構。同輪多個 job 併發回推會
+        # 撞 master 的 ref 鎖
+        # （自己 clone 之後 master 被對方推進，push 被拒而整個 job 變紅）——
+        # 各個包改的檔案不相交，失敗就重新克隆最新 master 重放提交，
+        # 隨機退避重試，最多 5 次
+        if: (matrix.repo_name == 'element-desktop-nightly-bin' || matrix.repo_name == 'nashira-git' || matrix.repo_name == 'qoder-cli' || matrix.repo_name == 'qoder-cli-cn' || matrix.repo_name == 'qoder-gui-bin' || matrix.repo_name == 'qoder-gui-cn') && steps.plan.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
@@ -1296,6 +1439,48 @@ jobs:
           fi
           ls -lh "$fname"
           chown -R builder:builder .
+
+      - name: 预下载 Qoder 四包的上游源码
+        # 四個 Qoder 包的源都在阿里雲 OSS / 境內 CDN（qoder-ide.oss-accelerate…、
+        # static.qoder.com.cn），體積大：國際 GUI 的 RPM 250MB、CN GUI 190MB、
+        # 兩個 CLI 的 tarball 各 80MB。makepkg 自帶的 CURL_OPTIONS 有 --max-time 300
+        # （見「初始化 Arch Linux 環境」），境外 runner 拉這種大檔很容易在半途被掐斷
+        # ——同 android-ndk 那 700MB zip 的教訓，所以照同一套「預下載」做法：
+        # 先用不設 max-time、帶速度下限判定的 curl 把檔落到 PKGBUILD 同目錄，
+        # 檔名與 source 陣列逐字一致，makepkg 見檔已在就直接複用、不再觸網。
+        if: (matrix.repo_name == 'qoder-cli' || matrix.repo_name == 'qoder-cli-cn' || matrix.repo_name == 'qoder-gui-bin' || matrix.repo_name == 'qoder-gui-cn') && steps.plan.outputs.build == 'true'
+        run: |
+          set -uo pipefail
+          cd pkg_dir
+          rc=0
+          # 展開後的 source 條目形如 <落地檔名>::<url>，也有直接給 url 的；
+          # ${pkgver} 在 source ./PKGBUILD 時就已展開成實際版本，跟後面 makepkg
+          # 用的完全同一個字串。
+          while IFS= read -r s; do
+            [ -n "$s" ] || continue
+            case "$s" in
+              *::*) fname="${s%%::*}"; url="${s#*::}" ;;
+              *)    url="$s";          fname="${url##*/}" ;;
+            esac
+            case "$url" in https://*|http://*) ;; *) continue ;; esac
+            if [ -f "$fname" ]; then
+              echo "$fname 已存在，跳過下載"
+              continue
+            fi
+            echo "下載 $fname <- $url"
+            # --speed-limit/--speed-time：連續 120 秒低於 2KB/s 就斷掉重試，
+            # 避免卡死到 job 超時；不留半截檔，失敗就刪，讓 makepkg 明確報缺檔
+            if ! curl -fL --retry 5 --retry-delay 15 --connect-timeout 30 \
+                      --speed-limit 2048 --speed-time 120 -o "$fname" "$url"; then
+              echo "::error::$fname 下載失敗"
+              rm -f "$fname"
+              rc=1
+            fi
+          done < <(bash -c 'source ./PKGBUILD >/dev/null 2>&1
+                             for x in "${source[@]:-}" "${source_x86_64[@]:-}"; do printf "%s\n" "$x"; done')
+          ls -lh
+          chown -R builder:builder .
+          exit $rc
 
       - name: 云端编译 `.pkg.tar.zst`
         if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'
