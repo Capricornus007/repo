@@ -16,7 +16,10 @@ on:
         description: '单个套件的构建超时（分钟）'
         required: false
         type: number
-        default: 340
+        # 360：Qoder 預下載步驟改成「無限重試直到成功」後，job 級 timeout 是唯一
+        # 兜底閘（見「预下载 Qoder 四包的上游源码」）。調值需 ≥ 單檔 190–250MB 在
+        # 境外慢鏈路（CN 端點單連線實測 ~48KB/s）下的總下載預算＋編裝時間。
+        default: 360
 
 env:
   REPO_RELEASE_TAG: current-repo
@@ -292,7 +295,8 @@ jobs:
               #   qoder-cli-cn  CN CLI，源 static.qoder.com.cn/qoder-cli-cn，
               #                 裝 /usr/bin/qoderclicn + symlink qoder-cn
               #   qoder-gui-bin 國際 GUI（VS Code fork 佈局），裝 /usr/share/qoder-ide
-              #   qoder-gui-cn  CN GUI（electron-builder 佈局），裝 "/opt/Qoder CN"
+              #   qoder-gui-cn  CN GUI（electron-builder 佈局），裝 /opt/Qoder-CN
+              #                 （package() 把上游帶空格的 "Qoder CN" 目錄改名、desktop 同步重寫）
               # 版本與校驗和都由各自官方端點驅動（見 plan 步驟）。不取 AUR：pakrohk
               # 那幾份走 pkgver=latest + prepare() 裡 curl 滾動址，追不了版，國際 CLI
               # 那份甚至固定恆紅（跑官方 install 腳本裝進 ~/.qoder/bin，$srcdir 等不到
@@ -1446,13 +1450,20 @@ jobs:
         # 兩個 CLI 的 tarball 各 80MB。makepkg 自帶的 CURL_OPTIONS 有 --max-time 300
         # （見「初始化 Arch Linux 環境」），境外 runner 拉這種大檔很容易在半途被掐斷
         # ——同 android-ndk 那 700MB zip 的教訓，所以照同一套「預下載」做法：
-        # 先用不設 max-time、帶速度下限判定的 curl 把檔落到 PKGBUILD 同目錄，
+        # 先用不設 max-time 的 curl 把檔落到 PKGBUILD 同目錄，
         # 檔名與 source 陣列逐字一致，makepkg 見檔已在就直接複用、不再觸網。
+        # 重試策略（2026-09-18 用戶拍板）：無限重試直到成功。舊寫法的
+        # --speed-limit 2048/--speed-time 120 配上 --retry 5 是「失敗條件」——
+        # CN 端點對境外 IP 恆速限流（實測單連線 ~48KB/s、雙連線無提速＝按 IP
+        # 限速），慢而不斷傳輸的鏈路一旦抖到閾值下就會被掐掉，5 次燒完整個 job
+        # 變紅，190MB 在這種速度下本來就要 70 分鐘上下，經不起一次掐斷。
+        # 現在單次只留 --connect-timeout、不設 max-time／速度下限，失敗就刪半截檔
+        # 30 秒後重來，直到成功為止；最外邊界由 job 的 timeout-minutes（360）兜底，
+        # 真拉到超時讓它紅，也不會有比「下載不回來」更壞的結果。
         if: (matrix.repo_name == 'qoder-cli' || matrix.repo_name == 'qoder-cli-cn' || matrix.repo_name == 'qoder-gui-bin' || matrix.repo_name == 'qoder-gui-cn') && steps.plan.outputs.build == 'true'
         run: |
           set -uo pipefail
           cd pkg_dir
-          rc=0
           # 展開後的 source 條目形如 <落地檔名>::<url>，也有直接給 url 的；
           # ${pkgver} 在 source ./PKGBUILD 時就已展開成實際版本，跟後面 makepkg
           # 用的完全同一個字串。
@@ -1468,19 +1479,19 @@ jobs:
               continue
             fi
             echo "下載 $fname <- $url"
-            # --speed-limit/--speed-time：連續 120 秒低於 2KB/s 就斷掉重試，
-            # 避免卡死到 job 超時；不留半截檔，失敗就刪，讓 makepkg 明確報缺檔
-            if ! curl -fL --retry 5 --retry-delay 15 --connect-timeout 30 \
-                      --speed-limit 2048 --speed-time 120 -o "$fname" "$url"; then
-              echo "::error::$fname 下載失敗"
+            # 無限重試直到成功：不設 max-time、不設速度下限；curl -o 重試本身
+            # 從頭覆蓋寫，這裡再顯式 rm 半截檔只是讓「已清檔重來」在日誌裡可見。
+            # 校驗和由後續 makepkg 把關，預下載不需要也不能「湊合能用就行」。
+            while ! curl -fL --connect-timeout 30 -o "$fname" "$url"; do
+              echo "::warning::$fname 下載失敗（$(date -u '+%F %T')），30 秒後重試"
               rm -f "$fname"
-              rc=1
-            fi
+              sleep 30
+            done
+            echo "$fname 下載完成"
           done < <(bash -c 'source ./PKGBUILD >/dev/null 2>&1
                              for x in "${source[@]:-}" "${source_x86_64[@]:-}"; do printf "%s\n" "$x"; done')
           ls -lh
           chown -R builder:builder .
-          exit $rc
 
       - name: 云端编译 `.pkg.tar.zst`
         if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'

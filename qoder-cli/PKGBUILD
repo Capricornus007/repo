@@ -20,15 +20,26 @@
 # 也是它（见其 BUN_OPTIMIZED_X64_REQUIRED_CPU_FLAGS）。
 pkgname=qoder-cli
 pkgver=1.1.55
-pkgrel=1
+pkgrel=2
 pkgdesc="Qoder Agentic CLI - agentic AI coding tool from Alibaba (international build)"
 url="https://qoder.com/cli"
 arch=('x86_64' 'aarch64')
 license=('custom:Qoder Product Service Terms')
 options=('!strip' '!debug')
 provides=('qodercli')
-# AUR 的 qodercli-bin 装同一个 /usr/bin/qodercli
-conflicts=('qodercli-bin')
+# 刻意**不** provides=('qoder')：pacman 的 conflicts 單向命中對手的 provides（libalpm
+# conflict.c 的 check_conflict→_alpm_depcmp，實查 6.0.2 與 master 均無「反向衝突豁免」），
+# 而國際 GUI 包 qoder-gui-bin 已宣告 conflicts=('qoder')——CLI 一提供 qoder 就會跟自家
+# GUI 包互斥死鎖，兩包文件其實零重疊、設計上並存。/usr/bin/qoder 的所有權靠下面
+# 逐條實包名 conflicts 來守，不靠虛擬名。
+# 對面清單（2026-09-18 實查各 AUR PKGBUILD）：
+#   qodercli-bin (Huipeng)       裝 /usr/bin/qodercli——與本包主檔對撞
+#   qoder-bin    (zxp19821005)   裝 /usr/bin/qoder——與本包 symlink 對撞
+#   qoder        (arch-lsf)      cp -a 舊滾動 RPM 整棵 /usr（含 /usr/bin/qoder）對撞
+#   qoder-ide-bin (zxp19821005)  實查只裝 /usr/bin/qoder-ide 與 qoder-ide.desktop 等，
+#                                與本包無任何共同路徑，不列；它與 GUI 包的文件重疊
+#                                已由 qoder-gui-bin 的 conflicts 擋下。
+conflicts=('qodercli-bin' 'qoder-bin' 'qoder')
 
 _case_arch() {
   case "$1" in

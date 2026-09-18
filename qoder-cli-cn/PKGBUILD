@@ -18,15 +18,21 @@
 # CPU 支持 sse4_2/popcnt/avx/avx2/bmi1/bmi2/fma 时选的也是它）。
 pkgname=qoder-cli-cn
 pkgver=1.1.55
-pkgrel=1
+pkgrel=2
 pkgdesc="Qoder Agentic CLI - agentic AI coding tool from Alibaba (China build)"
 url="https://qoder.com.cn/cli"
 arch=('x86_64' 'aarch64')
 license=('custom:Qoder Product Service Terms')
 options=('!strip' '!debug')
 provides=('qoderclicn')
-# AUR 的 qoder-cli-cn-bin 装同一个 /usr/bin/qoderclicn
-conflicts=('qoder-cli-cn-bin')
+# 刻意**不** provides=('qoder-cn')：pacman 的 conflicts 單向命中對手的 provides（libalpm
+# conflict.c 實查無「反向衝突豁免」），而 CN GUI 包 qoder-gui-cn 已宣告
+# conflicts=('qoder-cn')——CLI 一提供 qoder-cn 就會跟自家 GUI 包互斥死鎖。
+# /usr/bin/qoder-cn 的所有權靠逐條實包名 conflicts 來守：
+#   qoder-cli-cn-bin (galak9)     裝 /usr/bin/qoderclicn——與本包主檔對撞
+#   qoder-cn-bin     (zxp19821005) 裝 /usr/bin/qoder-cn 啟動腳本——與本包 symlink 對撞
+#                                 （2026-09-18 實查 AUR PKGBUILD）
+conflicts=('qoder-cli-cn-bin' 'qoder-cn-bin')
 
 _case_arch() {
   case "$1" in

@@ -11,7 +11,8 @@
       CI 由用戶本人盯（規則 2026-09-08），代理只負責推到遠端 ref 更新。
 - [ ] 實機確認 **CN CLI 與 CN GUI 的 desktop / launcher 命名不碰撞**：
       `qoder-cli-cn` 佔 `/usr/bin/qoderclicn` + symlink `/usr/bin/qoder-cn`；
-      `qoder-gui-cn` 主檔在 `/opt/Qoder CN/qoder-cn`（同名但不在 PATH 上）、
+      `qoder-gui-cn` 主檔在 `/opt/Qoder-CN/qoder-cn`（2026-09-18 起打包時將上游
+      "/opt/Qoder CN" 目錄改名、desktop Exec 同步重寫；同名但不在 PATH 上）、
       desktop 為 `/usr/share/applications/qoder-cn.desktop`、`StartupWMClass=qoder-cn`。
       本機已核對四包產物檔案清單交集為 0（只有 `/usr/`、`.PKGINFO` 這類共用目錄/元資料），
       還要在真機（Hyprland/sway + 桌面包管理器）上看：工作列/視窗清單會不會把
@@ -21,16 +22,22 @@
 - [ ] AUR 已有**同名**包 `qoder-gui-bin`（pakrohk，走 `download.qoder.com` 滾動址 +
       `pkgver=latest`）。自有倉這包與它同名→裝過 AUR 版的機器上會被直接取代（符合預期），
       但要不要在 `provides`/`conflicts` 上再做點什麼，等首輪 CI 綠了再定。
-- [ ] AUR 的 `qoder-ide-bin` / `qoder-bin` / `qoder-cn-bin`（zxp19821005）會把 launcher
-      寫進 `/usr/bin/qoder`、`/usr/bin/qoder-cn`，與本倉 `qoder-cli`/`qoder-cli-cn` 的
-      symlink 檔對撞。目前只在兩個 GUI 包上聲明了 `conflicts`，兩個 CLI 包維持前一輪
-      成果未動（不覆蓋既有改動）。要不要給 CLI 兩包也補 `conflicts=('qoder-ide-bin')`
-      之類的行，等用戶點頭。
+- [x] 給 CLI 兩包補 conflicts（用戶已拍板，2026-09-18 落地）：實查 AUR——zxp 的
+      `qoder-bin` 塞 `/usr/bin/qoder`、`qoder-cn-bin` 塞 `/usr/bin/qoder-cn`，與本倉
+      CLI 兩包的 symlink 對撞；`qoder-cli` conflicts 補 `('qoder-bin' 'qoder')`
+      （`qoder`＝arch-lsf 那份 cp -a 舊滾動 RPM，同樣含 `/usr/bin/qoder`），
+      `qoder-cli-cn` conflicts 補 `('qoder-cn-bin')`。**不**給 CLI 加
+      `provides=('qoder')/('qoder-cn')`：實查 libalpm `conflict.c`（6.0.2 與 master
+      同款 `check_conflict`→`_alpm_depcmp`），conflicts 單向命中對手 provides、無
+      反向豁免，而自家 GUI 兩包已宣告 `conflicts=('qoder')`/`('qoder-cn')`，一提供
+      就 GUI/CLI 互斥死鎖。`qoder-ide-bin` 實查只塞 `/usr/bin/qoder-ide`，與 CLI 包
+      零文件重疊，不列入 CLI conflicts（它與國際 GUI 包的重疊由 `qoder-gui-bin`
+      既有 conflicts 擋）。三包 pkgrel 同升 2，讓元數據/佈局改動經 CI 實際出包。
 - [ ] 國際 GUI 的 RPM 自帶 `/usr/share/bash-completion/completions/qoder` 與
       `/usr/share/zsh/site-functions/_qoder`，是寫給 IDE 的 CLI 橋接
       （`/usr/share/qoder-ide/bin/qoder`）的；而 PATH 上的 `qoder` 是 `qoder-cli` 的
-      symlink。也就是「補全列的選項屬於另一個程式」。屬上游命名地雷，先照原樣保留，
-      實測若補全內容明顯誤導再決定要不要在 package() 裡改名/移除。
+      symlink。也就是「補全列的選項屬於另一個程式」。屬上游命名地雷，用戶已拍板
+      **國際 GUI 包不動**（2026-09-18），維持照原樣保留。
 - [ ] 體積：`qoder-gui-bin` 壓縮後 339.7MiB / 裝後 774.15MiB，`qoder-gui-cn` 337.99MiB /
       644.64MiB。`current-repo` release 會因為「保留舊版本資產」快速膨脹（清理步驟只留
       資料庫引用的那份，理論上各只留一版），仍建議留意 release 總量。

@@ -2,7 +2,9 @@
 #
 # Qoder —— 圖形介面（GUI），中國大陸版（CN）。與國際版 qoder-gui-bin 全程分開：
 #   本版（CN）    source static.qoder.com.cn/qoder-app
-#                 裝 "/opt/Qoder CN/"（目錄名帶空格）、qoder-cn.desktop、
+#                 裝 /opt/Qoder-CN/（上游目錄名是「Qoder CN」帶空格，打包時改名為
+#                 無空格、與本倉 -cn 命名系一致的 /opt/Qoder-CN/，desktop 的 Exec
+#                 同步重寫）、qoder-cn.desktop、
 #                 /usr/share/icons/hicolor/*/apps/qoder-cn.png
 #   qoder-gui-bin source center.qoder.sh / qoder-ide.oss-accelerate.aliyuncs.com
 #                 裝 /usr/share/qoder-ide/、qoder-ide.desktop、qoder-ide.png
@@ -26,21 +28,24 @@
 #
 # 不碰 /usr/bin（用戶裁決的命名地雷）：上游 RPM 裡本來就沒有 /usr/bin 條目
 #   （electron-builder 只在 deb 裡建 /usr/bin 連結），主檔是 "/opt/Qoder CN/qoder-cn"，
-#   而 /usr/bin/qoder-cn 這個名字已經由 qoder-cli-cn 的 symlink 佔用。
-#   本包只在 /usr/share/applications 放 qoder-cn.desktop，其 Exec 已是
-#   Exec="/opt/Qoder CN/qoder-cn" %U（上游自帶引號，路徑裡的空格因此不成問題）。
+#   打包後改名為 /opt/Qoder-CN/qoder-cn；而 /usr/bin/qoder-cn 這個名字已經由
+#   qoder-cli-cn 的 symlink 佔用。
+#   本包只在 /usr/share/applications 放 qoder-cn.desktop，其 Exec 上游原為
+#   Exec="/opt/Qoder CN/qoder-cn" %U（靠引號存活路徑裡的空格），package() 把它
+#   sed 成 Exec=/opt/Qoder-CN/qoder-cn %U（改名後無空格，引號隨之去掉）。
 #   注：CN 的 deb 版 Version 帶 epoch 1（electron-builder 為可降級玩的手法），
 #   與本包無關，這邊 pkgrel 從 1 起算，不照搬。
 
 pkgname=qoder-gui-cn
 pkgver=0.3.3
-pkgrel=1
+pkgrel=2
 pkgdesc="Qoder - agent workbench for human and AI software teams (GUI, China build)"
 url="https://qoder.com.cn"
 arch=('x86_64')
 license=('custom:Qoder Product Service Terms')
 options=('!strip' '!debug')
-# 依賴按實測 NEEDED 逐條對應：readelf -d "/opt/Qoder CN/qoder-cn" 得 34 條，扣掉
+# 依賴按實測 NEEDED 逐條對應：readelf -d "/opt/Qoder CN/qoder-cn"（打包後即
+# /opt/Qoder-CN/qoder-cn）得 34 條，扣掉
 # glibc / gcc-libs 自帶的 6 條與包內自帶的 libffmpeg.so，剩 27 個外部 soname；
 # 與國際版 qoder-ide 的 NEEDED 集合逐條相同（實測 diff 為空），兩包依賴清單一致。
 depends=(
@@ -86,16 +91,21 @@ sha256sums_x86_64=('513457aeccbc72e3277327ecccea076718a17fefc39f212813f59c0df661
 
 package() {
   local rpm="Qoder-CN-linux-x86_64-${pkgver}.rpm"
-  # bsdtar 直接吃 RPM（libarchive 的 rpm reader 會解出 cpio payload）。整棵樹原樣落地：
+  # bsdtar 直接吃 RPM（libarchive 的 rpm reader 會解出 cpio payload）。整棵樹落地後：
   #   ./opt/Qoder CN/{qoder-cn,chrome-sandbox,resources/,locales/…}
   #   ./usr/share/applications/qoder-cn.desktop
   #   ./usr/share/icons/hicolor/<size>/apps/qoder-cn.png
-  # 目錄名「Qoder CN」中間那個空格是上游定的，不改名——改了就得重寫 desktop 的 Exec，
-  # 反而偏離上游；全程用引號變數處理。
+  # 目錄名「Qoder CN」中間那個空格是上游定的：靠 desktop Exec 自帶引號才不出事，
+  # 對所有不打引號的腳本/路徑都是隱雷，且與本倉 -cn 命名系不一致。打包階段把
+  # 整個發布目錄改名成無空格的 /opt/Qoder-CN/，並重寫 desktop 裡的絕對路徑。
   bsdtar -xf "$srcdir/$rpm" -C "$pkgdir" || return 1
 
-  local dir="$pkgdir/opt/Qoder CN"
-  [ -x "$dir/qoder-cn" ] || { echo "错误：解包后找不到 /opt/Qoder CN/qoder-cn" >&2; return 1; }
+  [ -d "$pkgdir/opt/Qoder CN" ] \
+    || { echo "错误：解包后找不到 \"opt/Qoder CN\" 目錄，請人工確認上游佈局" >&2; return 1; }
+  mv "$pkgdir/opt/Qoder CN" "$pkgdir/opt/Qoder-CN" || return 1
+
+  local dir="$pkgdir/opt/Qoder-CN"
+  [ -x "$dir/qoder-cn" ] || { echo "错误：改名后找不到 /opt/Qoder-CN/qoder-cn" >&2; return 1; }
 
   # chrome-sandbox：上游這個檔案是 0755、**沒有** setuid 位（實測 RPM 內
   # `-rwxr-xr-x`；國際版同一位置的檔案是 4755 setuid）。兩包各照上游原樣，
@@ -105,13 +115,46 @@ package() {
   chmod 0755 "$sbx"
   chmod 0755 "$dir/qoder-cn" "$dir/chrome_crashpad_handler"
 
-  # desktop 的 Exec 必須仍是帶引號的包內絕對路徑（本包不建 /usr/bin 連結，
-  # 圖形啟動全靠這一行）。上游寫對了，這裡只做防呆校驗，不改寫。
+  # desktop：先防呆校驗上游 Exec 仍是「帶引號的舊絕對路徑」（上游哪天自己改了
+  # 佈局/引號，這裡立刻紅，让人來確認，而不是把錯路徑 sed 進包裡），再改写成
+  # 新路径；改写后再防呆一回，最后全樹掃殘留。
   local dsk="$pkgdir/usr/share/applications/qoder-cn.desktop"
   [ -f "$dsk" ] || { echo "错误：找不到 qoder-cn.desktop" >&2; return 1; }
   grep -q 'Exec="/opt/Qoder CN/qoder-cn"' "$dsk" \
     || { echo "错误：qoder-cn.desktop 的 Exec 不再是預期絕對路徑，請人工確認上游改動" >&2; return 1; }
+  # 改名後路徑無空格，引號按 freedesktop 慣例一併去掉（整段 "old" 換成 new，
+  # 不能只換前綴否則會留下孤立的結尾引號）；其余同目錄的 desktop
+  # （如哪天上游多出 url-handler）一起掃。第二條是無引號殘留的兜底。
+  local f
+  for f in "$pkgdir"/usr/share/applications/*.desktop; do
+    [ -f "$f" ] || continue
+    sed -i -E 's|"/opt/Qoder CN/([^"]*)"|/opt/Qoder-CN/\1|g; s|/opt/Qoder CN/|/opt/Qoder-CN/|g' "$f"
+  done
+  grep -q 'Exec=/opt/Qoder-CN/qoder-cn' "$dsk" \
+    || { echo "错误：desktop 的 Exec 改写后仍不是 /opt/Qoder-CN/qoder-cn" >&2; return 1; }
 
+  # 0.3.3 實測包內另一處硬編碼舊絕對路徑：resources/apparmor-profile（上游
+  # electron-builder 給 deb 系的 `profile "qoder-cn" "/opt/Qoder CN/qoder-cn"`，
+  # Arch 上沒有東西載入它，但目錄都改名了，路徑照理同步改寫）。
+  local aap="$dir/resources/apparmor-profile"
+  [ -f "$aap" ] && sed -i 's|"/opt/Qoder CN/qoder-cn"|"/opt/Qoder-CN/qoder-cn"|' "$aap"
+
+  # Icon/StartupWMClass/ scheme handler 都是名字引用（qoder-cn），非絕對路徑，
+  # 不受目錄改名影響；这里兜底全 pkgdir 扫文本文件（-I 跳二进制，结果确定）里
+  # 是否还残留旧**路径**——注意只扫 '/opt/Qoder CN'，display name「Qoder CN」
+  # 是合法产品名不能算残留。
+  local leftover
+  leftover=$(grep -rlIF '/opt/Qoder CN' "$pkgdir" 2>/dev/null || true)
+  [ -z "$leftover" ] \
+    || { echo "错误：包内仍残留旧路径 /opt/Qoder CN：$leftover" >&2; return 1; }
+
+  # 2026-09-18 實測（sha256 對齊 manifest 的 0.3.3 RPM，全樹 478+11 條目）：本包
+  # 內**沒有** bash/zsh 補全檔——沒有 /usr/share/bash-completion、也沒有
+  # /usr/share/zsh/site-functions，跟國際版 RPM 自帶 qoder/_qoder 補全的佈局不同，
+  # 故無「qoder→qoder-cn 改名」可做；上面 /usr/share 殘留掃描順帶守住哪天上游
+  # 新增引用舊路徑的檔案。若未來上游真補上 qoder/_qoder 命名的補全檔，需 rename
+  # 成 qoder-cn/_qoder-cn 並把檔內綁定的命令名一併 sed，不要只改檔名。
+  #
   # 上游自帶的 Electron/Chromium 授權檔留在 /opt 內（app 自己會讀），
   # 另把服務條款放進 /usr/share/licenses，與本倉其它 qoder 包一致。
   install -Dm644 "$srcdir/LICENSE.html" \
