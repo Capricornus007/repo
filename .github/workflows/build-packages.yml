@@ -293,8 +293,27 @@ jobs:
               # 就去 clone AUR，而 free-claude-code-git、qalculate-gtk-git 在 AUR 上
               # 根本不存在（或內容不同），clone 到錯的 PKGBUILD 會直接紅。
               mkdir pkg_dir
-              _it_base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
-              curl -sfL "$_it_base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
+              _it_repo="${{ github.repository }}"
+              _it_pkg="${{ matrix.repo_name }}"
+              _it_base="https://raw.githubusercontent.com/${_it_repo}/master/${_it_pkg}"
+              _it_api="https://api.github.com/repos/${_it_repo}/contents/${_it_pkg}"
+              # 連同 PKGBUILD 把目錄內**全部**檔案取進容器：bash-git 的 dot.*/system.*、
+              # free-claude-code-git 的 .install 都是 source/install 引用的本地檔，
+              # 只抓 PKGBUILD 會讓 makepkg 報「was not found in the build directory」。
+              # 用 contents API（帶 github.token，免 60/hr 限流）動態列檔，以後目錄再加
+              # 輔助檔也不用改 CI；API 萬一異常（限流 / 非 JSON）就退回只抓 PKGBUILD，
+              # 至少維持舊行為，不會把本來能過的 nodejs/ttf/qalculate 也帶崩。
+              _it_list=$(curl -sfL -H "Accept: application/vnd.github+json" \
+                -H "Authorization: Bearer ${{ github.token }}" "$_it_api" 2>/dev/null \
+                | jq -r 'select(type=="array") | .[].name' 2>/dev/null || true)
+              if [ -n "$_it_list" ]; then
+                for _f in $_it_list; do
+                  curl -sfL "$_it_base/$_f" -o "pkg_dir/$_f" \
+                    || { echo "::error::抓取 ${_it_pkg}/$_f 失敗"; exit 1; }
+                done
+              else
+                curl -sfL "$_it_base/PKGBUILD" -o "pkg_dir/PKGBUILD"
+              fi ;;
             unicode-emoji)
               # in-tree 維護（本倉 unicode-emoji/）：PKGBUILD + license-from-upstream
               # 兩個檔都要取（授權檔是 source 陣列裡的本地檔，缺了 makepkg 直接紅）。
