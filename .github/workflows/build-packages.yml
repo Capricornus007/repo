@@ -386,7 +386,7 @@ jobs:
               # waybar，它走纯 dbus 不需要 systemd）。sway 本体走 wlroots 的 libseat/
               # elogind，不受影响。
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              sed -i 's/-D sd-bus-provider=libsystemd/-D sd-bus-provider=libsystemd -Dwerror=false -Dtray=false/' pkg_dir/PKGBUILD
+              sed -i 's/-D sd-bus-provider=libsystemd/-D sd-bus-provider=libsystemd -Dwerror=false -Dtray=disabled/' pkg_dir/PKGBUILD
               grep -n 'arch-meson' pkg_dir/PKGBUILD | head -3 ;;
             waybar-git)
               # AUR PKGBUILD 沒關 systemd，而 waybar 的 meson.build 是
