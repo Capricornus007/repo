@@ -1,0 +1,48 @@
+# 來源：用戶本地 ~/.cache/yay/qalculate-gtk-git/PKGBUILD，已與 AUR 現行版
+# （orphan，r387.ac03bc3-1）逐字比對過、完全相同，故原樣帶入。
+# 唯一改動：makedepends 拿掉 'rarian'——Arch 官方倉已收錄不到 rarian
+# （archlinux.org/packages 實查 2026-09-19：NOT-IN-REPOS），CI 容器 makepkg -s
+# 會直接 "target not found: rarian" 恆紅；而上游 configure.ac/Makefile.am 實查
+# （autogen.sh 只用 libtoolize+autopoint+aclocal+autoheader+automake+autoconf）
+# 完全沒有 rarian/OXY 依賴，屬 2021 年殘留。'intltool' 同樣沒被用到，但它在
+# Arch extra 還在（0.51.0-6）、裝得上，為維持「原樣」不移動。
+# 版本格式是 r<rev-list>.<short hash>（上游有 tag 但 AUR pkgver() 用總提交數），
+# 與本倉泛用 AUR -git 探測相容（pkgver() 內 cd "$_pkgname" 為相對路徑）。
+# Maintainer: Peter Züger <zueger.peter@icloud.com>
+
+pkgname=qalculate-gtk-git
+_pkgname="${pkgname%-git}"
+pkgver=r387.ac03bc3
+pkgrel=1
+pkgdesc="GTK frontend for libqalculate"
+arch=('x86_64')
+url="https://qalculate.github.io/"
+license=('GPL')
+depends=('libqalculate' 'gtk3')
+makedepends=('intltool' 'git')
+optdepends=('yelp: for displaying the help')
+conflicts=('qalculate-gtk')
+provides=('qalculate-gtk')
+source=('git+https://github.com/Qalculate/qalculate-gtk.git')
+md5sums=('SKIP')
+
+pkgver() {
+    cd "$_pkgname"
+    printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+    cd "$_pkgname"
+    ./autogen.sh
+}
+
+build() {
+    cd "$_pkgname"
+    ./configure --prefix=/usr
+    make
+}
+
+package() {
+    cd "$_pkgname"
+    make DESTDIR="$pkgdir" install
+}

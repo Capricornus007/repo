@@ -1,0 +1,39 @@
+# 來源：用戶自建倉 ~/.cache/yay/ttf-jetbrains-maple-mono-nf-xx-xx-xx/PKGBUILD
+# （origin = github.com/Capricornus007/ttf-jetbrains-maple-mono-nf-xx-xx-xx，用戶 commit
+# 5ecbcae「我自己專用的等寬字體最前沿版本」）。AUR 上只有 ttf-jetbrains-maple-mono-nf-xx-xx
+# （baddate，固定 1.2304.76），**-xx-xx-xx 這個名字 AUR 沒有**，故本目錄保留 AUR 式命名、
+# 內容以用戶版為準。用戶相對 AUR 的改動全部保留：
+#   1. pkgname/pkgbase 由 AUR 的 …-nf-xx-xx 再加一級 -xx 後綴（換上游另一組變體）
+#   2. pkgver 固定 "pre" → 源改成上游滾動 pre-release 的 JetBrainsMapleMono-NF-XX-XX-XX.zip
+#   3. 安裝路徑 /usr/share/fonts/TTF/<字體名>/ → /usr/share/fonts/TTF/monospace/
+#   4. 拿掉 upstream maintainer 註解、新增 .gitignore（.gitignore 屬打包倉自用，不入本倉）
+# 本倉唯一加動：sha256sums 改 SKIP——實查上游 pre-release 的
+# JetBrainsMapleMono-NF-XX-XX-XX.zip 在 2026-09-16 又被重傳（用戶 2026-08-04 錨的
+# 62f180bd… 已失配，原樣帶入必然 build 紅），而 `pre` 這種滾動資產按月重傳、
+# 沒有可比的版本字串，寫死校驗和只會定期炸；用戶規則亦為「sums 能跳過就跳過」。
+# 字體包不需要 .install hook：本機 fontconfig 已提供 /usr/share/libalpm/hooks/fontconfig.hook
+# 會在 usr/share/fonts/** 變動時跑 fc-cache，AUR 原版也沒有 hook。
+
+pkgname=ttf-jetbrains-maple-mono-nf-xx-xx-xx
+pkgver="pre"
+pkgrel=1
+pkgdesc="JetBrains Maple Mono: The free and open-source font fused with JetBrains Mono & Maple Mono"
+arch=('any')
+url="https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono"
+license=('OFL')
+source=("https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono/releases/download/${pkgver}/JetBrainsMapleMono-NF-XX-XX-XX.zip")
+sha256sums=('SKIP')
+
+package() {
+  _fontname=JetBrains-Maple-Mono-NF-XX-XX
+  # Create font directory
+  install -dm755 "$pkgdir/usr/share/fonts/TTF"
+
+  # Install all font files
+  for font in *.ttf; do
+    install -Dm644 "$font" "$pkgdir/usr/share/fonts/TTF/monospace/$font"
+  done
+
+  # Install license file
+  install -Dm644 "LICENSE.txt" "$pkgdir/usr/share/licenses/${_fontname}/LICENSE.txt"
+}
