@@ -382,7 +382,7 @@ jobs:
               # 改 sd-bus-provider=elogind：sway 的 sd-bus 走 libelogind（本机已装、
               # 且导出全套 sd_bus_* 符号），swaybar 不再需要 libsystemd，托盘照留。
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              sed -i 's/-D sd-bus-provider=libsystemd/-D sd-bus-provider=elogind -Dwerror=false/' pkg_dir/PKGBUILD
+              sed -i 's/-D sd-bus-provider=libsystemd/-D sd-bus-provider=libelogind -Dwerror=false/' pkg_dir/PKGBUILD
               grep -n 'arch-meson' pkg_dir/PKGBUILD | head -3 ;;
             waybar-git)
               # AUR PKGBUILD 沒關 systemd，而 waybar 的 meson.build 是
