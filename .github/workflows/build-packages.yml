@@ -377,8 +377,12 @@ jobs:
               # 新（多出枚举值），ipc-json.c 的 switch 触发 -Wswitch → 被 -Werror
               # 抬成硬错误，build() 红（2026-09-18 实测 LIBINPUT_CONFIG_SCROLL_C*）。
               # 加 -Dwerror=false 关掉把警告当错误（meson 命令行选项覆盖项目默认值）。
+              # 关键：Artix/OpenRC 无 systemd，libsystemd 提供者会让 swaybar NEEDED
+              # libsystemd.so.0 → 装上直接 "error while loading shared libraries"。
+              # 改 sd-bus-provider=elogind：sway 的 sd-bus 走 libelogind（本机已装、
+              # 且导出全套 sd_bus_* 符号），swaybar 不再需要 libsystemd，托盘照留。
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              sed -i 's/-D sd-bus-provider=libsystemd/-D sd-bus-provider=libsystemd -Dwerror=false/' pkg_dir/PKGBUILD
+              sed -i 's/-D sd-bus-provider=libsystemd/-D sd-bus-provider=elogind -Dwerror=false/' pkg_dir/PKGBUILD
               grep -n 'arch-meson' pkg_dir/PKGBUILD | head -3 ;;
             waybar-git)
               # AUR PKGBUILD 沒關 systemd，而 waybar 的 meson.build 是
