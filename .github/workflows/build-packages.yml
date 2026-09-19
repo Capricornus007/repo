@@ -377,12 +377,16 @@ jobs:
               # 新（多出枚举值），ipc-json.c 的 switch 触发 -Wswitch → 被 -Werror
               # 抬成硬错误，build() 红（2026-09-18 实测 LIBINPUT_CONFIG_SCROLL_C*）。
               # 加 -Dwerror=false 关掉把警告当错误（meson 命令行选项覆盖项目默认值）。
-              # 关键：Artix/OpenRC 无 systemd，libsystemd 提供者会让 swaybar NEEDED
-              # libsystemd.so.0 → 装上直接 "error while loading shared libraries"。
-              # 改 sd-bus-provider=elogind：sway 的 sd-bus 走 libelogind（本机已装、
-              # 且导出全套 sd_bus_* 符号），swaybar 不再需要 libsystemd，托盘照留。
+              # Artix 无 systemd：swaybar 的「系统托盘」用 sd-bus，而 sd-bus 只有
+              # libsystemd 这个 provider 能在（Arch）构建容器里找到；libelogind/basu
+              # 容器里没有 → configure 直接 "Dependency libelogind not found"。
+              # 保留 systemd 依赖会让 swaybar NEEDED libsystemd.so.0 → Artix 装上报错。
+              # 折中：-Dtray=false 关掉 swaybar 托盘 → swaybar 不再链 sd-bus/libsystemd，
+              # Artix 直接能跑（状态栏/工作区/时钟都在，只是没系统托盘区；要托盘请用
+              # waybar，它走纯 dbus 不需要 systemd）。sway 本体走 wlroots 的 libseat/
+              # elogind，不受影响。
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              sed -i 's/-D sd-bus-provider=libsystemd/-D sd-bus-provider=libelogind -Dwerror=false/' pkg_dir/PKGBUILD
+              sed -i 's/-D sd-bus-provider=libsystemd/-D sd-bus-provider=libsystemd -Dwerror=false -Dtray=false/' pkg_dir/PKGBUILD
               grep -n 'arch-meson' pkg_dir/PKGBUILD | head -3 ;;
             waybar-git)
               # AUR PKGBUILD 沒關 systemd，而 waybar 的 meson.build 是
