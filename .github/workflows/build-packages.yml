@@ -287,11 +287,12 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx)
-              # 五個 in-tree 包（本倉同名目錄，PKGBUILD 從用戶 ~/.cache/yay 的本地版
+            free-claude-code-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git)
+              # 六個 in-tree 包（本倉同名目錄，PKGBUILD 從用戶 ~/.cache/yay 的本地版
               # 帶過來、保留其改動）。**必須在這裡先攔掉**：下面的通用規則見 '-git$'
               # 就去 clone AUR，而 free-claude-code-git、qalculate-gtk-git 在 AUR 上
-              # 根本不存在（或內容不同），clone 到錯的 PKGBUILD 會直接紅。
+              # 根本不存在（或內容不同），adguardhome-git 雖在 AUR 有用戶要的是本地那份
+              # （規則 25），clone 到 AUR/錯的 PKGBUILD 會直接紅或拿到非用戶版。
               mkdir pkg_dir
               _it_repo="${{ github.repository }}"
               _it_pkg="${{ matrix.repo_name }}"
@@ -697,6 +698,23 @@ jobs:
               TARGET_PKGVER=$(git -C /tmp/gitpkg-src describe --tags --long \
                 | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-\([^-]*\)-\([^-]*\)$/.\1.\2/;s/-//')
               [ -n "$TARGET_PKGVER" ] || skip "拿不到 $PKG 上游版本"
+              ;;
+
+            adguardhome-git)
+              # AdGuardHome -git（前沿 dev）：pkgver() 是 `cd AdGuardHome;
+              # git describe --long --abbrev=7 | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'`。
+              # 泛用 -git 探測把源克隆成 ${pkgname%-git}=adguardhome（小寫），與 pkgver() 的
+              # `cd AdGuardHome`（大寫目錄名）對不上會 skip，故單獨克隆成 AdGuardHome 復現。
+              SRC_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
+                        for s in "${source[@]}"; do printf "%s\n" "$s"; done' \
+                  | sed -E 's/^git\+//; s/#[^:]*$//; s/^[^:]*:://' \
+                  | grep -E '^https?://' | head -n1)
+              rm -rf /tmp/agh-src
+              git clone --quiet --filter=blob:none "$SRC_URL" /tmp/agh-src/AdGuardHome \
+                || skip "clone AdGuardHome 上游失敗"
+              TARGET_PKGVER=$(git -C /tmp/agh-src/AdGuardHome describe --long --abbrev=7 \
+                | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g')
+              [ -n "$TARGET_PKGVER" ] || skip "拿不到 adguardhome-git 上游版本"
               ;;
 
             xlibre-xserver-git|xlibre-input-libinput-git)
@@ -1406,7 +1424,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'qoder-ide-bin' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'qoder-ide-bin' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}

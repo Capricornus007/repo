@@ -57,6 +57,7 @@ jobs:
           {"key": "bash-git", "repo_name": "bash-git", "variant": "none"},
           {"key": "nodejs-better-sqlite3", "repo_name": "nodejs-better-sqlite3", "variant": "none"},
           {"key": "qalculate-gtk-git", "repo_name": "qalculate-gtk-git", "variant": "none"},
+          {"key": "adguardhome-git", "repo_name": "adguardhome-git", "variant": "none"},
           {"key": "ttf-jetbrains-maple-mono-nf-xx-xx-xx", "repo_name": "ttf-jetbrains-maple-mono-nf-xx-xx-xx", "variant": "none"},
           {"key": "mesa-tkg-git", "repo_name": "mesa-tkg-git", "variant": "none", "kind": "tkg"},
           {"key": "extra-cmake-modules-git", "repo_name": "extra-cmake-modules-git", "variant": "none", "kind": "kde"},
