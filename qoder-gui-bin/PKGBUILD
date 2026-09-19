@@ -40,7 +40,7 @@
 #   空格），因此不需要 CN 包那套目錄改名 + desktop Exec 重寫 + 殘留掃描。
 
 pkgname=qoder-gui-bin
-pkgver=0.2.5
+pkgver=0.3.3
 pkgrel=1
 pkgdesc="Qoder - agent workbench for human and AI software teams (desktop app, international build)"
 url="https://qoder.com"
@@ -89,7 +89,7 @@ sha256sums=('SKIP')
 
 source_x86_64=("Qoder-linux-x86_64-${pkgver}.rpm::https://download.qoder.com.cn/qoder-app/releases/${pkgver}/Qoder-linux-x86_64.rpm")
 # 校驗和取自上面 manifest.json 中 id=linux-rpm-x64 的 sha256 欄位；CI 升版時同步改寫。
-sha256sums_x86_64=('76fbecc145d78b24b36ddb36dfe080b756ab1e35589edfc8e04777ed0cde60ef')
+sha256sums_x86_64=('7fdeee54da3ec9de13eaee0c72e94e65a0d47211f430a2dc80cece9031d3e8f3')
 
 package() {
   local rpm="Qoder-linux-x86_64-${pkgver}.rpm"
