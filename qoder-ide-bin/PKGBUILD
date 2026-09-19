@@ -16,12 +16,17 @@
 #
 # 版本與校驗來源（權威，就是 IDE 內建更新檢查打的端點）：
 #   GET https://center.qoder.sh/algo/api/update/linux-x64/stable/latest
-#     {"name":"1.31.0","productVersion":"1.31.0",
-#      "url":"https://qoder-ide.oss-accelerate.aliyuncs.com/release/1.31.0/qoder-ide_x86_64.rpm",
-#      "sha256hash":"72a55be6a9b3643286cbec15e33c5ada36c02eb769badc602daf0d6cad2e6441"}
-#   實測（2026-09-18）：sha256hash 與該 RPM 實算 sha256 逐字元吻合，可直接當
-#   sha256sums 用，CI 不需要自己下載再算。release/<ver>/<檔名> 路徑對舊版本
-#   （1.29.0 / 1.30.0）也全部 200，寫成 ${pkgver} 模板安全。
+#     {"name":"1.31.1","productVersion":"1.31.1",
+#      "url":"https://qoder-ide.oss-accelerate.aliyuncs.com/release/1.31.1/qoder-ide_amd64.deb",
+#      "sha256hash":"3c509e7ff863d0923264442275a6d204eb0e435eb603c578fb5f62f2a804d2c6"}
+#   實測 sha256hash 與該檔實算 sha256 逐字元吻合，可直接當 sha256sums 用，
+#   CI 不需要自己下載再算。release/<ver>/<檔名> 路徑對舊版本也全部 200，
+#   寫成 ${pkgver} 模板安全。
+#   2026-09-19：端點把 linux-x64 的 url 從 qoder-ide_x86_64.rpm 換成
+#   qoder-ide_amd64.deb。同一 release/<ver>/ 目錄下 .rpm 與 .deb 兩檔都還在
+#   （實測皆 206），但端點只餵 deb 的 url+sha 這一組；本包的校驗和是直接取自端
+#   點、不走 updpkgsums 重算，所以 source 必須與端點同一檔才不會 sha 對不上，
+#   故跟著吃 .deb（deb 與 rpm 的 payload 樹完全相同，只差外殼）。
 #
 #   刻意**不用** download.qoder.com/release/latest/…：那是滾動址，同一 URL
 #   的內容天天變、檔名裡也沒有版本號（AUR pakrohk 的 qoder-gui-bin 就是用它 +
@@ -31,13 +36,13 @@
 #   name=0.2.7 且 url 指向 …/release/0.2.7/qoder_amd64.deb（amd64 的 deb！），
 #   上游根本沒有 arm64 GUI 版，故 arch 如實只標 x86_64。
 #
-# 不碰 /usr/bin（用戶裁決的命名地雷）：上游 RPM 裡本就沒有任何 /usr/bin 條目，
+# 不碰 /usr/bin（用戶裁決的命名地雷）：上游包（deb/rpm 皆同）本就沒有任何 /usr/bin 條目，
 #   主程式在 /usr/share/qoder-ide/qoder-ide，desktop 的 Exec 直接寫這個絕對路徑。
 #   /usr/bin/qoder 已由 qoder-cli 佔用、/usr/bin/qoder-cn 已由 qoder-cli-cn 佔用，
 #   本包一律不去建連結，只在 /usr/share/applications 放 .desktop。
 
 pkgname=qoder-ide-bin
-pkgver=1.31.0
+pkgver=1.31.1
 pkgrel=1
 pkgdesc="Qoder IDE - agentic coding platform for real software (GUI, international build)"
 url="https://qoder.com"
@@ -90,20 +95,24 @@ conflicts=('qoder' 'qoder-ide' 'qoder-bin' 'qoder-gui')
 source=("LICENSE.html::https://qoder.com/product-service")
 sha256sums=('SKIP')
 
-source_x86_64=("qoder-ide-${pkgver}-x86_64.rpm::https://qoder-ide.oss-accelerate.aliyuncs.com/release/${pkgver}/qoder-ide_x86_64.rpm")
-# 校驗和取自上面 center.qoder.sh 端點的 sha256hash 欄位；CI 升版時與 pkgver 同步改寫。
-sha256sums_x86_64=('72a55be6a9b3643286cbec15e33c5ada36c02eb769badc602daf0d6cad2e6441')
+source_x86_64=("qoder-ide-${pkgver}-amd64.deb::https://qoder-ide.oss-accelerate.aliyuncs.com/release/${pkgver}/qoder-ide_amd64.deb")
+# 校驗和取自上面 center.qoder.sh 端點的 sha256hash 欄位（對應 .deb 那一檔）；
+# CI 升版時與 pkgver 同步改寫，端點給的 url 與 sha 恆為同一檔、不會錯位。
+sha256sums_x86_64=('3c509e7ff863d0923264442275a6d204eb0e435eb603c578fb5f62f2a804d2c6')
 
 package() {
-  local rpm="qoder-ide-${pkgver}-x86_64.rpm"
-  # bsdtar 直接吃 RPM（libarchive 的 rpm reader 會解出 cpio payload），
-  # 同 element-desktop-nightly-bin 用 bsdtar 解 .deb 一個路子。整棵樹原樣落地：
+  # makepkg 會把 .deb（ar 格式）先拆成 debian-binary/control.tar.*/data.tar.*，
+  # data.tar 落在 $srcdir；這裡解 data.tar 那層，整棵樹原樣落地（同
+  # element-desktop-nightly-bin 的路子）：
   #   ./usr/share/qoder-ide/{qoder-ide,chrome-sandbox,bin/,resources/,locales/…}
   #   ./usr/share/applications/qoder-ide{,-url-handler}.desktop
   #   ./usr/share/{appdata,mime,pixmaps,bash-completion,zsh}/…
-  bsdtar -xf "$srcdir/$rpm" -C "$pkgdir" || return 1
+  local dt
+  dt=$(ls "$srcdir"/data.tar.* 2>/dev/null | head -n1)
+  [ -n "$dt" ] || { echo "错误：拆包 .deb 后找不到 data.tar.*" >&2; return 1; }
+  bsdtar -xf "$dt" -C "$pkgdir" || return 1
 
-  # chrome-sandbox 上游就是 setuid root 4755（實測 RPM 內 `-rwsr-xr-x`）。
+  # chrome-sandbox 上游就是 setuid root 4755（實測 deb 內 `-rwsr-xr-x`）。
   # 非 root 解包時這個位會被 bsdtar 悄悄抹掉，這裡顯式要回來，保持與上游一致；
   # CN 版那個包的上游檔是 0755 非 setuid，兩邊各照原樣、不統一成 setuid。
   local sbx="$pkgdir/usr/share/qoder-ide/chrome-sandbox"
