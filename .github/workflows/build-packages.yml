@@ -465,7 +465,7 @@ jobs:
         run: |
           set -euo pipefail
           install -d -o builder -g builder /build/aur-deps
-          for aur_pkg in mpeghdec quirc svt-jpeg-xs-git; do
+          for aur_pkg in mpeghdec quirc svt-jpeg-xs-git astc-encoder; do
             git clone --depth=1 "https://aur.archlinux.org/${aur_pkg}.git" "/build/aur-deps/${aur_pkg}"
             chown -R builder:builder "/build/aur-deps/${aur_pkg}"
             (cd "/build/aur-deps/${aur_pkg}" && su builder -c 'makepkg -si --noconfirm --needed --asdeps')
