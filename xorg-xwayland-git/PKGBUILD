@@ -80,17 +80,16 @@ prepare() {
 }
 
 build() {
+  # 注意：xwayland-24.1 這版源碼的 meson 已移除 xorg/xnest/xephyr/xwin/
+  # xquartz/xwayland 這些「建哪個 DDX」的布爾開關（根 meson.build 把
+  # build_xwayland 寫死 true，hw/meson.build 只在 build_xwayland 下 subdir
+  # xwayland、在 xvfb 選項下 subdir vfb）。AUR xorg-xwayland-git 那份還在傳
+  # 這些舊開關 → meson 直接 "Unknown option: xnest" 紅。這裡只傳仍存在的選項。
   arch-meson xorg-xwayland build \
     -D ipv6=true \
     -D xvfb=false \
-    -D xnest=false \
     -D xdmcp=false \
     -D xcsecurity=true \
-    -D xorg=false \
-    -D xephyr=false \
-    -D xwayland=true \
-    -D xwin=false \
-    -D xquartz=false \
     -D dri3=true \
     -D glamor=true \
     -D libdecor=true \
