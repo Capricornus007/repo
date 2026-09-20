@@ -1,0 +1,111 @@
+# Maintainer: Capricornus007 <capricornus@outlook.com>
+# Contributor: Xuanrui Qi <me@xuanruiqi.com>
+# Contributor: lilydjwg <lilydjwg@gmail.com>
+# Contributor: q234 rty <q23456yuiop at gmail dot com>
+# Contributor: AndyRTR <andyrtr@archlinux.org>
+#
+# in-tree 自建包（本倉 xorg-xwayland-git/ 目錄維護，比照 wlroots-git 的做法）。
+# = xserver 的 xwayland-24.1 分支尖端 +
+#   ① lilydjwg/q234rty 的 MR !733「HiDPI via xprop」縮放補丁（燒成 hidpi.patch，
+#      取代 AUR 的 xorg-xwayland-hidpi-xprop/-git；AUR 根本沒有 hidpi-xprop-git，
+#      wlroots-git 的 optdepends 點名的正是這個缺失的名）
+#   ② Artix/OpenRC 免 systemd：Xwayland 的 sd_notify 走 meson 選項 systemd_notify，
+#      預設 auto 在（Arch）構建容器裡探到 libsystemd 就把二進制鏈上 libsystemd.so.0 →
+#      Artix 沒有這個 so，裝上直接 "error while loading shared libraries"（同 sway/
+#      waybar 當初的坑）。這裡強制 -D systemd_notify=false 從依賴裡拿掉 systemd，
+#      做出只依賴 libelogind 的純 Artix 版。sway/wlroots 用 -displayfd + wayland socket
+#      啟動 Xwayland，不用 systemd socket activation，关掉 sd_notify 不影響功能。
+# provides 收掉 xorg-xwayland / -hidpi-xprop / -hidpi-xprop-git / xorg-server-xwayland，
+# 因此可直接取代系統裡的穩定版 xorg-xwayland，並讓 wlroots 那條 optdepends 提示落地。
+pkgname=xorg-xwayland-git
+pkgver=24.1.13.r1.g0fcbb2802
+pkgrel=1
+arch=('x86_64')
+license=(
+  LicenseRef-Adobe-Display-PostScript
+  BSD-3-Clause
+  LicenseRef-DEC-3-Clause
+  HPND
+  LicenseRef-HPND-sell-MIT-disclaimer-xserver
+  HPND-sell-variant
+  ICU
+  ISC
+  MIT
+  MIT-open-group
+  NTP
+  SGI-B-2.0
+  SMLNJ
+  X11
+  X11-distribute-modifications-variant)
+groups=('xorg')
+url="https://xorg.freedesktop.org"
+pkgdesc="Run X clients under Wayland (git version, with !733 HiDPI xprop scaling, no systemd)"
+depends=('nettle' 'libepoxy' 'libxfont2'
+         'pixman' 'xorg-server-common' 'libxcvt' 'mesa'
+         'libglvnd' 'libxau' 'wayland' 'libdrm' 'libtirpc'
+         'libei' 'libxshmfence' 'libdecor' 'glibc')
+makedepends=('meson' 'xorgproto' 'xtrans' 'libxkbfile' 'dbus'
+             'xorg-font-util' 'wayland-protocols' 'mesa-libgl'
+             'git' 'patch')
+# 目錄前綴寫成 xorg-xwayland（= ${pkgname%-git}），讓 CI 通用 pkgver 探測
+# （把源克隆進 ${pkgname%-git} 後跑 pkgver()）與 makepkg 實建克隆到同一目錄名，
+# 否則 pkgver() 的 cd 目標對不上會恆 skip（見 adguardhome-git 同款教訓）。
+source=("xorg-xwayland::git+https://gitlab.freedesktop.org/xorg/xserver.git#branch=xwayland-24.1"
+        hidpi.patch)
+sha256sums=('SKIP'
+            'c00b014b2a74079da30b9f3a94358157a4d390bb90a84af78ee384bacf37193a')
+
+provides=('xorg-xwayland' 'xorg-server-xwayland' 'xorg-server-xwayland-git'
+          'xorg-xwayland-hidpi-xprop' 'xorg-xwayland-hidpi-xprop-git')
+conflicts=('xorg-xwayland' 'xorg-server-xwayland' 'xorg-server-xwayland-git'
+           'xorg-xwayland-hidpi-xprop')
+replaces=('xorg-server-xwayland' 'xorg-xwayland')
+
+# 版本一律從 origin/xwayland-24.1 這個 ref 算、不看 HEAD：CI 通用探測 clone 的是
+# 倉庫預設分支（master）、實建 clone 的才是 xwayland-24.1，兩者 HEAD 不同，
+# 只有鎖死讀同一個遠端 ref 才能讓「探測版本」與「產物版本」一致（否則每輪白編）。
+pkgver() {
+  cd xorg-xwayland || return 1
+  local branch=origin/xwayland-24.1
+  local head tag revisions
+  head=$(git rev-parse --short "$branch") || return 1
+  tag=$(git describe --abbrev=0 --tags "$branch") || return 1
+  revisions=$(git rev-list --count "${tag}..${branch}") || return 1
+  printf '%s.r%d.g%s' "${tag#xwayland-}" "$revisions" "$head"
+}
+
+prepare() {
+  cd xorg-xwayland
+  patch -Np1 -i ../hidpi.patch
+}
+
+build() {
+  arch-meson xorg-xwayland build \
+    -D ipv6=true \
+    -D xvfb=false \
+    -D xnest=false \
+    -D xdmcp=false \
+    -D xcsecurity=true \
+    -D xorg=false \
+    -D xephyr=false \
+    -D xwayland=true \
+    -D xwin=false \
+    -D xquartz=false \
+    -D dri3=true \
+    -D glamor=true \
+    -D libdecor=true \
+    -D systemd_notify=false \
+    -D xkb_dir=/usr/share/X11/xkb \
+    -D xkb_output_dir=/var/lib/xkb
+  ninja -C build
+}
+
+package() {
+  DESTDIR="${pkgdir}" ninja -C build install
+  # xorg-server-common 擁有 /usr/lib/xorg/protocol.txt，本包不重複打進
+  rm "${pkgdir}"/usr/lib/xorg/protocol.txt
+  rmdir "${pkgdir}"/usr/lib/xorg
+  rm "${pkgdir}"/usr/share/man/man1/Xserver.1
+  # license
+  install -m644 -Dt "${pkgdir}/usr/share/licenses/${pkgname}" xorg-xwayland/COPYING
+}

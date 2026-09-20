@@ -359,6 +359,15 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
+            xorg-xwayland-git)
+              # 本倉 in-tree 維護（比照 wlroots-git）：xserver 的 xwayland-24.1 分支
+              # + MR !733 HiDPI xprop 縮放補丁（燒成 hidpi.patch），並用
+              # -D systemd_notify=false 做純 Artix（免 libsystemd）版。PKGBUILD 有
+              # 輔助檔 hidpi.patch，兩個都要抓進 pkg_dir。
+              mkdir pkg_dir
+              base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
+              curl -sfL "$base/PKGBUILD"    -o "pkg_dir/PKGBUILD"
+              curl -sfL "$base/hidpi.patch" -o "pkg_dir/hidpi.patch" ;;
             fcitx5-git)
               # 本倉 in-tree 維護（2026-09-17）：AUR 版 build() 的
               # -DENABLE_SYSTEMD=OFF 打的是不存在的選項名（上游只有
