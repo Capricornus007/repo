@@ -34,6 +34,7 @@ jobs:
         [
           {"key": "dae-git", "repo_name": "dae-git", "variant": "none"},
           {"key": "ffmpeg-full-git", "repo_name": "ffmpeg-full-git", "variant": "nonfree"},
+          {"key": "astc-encoder-git", "repo_name": "astc-encoder-git", "variant": "none"},
           {"key": "kew-git", "repo_name": "kew-git", "variant": "none"},
           {"key": "mpv-git", "repo_name": "mpv-git", "variant": "none"},
           {"key": "oh-my-pi-git", "repo_name": "oh-my-pi-git", "variant": "none"},
