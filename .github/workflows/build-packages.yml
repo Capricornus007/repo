@@ -331,7 +331,7 @@ jobs:
               for _f in PKGBUILD license-from-upstream; do
                 curl -sfL "$_ue_base/$_f" -o "pkg_dir/$_f"
               done ;;
-            qoder-cli|qoder-cli-cn|qoder-gui-bin|qoder-gui-cn|qoder-ide-bin)
+            qoder-cli|qoder-cli-cn|qoder-gui-bin|qoder-gui-cn)
               # Qoder 五包（國際/CN × 命令列/GUI）全部 in-tree 維護在本倉同名目錄，
               # 只有 PKGBUILD 一個檔案：
               #   qoder-cli     國際 CLI，源 qoder-ide.oss-accelerate…/qodercli，
@@ -943,47 +943,6 @@ jobs:
               echo "目標 Unicode Emoji 版本：$TARGET_PKGVER"
               ;;
 
-            qoder-ide-bin)
-              # Qoder **IDE**（VS Code fork）國際版：IDE 內建更新檢查打的端點就是權威
-              # 來源——productVersion 給版本、sha256hash 給該 RPM 的校驗和（2026-09-18
-              # 實測與檔案實算 sha256 逐字吻合）。刻意不碰 download.qoder.com 的滾動址
-              # （沒有版本號、內容天天換）。
-              # 只有 x86_64：linux-arm64 通道是殭屍資料（實測回 name=0.2.7 且 url 指向
-              # qoder_amd64.deb），上游沒出 arm64 IDE，PKGBUILD 的 arch 如實只標 x86_64。
-              # 2026-09-19：這個端點過去餵給的是 qoder-gui-bin 這個名字，但內容是 IDE
-              # 不是桌面端 → 改由 qoder-ide-bin 使用，qoder-gui-bin 換成下面的桌面端。
-              _qgui=$(curl -fsSL --connect-timeout 15 --retry 3 --retry-delay 10 \
-                        "https://center.qoder.sh/algo/api/update/linux-x64/stable/latest" 2>/dev/null || true)
-              [ -n "$_qgui" ] || skip "拿不到 Qoder IDE（國際版）更新端點回應"
-              TARGET_PKGVER=$(printf '%s' "$_qgui" | jq -r '.productVersion // .name // empty')
-              case "$TARGET_PKGVER" in ""|0|*[!0-9.]*) skip "拿不到 Qoder IDE 版本號（=$TARGET_PKGVER）" ;; esac
-              _qgui_sha=$(printf '%s' "$_qgui" | jq -r '.sha256hash // empty')
-              _qgui_url=$(printf '%s' "$_qgui" | jq -r '.url // empty')
-              printf '%s' "$_qgui_sha" | grep -Eq '^[0-9a-fA-F]{64}$' \
-                || skip "Qoder IDE 更新端點沒有可用 sha256hash"
-              printf '%s' "$_qgui_url" | grep -q '^https://' \
-                || skip "Qoder IDE 更新端點沒有可用 url"
-              # 端點的 linux-x64 url 在 .deb / .rpm 之間反覆橫跳（09-18 rpm → 09-19 deb
-              # → 09-22 rpm），同一 release/<ver>/ 兩檔都在、payload 相同。校驗和取自端點
-              # → source 必須是端點那個檔。只要 URL 的「目錄前綴」沒變、只差檔名，就自動
-              # 跟隨端點檔名（構建時把 source 重寫成端點 URL），不再把 job 判紅；只有
-              # 前綴（域名／路徑結構）也變了才當作要人工看的大改。
-              # 注意：source ./PKGBUILD 時 ${pkgver} 已被展開成committed 版（CUR_PKGVER），
-              # 故用字串替換 CUR→TARGET 對齊目標版，別去搜 ${pkgver} 字面（已不存在）。
-              _tmpl_url=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "${source_x86_64[0]#*::}"')
-              _tmpl_url="${_tmpl_url//"$CUR_PKGVER"/$TARGET_PKGVER}"
-              if [ "$(dirname "$_tmpl_url")" != "$(dirname "$_qgui_url")" ]; then
-                echo "::error::$PKG 的 source URL 目錄前綴與官方不符（上游改域名/路徑結構了？）"
-                echo "  我方模板: $(dirname "$_tmpl_url")"
-                echo "  官方 URL: $(dirname "$_qgui_url")"
-                exit 1
-              fi
-              [ "$(basename "$_tmpl_url")" = "$(basename "$_qgui_url")" ] \
-                || echo "::warning::$PKG 上游檔名變更（$(basename "$_tmpl_url") → $(basename "$_qgui_url")），構建時自動跟隨"
-              echo "src_url_x86=$_qgui_url" >> "$GITHUB_OUTPUT"
-              echo "sha_x86=$_qgui_sha" >> "$GITHUB_OUTPUT"
-              ;;
-
             qoder-gui-bin)
               # Qoder **桌面端**（agent workbench）國際版：官方
               # https://download.qoder.com/qoder-app/releases/latest/manifest.json，
@@ -1198,7 +1157,6 @@ jobs:
           # Qoder 四包用：plan 從各自官方端點讀回來的校驗和
           # （x86_64 與 aarch64 各一條，拿不到的就是空字串）
           NEW_SHA_X86: ${{ steps.plan.outputs.sha_x86 }}
-          NEW_SRC_URL_X86: ${{ steps.plan.outputs.src_url_x86 }}
           NEW_SHA_ARM: ${{ steps.plan.outputs.sha_arm }}
           CACHY_TAG: ${{ steps.plan.outputs.cachy_tag }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -1425,7 +1383,7 @@ jobs:
               sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
               grep -n '^pkgver=' PKGBUILD
               ;;
-            qoder-cli|qoder-cli-cn|qoder-gui-bin|qoder-gui-cn|qoder-ide-bin)
+            qoder-cli|qoder-cli-cn|qoder-gui-bin|qoder-gui-cn)
               # Qoder 五包：PKGBUILD 的 source 是「<檔名>-/${pkgver}/…」模板，sed 掉
               # ^pkgver= 一行就自動跟著新版本取檔；校驗和由 plan 從官方端點讀回來後
               # 逐行換掉（四包的 sha 都是 64 位十六進位、pkgver 只含數字與點號，
@@ -1439,16 +1397,6 @@ jobs:
               fi
               if [ -n "${NEW_SHA_ARM:-}" ]; then
                 sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('$NEW_SHA_ARM')/" PKGBUILD
-              fi
-              # qoder-ide-bin：端點的 linux-x64 url 在 .deb/.rpm 間反覆橫跳、校驗和取自
-              # 端點，故 source 必須是端點那個檔。plan 把端點實際 URL 傳進來，這裡於構建時
-              # 把 source_x86_64 重寫成它（本地存檔名=端點檔名、外殼正確），package() 對
-              # deb/rpm 兩種外殼都能落地。只有 qoder-ide-bin 的 plan 會輸出 src_url_x86，
-              # 其餘 Qoder 包此處為空 → 跳過、維持各自 ${pkgver} 模板。
-              if [ -n "${NEW_SRC_URL_X86:-}" ]; then
-                _sf=$(basename "$NEW_SRC_URL_X86")
-                sed -i -E "s#^source_x86_64=.*#source_x86_64=(\"${_sf}::${NEW_SRC_URL_X86}\")#" PKGBUILD
-                echo "重寫 source → ${_sf}（跟隨端點 deb/rpm）"
               fi
               echo "==== $PKG 改寫結果 ===="
               grep -nE '^(pkgver|sha256sums_x86_64|sha256sums_aarch64)=' PKGBUILD
@@ -1477,7 +1425,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'qoder-ide-bin' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}

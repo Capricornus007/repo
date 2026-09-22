@@ -52,7 +52,6 @@ jobs:
           {"key": "qoder-cli-cn", "repo_name": "qoder-cli-cn", "variant": "none"},
           {"key": "qoder-gui-bin", "repo_name": "qoder-gui-bin", "variant": "none"},
           {"key": "qoder-gui-cn", "repo_name": "qoder-gui-cn", "variant": "none"},
-          {"key": "qoder-ide-bin", "repo_name": "qoder-ide-bin", "variant": "none"},
           {"key": "unicode-emoji", "repo_name": "unicode-emoji", "variant": "none"},
           {"key": "free-claude-code-git", "repo_name": "free-claude-code-git", "variant": "none"},
           {"key": "bash-git", "repo_name": "bash-git", "variant": "none"},
