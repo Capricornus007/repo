@@ -963,7 +963,24 @@ jobs:
                 || skip "Qoder IDE 更新端點沒有可用 sha256hash"
               printf '%s' "$_qgui_url" | grep -q '^https://' \
                 || skip "Qoder IDE 更新端點沒有可用 url"
-              check_url_template source_x86_64 "$_qgui_url"
+              # 端點的 linux-x64 url 在 .deb / .rpm 之間反覆橫跳（09-18 rpm → 09-19 deb
+              # → 09-22 rpm），同一 release/<ver>/ 兩檔都在、payload 相同。校驗和取自端點
+              # → source 必須是端點那個檔。只要 URL 的「目錄前綴」沒變、只差檔名，就自動
+              # 跟隨端點檔名（構建時把 source 重寫成端點 URL），不再把 job 判紅；只有
+              # 前綴（域名／路徑結構）也變了才當作要人工看的大改。
+              # 注意：source ./PKGBUILD 時 ${pkgver} 已被展開成committed 版（CUR_PKGVER），
+              # 故用字串替換 CUR→TARGET 對齊目標版，別去搜 ${pkgver} 字面（已不存在）。
+              _tmpl_url=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "${source_x86_64[0]#*::}"')
+              _tmpl_url="${_tmpl_url//"$CUR_PKGVER"/$TARGET_PKGVER}"
+              if [ "$(dirname "$_tmpl_url")" != "$(dirname "$_qgui_url")" ]; then
+                echo "::error::$PKG 的 source URL 目錄前綴與官方不符（上游改域名/路徑結構了？）"
+                echo "  我方模板: $(dirname "$_tmpl_url")"
+                echo "  官方 URL: $(dirname "$_qgui_url")"
+                exit 1
+              fi
+              [ "$(basename "$_tmpl_url")" = "$(basename "$_qgui_url")" ] \
+                || echo "::warning::$PKG 上游檔名變更（$(basename "$_tmpl_url") → $(basename "$_qgui_url")），構建時自動跟隨"
+              echo "src_url_x86=$_qgui_url" >> "$GITHUB_OUTPUT"
               echo "sha_x86=$_qgui_sha" >> "$GITHUB_OUTPUT"
               ;;
 
@@ -1181,6 +1198,7 @@ jobs:
           # Qoder 四包用：plan 從各自官方端點讀回來的校驗和
           # （x86_64 與 aarch64 各一條，拿不到的就是空字串）
           NEW_SHA_X86: ${{ steps.plan.outputs.sha_x86 }}
+          NEW_SRC_URL_X86: ${{ steps.plan.outputs.src_url_x86 }}
           NEW_SHA_ARM: ${{ steps.plan.outputs.sha_arm }}
           CACHY_TAG: ${{ steps.plan.outputs.cachy_tag }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -1421,6 +1439,16 @@ jobs:
               fi
               if [ -n "${NEW_SHA_ARM:-}" ]; then
                 sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('$NEW_SHA_ARM')/" PKGBUILD
+              fi
+              # qoder-ide-bin：端點的 linux-x64 url 在 .deb/.rpm 間反覆橫跳、校驗和取自
+              # 端點，故 source 必須是端點那個檔。plan 把端點實際 URL 傳進來，這裡於構建時
+              # 把 source_x86_64 重寫成它（本地存檔名=端點檔名、外殼正確），package() 對
+              # deb/rpm 兩種外殼都能落地。只有 qoder-ide-bin 的 plan 會輸出 src_url_x86，
+              # 其餘 Qoder 包此處為空 → 跳過、維持各自 ${pkgver} 模板。
+              if [ -n "${NEW_SRC_URL_X86:-}" ]; then
+                _sf=$(basename "$NEW_SRC_URL_X86")
+                sed -i -E "s#^source_x86_64=.*#source_x86_64=(\"${_sf}::${NEW_SRC_URL_X86}\")#" PKGBUILD
+                echo "重寫 source → ${_sf}（跟隨端點 deb/rpm）"
               fi
               echo "==== $PKG 改寫結果 ===="
               grep -nE '^(pkgver|sha256sums_x86_64|sha256sums_aarch64)=' PKGBUILD

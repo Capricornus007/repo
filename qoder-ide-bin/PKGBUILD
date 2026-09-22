@@ -101,16 +101,24 @@ source_x86_64=("qoder-ide-${pkgver}-amd64.deb::https://qoder-ide.oss-accelerate.
 sha256sums_x86_64=('3c509e7ff863d0923264442275a6d204eb0e435eb603c578fb5f62f2a804d2c6')
 
 package() {
-  # makepkg 會把 .deb（ar 格式）先拆成 debian-binary/control.tar.*/data.tar.*，
-  # data.tar 落在 $srcdir；這裡解 data.tar 那層，整棵樹原樣落地（同
-  # element-desktop-nightly-bin 的路子）：
+  # 上游 center.qoder.sh 的 linux-x64 端點在 .deb 與 .rpm 之間反覆横跳（09-18 rpm →
+  # 09-19 deb → 09-22 rpm），同一 release/<ver>/ 目錄下兩檔都在、payload 樹完全相同。
+  # 校驗和取自端點，故 source 必鬚跟著端點那一檔；CI 構建時會把 source 檔名重寫成端點
+  # 實際給的（見 build-packages.yml 的 src_url_x86）。這裡對兩種外殼都能落地：
+  #   .deb → makepkg 已拆出 data.tar.*（ar 格式），解這層；
+  #   .rpm → makepkg 不拆，留原檔，bsdtar 的 libarchive rpm reader 直接解 cpio payload。
+  local dt rp
+  if dt=$(ls "$srcdir"/data.tar.* 2>/dev/null | head -n1) && [ -n "$dt" ]; then
+    bsdtar -xf "$dt" -C "$pkgdir" || return 1
+  elif rp=$(ls "$srcdir"/*.rpm 2>/dev/null | head -n1) && [ -n "$rp" ]; then
+    bsdtar -xf "$rp" -C "$pkgdir" || return 1
+  else
+    echo "错误：\$srcdir 裡既無 data.tar.*(deb) 也無 *.rpm，無法解包" >&2; return 1
+  fi
+  # deb 與 rpm 落地佈局相同：
   #   ./usr/share/qoder-ide/{qoder-ide,chrome-sandbox,bin/,resources/,locales/…}
   #   ./usr/share/applications/qoder-ide{,-url-handler}.desktop
   #   ./usr/share/{appdata,mime,pixmaps,bash-completion,zsh}/…
-  local dt
-  dt=$(ls "$srcdir"/data.tar.* 2>/dev/null | head -n1)
-  [ -n "$dt" ] || { echo "错误：拆包 .deb 后找不到 data.tar.*" >&2; return 1; }
-  bsdtar -xf "$dt" -C "$pkgdir" || return 1
 
   # chrome-sandbox 上游就是 setuid root 4755（實測 deb 內 `-rwsr-xr-x`）。
   # 非 root 解包時這個位會被 bsdtar 悄悄抹掉，這裡顯式要回來，保持與上游一致；
