@@ -100,5 +100,7 @@ jobs:
           {"key": "iwgtk-git", "repo_name": "iwgtk-git", "variant": "none", "kind": "aur"},
           {"key": "wl-clipboard-git", "repo_name": "wl-clipboard-git", "variant": "none", "kind": "aur"},
           {"key": "rofi-bluetooth-git", "repo_name": "rofi-bluetooth-git", "variant": "none", "kind": "aur"},
+          {"key": "topgrade-git", "repo_name": "topgrade-git", "variant": "none", "kind": "aur"},
+          {"key": "linutil-git", "repo_name": "linutil-git", "variant": "none", "kind": "aur"},
           {"key": "kbreakout-git", "repo_name": "kbreakout-git", "variant": "none", "kind": "kde"}
         ]

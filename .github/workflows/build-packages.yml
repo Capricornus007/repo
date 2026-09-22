@@ -184,6 +184,14 @@ jobs:
           # makepkg 用 curl 下载源码，kernel.org 大文件常断连；
           # 设 120s 超时 + 3 次自动重试，再结合下游重试循环足够稳定
           echo 'CURL_OPTIONS="--connect-timeout 30 --max-time 300 --retry 5 --retry-delay 15"' >> /etc/makepkg.conf
+          # -git 包的源码是 `git clone` 抓的，上面的 CURL_OPTIONS 管不到它。
+          # freedesktop/gitlab 系仓库（mesa 等）在 HTTP/2 下偶发
+          # `RPC failed; HTTP 502 … HTTP/2 stream N reset by server` → makepkg
+          # 直接「Failure while downloading」整个 job 红（2026-09-22 mesa-tkg-git 实测）。
+          # 强制 HTTP/1.1 是这一类 stream-reset 的公认解；--system 写 /etc/gitconfig，
+          # 对 builder 用户（makepkg 以 su builder 跑）也生效。postBuffer 调大再稳一手。
+          git config --system http.version HTTP/1.1
+          git config --system http.postBuffer 524288000
           echo "nproc=$(nproc)"
 
           useradd builder -m || true
@@ -1649,20 +1657,29 @@ jobs:
             flags="$flags --skippgpcheck"
           fi
           echo "makepkg $flags"
-          # 自有源从 GitHub Release 资产下载，偶发截断会让坏包进 pacman 缓存，
-          # makepkg -s 装依赖时死在 "is corrupted (invalid or corrupted package)"
-          # 且 --noconfirm 不会替它删缓存（2026-09-17 kguiaddons-git 实测：缓存里
-          # 的 extra-cmake-modules-git 损坏 → 依赖解析整体失败）。抓到就删掉重试一次。
-          if ! su builder -c "makepkg $flags" 2>&1 | tee /tmp/makepkg.log; then
+          # 抓两类「可恢复故障」各退避重试（最多 3 次）；其余（真编译错）立即失败：
+          #  (a) 自有源截断→坏包进 pacman 缓存，报 "is corrupted" → 删缓存重装
+          #      （2026-09-17 kguiaddons-git 实测）。
+          #  (b) 上游/网络瞬断→makepkg "Failure while downloading" / git clone
+          #      "RPC failed; HTTP 502 / HTTP/2 stream reset" / curl 退出码
+          #      →整包稍后重来（2026-09-22 mesa-tkg-git 连续两轮栽在下载 502）。
+          #      上游已加 git http.version=HTTP/1.1 挡掉大部分 stream-reset，这里兜残余。
+          # tee 每次覆盖 /tmp/makepkg.log，故分类只看本次失败、不会误判上轮残留。
+          _mp=0
+          until su builder -c "makepkg $flags" 2>&1 | tee /tmp/makepkg.log; do
+            _mp=$((_mp + 1))
             bad=$(grep -oE '^:: File [^ ]+ is corrupted' /tmp/makepkg.log | awk '{print $3}' | sort -u || true)
+            dl=$(grep -qE 'Failure while downloading|RPC failed|returned error: 50[0-9]|reset by server|HTTP/2 stream|curl: \([0-9]+\)' /tmp/makepkg.log && echo yes)
             if [ -n "$bad" ]; then
-              echo "删除损坏缓存包后重试：$bad"
-              rm -fv $bad
-              su builder -c "makepkg $flags"
+              echo "删除损坏缓存包后重试：$bad"; rm -fv $bad
+            elif [ -n "$dl" ]; then
+              echo "::warning::源码下载瞬断（第 ${_mp} 次），退避重试"
             else
-              exit 1
+              echo "makepkg 失败（非可恢复故障），不再重试"; exit 1
             fi
-          fi
+            [ "$_mp" -ge 3 ] && { echo "::error::makepkg 连续 3 次失败"; exit 1; }
+            sleep $((_mp * 25))
+          done
           if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ] && [ "${{ matrix.variant }}" = "rc" ]; then
             # RC 產物檔名插入 -rc（如 linux-cachyos-cjktty-rc-7.3.rc1-1-…），
             # 包內 pkgname 保持 linux-cachyos-cjktty 不變：repo-add 條目照常
@@ -1733,12 +1750,27 @@ jobs:
             esac
           done
       - name: 上传产物到 artifact
+        id: upload1
+        continue-on-error: true
         if: (matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true') || (matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true')
         uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ matrix.key }}
           path: pkg_dir/*.pkg.tar.zst
           if-no-files-found: error
+          overwrite: true
+      - name: 上传产物到 artifact（重试：Actions 中转层偶发 403）
+        # FinalizeArtifact 偶发 "403 Forbidden: Error from intermediary"（2026-09-21
+        # libkdegames-git 实测）——纯 GitHub infra 抖动，包已编好、只是没上传成功。
+        # 第一步 continue-on-error 抓到失败后原地重试一次；仍失败则该步（无
+        # continue-on-error）让 job 正常红。overwrite 处理首传 403 后残留的同名 artifact。
+        if: ((matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true') || (matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true')) && steps.upload1.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: pkg-${{ matrix.key }}
+          path: pkg_dir/*.pkg.tar.zst
+          if-no-files-found: error
+          overwrite: true
 
   deploy-repo:
     needs: build-packages
