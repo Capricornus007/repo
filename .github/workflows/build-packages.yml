@@ -299,12 +299,18 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git)
-              # 六個 in-tree 包（本倉同名目錄，PKGBUILD 從用戶 ~/.cache/yay 的本地版
+            free-claude-code-git|openai-codex-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git)
+              # 七個 in-tree 包（本倉同名目錄，PKGBUILD 從用戶 ~/.cache/yay 的本地版
               # 帶過來、保留其改動）。**必須在這裡先攔掉**：下面的通用規則見 '-git$'
               # 就去 clone AUR，而 free-claude-code-git、qalculate-gtk-git 在 AUR 上
-              # 根本不存在（或內容不同），adguardhome-git 雖在 AUR 有用戶要的是本地那份
-              # （規則 25），clone 到 AUR/錯的 PKGBUILD 會直接紅或拿到非用戶版。
+              # 根本不存在（或內容不同），openai-codex-git 的 AUR 配方已跟不上上游，
+              # adguardhome-git 雖在 AUR 有用戶要的是本地那份（規則 25）；clone 到
+              # AUR/錯的 PKGBUILD 會直接紅或拿到非用戶版。
+              # 註：openai-codex-git 在矩陣裡仍標 kind:aur（與 fcitx5-git 同款），只是
+              # 借用 kind:aur 的「跳過校驗和回推」與掛自有源；取檔一律走本分支的 in-tree
+              # 目錄。日後若拿掉 kind，必須同時在下方「更新校驗和並回推」的 giant if 補
+              # matrix.repo_name != 'openai-codex-git'，否則那步會為 1.9GB 的 git 源重跑
+              # updpkgsums（連續失敗 5 次就 exit 1 把 job 判紅）。
               mkdir pkg_dir
               _it_repo="${{ github.repository }}"
               _it_pkg="${{ matrix.repo_name }}"

@@ -1,0 +1,69 @@
+# Based on the AUR openai-codex-git package maintained by Jack Mahoney.
+# The AUR recipe currently forces the newest stable Rust and builds every
+# workspace member. Codex pins its release compiler in rust-toolchain.toml,
+# and its release workflow builds named binaries only. Following both avoids
+# compiling unrelated internal crates with an unsupported compiler.
+
+pkgname=openai-codex-git
+pkgver=r11237
+pkgrel=1
+pkgdesc="Lightweight coding agent that runs in your terminal"
+arch=('x86_64' 'aarch64')
+url="https://github.com/openai/codex"
+license=('Apache-2.0')
+provides=('openai-codex')
+conflicts=('openai-codex')
+# bubblewrap 是執行期依賴：實測 build 出來的 codex 二進位會 exec 系統的 bwrap 來做
+# Linux 沙箱（strings 命中 "bwrap"），缺它則 codex 的沙箱模式不能用。AUR 那份沒列。
+depends=('bubblewrap')
+makedepends=('rustup' 'git')
+optdepends=(
+  'git: for working with git repositories'
+  'ripgrep: accelerated large-repo search'
+)
+options=('!lto')
+source=("${pkgname%-git}::git+${url}.git")
+b2sums=('SKIP')
+
+pkgver() {
+  cd "${pkgname%-git}"
+  git rev-list --count HEAD | sed 's/^/r/'
+}
+
+_upstream_toolchain() {
+  sed -nE 's/^channel = "([^"]+)"/\1/p' \
+    "${srcdir}/${pkgname%-git}/codex-rs/rust-toolchain.toml"
+}
+
+prepare() {
+  cd "${pkgname%-git}/codex-rs"
+
+  local _toolchain
+  _toolchain=$(_upstream_toolchain)
+  [[ -n "$_toolchain" ]] || return 1
+  rustup toolchain install "$_toolchain" --profile minimal
+  RUSTUP_TOOLCHAIN="$_toolchain" cargo fetch --locked \
+    --target "$(RUSTUP_TOOLCHAIN="$_toolchain" rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "${pkgname%-git}/codex-rs"
+
+  local _toolchain
+  _toolchain=$(_upstream_toolchain)
+  [[ -n "$_toolchain" ]] || return 1
+  export CARGO_TARGET_DIR=target
+  RUSTUP_TOOLCHAIN="$_toolchain" cargo build --release --frozen \
+    --bin codex \
+    --bin codex-exec \
+    --bin codex-linux-sandbox
+}
+
+package() {
+  cd "${pkgname%-git}/codex-rs"
+
+  install -Dm755 -t "${pkgdir}/usr/bin" \
+    target/release/codex \
+    target/release/codex-exec \
+    target/release/codex-linux-sandbox
+}

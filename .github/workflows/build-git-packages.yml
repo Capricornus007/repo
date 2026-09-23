@@ -101,5 +101,6 @@ jobs:
           {"key": "rofi-bluetooth-git", "repo_name": "rofi-bluetooth-git", "variant": "none", "kind": "aur"},
           {"key": "topgrade-git", "repo_name": "topgrade-git", "variant": "none", "kind": "aur"},
           {"key": "linutil-git", "repo_name": "linutil-git", "variant": "none", "kind": "aur"},
+          {"key": "openai-codex-git", "repo_name": "openai-codex-git", "variant": "none", "kind": "aur"},
           {"key": "kbreakout-git", "repo_name": "kbreakout-git", "variant": "none", "kind": "kde"}
         ]
