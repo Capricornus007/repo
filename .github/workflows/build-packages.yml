@@ -299,18 +299,19 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git)
-              # 七個 in-tree 包（本倉同名目錄，PKGBUILD 從用戶 ~/.cache/yay 的本地版
-              # 帶過來、保留其改動）。**必須在這裡先攔掉**：下面的通用規則見 '-git$'
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git)
+              # 這批 in-tree 包（本倉同名目錄，PKGBUILD 要嘛是用戶 ~/.cache/yay 的本地版、
+              # 要嘛是我方改過的版本）。**必須在這裡先攔掉**：下面的通用規則見 '-git$'
               # 就去 clone AUR，而 free-claude-code-git、qalculate-gtk-git 在 AUR 上
               # 根本不存在（或內容不同），openai-codex-git 的 AUR 配方已跟不上上游，
-              # adguardhome-git 雖在 AUR 有用戶要的是本地那份（規則 25）；clone 到
-              # AUR/錯的 PKGBUILD 會直接紅或拿到非用戶版。
-              # 註：openai-codex-git 在矩陣裡仍標 kind:aur（與 fcitx5-git 同款），只是
-              # 借用 kind:aur 的「跳過校驗和回推」與掛自有源；取檔一律走本分支的 in-tree
-              # 目錄。日後若拿掉 kind，必須同時在下方「更新校驗和並回推」的 giant if 補
-              # matrix.repo_name != 'openai-codex-git'，否則那步會為 1.9GB 的 git 源重跑
-              # updpkgsums（連續失敗 5 次就 exit 1 把 job 判紅）。
+              # alacritty-sixel-git 的 AUR 版抓的是 ayosec 原 fork（停在 0.17.0、沒跟上
+              # master 的 0.18.0-dev，且源目錄名與版本探測對不上），adguardhome-git 雖在
+              # AUR 有用戶要的是本地那份（規則 25）；clone 到 AUR/錯的 PKGBUILD 會直接紅
+              # 或拿到非用戶版。
+              # 這三個 -git 包（openai-codex-git、alacritty-sixel-git、adguardhome-git 等）
+              # 版本都由 makepkg build 時現算，所以都已列進下方「更新校驗和並回推」的
+              # giant if 排除清單；不然那步會為 1.9GB 級別的 git 源重跑 updpkgsums
+              # （連續失敗 5 次就 exit 1 把 job 判紅）。
               mkdir pkg_dir
               _it_repo="${{ github.repository }}"
               _it_pkg="${{ matrix.repo_name }}"
@@ -1445,7 +1446,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}

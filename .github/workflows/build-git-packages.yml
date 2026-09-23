@@ -59,6 +59,8 @@ jobs:
           {"key": "qalculate-gtk-git", "repo_name": "qalculate-gtk-git", "variant": "none"},
           {"key": "adguardhome-git", "repo_name": "adguardhome-git", "variant": "none"},
           {"key": "ttf-jetbrains-maple-mono-nf-xx-xx-xx", "repo_name": "ttf-jetbrains-maple-mono-nf-xx-xx-xx", "variant": "none"},
+          {"key": "openai-codex-git", "repo_name": "openai-codex-git", "variant": "none"},
+          {"key": "alacritty-sixel-git", "repo_name": "alacritty-sixel-git", "variant": "none"},
           {"key": "mesa-tkg-git", "repo_name": "mesa-tkg-git", "variant": "none", "kind": "tkg"},
           {"key": "extra-cmake-modules-git", "repo_name": "extra-cmake-modules-git", "variant": "none", "kind": "kde"},
           {"key": "plasma-wayland-protocols-git", "repo_name": "plasma-wayland-protocols-git", "variant": "none", "kind": "kde"},
@@ -101,6 +103,5 @@ jobs:
           {"key": "rofi-bluetooth-git", "repo_name": "rofi-bluetooth-git", "variant": "none", "kind": "aur"},
           {"key": "topgrade-git", "repo_name": "topgrade-git", "variant": "none", "kind": "aur"},
           {"key": "linutil-git", "repo_name": "linutil-git", "variant": "none", "kind": "aur"},
-          {"key": "openai-codex-git", "repo_name": "openai-codex-git", "variant": "none", "kind": "aur"},
           {"key": "kbreakout-git", "repo_name": "kbreakout-git", "variant": "none", "kind": "kde"}
         ]

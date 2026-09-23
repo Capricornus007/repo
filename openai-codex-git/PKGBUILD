@@ -22,8 +22,8 @@ optdepends=(
   'ripgrep: accelerated large-repo search'
 )
 options=('!lto')
-source=("${pkgname%-git}::git+${url}.git")
-b2sums=('SKIP')
+source=("${pkgname%-git}::git+${url}.git" "exec-bin-recursion-limit.patch")
+b2sums=('SKIP' 'SKIP')
 
 pkgver() {
   cd "${pkgname%-git}"
@@ -36,7 +36,21 @@ _upstream_toolchain() {
 }
 
 prepare() {
-  cd "${pkgname%-git}/codex-rs"
+  cd "${pkgname%-git}"
+
+  # 上游只在 codex-rs/exec/src/lib.rs 設了 #![recursion_limit = "256"]，但 bin 目標
+  # （codex-exec 的 main.rs，crate 名同為 codex_exec）仍是預設的 128，於是 CI 編那個
+  # bin 時炸「error: queries overflow the depth limit!」（2026-09-23 run #223 實測，
+  # 推導 codex_app_server 那個 async fn 的佈局就多吃 130 層）。
+  # 哪天上游自己補上，patch -N 會回報已套用：這時只要確認屬性存在就放過，別判紅。
+  if ! patch -p1 -N --quiet -i "$srcdir/exec-bin-recursion-limit.patch"; then
+    grep -q 'recursion_limit' codex-rs/exec/src/main.rs || {
+      echo "::error::無法套用 recursion_limit 補丁，上游也沒有該屬性"
+      return 1
+    }
+  fi
+
+  cd codex-rs
 
   local _toolchain
   _toolchain=$(_upstream_toolchain)

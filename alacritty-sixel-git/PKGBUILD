@@ -1,0 +1,63 @@
+# Maintainer: Capricornus007
+# 基於 AUR 的 alacritty-sixel-git（原 Maintainer: chrhasse），兩處關鍵改動：
+#   1) 源改成抓我自己的 fork Capricornus007/alacritty（graphics 分支）。上游
+#      ayosec/alacritty 停在 2026-03-15、沒跟上 alacritty master（Cargo.toml 已是
+#      0.18.0-dev），我方 fork 已把 upstream master 併進 sixel 分支，合併後
+#      cargo check 通過、cargo test -p alacritty_terminal 186 項全綠（含 sixel 測試）。
+#   2) source 前綴與 pkgver() 的 cd 目錄都改成 ${pkgname%-git}=alacritty-sixel。
+#      自動構建倉的版本探測（build-packages.yml 通用分支）一律把源克隆成這個目錄名，
+#      AUR 原版 cd 進 alacritty/ 會與之對不上而恆紅（adguardhome-git 就踩過）。
+# 刻意不寫 #branch=：構建與版本探測都取預設分支（本倉 graphics），兩者永遠同值。
+
+pkgname='alacritty-sixel-git'
+_pkgname='alacritty-sixel'
+pkgdesc="A cross-platform, GPU-accelerated terminal emulator (with sixel graphics)"
+pkgver=0.18.0.2579.g8b9699bd
+pkgrel=1
+epoch=1
+arch=('x86_64')
+url="https://github.com/Capricornus007/alacritty"
+license=('Apache-2.0' 'MIT')
+depends=('freetype2' 'fontconfig' 'libxi' 'libxcursor' 'libxkbcommon' 'libxkbcommon-x11' 'libxrandr')
+makedepends=('rust' 'cargo' 'cmake' 'fontconfig' 'ncurses' 'desktop-file-utils' 'gdb' 'libxcb' 'git' 'scdoc')
+checkdepends=('ttf-dejavu') # for monospace fontconfig test
+provides=('alacritty')
+conflicts=('alacritty')
+source=("$_pkgname::git+https://github.com/Capricornus007/alacritty.git")
+sha256sums=('SKIP')
+
+pkgver() {
+	cd "$_pkgname/alacritty"
+	echo "$(grep '^version =' Cargo.toml | head -n1 | cut -d\" -f2 | cut -d- -f1).$(git rev-list --count HEAD).g$(git rev-parse --short HEAD)"
+}
+
+build() {
+	cd "$_pkgname"
+	env CARGO_INCREMENTAL=0 cargo build --release
+}
+
+check() {
+	cd "$_pkgname"
+	env CARGO_INCREMENTAL=0 cargo test --release
+}
+
+package() {
+	cd "$_pkgname"
+
+	desktop-file-install -m 644 --dir "$pkgdir/usr/share/applications/" "extra/linux/Alacritty.desktop"
+
+	mkdir -p "$pkgdir/usr/share/man/man1" "$pkgdir/usr/share/man/man5"
+	scdoc < extra/man/alacritty.1.scd | gzip -c | tee "$pkgdir/usr/share/man/man1/alacritty.1.gz" > /dev/null
+	scdoc < extra/man/alacritty.5.scd | gzip -c | tee "$pkgdir/usr/share/man/man5/alacritty.5.gz" > /dev/null
+	scdoc < extra/man/alacritty-msg.1.scd | gzip -c | tee "$pkgdir/usr/share/man/man1/alacritty-msg.1.gz" > /dev/null
+	scdoc < extra/man/alacritty-bindings.5.scd | gzip -c | tee "$pkgdir/usr/share/man/man5/alacritty-bindings.5.gz" > /dev/null
+	scdoc < extra/man/alacritty-escapes.7.scd | gzip -c | tee "$pkgdir/usr/share/man/man5/alacritty-escapes.7.gz" > /dev/null
+
+	install -D -m755 "target/release/alacritty" "$pkgdir/usr/bin/alacritty"
+	install -D -m644 "extra/linux/org.alacritty.Alacritty.appdata.xml" "$pkgdir/usr/share/appdata/org.alacritty.Alacritty.appdata.xml"
+	install -D -m644 "extra/completions/alacritty.bash" "$pkgdir/usr/share/bash-completion/completions/alacritty"
+	install -D -m644 "extra/completions/_alacritty" "$pkgdir/usr/share/zsh/site-functions/_alacritty"
+	install -D -m644 "extra/completions/alacritty.fish" "$pkgdir/usr/share/fish/vendor_completions.d/alacritty.fish"
+	install -D -m644 "extra/logo/alacritty-term.svg" "$pkgdir/usr/share/pixmaps/Alacritty.svg"
+	install -D -m644 "extra/logo/compat/alacritty-term.png" "$pkgdir/usr/share/pixmaps/Alacritty.png"
+}
