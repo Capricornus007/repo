@@ -949,7 +949,7 @@ jobs:
               _ue_vers=$(curl -fsSL --connect-timeout 15 --retry 3 --retry-delay 10 \
                            "https://www.unicode.org/Public/" 2>/dev/null \
                          | grep -oE 'href="[0-9]+\.[0-9]+\.[0-9]+/"' \
-                         | sed -E 's/href="//; s|/"$//' | sort -Vr || true)
+                         | sed -E 's/href="//; s#/"$##' | sort -Vr || true)
               [ -n "$_ue_vers" ] || skip "拿不到 unicode.org /Public/ 的版本目錄清單"
               TARGET_PKGVER=""
               for _v in $_ue_vers; do
