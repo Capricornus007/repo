@@ -3,9 +3,26 @@
 # workspace member. Codex pins its release compiler in rust-toolchain.toml,
 # and its release workflow builds named binaries only. Following both avoids
 # compiling unrelated internal crates with an unsupported compiler.
+#
+# 2026-09-24 改版：裝完跑 `codex` 會報
+#   "this CLI has no complete local package; install a packaged Codex CLI or
+#    use the standalone installer"
+# 因為上游的 app-server-daemon 要先把自己那套「完整套件」裝進 ~/.codex 才開機，
+# 而它判別「本機有沒有完整套件」只看執行檔所在目錄的形狀（codex-rs/install-context）：
+#   <package_dir>/codex-package.json
+#   <package_dir>/bin/codex
+#   <package_dir>/bin/codex-code-mode-host
+#   <package_dir>/codex-path/rg
+#   <package_dir>/codex-resources/bwrap        （Linux 必須）
+# 我們以前只把三個 binary 直接丟 /usr/bin，沒有 codex-package.json，而且 in-tree
+# 版沿用工作區 Cargo.toml 的 0.0.0（上游 release 才會填真版號），所以
+# `codex --version` 顯示 codex-cli 0.0.0、`stable_version()` 也拒收 0.0.0 → 永遠走
+# 不到 daemon 模式。現在改用上游自己的打包腳本
+# `scripts/build_codex_package.py`（just assemble-codex-package 是同一条）產出正式
+# 套件目錄，/usr/bin 那三個只留符號連結。
 
 pkgname=openai-codex-git
-pkgver=r11237
+pkgver=0.156.1.r11244.g9f3b6d1
 pkgrel=1
 pkgdesc="Lightweight coding agent that runs in your terminal"
 arch=('x86_64' 'aarch64')
@@ -16,7 +33,9 @@ conflicts=('openai-codex')
 # bubblewrap 是執行期依賴：實測 build 出來的 codex 二進位會 exec 系統的 bwrap 來做
 # Linux 沙箱（strings 命中 "bwrap"），缺它則 codex 的沙箱模式不能用。AUR 那份沒列。
 depends=('bubblewrap')
-makedepends=('rustup' 'git')
+# python：跑 build_codex_package.py；ripgrep/bubblewrap：套件的 codex-path/rg 與
+# codex-resources/bwrap 直接用發行版二进制，不去抓上游的預構建檔。
+makedepends=('rustup' 'git' 'python' 'ripgrep' 'bubblewrap')
 optdepends=(
   'git: for working with git repositories'
   'ripgrep: accelerated large-repo search'
@@ -27,7 +46,18 @@ b2sums=('SKIP' 'SKIP')
 
 pkgver() {
   cd "${pkgname%-git}"
-  git rev-list --count HEAD | sed 's/^/r/'
+  # 上游 tag 形如 rust-v0.156.1；工作區 Cargo.toml 的 version 是 0.0.0（只有 release
+  # 流程會填），所以版號必須從 tag 取，不能用 read_workspace_version()。
+  local _base _n _h
+  _base=$(git describe --tags --abbrev=0 --match 'rust-v*' 2>/dev/null | sed 's/^rust-v//')
+  _h=$(git rev-parse --short HEAD)
+  [ -n "$_base" ] || { printf "0.0.0.r%s.g%s" "$(git rev-list --count HEAD)" "$_h"; return; }
+  _n=$(git rev-list --count "rust-v${_base}..HEAD")
+  if [ "$_n" = "0" ]; then
+    printf "%s" "$_base"
+  else
+    printf "%s.r%s.g%s" "$_base" "$_n" "$_h"
+  fi
 }
 
 _upstream_toolchain() {
@@ -67,17 +97,48 @@ build() {
   _toolchain=$(_upstream_toolchain)
   [[ -n "$_toolchain" ]] || return 1
   export CARGO_TARGET_DIR=target
+  # codex-code-mode-host 是「完整套件」的必須檔（validate_package 會查），
+  # 少了它裝上去一樣報 no complete local package。
   RUSTUP_TOOLCHAIN="$_toolchain" cargo build --release --frozen \
     --bin codex \
+    --bin codex-code-mode-host \
     --bin codex-exec \
     --bin codex-linux-sandbox
 }
 
 package() {
-  cd "${pkgname%-git}/codex-rs"
+  local _src="${srcdir}/${pkgname%-git}"
+  local _bin="$_src/codex-rs/target/release"
+  local _pkgdir_root="${pkgdir}/usr/lib/codex"
 
-  install -Dm755 -t "${pkgdir}/usr/bin" \
-    target/release/codex \
-    target/release/codex-exec \
-    target/release/codex-linux-sandbox
+  # 用上游自己的腳本組出正式套件目錄（含 codex-package.json）。
+  # --target 明確給 gnu：默認值是 musl（跟上游 release 檔對齊），我們是 glibc 系統。
+  # rg/bwrap 餵發行版二进制，避免腳本去抓預構建檔；zsh 不傳 → 套件裡不帶 bundled zsh
+  # （layout 的必須檔清單裡沒有它，跳過不會讓校驗失敗）。
+  local _semver="${pkgver%%.r*}"
+  cd "$_src"
+  python3 scripts/build_codex_package.py \
+    --variant codex \
+    --target "$(rustc -vV | sed -n 's/^host: //p')" \
+    --package-version "$_semver" \
+    --package-dir "$_pkgdir_root" \
+    --entrypoint-bin "$_bin/codex" \
+    --code-mode-host-bin "$_bin/codex-code-mode-host" \
+    --rg-bin /usr/bin/rg \
+    --bwrap-bin /usr/bin/bwrap \
+    --force
+
+  # 上游腳本只認「bin 目錄的上一層有 codex-package.json」，所以 /usr/bin 這三個
+  # 一律做成符號連結；current_exe() 會解析連結，才認得出這是完整套件。
+  install -Dm755 "$_bin/codex-exec" "${_pkgdir_root}/bin/codex-exec"
+  install -Dm755 "$_bin/codex-linux-sandbox" "${_pkgdir_root}/bin/codex-linux-sandbox"
+  for _b in codex codex-exec codex-linux-sandbox; do
+    ln -s "../lib/codex/bin/${_b}" "${pkgdir}/usr/bin/${_b}"
+  done
+
+  # 上游根目錄的授權檔（檔名哪天換掉也不該把整個包判紅）
+  local _lic
+  for _lic in LICENSE LICENSE.md; do
+    [ -f "$_src/$_lic" ] && install -Dm644 "$_src/$_lic" "${pkgdir}/usr/share/licenses/${pkgname}/$_lic"
+  done
 }

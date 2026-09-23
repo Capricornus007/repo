@@ -433,6 +433,28 @@ jobs:
               # "cannot find the gif_lib.h header"）。补进 makedepends。
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
               sed -i "s/^makedepends=('git')/makedepends=('git' 'giflib')/" pkg_dir/PKGBUILD ;;
+            fd-git)
+              # AUR 那份沒有 build()，package() 直接 cargo install 打預設 features，
+              # 而 fd 的 default = ["use-jemalloc", "completions"]。容器用 ld.lld
+              # 連結時 jemalloc 的符號進不去 → 「ld.lld: error: undefined symbol:
+              # _rjem_malloc / _rjem_calloc …」→ package() 紅（2026-09-24 run #225
+              # 實測 job 107254085568）。Arch 官方 fd 走 cargo build --release
+              # --locked --offline 沒踩到。對策：關掉 use-jemalloc 改用系統分配器，
+              # completions 要留（下面 make completions 依賴 clap_complete）。
+              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
+              sed -i "s|--path .|--path . --no-default-features --features completions|" pkg_dir/PKGBUILD
+              grep -n -A6 'cargo install' pkg_dir/PKGBUILD | head -9 ;;
+            fontforge-git)
+              # 上游 CMakeLists 硬性 pkg_check_modules(GLibMM REQUIRED glibmm-2.4)，
+              # 但 AUR 那份 makedepends 只有 git/cmake/ninja → 容器沒 glibmm，
+              # configure 直接「The following required packages were not found:
+              # glibmm-2.4」（2026-09-24 run #225 實測 job 107254085583）。
+              # 注意只有 glibmm（2.66.x 線）提供 glibmm-2.4.pc，glibmm-2.68 給的是
+              # 2.68.pc，補錯模組照樣紅。Arch/Artix 的 fontforge 本身也是靠
+              # gtkmm3→glibmm 間接拿到它，所以列進 depends 而不是 makedepends。
+              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
+              printf "%s\n" "depends+=('glibmm')" >> pkg_dir/PKGBUILD
+              tail -3 pkg_dir/PKGBUILD ;;
             *)
               # AUR 包或本仓库维护的 -git 包：
               # sway/wlroots/waybar/i3status 家族：-git 取 AUR、穩定版取 Arch
@@ -1706,6 +1728,14 @@ jobs:
             # nightly deb 天天换，PKGBUILD 里写死的 sha256 必然失配；源是
             # Element 官方 HTTPS 仓库，跳过校验和不损失信任（用户指示：
             # sums 能跳过就跳过）
+            flags="$flags --skipchecksums"
+          elif [ "${{ matrix.kind }}" = 'aur' ]; then
+            # AUR 的輔助檔 sha256 是維護者手寫、會過時：pi-coding-agent-git 的
+            # pi-wrapper 聲明 3667009d…，AUR 倉裡實際檔案是 13a511a7…（實測
+            # 2026-09-24 run #225 job 107254085839「One or more files did not pass
+            # the validity check!」）。來源本身就是 AUR 的 HTTPS git 倉，跳過校驗和
+            # 不另增信任面；PGP 校驗與 makepkg 其他完整性檢查照舊。
+            # （用戶 2026-09-24 指示：sums 能跳過就跳過。）
             flags="$flags --skipchecksums"
           elif [ "${PGP_OK:-1}" != "1" ]; then
             echo "::warning::有公钥没导入成功，本次跳过 PGP 校验（校验和仍然检查）"
