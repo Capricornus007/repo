@@ -13,7 +13,11 @@ on:
     branches:
       - master
   schedule:
-    - cron: '0 * * * *'
+    # 每 90 分鐘一次（原本整點一次）。openai-codex-git 單包 release 編譯要 60 分鐘以上，
+    # 每小時排程等於它一輪跑完馬上又排下一輪，整條矩陣被它拖著連轉。
+    # 兩條湊成 90 分鐘間隔：00:00/03:00/… 加 01:30/04:30/…，跨日也是 90 分鐘。
+    - cron: '0 0-23/3 * * *'
+    - cron: '30 1-23/3 * * *'
   workflow_dispatch:
 
 concurrency:
@@ -103,5 +107,39 @@ jobs:
           {"key": "rofi-bluetooth-git", "repo_name": "rofi-bluetooth-git", "variant": "none", "kind": "aur"},
           {"key": "topgrade-git", "repo_name": "topgrade-git", "variant": "none", "kind": "aur"},
           {"key": "linutil-git", "repo_name": "linutil-git", "variant": "none", "kind": "aur"},
-          {"key": "kbreakout-git", "repo_name": "kbreakout-git", "variant": "none", "kind": "kde"}
+          {"key": "kbreakout-git", "repo_name": "kbreakout-git", "variant": "none", "kind": "kde"},
+          {"key": "aom-git", "repo_name": "aom-git", "variant": "none", "kind": "aur"},
+          {"key": "brotli-git", "repo_name": "brotli-git", "variant": "none", "kind": "aur"},
+          {"key": "calibre-git", "repo_name": "calibre-git", "variant": "none", "kind": "aur"},
+          {"key": "espeak-ng-git", "repo_name": "espeak-ng-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-skin-ori-git", "repo_name": "fcitx5-skin-ori-git", "variant": "none", "kind": "aur"},
+          {"key": "fd-git", "repo_name": "fd-git", "variant": "none", "kind": "aur"},
+          {"key": "fontforge-git", "repo_name": "fontforge-git", "variant": "none", "kind": "aur"},
+          {"key": "fzf-git", "repo_name": "fzf-git", "variant": "none", "kind": "aur"},
+          {"key": "iwd-nosystemd-git", "repo_name": "iwd-nosystemd-git", "variant": "none", "kind": "aur"},
+          {"key": "kvantum-qt4-git", "repo_name": "kvantum-qt4-git", "variant": "none", "kind": "aur"},
+          {"key": "libgnome-keyring", "repo_name": "libgnome-keyring", "variant": "none", "kind": "aur"},
+          {"key": "libheif-git", "repo_name": "libheif-git", "variant": "none", "kind": "aur"},
+          {"key": "libqalculate-git", "repo_name": "libqalculate-git", "variant": "none", "kind": "aur"},
+          {"key": "libsixel-git", "repo_name": "libsixel-git", "variant": "none", "kind": "aur"},
+          {"key": "mpeghdec-git", "repo_name": "mpeghdec-git", "variant": "none", "kind": "aur"},
+          {"key": "multitail", "repo_name": "multitail", "variant": "none", "kind": "aur"},
+          {"key": "nano-syntax-highlighting-git", "repo_name": "nano-syntax-highlighting-git", "variant": "none", "kind": "aur"},
+          {"key": "pi-coding-agent-git", "repo_name": "pi-coding-agent-git", "variant": "none", "kind": "aur"},
+          {"key": "ps_mem", "repo_name": "ps_mem", "variant": "none", "kind": "aur"},
+          {"key": "psautohint", "repo_name": "psautohint", "variant": "none", "kind": "aur"},
+          {"key": "python-pythondialog", "repo_name": "python-pythondialog", "variant": "none", "kind": "aur"},
+          {"key": "quirc-git", "repo_name": "quirc-git", "variant": "none", "kind": "aur"},
+          {"key": "rust-bindgen-git", "repo_name": "rust-bindgen-git", "variant": "none", "kind": "aur"},
+          {"key": "scenefx0.5", "repo_name": "scenefx0.5", "variant": "none", "kind": "aur"},
+          {"key": "smem", "repo_name": "smem", "variant": "none", "kind": "aur"},
+          {"key": "starship-git", "repo_name": "starship-git", "variant": "none", "kind": "aur"},
+          {"key": "sutils-git", "repo_name": "sutils-git", "variant": "none", "kind": "aur"},
+          {"key": "svt-jpeg-xs-git", "repo_name": "svt-jpeg-xs-git", "variant": "none", "kind": "aur"},
+          {"key": "tty-solitaire-git", "repo_name": "tty-solitaire-git", "variant": "none", "kind": "aur"},
+          {"key": "uchardet-git", "repo_name": "uchardet-git", "variant": "none", "kind": "aur"},
+          {"key": "warp-plus", "repo_name": "warp-plus", "variant": "none", "kind": "aur"},
+          {"key": "xdg-desktop-portal-gtk-git", "repo_name": "xdg-desktop-portal-gtk-git", "variant": "none", "kind": "aur"},
+          {"key": "yelp-git", "repo_name": "yelp-git", "variant": "none", "kind": "aur"},
+          {"key": "zstd-git", "repo_name": "zstd-git", "variant": "none", "kind": "aur"}
         ]

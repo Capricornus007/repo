@@ -441,7 +441,11 @@ jobs:
               # 「clone 本倉自己維護的倉」分支，而那几个倉不存在 → git 索要
               # 憑證 → CI 無 TTY 直接 exit 128（2026-09-17 實測三個 job 同因
               # 紅）。改成只比對家族前綴，家族再加新包不必動這裡。
-              if printf '%s' "${{ matrix.repo_name }}" | grep -qE -- '-git$'; then
+              if printf '%s' "${{ matrix.repo_name }}" | grep -qE -- '-git$' \
+                 || [ "${{ matrix.kind }}" = 'aur' ]; then
+                # kind: aur 一律直接取 AUR，不看後綴：AUR 上大量包是不帶 -git 的
+                # 靜態版本包（smem、multitail、warp-plus…），原本會掉到最後的
+                # 「clone 本倉同名倉」分支，而那類倉不存在 → git 索要憑證 → exit 128。
                 git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
               elif echo "${{ matrix.repo_name }}" | grep -qE '^(sway|wlroots|waybar|i3status)'; then
                 # 官方穩定版包（無 -git 後綴）：從 Arch 官方 GitLab 取 PKGBUILD
@@ -1065,12 +1069,18 @@ jobs:
                   || skip "KDE 依賴 $d 尚未發布到 junlin03-aur，本轮跳过等下轮"
               done
               else
-              # 通用 AUR -git 包（sway/wlroots/waybar 等）：忠實複現 makepkg 的
-              # pkgver()——整份 source ./PKGBUILD（bash -c 起乾淨子殼，避免本步
-              # set -u 撞上 PKGBUILD 頂層未綁定變數）、按 source URL blobless 克隆
-              # （保留 commits/tags 給 rev-list/describe）、跑 PKGBUILD 自己的
-              # pkgver()。與 kde 分支同款算法。
+              # 通用分支，兩種形態都要支援：
+              #  (a) VCS 包（-git/-svn/-hg）：有 pkgver()，目標版本必須由上游 HEAD 算出；
+              #  (b) 靜態版本包（smem、multitail、warp-plus、python-pythondialog…）：
+              #      沒有 pkgver()，PKGBUILD 裡寫的 pkgver 就是目標版本，AUR 一改版自然不同。
+              # 以前這裡無條件跑 pkgver()，(b) 會因查不到該函式被 skip，於是「一行
+              # kind: aur」對非 -git 包永遠綠燈卻永遠不產出（2026-09-23 查明）。
               rm -rf /tmp/generic-ver; mkdir -p /tmp/generic-ver; cp PKGBUILD /tmp/generic-ver/
+              has_pkgver=$(bash -c '
+                cd /tmp/generic-ver || exit 1
+                source ./PKGBUILD >/dev/null 2>&1
+                type -t pkgver 2>/dev/null || true')
+              if [ "$has_pkgver" = function ]; then
               TARGET_PKGVER=$(bash -c '
                 cd /tmp/generic-ver || exit 1
                 source ./PKGBUILD >/dev/null 2>&1
@@ -1078,9 +1088,32 @@ jobs:
                       | sed -E "s/^[^:]*:://; s/^git\+//; s/#[^:]*$//" \
                       | grep -E "^https?://" | head -n1)
                 [ -n "$url" ] || exit 1
-                git clone --quiet --filter=blob:none "$url" "${pkgname%-git}" || exit 1
+                rm -rf src; mkdir -p src
+                git clone --quiet --filter=blob:none "$url" src/repo || exit 1
+                # pkgver() 裡 cd 的目錄名有三種寫法，只認一種就會「掛了卻永遠不出包」：
+                #   cd fd                —— 相對 CWD，名字是 ${pkgname%-git}
+                #   cd "$_pkgname"       —— AUR 自訂變數，常與 pkgname 不同
+                #                             （iwd-nosystemd-git 的 _pkgname=iwd）
+                #   cd "$srcdir/$_gitname" —— 探測子殼本來就沒有 srcdir（kvantum-qt4-git）
+                # 一次克隆、把各種可能名字都軟鏈過去，並把 srcdir 補上。
+                export srcdir="$PWD/src"
+                for d in "${pkgname}" "${pkgname%-git}" "${_pkgname:-}" "${_gitname:-}" \
+                         "${_base:-}" "${_gitrepo:-}" "${pkgbase:-}"; do
+                  [ -n "$d" ] || continue
+                  ln -sfn repo "src/$d"
+                done
+                cd src || exit 1
                 pkgver
               ') || skip "跑 $PKG 的 pkgver() 失敗"
+              else
+              TARGET_PKGVER=$(bash -c '
+                cd /tmp/generic-ver || exit 1
+                source ./PKGBUILD >/dev/null 2>&1
+                printf "%s" "${pkgver:-}"')
+              [ -n "$TARGET_PKGVER" ] \
+                || skip "$PKG 的 PKGBUILD 既沒有 pkgver() 也沒有靜態 pkgver"
+              echo "靜態版本包（無 pkgver()）：直接採用 PKGBUILD 的 pkgver=$TARGET_PKGVER"
+              fi
               case "$TARGET_PKGVER" in
                 *[!0-9A-Za-z._+-]*|"") skip "拿不到 $PKG 上游版本（=$TARGET_PKGVER）" ;;
               esac
@@ -1849,6 +1882,48 @@ jobs:
           fi
 
           # repo-add 会为数据库留下 *.old 本地备份；它们不应成为仓库入口或 Release 资产。
+          # 注意：下面的 repo-remove 也会再生成 *.old，所以清理必须放在整段最后。
+
+          # 幽灵条目自我修复：从矩阵移除某个包时若只删了资产、没摘 DB 条目，pacman 仍会
+          # 把它列成「可装」，客户端一抓就是 404 并让整个升级事务中止。2026-09-23 实测：
+          # 3bee1e8 把 bspwm-git/sxhkd-git 移出矩阵后，库里就留下两条指向已消失资产的条目，
+          # 一直挂到今天。判据：DB 的 %FILENAME% 既不在本轮待上传的产物里、也不在 Release
+          # 现有资产里 → 从库里摘掉（下一轮它会因「不在库中」被正常重建，若有挂进矩阵）。
+          # 资产清单走 REST 分页而非 gh release view 的 GraphQL 视图：后者在资产数破百时
+          # 会漏看，漏看就会把「其实还在」的条目误判成幽灵删掉。
+          release_id=$(gh api "repos/${{ github.repository }}/releases/tags/$REPO_RELEASE_TAG" \
+                       --jq .id 2>/dev/null | tail -1 || true)
+          all_assets=()
+          if [ -n "$release_id" ]; then
+            mapfile -t all_assets < <(
+              gh api --paginate \
+                "repos/${{ github.repository }}/releases/$release_id/assets?per_page=100" \
+                --jq '.[].name' 2>/dev/null || true)
+          fi
+          if [ "${#all_assets[@]}" -gt 0 ]; then
+            declare -A have_asset=()
+            for a in "${all_assets[@]}"; do have_asset["$a"]=1; done
+            for f in ./*.pkg.tar.zst; do
+              [ -e "$f" ] || continue
+              have_asset["${f##*/}"]=1
+            done
+            ghost=0
+            while IFS= read -r d; do
+              [ -n "$d" ] || continue
+              desc=$(tar -xzOf junlin03-aur.db.tar.gz "$d/desc" 2>/dev/null || true)
+              gname=$(printf '%s\n' "$desc" | awk '/^%NAME%$/{getline; print; exit}')
+              gfile=$(printf '%s\n' "$desc" | awk '/^%FILENAME%$/{getline; print; exit}')
+              [ -n "$gname" ] && [ -n "$gfile" ] || continue
+              # 库里存的是 makepkg 的原始名（epoch 包带冒号），资产名已把冒号换成点号
+              [ -n "${have_asset[${gfile//:/.}]+x}" ] && continue
+              echo "::warning::DB 条目 $gname 指向的 $gfile 已不存在，从库里摘除"
+              repo-remove junlin03-aur.db.tar.gz "$gname" >/dev/null 2>&1 || true
+              ghost=$((ghost + 1))
+            done < <(tar -tzf junlin03-aur.db.tar.gz | awk -F/ 'NF>=2 && $2=="desc" {print $1}' | sort -u)
+            echo "幽灵条目摘除数: $ghost"
+          else
+            echo "::warning::取不到 Release 资产清单，本轮跳过幽灵条目检查"
+          fi
           rm -f junlin03-aur.db.tar.gz.old junlin03-aur.files.tar.gz.old
           ls -lh
 
@@ -1890,8 +1965,17 @@ jobs:
             keep["${f//:/.}"]=1
           done
 
+          # 资产清单统一走 REST 分页：gh release view 的 GraphQL 视图在资产数破百时会截断，
+          # 截断会让下面的寬限期逻辑挑错保留对象、也会让比对口径不稳定。
+          release_id=$(gh api "repos/$GH_REPO/releases/tags/$REPO_RELEASE_TAG" \
+                       --jq .id 2>/dev/null | tail -1 || true)
+          if [ -z "$release_id" ]; then
+            echo "::error::取不到 $REPO_RELEASE_TAG 的 release id，为安全起见不清理"
+            exit 1
+          fi
           mapfile -t release_assets < <(
-            gh release view "$REPO_RELEASE_TAG" --repo "$GH_REPO" --json assets --jq '.assets[].name')
+            gh api --paginate "repos/$GH_REPO/releases/$release_id/assets?per_page=100" \
+              --jq '.[].name')
 
           # 寬限期：客戶端（yay/pacman）可能在我们換代的中間就同步了 DB，等它來下載時
           # 舊資產已被刪掉 → 404 → 整個升級事務中止（2026-09-23 用戶機實測：codex-desktop-git、
@@ -1901,8 +1985,8 @@ jobs:
           mapfile -t db_pkgbases < <(
             tar -tzf deploy/junlin03-aur.db.tar.gz | awk -F/ 'NF>=2 && $2=="desc" {print $1}' | sort -u)
           mapfile -t asset_rows < <(
-            gh release view "$REPO_RELEASE_TAG" --repo "$GH_REPO" --json assets \
-              --jq '.assets[] | select(.name | endswith(".pkg.tar.zst")) | "\(.createdAt)\t\(.name)"' | sort -r)
+            gh api --paginate "repos/$GH_REPO/releases/$release_id/assets?per_page=100" \
+              --jq '.[] | select(.name | endswith(".pkg.tar.zst")) | "\(.created_at)\t\(.name)"' | sort -r)
 
           # rc/正式版互保：當 DB 條目是 -rc 檔（RC 版本號更高而換掉了正式版條目），
           # 同家族最新的一份「非 -rc」資產額外保留，便於回退安裝；
