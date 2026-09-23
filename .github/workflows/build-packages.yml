@@ -946,10 +946,12 @@ jobs:
             qoder-gui-bin)
               # Qoder **桌面端**（agent workbench）國際版：官方
               # https://download.qoder.com/qoder-app/releases/latest/manifest.json，
-              # version 給版本、artifacts[id=linux-rpm-x64] 給校驗和與 URL（2026-09-19
-              # 實測 manifest 的 sha256 與該 RPM 實算逐字吻合）。
-              # manifest 裡寫的 URL 網域是 download.qoder.com.cn，與 .com 兩邊都回 200
-              # 且內容相同，PKGBUILD 用 .com；哪天一邊掛了可互換。
+              # version 給版本、artifacts[id=linux-rpm-x64] 給校驗和與 URL。
+              # manifest 裡寫的 URL 網域是 download.qoder.com.cn，但 2026-09-23
+              # 實測 .com.cn 會回 404 或穿不完整的檔案（sha256 不符 manifest），
+              # 國際版 RPMs 只穩定回應在 download.qoder.com（.com）。所以 PKGBUILD
+              # 的 source_x86_64 必用 **.com**，這裡在 check_url_template 前把
+              # manifest 的 .com.cn 正規化為 .com 再比對（避免因網域不一致誤判）。
               # linux 產物只有 x64 的 deb/rpm 兩項（arm64 只在 mac 那側），故只發 x86_64。
               # 與 CN 版（qoder-gui-cn，static.qoder.com.cn）同類資料但端點、檔名、
               # 佈局全不同（國際版目錄無空格 /opt/Qoder，CN 是「Qoder CN」要改名），
@@ -965,7 +967,11 @@ jobs:
                 || skip "Qoder 桌面端 manifest 裡沒有 linux-rpm-x64 的 sha256"
               printf '%s' "$_qapp_url" | grep -q '^https://' \
                 || skip "Qoder 桌面端 manifest 裡沒有 linux-rpm-x64 的 url"
-              check_url_template source_x86_64 "$_qapp_url"
+              # manifest 的 url 用 .com.cn，PKGBUILD source 用 .com（.com.cn 實測
+              # 回 404/穿檔），差在網域這幾個字元上——check_url_template 逐字比對會誤判
+              #「模板與官方清單不符」，所以事先把 manifest URL 的 .com.cn 换成 .com。
+              _qapp_url_norm="${_qapp_url//download.qoder.com.cn/download.qoder.com}"
+              check_url_template source_x86_64 "$_qapp_url_norm"
               echo "sha_x86=$_qapp_sha" >> "$GITHUB_OUTPUT"
               ;;
 
