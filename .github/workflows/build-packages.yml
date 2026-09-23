@@ -1084,17 +1084,35 @@ jobs:
               TARGET_PKGVER=$(bash -c '
                 cd /tmp/generic-ver || exit 1
                 source ./PKGBUILD >/dev/null 2>&1
-                url=$(for s in "${source[@]}"; do printf "%s\n" "$s"; done \
-                      | sed -E "s/^[^:]*:://; s/^git\+//; s/#[^:]*$//" \
-                      | grep -E "^https?://" | head -n1)
+                # 取第一個 git+ 來源，並還原它在 makepkg 眼裡的樣子：去掉「名字::」前綴、
+                # 去掉 git+ 協定、剋掉 AUR 專用的 ?signed= 後綴，並把 #branch= / #tag= /
+                # #commit= 片段拆出來照用。i3-git 的來源是
+                #   git+https://github.com/i3/i3#branch=next
+                # 忽略片段會克隆到 master，探測算出的版本與 makepkg 實際產出的永不相同，
+                # 「已在 release 裡」的比對恆不命中 → 每輪白編一次。
+                entry=$(for s in "${source[@]}"; do printf "%s\n" "$s"; done \
+                        | sed -E "s/^[^:]*:://" | grep -E "^git\+" | head -n1)
+                [ -n "$entry" ] || exit 1
+                frag=$(printf "%s" "$entry" | sed -nE "s/.*#//p")
+                url=$(printf "%s" "${entry#git+}" | sed -E "s/[?&]signed=[^&#]*//g; s/#.*$//")
                 [ -n "$url" ] || exit 1
                 rm -rf src; mkdir -p src
-                git clone --quiet --filter=blob:none "$url" src/repo || exit 1
-                # pkgver() 裡 cd 的目錄名有三種寫法，只認一種就會「掛了卻永遠不出包」：
-                #   cd fd                —— 相對 CWD，名字是 ${pkgname%-git}
-                #   cd "$_pkgname"       —— AUR 自訂變數，常與 pkgname 不同
-                #                             （iwd-nosystemd-git 的 _pkgname=iwd）
-                #   cd "$srcdir/$_gitname" —— 探測子殼本來就沒有 srcdir（kvantum-qt4-git）
+                case "$frag" in
+                  branch=*) git clone --quiet --filter=blob:none --branch "${frag#branch=}" "$url" src/repo ;;
+                  tag=*)    git clone --quiet --filter=blob:none --branch "${frag#tag=}" "$url" src/repo ;;
+                  commit=*) git clone --quiet --filter=blob:none "$url" src/repo \
+                              && git -C src/repo checkout --quiet --detach "${frag#commit=}" ;;
+                  *)        git clone --quiet --filter=blob:none "$url" src/repo ;;
+                esac
+                [ -d src/repo/.git ] || exit 1
+                # pkgver() 裡 cd 的目錄名有四種寫法，只認一種就會「掛了卻永遠不出包」
+                # （2026-09-23 實測 i3-git/i3status-git/brightnessctl-git/wl-clipboard-git
+                #  每輪都是「跳过构建：拿不到上游版本（=）」）：
+                #   cd "$pkgname"           —— brightnessctl-git
+                #   cd ${pkgname%-git}      —— 相對 CWD，CI 原本的假設
+                #   cd "$_pkgname"          —— AUR 自訂變數（iwd-nosystemd-git 的是 iwd）
+                #   cd "$srcdir/$_gitname"  —— i3-git、i3status-git、wl-clipboard-git；
+                #                              探測子殼本來就沒有 srcdir
                 # 一次克隆、把各種可能名字都軟鏈過去，並把 srcdir 補上。
                 export srcdir="$PWD/src"
                 for d in "${pkgname}" "${pkgname%-git}" "${_pkgname:-}" "${_gitname:-}" \
