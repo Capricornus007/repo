@@ -1,0 +1,36 @@
+pkgname=kew-git
+pkgver=v4.3.6.432d1ae0
+pkgrel=2
+pkgdesc="A command-line music player"
+arch=('x86_64')
+url="https://codeberg.org/ravachol/kew"
+license=('GPL2')
+conflicts=('kew')
+depends=('fftw' 'faad' 'git' 'chafa' 'taglib' 'libogg' 'gcc' 'make' 'glib2' 'opus' 'opusfile' 'libvorbis' 'curl')
+replaces=('cue-git')
+sha256sums=('SKIP')
+
+source=("git+${url}")
+
+pkgver() {
+    cd "$srcdir/kew"
+    local tag=$(git for-each-ref --sort=-version:refname --count=1 \
+        --format='%(refname:strip=2)' refs/tags)
+    local commit_hash=$(git rev-parse --short HEAD)
+    echo "${tag}.${commit_hash}" | sed 's/[:\/\-]//g'
+}
+
+build() {
+    cd "$srcdir/kew"
+    make PREFIX=/usr KEW_DATADIR=/usr/share LOCALEDIR=/usr/share/locale
+}
+
+package() {
+    cd "$srcdir/kew"
+    make PREFIX=/usr KEW_DATADIR=/usr/share LOCALEDIR=/usr/share/locale \
+        DESTDIR="$pkgdir" install
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/${pkgname}/LICENSE"
+
+    [[ -s "$pkgdir/usr/share/kew/layouts/current.layout" ]]
+    [[ -s "$pkgdir/usr/share/kew/themes/default.theme" ]]
+}

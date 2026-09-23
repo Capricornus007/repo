@@ -202,7 +202,7 @@ jobs:
       - name: 拉取对应的套件仓库
         run: |
           set -euo pipefail
-          # ffmpeg-full-git / kew-git 直接取 AUR 的 PKGBUILD；
+          # ffmpeg-full-git 直接取 AUR 的 PKGBUILD；kew-git 使用本倉庫版本；
           # oh-my-pi-git 改走 in-tree（本仓库 oh-my-pi-git/ 目录）：AUR 那份照上游
           #   compile-binary.ts 里新加的 `bytecode: true` 编译，而本仓库的非 frozen
           #   `bun install` 会把 yargs（内含 import.meta.resolve）打进 bundle，
@@ -214,8 +214,12 @@ jobs:
           # pysolfc-git / protonvpn-cli-community-git 同理只取各自目录下的 PKGBUILD
           # （protonvpn 的上游 url 改成了 jonasjancarik 的续命 fork，不能取 AUR 版）
           case "${{ matrix.repo_name }}" in
-            ffmpeg-full-git|kew-git)
+            ffmpeg-full-git)
               git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
+            kew-git)
+              mkdir pkg_dir
+              curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/kew-git/PKGBUILD" \
+                -o pkg_dir/PKGBUILD ;;
             oh-my-pi-git)
               # 只要 PKGBUILD 一个文件（无 install hook）；pkgver 仍由 PKGBUILD 的
               # pkgver() 在构建时从上游 HEAD 算出，CI 不回推本仓库这份
@@ -659,10 +663,14 @@ jobs:
               KEW_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "$url"')
               rm -rf /tmp/kew-src
               git clone "$KEW_URL" /tmp/kew-src || skip "clone kew 上游失败"
-              kew_tag=$(git -C /tmp/kew-src tag | sort | tail -n1)
+              kew_tag=$(git -C /tmp/kew-src for-each-ref --sort=-version:refname --count=1 \
+                --format='%(refname:strip=2)' refs/tags)
               kew_hash=$(git -C /tmp/kew-src rev-parse --short HEAD)
               [ -n "$kew_hash" ] || skip "拿不到 kew 上游 HEAD"
               TARGET_PKGVER=$(printf '%s.%s' "$kew_tag" "$kew_hash" | sed 's/[:\/\-]//g')
+              if [ "$TARGET_PKGVER" != "$CUR_PKGVER" ]; then
+                TARGET_PKGREL=1
+              fi
               ;;
 
             mpv-git|oh-my-pi-git|pysolfc-git)
