@@ -446,7 +446,14 @@ jobs:
                 # kind: aur 一律直接取 AUR，不看後綴：AUR 上大量包是不帶 -git 的
                 # 靜態版本包（smem、multitail、warp-plus…），原本會掉到最後的
                 # 「clone 本倉同名倉」分支，而那類倉不存在 → git 索要憑證 → exit 128。
-                git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
+                # AUR 的 git 倉是以 **pkgbase** 命名的，而 pkgbase 未必等於 pkgname：
+                #   autocorrect-git   的 pkgbase 是 autocorrect-rs-git
+                #   python-brotli-git 的 pkgbase 是 brotli-git（分包）
+                # 這類包用包名去 clone 會 404，所以矩陣可帶可選的 "pkgbase" 欄位覆寫；
+                # 沒帶就沿用 repo_name（與既有條目行為完全相同）。
+                _aur_base="${{ matrix.pkgbase }}"
+                [ -n "$_aur_base" ] || _aur_base="${{ matrix.repo_name }}"
+                git clone "https://aur.archlinux.org/${_aur_base}.git" pkg_dir
               elif echo "${{ matrix.repo_name }}" | grep -qE '^(sway|wlroots|waybar|i3status)'; then
                 # 官方穩定版包（無 -git 後綴）：從 Arch 官方 GitLab 取 PKGBUILD
                 mkdir pkg_dir
