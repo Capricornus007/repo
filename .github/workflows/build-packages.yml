@@ -1892,6 +1892,17 @@ jobs:
           mapfile -t release_assets < <(
             gh release view "$REPO_RELEASE_TAG" --repo "$GH_REPO" --json assets --jq '.assets[].name')
 
+          # 寬限期：客戶端（yay/pacman）可能在我们換代的中間就同步了 DB，等它來下載時
+          # 舊資產已被刪掉 → 404 → 整個升級事務中止（2026-09-23 用戶機實測：codex-desktop-git、
+          # mesa-tkg-git、lib32-mesa-tkg-git、oh-my-pi-git 四個同時 404）。
+          # 所以每個 pkgbase 額外保留「最新的一份已被取代的」資產，其餘照舊清掉；
+          # pkgbase 用 DB 裡的目錄名（比從檔名硬拆可靠，包名本身可能含連字號）。
+          mapfile -t db_pkgbases < <(
+            tar -tzf deploy/junlin03-aur.db.tar.gz | awk -F/ 'NF>=2 && $2=="desc" {print $1}' | sort -u)
+          mapfile -t asset_rows < <(
+            gh release view "$REPO_RELEASE_TAG" --repo "$GH_REPO" --json assets \
+              --jq '.assets[] | select(.name | endswith(".pkg.tar.zst")) | "\(.createdAt)\t\(.name)"' | sort -r)
+
           # rc/正式版互保：當 DB 條目是 -rc 檔（RC 版本號更高而換掉了正式版條目），
           # 同家族最新的一份「非 -rc」資產額外保留，便於回退安裝；
           # 反向（DB 已是正式版）不保護 -rc 檔——正式版已涵蓋它，正常清理。
@@ -1922,9 +1933,22 @@ jobs:
             done
           fi
 
-          for asset in "${release_assets[@]}"; do
+          declare -A kept_prev=()
+          for row in ${asset_rows[@]+"${asset_rows[@]}"}; do
+            asset=${row#*$'\t'}
             [[ "$asset" == *.pkg.tar.zst ]] || continue
             [ -n "${keep[$asset]+x}" ] && continue
+            base=""
+            for b in ${db_pkgbases[@]+"${db_pkgbases[@]}"}; do
+              case "$asset" in
+                "$b"-*) [ "${#b}" -gt "${#base}" ] && base="$b" ;;
+              esac
+            done
+            if [ -n "$base" ] && [ -z "${kept_prev[$base]+x}" ]; then
+              kept_prev[$base]=1
+              echo "寬限期保留上一版資產（給中途同步過 DB 的客戶端）: $asset"
+              continue
+            fi
             echo "删除数据库已不引用的资产: $asset"
             gh release delete-asset "$REPO_RELEASE_TAG" "$asset" --repo "$GH_REPO" --yes
           done
