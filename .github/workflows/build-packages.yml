@@ -1754,7 +1754,7 @@ jobs:
           until su builder -c "makepkg $flags" 2>&1 | tee /tmp/makepkg.log; do
             _mp=$((_mp + 1))
             bad=$(grep -oE '^:: File [^ ]+ is corrupted' /tmp/makepkg.log | awk '{print $3}' | sort -u || true)
-            dl=$(grep -qE 'Failure while downloading|RPC failed|returned error: 50[0-9]|reset by server|HTTP/2 stream|curl: \([0-9]+\)' /tmp/makepkg.log && echo yes)
+            dl=$(grep -qE 'Failure while downloading|RPC failed|returned error: 50[0-9]|reset by server|HTTP/2 stream|curl: \([0-9]+\)|failed retrieving file|failed to commit transaction' /tmp/makepkg.log && echo yes)
             if [ -n "$bad" ]; then
               echo "删除损坏缓存包后重试：$bad"; rm -fv $bad
             elif [ -n "$dl" ]; then
