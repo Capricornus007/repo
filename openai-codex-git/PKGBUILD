@@ -230,8 +230,12 @@ package() {
 
   # 上游腳本只認「bin 目錄的上一層有 codex-package.json」，所以 /usr/bin 這三個
   # 一律做成符號連結；current_exe() 會解析連結，才認得出這是完整套件。
+  # 先建目錄：改用上游組裝腳本後，$pkgdir 裡除了 /usr/lib/codex 就只剩 licenses，
+  # 沒有任何步驟會順手造出 /usr/bin，ln 直接「No such file or directory」（run
+  # 35968328540 實測：package() 已印出 Built Codex package directory 才死在這裡）。
   install -Dm755 "$_bin/codex-exec" "${_pkgdir_root}/bin/codex-exec"
   install -Dm755 "$_bin/codex-linux-sandbox" "${_pkgdir_root}/bin/codex-linux-sandbox"
+  install -d -m755 "${pkgdir}/usr/bin"
   for _b in codex codex-exec codex-linux-sandbox; do
     ln -s "../lib/codex/bin/${_b}" "${pkgdir}/usr/bin/${_b}"
   done
