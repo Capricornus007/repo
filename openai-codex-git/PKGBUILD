@@ -68,9 +68,12 @@ _upstream_toolchain() {
     "${srcdir}/${pkgname%-git}/codex-rs/rust-toolchain.toml"
 }
 
-# 純 semver（pkgver 是 0.156.1.r3546.g… 這種 AUR 形勢，取 tag 基底）。版號蓋入與
-# build_codex_package.py 的 --package-version 共用同一個來源，避免兩邊各算一次。
-_pkg_semver() { printf '%s' "${pkgver%%.r*}"; }
+# 給版號蓋入與 build_codex_package.py --package-version 共用的 semver。
+# pkgver 是 AUR 形勢的 0.156.1.r3546.g7dae8c53d9；semver 不允許 patch 後再掛點分段，
+# 所以把第一個 .r 換成 build metadata 的 +，得到 0.156.1+r3546.g7dae8c53d9 ——
+# commit 數與短 hash 全留，且 build metadata 不參與優先序比較（用 -r3546 會被
+# 當成比 0.156.1 更舊的前釋版）。剛好落在 tag 上時 pkgver 沒有 .r，原樣返回。
+_pkg_semver() { printf '%s' "${pkgver/.r/+}"; }
 
 prepare() {
   cd "${pkgname%-git}"
