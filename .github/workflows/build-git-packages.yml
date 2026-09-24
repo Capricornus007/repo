@@ -163,6 +163,5 @@ jobs:
           {"key": "ripgrep-git", "repo_name": "ripgrep-git", "variant": "none", "kind": "aur"},
           {"key": "taglib-git", "repo_name": "taglib-git", "variant": "none", "kind": "aur"},
           {"key": "trash-cli-git", "repo_name": "trash-cli-git", "variant": "none", "kind": "aur"},
-          {"key": "xapp-symbolic-icons-git", "repo_name": "xapp-symbolic-icons-git", "variant": "none", "kind": "aur"},
-          {"key": "xterm-git", "repo_name": "xterm-git", "variant": "none", "kind": "aur"}
+          {"key": "xapp-symbolic-icons-git", "repo_name": "xapp-symbolic-icons-git", "variant": "none", "kind": "aur"}
         ]
