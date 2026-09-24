@@ -187,6 +187,9 @@ package() {
   _host=$(RUSTUP_TOOLCHAIN="$_toolchain" rustc -vV 2>/dev/null | sed -n 's/^host: //p')
   [ -n "$_host" ] || _host="$(uname -m)-unknown-linux-gnu"
   cd "$_src"
+  # build_codex_package.py 要靠 CODEX_REPO_ROOT 找倉庫根（上游 justfile 就是
+  # export CODEX_REPO_ROOT := justfile_directory()）；沒這隻變量腳本直接 RuntimeError。
+  export CODEX_REPO_ROOT="$_src"
   python3 scripts/build_codex_package.py \
     --variant codex \
     --target "$_host" \
