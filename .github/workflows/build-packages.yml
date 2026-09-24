@@ -545,6 +545,11 @@ jobs:
               # `error: target not found: ruby-asciidoctor`；Arch 官方 git-lfs 的
               # makedepends 就是 ('go' 'ruby-ronn' 'go-tools' 'asciidoctor')）。
               printf "\n%s\n" "makedepends+=('asciidoctor')" >> pkg_dir/PKGBUILD
+              # 上游 `make man` 把 roff 頁產到 man/man1/ 與 man/man5/，AUR 的 package()
+              # 還在抓 man/*.1 與 man/*.5 → `install: cannot stat 'man/*.1'`（run #234
+              # 實測：asciidoctor 補對之後 man 頁有產出來，死在這條 glob 抓不到東西）。
+              sed -i 's|install -Dm644 "man"/\*\.1 |install -Dm644 "man/man1"/*.1 |; s|install -Dm644 "man"/\*\.5 |install -Dm644 "man/man5"/*.5 |' pkg_dir/PKGBUILD
+              grep -n 'share/man' pkg_dir/PKGBUILD | head -3
               tail -2 pkg_dir/PKGBUILD ;;
                         
             jadx-git)
