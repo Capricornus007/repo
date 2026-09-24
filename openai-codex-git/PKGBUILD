@@ -23,7 +23,7 @@
 
 pkgname=openai-codex-git
 pkgver=0.156.1.r3546.g7dae8c53d9
-pkgrel=1
+pkgrel=2
 pkgdesc="Lightweight coding agent that runs in your terminal"
 arch=('x86_64' 'aarch64')
 url="https://github.com/openai/codex"
@@ -69,11 +69,28 @@ _upstream_toolchain() {
 }
 
 # 給版號蓋入與 build_codex_package.py --package-version 共用的 semver。
-# pkgver 是 AUR 形勢的 0.156.1.r3546.g7dae8c53d9；semver 不允許 patch 後再掛點分段，
-# 所以把第一個 .r 換成 build metadata 的 +，得到 0.156.1+r3546.g7dae8c53d9 ——
-# commit 數與短 hash 全留，且 build metadata 不參與優先序比較（用 -r3546 會被
-# 當成比 0.156.1 更舊的前釋版）。剛好落在 tag 上時 pkgver 沒有 .r，原樣返回。
-_pkg_semver() { printf '%s' "${pkgver/.r/+}"; }
+#
+# 不能直接用 $pkgver：實測 run #240 日誌 —— plan 步驟 08:31:43 算出目標 r214、
+# 成品檔名也是 r214，但 08:32:44 的 prepare() 裡 $pkgver 仍是 PKGBUILD 寫死的
+# r3546（跑出來的二進制自報 0.156.1+3546.g7dae8c53d9，與套件名不一致）。也就是
+# makepkg 把 pkgver() 新值套上去的時機晚於 prepare()/build()。所以這裡自己呼叫
+# pkgver()：prepare() 時 source 已完整克隆、tags 在，算出的才是最終值。
+#
+# pkgver() 拿不到穩定 tag 時回退成 0.0.0.rN.gH（淺克隆無 tag 實測過），那種值是
+# 垃圾、不該蓋進 Cargo，故這種情況與呼叫失敗時退回 $pkgver。
+#
+# 形勢：AUR 的 0.156.1.r3546.g7dae8c53d9，semver 不允許 patch 後再掛點分段，所以
+# 把第一個 .r 換成 build metadata 的 + → 0.156.1+r3546.g7dae8c53d9；commit 數與短
+# hash 全留，且 build metadata 不參與優先序比較（用 -r3546 會被當成比 0.156.1 更
+# 舊的前釋版）。剛好落在 tag 上時沒有 .r，原樣返回。
+_pkg_semver() {
+  local v
+  v=$(cd "$srcdir" 2>/dev/null && pkgver 2>/dev/null) || v=""
+  case "$v" in
+    0.0.0.* | "") v="$pkgver" ;;
+  esac
+  printf '%s' "${v/.r/+}"
+}
 
 prepare() {
   cd "${pkgname%-git}"
