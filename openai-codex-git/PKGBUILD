@@ -243,9 +243,14 @@ package() {
     ln -s "../lib/codex/bin/${_b}" "${pkgdir}/usr/bin/${_b}"
   done
 
-  # 上游根目錄的授權檔（檔名哪天換掉也不該把整個包判紅）
+  # 上游根目錄的授權檔（檔名哪天換掉也不該把整個包判紅）。
+  # 必須寫成 if/then/fi：實測倉根只有 LICENSE、沒有 LICENSE.md，而
+  # `[ -f x ] && install …` 在條件假時整個 for 迴圈回傳 1，package() 是函式最後
+  # 一句的回傳值決定成敗 → 會像 ln 那次一樣判紅（本地實測回傳 1 確認）。
   local _lic
   for _lic in LICENSE LICENSE.md; do
-    [ -f "$_src/$_lic" ] && install -Dm644 "$_src/$_lic" "${pkgdir}/usr/share/licenses/${pkgname}/$_lic"
+    if [ -f "$_src/$_lic" ]; then
+      install -Dm644 "$_src/$_lic" "${pkgdir}/usr/share/licenses/${pkgname}/$_lic"
+    fi
   done
 }
