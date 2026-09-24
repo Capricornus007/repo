@@ -505,7 +505,7 @@ jobs:
               # 注意只有 glibmm（2.66.x 線）提供 glibmm-2.4.pc，glibmm-2.68 給的是
               # 2.68.pc，補錯模組照樣紅。Arch/Artix 的 fontforge 本身也是靠
               # gtkmm3→glibmm 間接拿到它，所以列進 depends 而不是 makedepends。
-              printf "%s\n" "depends+=('glibmm' 'gtkmm3')" >> pkg_dir/PKGBUILD
+              printf "\n%s\n" "depends+=('glibmm' 'gtkmm3')" >> pkg_dir/PKGBUILD
               tail -3 pkg_dir/PKGBUILD ;;
                         
             libaec-git)
@@ -524,7 +524,7 @@ jobs:
               # `BackendUnavailable: Cannot import 'hatchling.build'`（run #230）。
               # 補完 hatchling 後 run #232 又報「Unmet dependencies: hatch-vcs」——
               # 它的 pyproject 用了 [tool.hatch.build.hooks.vcs]，兩個一起補。
-              printf "%s\n" "makedepends+=('python-hatchling' 'python-hatch-vcs')" >> pkg_dir/PKGBUILD
+              printf "\n%s\n" "makedepends+=('python-hatchling' 'python-hatch-vcs')" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
                         
             mousepad-git)
@@ -535,13 +535,16 @@ jobs:
               # 'glib_genmarshal' contains erroneous value: /usr/bin/glib-genmarshal」——
               # Arch 已把 glib 的建置工具從 glib2 拆進 glib2-devel（實查 core 有
               # glib2-devel 2.88.3、pkgbase 仍是 glib2），容器只裝到 glib2 就找不到。
-              printf "%s\n" "makedepends+=('libxfce4ui' 'gtk3' 'glib2-devel')" >> pkg_dir/PKGBUILD
+              printf "\n%s\n" "makedepends+=('libxfce4ui' 'gtk3' 'glib2-devel')" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
                         
             git-lfs-git)
               # 上游改用 asciidoctor 產 man 頁，AUR 的 makedepends 還寫 ruby-ronn
               # → `make: asciidoctor: No such file or directory` 紅在 build()（run #230）。
-              printf "%s\n" "makedepends+=('ruby-asciidoctor')" >> pkg_dir/PKGBUILD
+              # 包名是 asciidoctor，不是 ruby-asciidoctor（run #232 實測補錯名會
+              # `error: target not found: ruby-asciidoctor`；Arch 官方 git-lfs 的
+              # makedepends 就是 ('go' 'ruby-ronn' 'go-tools' 'asciidoctor')）。
+              printf "\n%s\n" "makedepends+=('asciidoctor')" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
                         
             jadx-git)
@@ -549,7 +552,7 @@ jobs:
               # InstrumentationAnalysisTransform（run #230：「Could not isolate value
               # …MergeInstrumentationAnalysisTransform$Parameters_Decorated」），
               # 這是 Gradle 跟不上 JDK 的已知症狀。釘到 JDK 21 並让它作为 makedep 装上。
-              printf "%s\n" "makedepends+=('jdk21-openjdk')" "export JAVA_HOME=/usr/lib/jvm/java-21-openjdk" >> pkg_dir/PKGBUILD
+              printf "\n%s\n" "makedepends+=('jdk21-openjdk')" >> pkg_dir/PKGBUILD
               sed -i 's|^  ./gradlew dist --no-daemon|  export JAVA_HOME=/usr/lib/jvm/java-21-openjdk\n  ./gradlew dist --no-daemon|' pkg_dir/PKGBUILD
               grep -n -B1 'gradlew dist' pkg_dir/PKGBUILD | head -5 ;;
                         
