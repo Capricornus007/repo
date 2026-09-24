@@ -22,7 +22,7 @@
 # 套件目錄，/usr/bin 那三個只留符號連結。
 
 pkgname=openai-codex-git
-pkgver=0.156.1.r11244.g9f3b6d1
+pkgver=0.156.1.r3546.g7dae8c53d9
 pkgrel=1
 pkgdesc="Lightweight coding agent that runs in your terminal"
 arch=('x86_64' 'aarch64')
@@ -49,7 +49,10 @@ pkgver() {
   # 上游 tag 形如 rust-v0.156.1；工作區 Cargo.toml 的 version 是 0.0.0（只有 release
   # 流程會填），所以版號必須從 tag 取，不能用 read_workspace_version()。
   local _base _n _h
-  _base=$(git describe --tags --abbrev=0 --match 'rust-v*' 2>/dev/null | sed 's/^rust-v//')
+  # 只要穩定 tag：`git describe --abbrev=0` 會挑到 rust-v0.143.0-alpha.10 這種預釋版，
+  # 而 pkgver 不準含連字號（run #230 實測「pkgver is not allowed to contain … hyphens」，
+  # 生成的是 0.143.0-alpha.10.r3546.g…）。按版本序取最新無後綴的那個。
+  _base=$(git tag -l 'rust-v*' --sort=-v:refname | grep -E '^rust-v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 | sed 's/^rust-v//')
   _h=$(git rev-parse --short HEAD)
   [ -n "$_base" ] || { printf "0.0.0.r%s.g%s" "$(git rev-list --count HEAD)" "$_h"; return; }
   _n=$(git rev-list --count "rust-v${_base}..HEAD")
