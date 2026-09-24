@@ -399,100 +399,6 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            sway-git)
-              # AUR PKGBUILD 用 arch-meson … -D sd-bus-provider=libsystemd 且 sway
-              # 上游 meson.build 写死 werror=true：容器 libinput 一旦比 sway 支持的
-              # 新（多出枚举值），ipc-json.c 的 switch 触发 -Wswitch → 被 -Werror
-              # 抬成硬错误，build() 红（2026-09-18 实测 LIBINPUT_CONFIG_SCROLL_C*）。
-              # 加 -Dwerror=false 关掉把警告当错误（meson 命令行选项覆盖项目默认值）。
-              # Artix 无 systemd：swaybar 的「系统托盘」用 sd-bus，而 sd-bus 只有
-              # libsystemd 这个 provider 能在（Arch）构建容器里找到；libelogind/basu
-              # 容器里没有 → configure 直接 "Dependency libelogind not found"。
-              # 保留 systemd 依赖会让 swaybar NEEDED libsystemd.so.0 → Artix 装上报错。
-              # 折中：-Dtray=false 关掉 swaybar 托盘 → swaybar 不再链 sd-bus/libsystemd，
-              # Artix 直接能跑（状态栏/工作区/时钟都在，只是没系统托盘区；要托盘请用
-              # waybar，它走纯 dbus 不需要 systemd）。sway 本体走 wlroots 的 libseat/
-              # elogind，不受影响。
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              sed -i 's/-D sd-bus-provider=libsystemd/-D sd-bus-provider=libsystemd -Dwerror=false -Dtray=disabled/' pkg_dir/PKGBUILD
-              grep -n 'arch-meson' pkg_dir/PKGBUILD | head -3 ;;
-            waybar-git)
-              # AUR PKGBUILD 沒關 systemd，而 waybar 的 meson.build 是
-              # `libsystemd = dependency('libsystemd', required: get_option('systemd'))`：
-              # 容器（Arch）有 libsystemd → 產物 usr/bin/waybar NEEDED
-              # libsystemd.so.0；Artix/OpenRC 沒有這個 so → 裝上直接
-              # "error while loading shared libraries: libsystemd.so.0"
-              # （2026-09-18 實測 objdump 該包）。加 -Dsystemd=disabled 真正切走，
-              # 同時不再安裝 systemd user unit。
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              sed -i "/local _meson_args=(/a\\    -Dsystemd=disabled" pkg_dir/PKGBUILD
-              grep -n -A3 'local _meson_args=(' pkg_dir/PKGBUILD | head -6 ;;
-            i3lock-color-git)
-              # AUR 版 makedepends 只有 git，但 configure 默认开 --enable-image
-              # 要 gif_lib.h，容器没有 giflib → build() 红（2026-09-17 实测
-              # "cannot find the gif_lib.h header"）。补进 makedepends。
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              sed -i "s/^makedepends=('git')/makedepends=('git' 'giflib')/" pkg_dir/PKGBUILD ;;
-            fd-git)
-              # AUR 那份沒有 build()，package() 直接 cargo install 打預設 features，
-              # 而 fd 的 default = ["use-jemalloc", "completions"]。容器用 ld.lld
-              # 連結時 jemalloc 的符號進不去 → 「ld.lld: error: undefined symbol:
-              # _rjem_malloc / _rjem_calloc …」→ package() 紅（2026-09-24 run #225
-              # 實測 job 107254085568）。Arch 官方 fd 走 cargo build --release
-              # --locked --offline 沒踩到。對策：關掉 use-jemalloc 改用系統分配器，
-              # completions 要留（下面 make completions 依賴 clap_complete）。
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              sed -i "s|--path .|--path . --no-default-features --features completions|" pkg_dir/PKGBUILD
-              grep -n -A6 'cargo install' pkg_dir/PKGBUILD | head -9 ;;
-            fontforge-git)
-              # 上游 CMakeLists 硬性 pkg_check_modules(GLibMM REQUIRED glibmm-2.4)，
-              # 但 AUR 那份 makedepends 只有 git/cmake/ninja → 容器沒 glibmm，
-              # configure 直接「The following required packages were not found:
-              # glibmm-2.4」（2026-09-24 run #225 實測 job 107254085583）。
-              # 注意只有 glibmm（2.66.x 線）提供 glibmm-2.4.pc，glibmm-2.68 給的是
-              # 2.68.pc，補錯模組照樣紅。Arch/Artix 的 fontforge 本身也是靠
-              # gtkmm3→glibmm 間接拿到它，所以列進 depends 而不是 makedepends。
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              printf "%s\n" "depends+=('glibmm' 'gtkmm3')" >> pkg_dir/PKGBUILD
-              tail -3 pkg_dir/PKGBUILD ;;
-            libaec-git)
-              # AUR 的 package() 最後一行 `mv "$pkgdir"/usr/{,lib}/cmake` 假設 cmake 套件檔
-              # 落在 usr/cmake，但 CMake 在 Arch 上直接裝到 usr/lib/cmake（實測
-              # -- Installing: …/usr/lib/cmake/libaec/…），來源目錄不存在 → mv 報
-              # "cannot stat 'usr//cmake'" 紅在 package()（2026-09-24 run #230）。
-              # 改成「有才搬，沒有就跳過」，兩邊佈局都能過。
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              sed -i 's|  mv "$pkgdir"/usr/{,lib}/cmake|  [ -d "$pkgdir/usr/cmake" ] \&\& mv "$pkgdir"/usr/{,lib}/cmake|' pkg_dir/PKGBUILD
-              grep -n 'usr/cmake' pkg_dir/PKGBUILD | head -3 ;;
-            python-fontpens-git)
-              # 上游 build-backend 是 hatchling，AUR 的 makedepends 只列了
-              # python-{build,installer,wheel}，容器裡 import 不到 →
-              # `BackendUnavailable: Cannot import 'hatchling.build'`（run #230）。
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              printf "%s\n" "makedepends+=('python-hatchling')" >> pkg_dir/PKGBUILD
-              tail -2 pkg_dir/PKGBUILD ;;
-            mousepad-git)
-              # meson.build 要 dependency('libxfce4ui-2')，AUR 的 makedepends 只有
-              # xfce4-dev-tools/git/meson → 「Dependency "libxfce4ui-2" not found」
-              # （run #230）。.pc 由 libxfce4ui 提供。
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              printf "%s\n" "makedepends+=('libxfce4ui' 'gtk3')" >> pkg_dir/PKGBUILD
-              tail -2 pkg_dir/PKGBUILD ;;
-            git-lfs-git)
-              # 上游改用 asciidoctor 產 man 頁，AUR 的 makedepends 還寫 ruby-ronn
-              # → `make: asciidoctor: No such file or directory` 紅在 build()（run #230）。
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              printf "%s\n" "makedepends+=('ruby-asciidoctor')" >> pkg_dir/PKGBUILD
-              tail -2 pkg_dir/PKGBUILD ;;
-            jadx-git)
-              # Gradle 在容器默認的超新 JDK 上會炸 buildSrc 的
-              # InstrumentationAnalysisTransform（run #230：「Could not isolate value
-              # …MergeInstrumentationAnalysisTransform$Parameters_Decorated」），
-              # 這是 Gradle 跟不上 JDK 的已知症狀。釘到 JDK 21 並让它作为 makedep 装上。
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              printf "%s\n" "makedepends+=('jdk21-openjdk')" "export JAVA_HOME=/usr/lib/jvm/java-21-openjdk" >> pkg_dir/PKGBUILD
-              sed -i 's|^  ./gradlew dist --no-daemon|  export JAVA_HOME=/usr/lib/jvm/java-21-openjdk\n  ./gradlew dist --no-daemon|' pkg_dir/PKGBUILD
-              grep -n -B1 'gradlew dist' pkg_dir/PKGBUILD | head -5 ;;
             *)
               # AUR 包或本仓库维护的 -git 包：
               # sway/wlroots/waybar/i3status 家族：-git 取 AUR、穩定版取 Arch
@@ -528,6 +434,110 @@ jobs:
           esac
           git config --global --add safe.directory "$PWD/pkg_dir"
 
+      - name: 逐包修正 AUR 的 PKGBUILD（缺依賴、路徑假設、連結器）
+        run: |
+          set -euo pipefail
+          # 這些都是 AUR／上游自己的小毛病，與本倉打包流程無關。原先連同 clone 寫在
+          # 上一步的 case 裡，結果那一步腳本太長，撞上 GitHub「max expression length
+          # 21000」的解析上限（run #231 整個 workflow 因此無效、一個 job 都沒起）。
+          # 現在 clone 留在上一步的通用分支，這裡只做 PKGBUILD 手術。
+          case "${{ matrix.repo_name }}" in
+            sway-git)
+              # AUR PKGBUILD 用 arch-meson … -D sd-bus-provider=libsystemd 且 sway
+              # 上游 meson.build 写死 werror=true：容器 libinput 一旦比 sway 支持的
+              # 新（多出枚举值），ipc-json.c 的 switch 触发 -Wswitch → 被 -Werror
+              # 抬成硬错误，build() 红（2026-09-18 实测 LIBINPUT_CONFIG_SCROLL_C*）。
+              # 加 -Dwerror=false 关掉把警告当错误（meson 命令行选项覆盖项目默认值）。
+              # Artix 无 systemd：swaybar 的「系统托盘」用 sd-bus，而 sd-bus 只有
+              # libsystemd 这个 provider 能在（Arch）构建容器里找到；libelogind/basu
+              # 容器里没有 → configure 直接 "Dependency libelogind not found"。
+              # 保留 systemd 依赖会让 swaybar NEEDED libsystemd.so.0 → Artix 装上报错。
+              # 折中：-Dtray=false 关掉 swaybar 托盘 → swaybar 不再链 sd-bus/libsystemd，
+              # Artix 直接能跑（状态栏/工作区/时钟都在，只是没系统托盘区；要托盘请用
+              # waybar，它走纯 dbus 不需要 systemd）。sway 本体走 wlroots 的 libseat/
+              # elogind，不受影响。
+              sed -i 's/-D sd-bus-provider=libsystemd/-D sd-bus-provider=libsystemd -Dwerror=false -Dtray=disabled/' pkg_dir/PKGBUILD
+              grep -n 'arch-meson' pkg_dir/PKGBUILD | head -3 ;;
+                        
+            waybar-git)
+              # AUR PKGBUILD 沒關 systemd，而 waybar 的 meson.build 是
+              # `libsystemd = dependency('libsystemd', required: get_option('systemd'))`：
+              # 容器（Arch）有 libsystemd → 產物 usr/bin/waybar NEEDED
+              # libsystemd.so.0；Artix/OpenRC 沒有這個 so → 裝上直接
+              # "error while loading shared libraries: libsystemd.so.0"
+              # （2026-09-18 實測 objdump 該包）。加 -Dsystemd=disabled 真正切走，
+              # 同時不再安裝 systemd user unit。
+              sed -i "/local _meson_args=(/a\\    -Dsystemd=disabled" pkg_dir/PKGBUILD
+              grep -n -A3 'local _meson_args=(' pkg_dir/PKGBUILD | head -6 ;;
+                        
+            i3lock-color-git)
+              # AUR 版 makedepends 只有 git，但 configure 默认开 --enable-image
+              # 要 gif_lib.h，容器没有 giflib → build() 红（2026-09-17 实测
+              # "cannot find the gif_lib.h header"）。补进 makedepends。
+              sed -i "s/^makedepends=('git')/makedepends=('git' 'giflib')/" pkg_dir/PKGBUILD ;;
+                        
+            fd-git)
+              # AUR 那份沒有 build()，package() 直接 cargo install 打預設 features，
+              # 而 fd 的 default = ["use-jemalloc", "completions"]。容器用 ld.lld
+              # 連結時 jemalloc 的符號進不去 → 「ld.lld: error: undefined symbol:
+              # _rjem_malloc / _rjem_calloc …」→ package() 紅（2026-09-24 run #225
+              # 實測 job 107254085568）。Arch 官方 fd 走 cargo build --release
+              # --locked --offline 沒踩到。對策：關掉 use-jemalloc 改用系統分配器，
+              # completions 要留（下面 make completions 依賴 clap_complete）。
+              sed -i "s|--path .|--path . --no-default-features --features completions|" pkg_dir/PKGBUILD
+              grep -n -A6 'cargo install' pkg_dir/PKGBUILD | head -9 ;;
+                        
+            fontforge-git)
+              # 上游 CMakeLists 硬性 pkg_check_modules(GLibMM REQUIRED glibmm-2.4)，
+              # 但 AUR 那份 makedepends 只有 git/cmake/ninja → 容器沒 glibmm，
+              # configure 直接「The following required packages were not found:
+              # glibmm-2.4」（2026-09-24 run #225 實測 job 107254085583）。
+              # 注意只有 glibmm（2.66.x 線）提供 glibmm-2.4.pc，glibmm-2.68 給的是
+              # 2.68.pc，補錯模組照樣紅。Arch/Artix 的 fontforge 本身也是靠
+              # gtkmm3→glibmm 間接拿到它，所以列進 depends 而不是 makedepends。
+              printf "%s\n" "depends+=('glibmm' 'gtkmm3')" >> pkg_dir/PKGBUILD
+              tail -3 pkg_dir/PKGBUILD ;;
+                        
+            libaec-git)
+              # AUR 的 package() 最後一行 `mv "$pkgdir"/usr/{,lib}/cmake` 假設 cmake 套件檔
+              # 落在 usr/cmake，但 CMake 在 Arch 上直接裝到 usr/lib/cmake（實測
+              # -- Installing: …/usr/lib/cmake/libaec/…），來源目錄不存在 → mv 報
+              # "cannot stat 'usr//cmake'" 紅在 package()（2026-09-24 run #230）。
+              # 改成「有才搬，沒有就跳過」，兩邊佈局都能過。
+              sed -i 's|  mv "$pkgdir"/usr/{,lib}/cmake|  [ -d "$pkgdir/usr/cmake" ] \&\& mv "$pkgdir"/usr/{,lib}/cmake|' pkg_dir/PKGBUILD
+              grep -n 'usr/cmake' pkg_dir/PKGBUILD | head -3 ;;
+                        
+            python-fontpens-git)
+              # 上游 build-backend 是 hatchling，AUR 的 makedepends 只列了
+              # python-{build,installer,wheel}，容器裡 import 不到 →
+              # `BackendUnavailable: Cannot import 'hatchling.build'`（run #230）。
+              printf "%s\n" "makedepends+=('python-hatchling')" >> pkg_dir/PKGBUILD
+              tail -2 pkg_dir/PKGBUILD ;;
+                        
+            mousepad-git)
+              # meson.build 要 dependency('libxfce4ui-2')，AUR 的 makedepends 只有
+              # xfce4-dev-tools/git/meson → 「Dependency "libxfce4ui-2" not found」
+              # （run #230）。.pc 由 libxfce4ui 提供。
+              printf "%s\n" "makedepends+=('libxfce4ui' 'gtk3')" >> pkg_dir/PKGBUILD
+              tail -2 pkg_dir/PKGBUILD ;;
+                        
+            git-lfs-git)
+              # 上游改用 asciidoctor 產 man 頁，AUR 的 makedepends 還寫 ruby-ronn
+              # → `make: asciidoctor: No such file or directory` 紅在 build()（run #230）。
+              printf "%s\n" "makedepends+=('ruby-asciidoctor')" >> pkg_dir/PKGBUILD
+              tail -2 pkg_dir/PKGBUILD ;;
+                        
+            jadx-git)
+              # Gradle 在容器默認的超新 JDK 上會炸 buildSrc 的
+              # InstrumentationAnalysisTransform（run #230：「Could not isolate value
+              # …MergeInstrumentationAnalysisTransform$Parameters_Decorated」），
+              # 這是 Gradle 跟不上 JDK 的已知症狀。釘到 JDK 21 並让它作为 makedep 装上。
+              printf "%s\n" "makedepends+=('jdk21-openjdk')" "export JAVA_HOME=/usr/lib/jvm/java-21-openjdk" >> pkg_dir/PKGBUILD
+              sed -i 's|^  ./gradlew dist --no-daemon|  export JAVA_HOME=/usr/lib/jvm/java-21-openjdk\n  ./gradlew dist --no-daemon|' pkg_dir/PKGBUILD
+              grep -n -B1 'gradlew dist' pkg_dir/PKGBUILD | head -5 ;;
+                        
+            *) : ;;
+          esac
       - name: 检测 ffmpeg-full-git 上游版本
         if: matrix.repo_name == 'ffmpeg-full-git'
         id: ffmpeg_plan
