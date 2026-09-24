@@ -116,10 +116,16 @@ package() {
   # rg/bwrap 餵發行版二进制，避免腳本去抓預構建檔；zsh 不傳 → 套件裡不帶 bundled zsh
   # （layout 的必須檔清單裡沒有它，跳過不會讓校驗失敗）。
   local _semver="${pkgver%%.r*}"
+  # 目標 triple 用實際 host，且沿用上游鎖定的 toolchain 去問（容器裡 rustc 是 rustup
+  # 的 shim，沒 RUSTUP_TOOLCHAIN 時默認 toolchain 未必存在）。問不到就退回 gnu。
+  local _toolchain _host
+  _toolchain=$(_upstream_toolchain)
+  _host=$(RUSTUP_TOOLCHAIN="$_toolchain" rustc -vV 2>/dev/null | sed -n 's/^host: //p')
+  [ -n "$_host" ] || _host="$(uname -m)-unknown-linux-gnu"
   cd "$_src"
   python3 scripts/build_codex_package.py \
     --variant codex \
-    --target "$(rustc -vV | sed -n 's/^host: //p')" \
+    --target "$_host" \
     --package-version "$_semver" \
     --package-dir "$_pkgdir_root" \
     --entrypoint-bin "$_bin/codex" \
