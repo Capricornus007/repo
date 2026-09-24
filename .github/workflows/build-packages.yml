@@ -353,15 +353,19 @@ jobs:
                 curl -sfL "$_ue_base/$_f" -o "pkg_dir/$_f"
               done ;;
             qoder-cli|qoder-cli-cn|qoder-gui-bin|qoder-gui-cn)
-              # Qoder 五包（國際/CN × 命令列/GUI）全部 in-tree 維護在本倉同名目錄，
+              # Qoder 四包（國際/CN × 命令列/桌面端）全部 in-tree 維護在本倉同名目錄，
               # 只有 PKGBUILD 一個檔案：
               #   qoder-cli     國際 CLI，源 qoder-ide.oss-accelerate…/qodercli，
               #                 裝 /usr/bin/qodercli + symlink qoder
               #   qoder-cli-cn  CN CLI，源 static.qoder.com.cn/qoder-cli-cn，
               #                 裝 /usr/bin/qoderclicn + symlink qoder-cn
-              #   qoder-gui-bin 國際 GUI（VS Code fork 佈局），裝 /usr/share/qoder-ide
-              #   qoder-gui-cn  CN GUI（electron-builder 佈局），裝 /opt/Qoder-CN
+              #   qoder-gui-bin 國際桌面端（agent workbench，electron-builder 佈局），
+              #                 源 download.qoder.com/qoder-app，裝 /opt/Qoder + qoder.desktop
+              #   qoder-gui-cn  CN 桌面端（同一產品線的中國版），裝 /opt/Qoder-CN
               #                 （package() 把上游帶空格的 "Qoder CN" 目錄改名、desktop 同步重寫）
+              # 注意：VS Code fork 那條產品線是 **Qoder IDE**（裝 /usr/share/qoder-ide），
+              # 與上面兩個 *-gui-* 不是同一個東西；它曾以 qoder-ide-bin 進自動構建，
+              # 2026-09-22 依用戶指示移出（c3a217e），要撈回來用 git show c3a217e^:qoder-ide-bin/PKGBUILD。
               # 版本與校驗和都由各自官方端點驅動（見 plan 步驟）。不取 AUR：pakrohk
               # 那幾份走 pkgver=latest + prepare() 裡 curl 滾動址，追不了版，國際 CLI
               # 那份甚至固定恆紅（跑官方 install 腳本裝進 ~/.qoder/bin，$srcdir 等不到

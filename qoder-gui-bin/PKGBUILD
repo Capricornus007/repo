@@ -3,18 +3,29 @@
 # Qoder 桌面端（agent workbench），國際版。
 #
 # 2026-09-19 命名更正（用戶指出）：本包名 qoder-gui-bin 過去装的其實是 **Qoder IDE**
-# （VS Code fork 那條產品線，/usr/share/qoder-ide）。那不是「GUI 桌面端」。IDE 內容已
-# 原樣搬到 qoder-ide-bin，qoder-gui-bin 騰回來放真正的國際版桌面端 —— 與 CN 版
-# qoder-gui-cn（同一產品線的中國版）對稱。
+# （VS Code fork 那條產品線，/usr/share/qoder-ide）。那不是「GUI 桌面端」。IDE 內容先搬到
+# qoder-ide-bin，qoder-gui-bin 騰回來放真正的國際版桌面端 —— 與 CN 版 qoder-gui-cn
+# （同一產品線的中國版）對稱。qoder-ide-bin 其後於 2026-09-22 依用戶指示移出自動構建
+# （c3a217e），倉裡現在沒有那包；要撈回來：git show c3a217e^:qoder-ide-bin/PKGBUILD。
 #
 #   本版（國際桌面端） source download.qoder.com/qoder-app → 裝 /opt/Qoder/、
 #                      qoder.desktop、/usr/share/icons/hicolor/*/apps/qoder.png
 #   qoder-gui-cn       source static.qoder.com.cn/qoder-app → 裝 /opt/Qoder-CN/、
 #                      qoder-cn.desktop、qoder-cn.png
-#   qoder-ide-bin      source center.qoder.sh / qoder-ide.oss-accelerate → 裝
-#                      /usr/share/qoder-ide/、qoder-ide.desktop
-# 三包的主檔目錄、desktop 檔名、圖示名、StartupWMClass、scheme handler 互不重疊，
+#   qoder-ide-bin      （已移出構建，見上）source center.qoder.sh / qoder-ide.oss-accelerate
+#                      → 裝 /usr/share/qoder-ide/、qoder-ide.desktop
+# 這三者的主檔目錄、desktop 檔名、圖示名、StartupWMClass、scheme handler 互不重疊，
 # 可任意並存；也與命令列的 qoder-cli / qoder-cli-cn 互不干擾。
+#
+# 2026-09-24 複核（用戶質疑是否誤装成 IDE，逐項實測）：把 source_x86_64 那顆 RPM 抓下來
+# 解開 —— 佈局是 /opt/Qoder/{qoder,chrome-sandbox,resources,…}，qoder.desktop 為
+# Name=Qoder、Exec=/opt/Qoder/qoder %U、StartupWMClass=qoder、
+# Comment「Qoder - Agent workbench for human and AI software teams」；
+# resources/product.json 是桌面端的欄位集（productId=qoder / electronApplicationName=
+# Qoder App / appId=com.qoder.app / dataDirectoryName=com.qoder.app.stable /
+# desktopUpdateDownloadBaseUrl=…/qoder-app/releases），**不是** VS Code fork 那種
+# product.json（nameShort/applicationName/dataFolderName/urlProtocol 一個都沒有）。
+# 下載檔 sha256 與 manifest.json 的 linux-rpm-x64、與本包死值三者一致。裝的是桌面端無誤。
 #
 # 版本與校驗來源（權威）：
 #   GET https://download.qoder.com/qoder-app/releases/latest/manifest.json
