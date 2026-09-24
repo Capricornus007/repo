@@ -68,6 +68,10 @@ _upstream_toolchain() {
     "${srcdir}/${pkgname%-git}/codex-rs/rust-toolchain.toml"
 }
 
+# 純 semver（pkgver 是 0.156.1.r3546.g… 這種 AUR 形勢，取 tag 基底）。版號蓋入與
+# build_codex_package.py 的 --package-version 共用同一個來源，避免兩邊各算一次。
+_pkg_semver() { printf '%s' "${pkgver%%.r*}"; }
+
 prepare() {
   cd "${pkgname%-git}"
 
@@ -84,6 +88,28 @@ prepare() {
   fi
 
   cd codex-rs
+
+  # 上游工作區的 version 是 0.0.0（只有發版流程會填真值），而 TUI 標題列讀的是
+  # 編譯期 CARGO_PKG_VERSION（codex-rs/tui/src/version.rs: env!("CARGO_PKG_VERSION")），
+  # 所以直接從 git 裝出來的 codex 會顯示「OpenAI Codex (v0.0.0)」。上游自己的
+  # codex-rs/default.nix 就是 sed 掉它（postPatch），這裡照做；但我們 build() 用
+  # --frozen，Cargo.lock 裡 157 個成員區塊也是 0.0.0，只改 toml 會「lock 過時」直接
+  # 失敗，所以兩邊一起改。實測這 157 個全是本倉成員（155 個 codex* 加
+  # app_test_support、core_test_support），無第三方同值，整批替換安全。
+  local _semver
+  _semver=$(_pkg_semver)
+  if [ -n "$_semver" ] && [ "$_semver" != "0.0.0" ]; then
+    find . -name Cargo.toml -exec sed -i "s/^version = \"0\.0\.0\"\$/version = \"$_semver\"/" {} +
+    sed -i "s/^version = \"0\.0\.0\"\$/version = \"$_semver\"/" Cargo.lock
+    grep -q "^version = \"$_semver\"\$" Cargo.toml || {
+      echo "::error::版號蓋入失敗（Cargo.toml 的 [workspace.package] version 不是 0.0.0？上游改了寫法）"
+      return 1
+    }
+    if grep -q '^version = "0\.0\.0"$' Cargo.lock; then
+      echo "::error::Cargo.lock 仍殘留 0.0.0 成員，蓋入不完整"
+      return 1
+    fi
+  fi
 
   local _toolchain
   _toolchain=$(_upstream_toolchain)
@@ -179,7 +205,8 @@ package() {
   # --target 明確給 gnu：默認值是 musl（跟上游 release 檔對齊），我們是 glibc 系統。
   # rg/bwrap 餵發行版二进制，避免腳本去抓預構建檔；zsh 不傳 → 套件裡不帶 bundled zsh
   # （layout 的必須檔清單裡沒有它，跳過不會讓校驗失敗）。
-  local _semver="${pkgver%%.r*}"
+  local _semver
+  _semver=$(_pkg_semver)
   # 目標 triple 用實際 host，且沿用上游鎖定的 toolchain 去問（容器裡 rustc 是 rustup
   # 的 shim，沒 RUSTUP_TOOLCHAIN 時默認 toolchain 未必存在）。問不到就退回 gnu。
   local _toolchain _host
