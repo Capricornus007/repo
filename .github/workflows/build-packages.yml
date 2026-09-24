@@ -46,7 +46,17 @@ jobs:
       - name: 初始化 Arch Linux 环境
         run: |
           set -euo pipefail
-          pacman -Syu --noconfirm git jq curl sudo devtools pacman-contrib gnupg github-cli
+          # 鏡像常瞬斷：run #232 的 openai-codex-git 就紅在這裡
+          # （failed retrieving file 'python-configobj-…sig' from fastly.mirror.pkgbuild.com
+          #  → failed to commit transaction）。這一步在 makepkg 之前，吃不到後面
+          # 那套重試迴圈，所以自己包一層。
+          _pi=0
+          until pacman -Syu --noconfirm git jq curl sudo devtools pacman-contrib gnupg github-cli; do
+            _pi=$((_pi + 1))
+            [ "$_pi" -ge 4 ] && { echo "::error::初始化依賴 pacman 連續 4 次失敗"; exit 1; }
+            echo "::warning::鏡像瞬斷，初始化依賴重試（第 ${_pi} 次）"
+            sleep $((_pi * 20))
+          done
           # oh-my-pi 的 rust natives（audiopus_sys 等）用 cmake+Ninja generator，
           # AUR PKGBUILD 的 makedepends 漏列 ninja，容器預設沒有 → 補裝
           if [ "${{ matrix.repo_name }}" = 'oh-my-pi-git' ]; then
@@ -503,22 +513,29 @@ jobs:
               # 落在 usr/cmake，但 CMake 在 Arch 上直接裝到 usr/lib/cmake（實測
               # -- Installing: …/usr/lib/cmake/libaec/…），來源目錄不存在 → mv 報
               # "cannot stat 'usr//cmake'" 紅在 package()（2026-09-24 run #230）。
-              # 改成「有才搬，沒有就跳過」，兩邊佈局都能過。
-              sed -i 's|  mv "$pkgdir"/usr/{,lib}/cmake|  [ -d "$pkgdir/usr/cmake" ] \&\& mv "$pkgdir"/usr/{,lib}/cmake|' pkg_dir/PKGBUILD
+              # 改成 if/then。不能寫成 `[ -d … ] && mv …`：條件不成立時整行回傳 1，
+              # 而它剛好是 package() 的最後一行，makepkg 就照樣判失敗（run #232 實測）。
+              sed -i 's|  mv "$pkgdir"/usr/{,lib}/cmake|  if [ -d "$pkgdir/usr/cmake" ]; then mv "$pkgdir"/usr/{,lib}/cmake; fi|' pkg_dir/PKGBUILD
               grep -n 'usr/cmake' pkg_dir/PKGBUILD | head -3 ;;
                         
             python-fontpens-git)
               # 上游 build-backend 是 hatchling，AUR 的 makedepends 只列了
               # python-{build,installer,wheel}，容器裡 import 不到 →
               # `BackendUnavailable: Cannot import 'hatchling.build'`（run #230）。
-              printf "%s\n" "makedepends+=('python-hatchling')" >> pkg_dir/PKGBUILD
+              # 補完 hatchling 後 run #232 又報「Unmet dependencies: hatch-vcs」——
+              # 它的 pyproject 用了 [tool.hatch.build.hooks.vcs]，兩個一起補。
+              printf "%s\n" "makedepends+=('python-hatchling' 'python-hatch-vcs')" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
                         
             mousepad-git)
               # meson.build 要 dependency('libxfce4ui-2')，AUR 的 makedepends 只有
               # xfce4-dev-tools/git/meson → 「Dependency "libxfce4ui-2" not found」
               # （run #230）。.pc 由 libxfce4ui 提供。
-              printf "%s\n" "makedepends+=('libxfce4ui' 'gtk3')" >> pkg_dir/PKGBUILD
+              # run #232 接著炸在 meson「Dependency 'glib-2.0' tool variable
+              # 'glib_genmarshal' contains erroneous value: /usr/bin/glib-genmarshal」——
+              # Arch 已把 glib 的建置工具從 glib2 拆進 glib2-devel（實查 core 有
+              # glib2-devel 2.88.3、pkgbase 仍是 glib2），容器只裝到 glib2 就找不到。
+              printf "%s\n" "makedepends+=('libxfce4ui' 'gtk3' 'glib2-devel')" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
                         
             git-lfs-git)
