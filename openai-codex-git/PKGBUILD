@@ -89,8 +89,67 @@ prepare() {
   _toolchain=$(_upstream_toolchain)
   [[ -n "$_toolchain" ]] || return 1
   rustup toolchain install "$_toolchain" --profile minimal
+
+  _v8_fetch "$_toolchain"
   RUSTUP_TOOLCHAIN="$_toolchain" cargo fetch --locked \
     --target "$(RUSTUP_TOOLCHAIN="$_toolchain" rustc -vV | sed -n 's/host: //p')"
+}
+
+# rusty_v8 上游只發布 release／ptrcomp／simdutf 三種預構建靜態檔，沒有 `v8` crate
+# 在 codex 鎖定組合下要的 `ptrcomp_sandbox`（實測 denoland 的 v150.4.0 release 72 個
+# 資產裡 0 個含 sandbox → build.rs 直接 404 panic）。OpenAI 自己編好放在
+# `rusty-v8-v<crate版號>` 這個 release，上游 CI 走的就是它
+# （.github/actions/setup-rusty-v8），照抄：抓 .a.gz 與 src binding，校完和再寫成
+# build() 要 source 的 env 檔。
+_v8_fetch() {
+  local _toolchain="$1"
+  local _host _ver _prof _dir _base _sum _trusted
+  _host=$(RUSTUP_TOOLCHAIN="$_toolchain" rustc -vV | sed -n 's/^host: //p')
+  [[ -n "$_host" ]] || { echo "::error::問不到 rustc host triple"; return 1; }
+  _ver=$(awk '/^name = "v8"$/{getline; sub(/^version = "/, ""); sub(/"$/, ""); print; exit}' Cargo.lock)
+  [[ -n "$_ver" ]] || { echo "::error::Cargo.lock 裡找不到 v8 版號"; return 1; }
+  _prof="ptrcomp_sandbox_release"
+  _dir="${srcdir}/rusty_v8"
+  _base="https://github.com/openai/codex/releases/download/rusty-v8-v${_ver}"
+  _sum="rusty_v8_${_prof}_${_host}.sha256"
+  mkdir -p "$_dir" || return 1
+
+  if ! curl -fsSL "${_base}/${_sum}" -o "${_dir}/${_sum}"; then
+    echo "::error::抓不到 ${_base}/${_sum}（上游換檔名或 release 被移？）"
+    return 1
+  fi
+
+  # 倉庫內附的信任清單：先比對剛抓到的 sha256 Manifest 本身，避免拿到被替換的清單。
+  _trusted="third_party/v8/rusty_v8_${_ver//./_}_release_manifests.sha256"
+  if [ -f "$_trusted" ]; then
+    local _want _got
+    _want=$(grep -F "  ${_sum}" "$_trusted" | cut -d ' ' -f 1)
+    _got=$(sha256sum "${_dir}/${_sum}" | cut -d ' ' -f 1)
+    if [ -z "$_want" ] || [ "$_want" != "$_got" ]; then
+      echo "::error::${_sum} 與 ${_trusted} 不符（上游 V8 清單換版了）"
+      return 1
+    fi
+  else
+    echo "::warning::倉庫沒有 ${_trusted}，跳過信任清單比對（只驗資產自身的 sha256）"
+  fi
+
+  local _art
+  for _art in "librusty_v8_${_prof}_${_host}.a.gz" "src_binding_${_prof}_${_host}.rs"; do
+    if ! curl -fsSL "${_base}/${_art}" -o "${_dir}/${_art}"; then
+      echo "::error::抓不到 ${_base}/${_art}"
+      return 1
+    fi
+  done
+
+  if ! ( cd "$_dir" && tr -d '\r' < "${_sum}" | sha256sum --check - ); then
+    echo "::error::V8 預構建檔校验失敗"
+    return 1
+  fi
+
+  {
+    printf 'export RUSTY_V8_ARCHIVE=%q\n' "${_dir}/librusty_v8_${_prof}_${_host}.a.gz"
+    printf 'export RUSTY_V8_SRC_BINDING_PATH=%q\n' "${_dir}/src_binding_${_prof}_${_host}.rs"
+  } > "${_dir}/env.sh"
 }
 
 build() {
@@ -100,6 +159,8 @@ build() {
   _toolchain=$(_upstream_toolchain)
   [[ -n "$_toolchain" ]] || return 1
   export CARGO_TARGET_DIR=target
+  # prepare() 抓好的 V8 預構建檔位置（缺檔就讓 cargo 自己去問，錯誤資訊比較直觀）
+  [ -f "${srcdir}/rusty_v8/env.sh" ] && source "${srcdir}/rusty_v8/env.sh"
   # codex-code-mode-host 是「完整套件」的必須檔（validate_package 會查），
   # 少了它裝上去一樣報 no complete local package。
   RUSTUP_TOOLCHAIN="$_toolchain" cargo build --release --frozen \
