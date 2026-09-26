@@ -52,7 +52,7 @@
 #   空格），因此不需要 CN 包那套目錄改名 + desktop Exec 重寫 + 殘留掃描。
 
 pkgname=qoder-gui-bin
-pkgver=0.4.2
+pkgver=0.4.3
 pkgrel=2
 # 2026-09-19 本包從「Qoder IDE」改裝成「Qoder 桌面端」，版號因此從 IDE 的 1.31.0
 # 掉回桌面端的 0.4.2；DB 裡那顆 1.31.0-1 被 vercmp 判成比較新，repo-add 每輪都回
@@ -107,7 +107,7 @@ sha256sums=('SKIP')
 
 source_x86_64=("Qoder-linux-x86_64-${pkgver}.rpm::https://download.qoder.com/qoder-app/releases/${pkgver}/Qoder-linux-x86_64.rpm")
 # 校驗和取自上面 manifest.json 中 id=linux-rpm-x64 的 sha256 欄位；CI 升版時同步改寫。
-sha256sums_x86_64=('18eb90aee04acc5e41287d5806f064edbad9b3696a9e301ec546eef0069764b4')
+sha256sums_x86_64=('f46feec5d4e89366bf6c2bbb63b249fd27768edf6cb279ff32b73432ed0f2ecd')
 
 package() {
   local rpm="Qoder-linux-x86_64-${pkgver}.rpm"
