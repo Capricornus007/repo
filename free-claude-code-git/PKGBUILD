@@ -9,7 +9,7 @@
 #
 # bin→git 的全部改動（build()/package() 逐字保留）：
 #   1. pkgname 與 install 檔名 → free-claude-code-git；pkgver 由 pkgver() 於構建時
-#      重算，寫在檔頭的 2.0.0.r631 只是佔位。
+#      重算，寫在檔頭的只是佔位（值取上一次探測到的上游實況）。
 #   2. pkgver() 的 `cd "$srcdir/free-claude-code"` → 相對 `cd "free-claude-code"`：
 #      本倉 CI 的泛用 AUR -git 探測（build-packages.yml 預設分支）是把 PKGBUILD 單檔
 #      拷進臨時目錄、按 source URL clone 成 ${pkgname%-git}，再直接跑 pkgver()；
@@ -29,8 +29,12 @@
 # Maintainer: Vitaliy VVS Star <vitaliy <dot> star <at> Gmail-DOT-Com>
 
 pkgname=free-claude-code-git
-pkgver=6.2.39.r1086.8ac3c6c
+pkgver=v6.2.71.r1.gba4b934
 pkgrel=1
+# feed 現值 `.r1125.ba4b934-1` 的版本號前綴是空的（見下方 pkgver() 註解），而
+# vercmp 把這種「r 開頭」的舊條目判得比任何 v6.x 都新（實測
+# vercmp v6.2.71.r1.g… .r1125.ba4b934 = -1），不改 epoch 就永遠換不了代。
+epoch=1
 pkgdesc="Proxy to use Claude Code CLI with free alternative providers (NVIDIA NIM, OpenRouter, DeepSeek, etc.)"
 arch=('x86_64')
 url="https://github.com/Alishahryar1/free-claude-code"
@@ -55,15 +59,21 @@ install="$pkgname.install"
 source=("git+${url}.git")
 sha256sums=('SKIP')
 
-# 版本演算法：實查上游（2026-09-19）`git tag` 完全為空，本倉慣用的
-# `git describe --long --tags --abbrev=7 | sed …`（mpv-git/oh-my-pi-git 式）會直接
-# 「沒有發現名稱」而失敗，CI 的版本探測也拿不到值。故沿用 AUR 原式
-# <pyproject.toml 的 version>.r<總提交數>.<短 hash>，輸出同樣是 AUR -git 慣例形狀。
+# 版本演算法（2026-09-26 換掉，原因實測如下）：
+#   舊式 <pyproject.toml 的 version>.r<總提交數>.<短 hash> 依賴 `grep '^version ='`，
+#   而上游在 6.2.x 某版把該行拿掉、改成 hatch-vcs 的 `dynamic = ["version"]`
+#   （實測 https 抓 main 的 pyproject.toml：[project] 底下只有 dynamic，沒有 version）
+#   → grep 到空字串，feed 裡因此出現 `.r1123…`、`.r1125…` 這種**沒有版本號前綴**的包，
+#   而且「總提交數」是倉庫總數、與 tag 無關，tag 跳版時它也不會反映。
+#   舊式當初這麼寫是因為 2026-09-19 實查上游 `git tag` 完全為空、describe 無從下手；
+#   現在上游已經在打 tag（實測 v6.2.66 … v6.2.71），本倉慣用的 describe 式
+#   （mpv-git / oh-my-pi-git / adguardhome-git 同一套路）可用，而且它正是上游
+#   hatch-vcs 取版號的來源，探測值與實際裝出來的版本必然一致。
+#   `--abbrev=7` 寫死長度：blobless 探測克隆與完整實建克隆的物件數不同，讓 git 自行
+#   縮短 hash 會造成「探測版本 ≠ 產物版本」、每小時白編一次。
 pkgver() {
   cd "free-claude-code"
-  local ver
-  ver=$(grep '^version =' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
-  printf "%s.r%s.%s" "$ver" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+  git describe --tags --long --abbrev=7 | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
 }
 
 build() {
