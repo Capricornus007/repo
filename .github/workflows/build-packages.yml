@@ -565,6 +565,17 @@ jobs:
               sed -i 's|^  ./gradlew dist --no-daemon|  export JAVA_HOME=/usr/lib/jvm/java-21-openjdk\n  ./gradlew dist --no-daemon|' pkg_dir/PKGBUILD
               grep -n -B1 'gradlew dist' pkg_dir/PKGBUILD | head -5 ;;
                         
+            rofi-git)
+              # 上游 meson.build 把 libcheck 當必要依賴（`dependency('check',
+              # required: get_option('check'))`，arch-meson 預設把 feature 選項解成
+              # enabled），AUR 那份卻只列在 checkdepends。本 workflow 對 kind:aur
+              # 一律 --nocheck → makepkg 連 checkdepends 都不裝 → configure 直接
+              # 「Dependency "check" not found」紅在 build()（2026-09-25 run #252
+              # 起連續四輪）。補進 makedepends：依賴照裝、測試照舊不跑（--nocheck
+              # 是 09-24 定的規矩，不改它）。
+              printf "\n%s\n" "makedepends+=('check')" >> pkg_dir/PKGBUILD
+              tail -2 pkg_dir/PKGBUILD ;;
+
             *) : ;;
           esac
       - name: 检测 ffmpeg-full-git 上游版本
