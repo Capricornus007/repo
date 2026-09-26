@@ -788,14 +788,16 @@ jobs:
 
             kew-git)
               # -git 包：目标 pkgver 完全由上游 HEAD 决定，忠实复刻 PKGBUILD 的 pkgver()
+              # （公式必须与 kew-git/PKGBUILD 逐字一致，否則「已在 release 里」永遠比不中、
+              # 每整點白編一次）。用 describe 的 <tag>.r<距離>.g<hash> 而非「tag + hash」：
+              # 後者在同一 tag 內要靠 hash 的數字段排序，會把新提交判成舊版而卡死換代
+              # （2026-09-26 查明，DB 停在 v4.3.6.892380a7）。
               KEW_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "$url"')
               rm -rf /tmp/kew-src
               git clone "$KEW_URL" /tmp/kew-src || skip "clone kew 上游失败"
-              kew_tag=$(git -C /tmp/kew-src for-each-ref --sort=-version:refname --count=1 \
-                --format='%(refname:strip=2)' refs/tags)
-              kew_hash=$(git -C /tmp/kew-src rev-parse --short HEAD)
-              [ -n "$kew_hash" ] || skip "拿不到 kew 上游 HEAD"
-              TARGET_PKGVER=$(printf '%s.%s' "$kew_tag" "$kew_hash" | sed 's/[:\/\-]//g')
+              TARGET_PKGVER=$(git -C /tmp/kew-src describe --tags --long --abbrev=7 \
+                | sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/[:\/]//g')
+              [ -n "$TARGET_PKGVER" ] || skip "拿不到 kew 上游版本"
               if [ "$TARGET_PKGVER" != "$CUR_PKGVER" ]; then
                 TARGET_PKGREL=1
               fi

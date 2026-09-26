@@ -1,6 +1,13 @@
 pkgname=kew-git
-pkgver=v4.3.6.432d1ae0
-pkgrel=2
+pkgver=v4.3.6.r23.g9181a7e
+pkgrel=1
+# 舊 pkgver() 用「最高版 tag + commit 短 hash」拼出 v4.3.6.<hash>，同一 tag 下換
+# commit 時 vercmp 會去比 hash 的數字段：DB 停在 892380a7（09-21），之後任何以較小
+# 數字開頭的 hash 都被判成「更舊」→ repo-add 拒收、產物被清理步驟當未引用刪掉，
+# 這包永遠不再換代（用戶機就裝在 v4.3.6.892380a7-1 上）。改成 describe 的
+# <tag>.r<距離>.g<hash>（與 mpv-git 同一套路）才有單調性；epoch 是為了跨過 DB 裡
+# 那顆舊格式的條目（實測 vercmp v4.3.6.r23.g… vs v4.3.6.892380a7 = -1）。
+epoch=1
 pkgdesc="A command-line music player"
 arch=('x86_64')
 url="https://codeberg.org/ravachol/kew"
