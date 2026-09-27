@@ -1,7 +1,16 @@
 _name=dae
 pkgname=$_name-git
 pkgver=2.0.1.r10.g5a446e7
-pkgrel=1
+pkgrel=2
+# pkgver() 用 describe 錨定「最近的祖先 tag」，而上游 v2.0.1 那筆（2026-08-12 的
+# chore(release): v2.0.1）**不在 main 的歷史裡**——實測 compare v2.0.1...main 回
+# behind=5 / ahead=385 / diverged。所以 main HEAD 雖然比庫裡那條新六週（385 個提交），
+# describe 卻退回 v2.0.0rc1，算出 2.0.0rc1.r593.g<hash>，被 vercmp 判成比 2.0.1.r240
+# 更舊 → repo-add 拒收（2026-09-27 run #269 日誌實證：WARNING: A newer version for
+# 'dae-git' is already present in database），剛蓋好的產物接著被「清理未引用資產」刪掉，
+# 這包永遠不再換代。只能靠 epoch 跨過庫裡那條（不准 --force：拒收是唯一擋住全網降級的
+# 閘門）。若哪天把 v2.0.1 那 5 筆併進 main，describe 會自然回到 2.0.1 線，epoch 仍留著無害。
+epoch=1
 pkgdesc="A Linux lightweight and high-performance transparent proxy solution based on eBPF."
 arch=('x86_64' 'aarch64')
 url="https://github.com/Capricornus007/dae"

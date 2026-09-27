@@ -809,7 +809,7 @@ jobs:
               #   mpv-git: git describe --long --tags --abbrev=7 --exclude 'git-release'
               #            | sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/^v//g'  (带 epoch=1)
               #   oh-my-pi-git: git describe --tags --long --abbrev=7
-              #            | sed 's/\([^--]*\)-g/r\1/;s/-/./g'
+              #            | sed 's/\([^-]*-g\)/r\1/;s/-/./g'   （带 epoch=1）
               #   pysolfc-git: git describe --tags --long --abbrev=7 --match 'pysolfc-[0-9]*'
               #            | sed 's/^pysolfc-//;s/\([^-]*-g\)/r\1/;s/-/./g'
               # source 数组元素形如 "git+https://github.com/mpv-player/mpv"：
@@ -827,8 +827,14 @@ jobs:
                 TARGET_PKGVER=$(git -C /tmp/gitpkg-src describe --tags --long --abbrev=7 --match 'pysolfc-[0-9]*' \
                   | sed 's/^pysolfc-//; s/\([^-]*-g\)/r\1/; s/-/./g')
               else
+                # oh-my-pi-git。这里的 sed 必须与 PKGBUILD 的 pkgver() 逐字相同——
+                # 同一个公式藏在两处（包里 + plan 步），2026-09-26 kew-git 只改了
+                # 探测那半边，结果产物照旧、每轮白编一次。旧版这里的
+                # s/\([^--]*\)-g/r\1/ 会把 -g 吞掉、把距离和 hash 黏成 r54886f21d，
+                # vercmp 因此判定新产物更旧（拒收），修法与 epoch 的来龙去脉写在
+                # oh-my-pi-git/PKGBUILD 档头。
                 TARGET_PKGVER=$(git -C /tmp/gitpkg-src describe --tags --long --abbrev=7 \
-                  | sed 's/\([^--]*\)-g/r\1/;s/-/./g')
+                  | sed 's/\([^-]*-g\)/r\1/;s/-/./g')
               fi
               [ -n "$TARGET_PKGVER" ] || skip "拿不到 $PKG 上游版本"
               ;;

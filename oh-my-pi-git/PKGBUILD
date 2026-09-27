@@ -14,7 +14,17 @@ pkgver=v13.10.1.r5817130cd3
 # 而無限重構這個包（单次 ~15 分鐘的 rust 編譯）。2026-09-15 就是靠 temporarily
 # pkgrel=2 逼 CI 重跑了一次、把壞的 v18.2.0.r06f2c14b-1 產物蓋掉，隨後立即改回 1。
 # 日後要再強制重構：短期抬 pkgrel 跑一輪就改回來，或直接删 release 裡那個資產。
-pkgrel=1
+pkgrel=2
+# 舊 pkgver() 的 sed 寫錯：s/\([^--]*\)-g/r\1/ 把「-g」整段吞掉、只留回 capture 的距離
+# 數字，於是 describe 的 `v18.3.2-5-g4886f21d` 变成 `v18.3.2.r54886f21d`——距離與 hash
+# 黏成一團。vercmp 會去比這段前導數字（實測 vercmp v18.3.2.r54886f21d v18.3.2.r74adc7e8c
+# = 1，即庫裡那條被判定「比較新」），所以距離從 5 進到 7、再進到两位数時，新產物會被
+# repo-add 當舊版拒收（2026-09-27 run #269 日誌：WARNING: A newer version for 'oh-my-pi-git'
+# is already present in database），接著剛蓋好的產物被「清理未引用資產」刪掉，這包再也不換代。
+# 改成與 mpv-git/kew-git 同型的 s/\([^-]*-g\)/r\1/（把 -g 留在 capture 內）才有 <tag>.r<距離>.g<hash>
+# 這個單調形狀。epoch=1 是為了跨過庫裡那顆舊格式的條目（拒收閘門不准用 --force 繞）。
+# 上面的 pkgver 佔位值是舊格式殘留，僅供人讀；構建時 makepkg 一律用 pkgver() 重算覆寫。
+epoch=1
 pkgdesc="AI Coding agent for the terminal — hash-anchored edits, optimized tool harness, LSP, Python, browser, subagents, and more (git build)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/can1357/oh-my-pi"
@@ -30,7 +40,7 @@ sha256sums=('SKIP')
 
 pkgver() {
   cd "oh-my-pi"
-  git describe --tags --long --abbrev=7 | sed 's/\([^--]*\)-g/r\1/;s/-/./g'
+  git describe --tags --long --abbrev=7 | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
 }
 
 prepare() {
