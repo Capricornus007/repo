@@ -1,7 +1,7 @@
 _name=dae
 pkgname=$_name-git
 pkgver=2.1.1.r576.gd43924d1
-pkgrel=1
+pkgrel=2
 # 這條 pkgver() 原本只寫 `git describe --tags --long`，會錨到「距離最近的祖先 tag」，
 # 而上游在 main 上掛了一顆非版號的輕量 tag `lastst`（2026-08-08，指 1d52465d）。它離
 # HEAD 只有 396 步，比正經的 v2.1.1（576 步）更近，所以 describe 寧可選它，產物會變成
@@ -21,7 +21,9 @@ license=('AGPL-3.0-or-later')
 provides=("$_name")
 conflicts=("$_name")
 depends=('glibc')
-makedepends=('clang' 'go' 'git')
+# clang19/llvm19 而不是 clang：見 build() 的說明。llvm19 提供 llvm-strip-19
+# （clang19 只依賴 llvm19-libs，不含 strip 工具）。
+makedepends=('clang19' 'llvm19' 'go' 'git')
 backup=("etc/dae/config.dae")
 install="${_name}.install"
 source=(
@@ -48,6 +50,21 @@ prepare() {
 
 build() {
 	cd "$srcdir/$_name"
+	# eBPF 能不能載入，取決於「編它的那個 clang 版本」，跟 dae 源碼無關。實測 A/B
+	# （同一份源碼、同一顆核心 7.3、同樣的常數注入）：clang 23.1.1 產出的
+	# tproxy_wan_cg_connect4 被驗證器拒收
+	#   load program: invalid argument: invalid variable-offset read from stack R4 ...
+	# 而 clang 19 過。dae 的 Makefile 寫的是 `CLANG ?= clang` / `STRIP ?= llvm-strip`，
+	# 不釘就會跟著容器裡的 extra/clang 漂移（[extra] 現行 22.1.8、[extra-testing] 23.1.1），
+	# 用戶哪天 pacman -Syu 就可能裝到一顆起不來、直接斷網的包。
+	# 找不到 clang19 就中止，絕不退回未釘的 clang：靜默降級正是這次要堵掉的東西。
+	local _clang=/usr/lib/llvm19/bin/clang
+	if [ ! -x "$_clang" ]; then
+		echo "ERROR: 找不到 $_clang（clang19 套件）。拒用未釘版本的 clang 編 eBPF。" >&2
+		return 1
+	fi
+	export CLANG="$_clang"
+	export STRIP=llvm-strip-19
 	BUILD_ARGS="-buildmode=pie -modcacherw" CFLAGS="-fno-stack-protector" make VERSION="${pkgver}"
 }
 
