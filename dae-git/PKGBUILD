@@ -50,14 +50,19 @@ prepare() {
 
 build() {
 	cd "$srcdir/$_name"
-	# eBPF 能不能載入，取決於「編它的那個 clang 版本」，跟 dae 源碼無關。實測 A/B
-	# （同一份源碼、同一顆核心 7.3、同樣的常數注入）：clang 23.1.1 產出的
-	# tproxy_wan_cg_connect4 被驗證器拒收
+	# 釘 clang19 是出於「產物可重現性」：進包的 eBPF 不該跟著 CI 容器（ubuntu runner）
+	# 的預設 LLVM 漂移，同一份源碼每次都要能編出可對照的固定產物。
+	# 事實已更新、舊前提作廢：原註解宣稱「不釘就會被驗證器拒收、用戶裝完 dae 直接斷網」——
+	# clang 23.1.1 產出的 tproxy_wan_cg_connect4 曾報
 	#   load program: invalid argument: invalid variable-offset read from stack R4 ...
-	# 而 clang 19 過。dae 的 Makefile 寫的是 `CLANG ?= clang` / `STRIP ?= llvm-strip`，
-	# 不釘就會跟著容器裡的 extra/clang 漂移（[extra] 現行 22.1.8、[extra-testing] 23.1.1），
-	# 用戶哪天 pacman -Syu 就可能裝到一顆起不來、直接斷網的包。
-	# 找不到 clang19 就中止，絕不退回未釘的 clang：靜默降級正是這次要堵掉的東西。
+	# 現已由 dae 源碼修復：commit d114e4e38 把程序名邊界檢查改用 barrier_var(idx) 界定索引
+	# （見 control/kern/tproxy.c），修掉 LLVM 23 先做 <<32/>>32 零擴充而丟失 32 位邊界資訊的
+	# 問題，最新 clang 的產物也能過載入閘門（clang 23.1.1 與 clang 19 實測皆可載入）。
+	# 故「未釘＝用戶斷網」不再成立；但釘選本身保留，理由換成上面那條可重現性。
+	# 防呆仍必須寫在 PKGBUILD 裡，技術細節照舊：llvm19 才提供 llvm-strip-19（clang19 只依賴
+	# llvm19-libs、不含 strip 工具），而 dae 的 Makefile 是 `CLANG ?= clang` / `STRIP ?= llvm-strip`，
+	# 找不到 STRIP 時會靜默改成 -no-strip；所以找不到 $_clang 就 return 1 中止、
+	# 絕不退回未釘的 clang（靜默降級正是這道閘門要堵掉的）。
 	local _clang=/usr/lib/llvm19/bin/clang
 	if [ ! -x "$_clang" ]; then
 		echo "ERROR: 找不到 $_clang（clang19 套件）。拒用未釘版本的 clang 編 eBPF。" >&2
