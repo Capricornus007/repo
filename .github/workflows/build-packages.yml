@@ -857,14 +857,17 @@ jobs:
             dae-git)
               # 上游是维护者 fork（Capricornus007/dae）。忠实复刻 PKGBUILD 的
               # pkgver()：sed 三连是 AUR 原版算法，别"顺手简化"成 s/-/./g——
-              # 两者对 v2.0.1-10-g5a446e7 的结果一样，但保持逐字一致最保险
+              # 两者对 v2.0.1-10-g5a446e7 的结果一样，但保持逐字一致最保险。
+              # --match 'v[0-9]*' 不可省：main 上挂了非版號的轻量 tag `lastst`，
+              # 它离 HEAD 更近，不限制錨点就会算出 lastst.r396.g… 这种没有排序
+              # 意义的版号（详见 dae-git/PKGBUILD 档头）。
               SRC_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
                         for s in "${source[@]}"; do printf "%s\n" "$s"; done' \
                 | sed -E 's/^git\+//; s/#[^:]*$//; s/^[^:]*:://' \
                 | grep -E '^https?://' | head -n1)
               rm -rf /tmp/gitpkg-src
               git clone "$SRC_URL" /tmp/gitpkg-src || skip "clone $PKG 上游失败"
-              TARGET_PKGVER=$(git -C /tmp/gitpkg-src describe --tags --long \
+              TARGET_PKGVER=$(git -C /tmp/gitpkg-src describe --tags --long --match 'v[0-9]*' \
                 | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-\([^-]*\)-\([^-]*\)$/.\1.\2/;s/-//')
               [ -n "$TARGET_PKGVER" ] || skip "拿不到 $PKG 上游版本"
               ;;

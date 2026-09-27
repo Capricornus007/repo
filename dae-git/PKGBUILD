@@ -1,15 +1,18 @@
 _name=dae
 pkgname=$_name-git
-pkgver=2.0.1.r10.g5a446e7
-pkgrel=2
-# pkgver() 用 describe 錨定「最近的祖先 tag」，而上游 v2.0.1 那筆（2026-08-12 的
-# chore(release): v2.0.1）**不在 main 的歷史裡**——實測 compare v2.0.1...main 回
-# behind=5 / ahead=385 / diverged。所以 main HEAD 雖然比庫裡那條新六週（385 個提交），
-# describe 卻退回 v2.0.0rc1，算出 2.0.0rc1.r593.g<hash>，被 vercmp 判成比 2.0.1.r240
-# 更舊 → repo-add 拒收（2026-09-27 run #269 日誌實證：WARNING: A newer version for
-# 'dae-git' is already present in database），剛蓋好的產物接著被「清理未引用資產」刪掉，
-# 這包永遠不再換代。只能靠 epoch 跨過庫裡那條（不准 --force：拒收是唯一擋住全網降級的
-# 閘門）。若哪天把 v2.0.1 那 5 筆併進 main，describe 會自然回到 2.0.1 線，epoch 仍留著無害。
+pkgver=2.1.1.r576.gd43924d1
+pkgrel=1
+# 這條 pkgver() 原本只寫 `git describe --tags --long`，會錨到「距離最近的祖先 tag」，
+# 而上游在 main 上掛了一顆非版號的輕量 tag `lastst`（2026-08-08，指 1d52465d）。它離
+# HEAD 只有 396 步，比正經的 v2.1.1（576 步）更近，所以 describe 寧可選它，產物會變成
+# `lastst.r396.g…` 這種沒有任何排序意義的字串。修法＝加 --match 'v[0-9]*' 把錨點限死
+# 在版號 tag 上。
+# 另須記錄：2026-09-27 run #269 那輪產物是 2.0.0rc1.r593.g<hash>（同一個 HEAD），被
+# repo-add 判比庫裡 2.0.1.r240 舊而拒收（日誌：WARNING: A newer version for 'dae-git'
+# is already present in database），接著剛蓋好的包被「清理未引用資產」刪掉，用戶機上這包
+# 就再也沒換過代。當時 v2.1.1／lastst 這兩顆 tag 還沒推進 fork，describe 才一路退到 rc1。
+# epoch=1 保留：萬一上游再挪 tag、或 fork 的 tag 推送慢一拍，讓 describe 退回舊錨點時，
+# 這包還能繼續餵養而不是永遠被拒收（不准用 --force 繞，拒收是唯一擋住全網降級的閘門）。
 epoch=1
 pkgdesc="A Linux lightweight and high-performance transparent proxy solution based on eBPF."
 arch=('x86_64' 'aarch64')
@@ -34,7 +37,8 @@ sha256sums=(
 
 pkgver() {
 	cd "$_name"
-	git describe --tags --long | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-\([^-]*\)-\([^-]*\)$/.\1.\2/;s/-//'
+	git describe --tags --long --match 'v[0-9]*' \
+		| sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-\([^-]*\)-\([^-]*\)$/.\1.\2/;s/-//'
 }
 
 prepare() {
