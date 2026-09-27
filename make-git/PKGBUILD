@@ -32,7 +32,7 @@ _name=make
 pkgname=$_name-git
 # 佔位值，僅供人讀：實際由 pkgver() 從 origin/master 現算。實測 origin/master = 4.4.1-146-gb3802782。
 pkgver=4.4.1.r146.gb3802782
-pkgrel=2
+pkgrel=3
 # epoch=1：見 tar-git 的同一理由——describe 錨點漂移時避免被 repo-add 判降級而永遠拒收。
 epoch=1
 pkgdesc='GNU make utility to maintain groups of programs'
@@ -78,18 +78,33 @@ prepare() {
   GNULIB_SRCDIR="${srcdir}/gnulib" ./bootstrap --no-git
 }
 
+# 從 git 建構預設是 maintainer mode，上游 README.git:149-159 寫了兩件必須關掉的事：
+#   1) 它會定義 MAKE_MAINTAINER_MODE → 關掉 NDEBUG（assert 全留）＋常開 verify_flag，
+#      原話是「Make programs built in this mode will be slower, possibly MUCH slower」。
+#      這顆是要頂替系統 make 的，慢是用戶付錢，而且官方 tarball 版根本不含 maintMakefile
+#      （configure.ac:474 只有在 maintMakefile 可讀時才 include），所以關掉它才是與官方等值的產物。
+#   2) maintMakefile:32 的 MAKE_CFLAGS 含 -Werror，任一條新警告就把 feed 打紅。
+#      實測紅點：src/read.c:3068 `char *userend = strchr (name + 1, '/')` 在 glibc 的
+#      C23 strchr 對 const 參數回 const char* 之後，被 -Werror=discarded-qualifiers 打死；
+#      上游 master 從 2026-04-29 (b380278) 起沒動過這行，不會自己好。
+# 用上游給的兩個開關、不自己 patch 源码（行會漂移）。EXTRA_CFLAGS 留在 MAKE_CFLAGS 之後
+# （maintMakefile:40 `AM_CFLAGS += $(MAKE_CFLAGS) $(EXTRA_CFLAGS)`），所以 -Wno-error 壓得住
+# -Werror，但警告本體照樣印在日誌裡，不會把問題藏起來。
+# build() 與 check() 必須用同一組，否則 check 會因編譯旗標改變而全部重編、再把同一個錯踩一遍。
+_flags=(MAKE_MAINTAINER_MODE= EXTRA_CFLAGS=-Wno-error)
+
 build() {
   cd "${_name}"
   # 與官方逐字相同（官方就只有 --prefix=/usr，沒有任何 distro 旗標）
   ./configure --prefix=/usr
-  make
+  make "${_flags[@]}"
 }
 
 check() {
   cd "${_name}"
   # 官方用 -k：GNU make 的測試集有已知環境性失敗，-k 讓它跑完全部再報，
   # 這是最後一道品質閘門，不能因為「怕紅」就拿掉。
-  make -k check
+  make -k check "${_flags[@]}"
 }
 
 package() {
