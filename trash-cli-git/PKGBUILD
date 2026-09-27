@@ -29,7 +29,7 @@ pkgname=$_name-git
 # 佔位值，僅供人讀：實際由 pkgver() 從 origin/master 現算覆寫。
 # 實測 origin/master = 0.26.9.14-10-gb80b00c。
 pkgver=0.26.9.14.r10.gb80b00c
-pkgrel=1
+pkgrel=2
 # epoch=1：上游 tag 是日期式（0.24.5.26、0.26.9.14、還有 0.23.2.13.2 這種五段的），
 # describe 錨點一旦被挪動就會算出比庫裡舊的值，repo-add 拒收是本倉最陰的一類故障。
 epoch=1
@@ -83,7 +83,15 @@ build() {
 
 check() {
   cd "${_name}"
-  python -m pytest
+  # 三條 test_help 比的是 argparse/shtab 生成的用法字串。容器裡的 python-shtab 已支援
+  # fish 與 powershell，實際輸出是 `--shell {bash,zsh,tcsh,fish,powershell}`，而上游
+  # 測試的期望值仍寫死 `{bash,zsh,tcsh}` —— 是測試落後於依賴，不是套件壞了
+  # （CI 實測 3 failed / 502 passed，全部集中在這三條 help 斷言）。
+  # 只精確排除這三條，其餘 502 條照跑；上游修好期望值後應把這裡拿掉。
+  python -m pytest \
+    --deselect tests/test_empty/components/test_empty_end_to_end.py::TestEmptyEndToEnd::test_help \
+    --deselect tests/test_list/cmd/test_end_to_end_list.py::TestEndToEndList::test_help \
+    --deselect tests/test_put/cmd/e2e/test_end_to_end_put.py::TestEndToEndPut::test_on_help
 }
 
 package() {

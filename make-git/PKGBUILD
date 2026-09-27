@@ -32,7 +32,7 @@ _name=make
 pkgname=$_name-git
 # 佔位值，僅供人讀：實際由 pkgver() 從 origin/master 現算。實測 origin/master = 4.4.1-146-gb3802782。
 pkgver=4.4.1.r146.gb3802782
-pkgrel=1
+pkgrel=2
 # epoch=1：見 tar-git 的同一理由——describe 錨點漂移時避免被 repo-add 判降級而永遠拒收。
 epoch=1
 pkgdesc='GNU make utility to maintain groups of programs'
@@ -43,7 +43,10 @@ license=('GPL3')
 depends=('glibc' 'guile')
 # 官方沒有 makedepends（tarball 自帶 configure）。-git 必須 bootstrap，故補上整組鏈工具；
 # 同時把 make 本身列進來（用系統 make 造新 make）。
-makedepends=('autoconf' 'automake' 'git' 'make' 'patch')
+# wget：./bootstrap-funclib.sh 用 wget 抓 po/.reference 的翻譯檔，容器只有 curl →
+#       實測 CI 紅在 `wget: command not found` / `could not fetch auxiliary files`。
+# gettext：抓完翻譯之後還要 msgmerge 合成，與 tar-git 同一條 bootstrap 流程（那邊有列）。
+makedepends=('autoconf' 'automake' 'gettext' 'git' 'make' 'patch' 'wget')
 # 少了這兩行就是災難：pacman 會讓官方 make 與 make-git 並存，兩套 /usr/bin/make 互相
 # 覆蓋檔案，而且依賴 make 的包解析不出來。本倉範本（dae-git／jq-git 型）一律是
 # provides=('<穩定包名>') + conflicts=('<穩定包名>')，不加 replaces（慣例如此）。
