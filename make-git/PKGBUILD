@@ -1,0 +1,95 @@
+# GNU make 的開發版（上游 master，AC_INIT 已是 4.4.90）。基準對照物是 Arch 官方 make
+# （pkgver 4.4.1-3）：https://gitlab.archlinux.org/archlinux/packaging/packages/make/-/raw/main/PKGBUILD
+# 本機實測 Artix 來源全部抓不到（api.artixlinux.org／code.artixlinux.org 連 DNS 都解析不出來），
+# 故依賴與旗標以 Arch 為準。好消息是官方 make 極乾淨：**沒有任何 distro 補丁、沒有
+# backup、沒有 install 鉤子、沒有 systemd 相關東西**，configure 只有一個 --prefix=/usr，
+# 所以「搬過來」這件事在這裡等於全搬，不存在漏東西的空間。
+#
+# ⚠️ 循環依賴（必須讓用戶知道的代價）：make 是絕大多數 build() 的執行器，也是 makepkg
+#   的隱性依賴。把系統 make 換成 make-git 之後，萬一開發版 make 有回歸（GNU make 4.3 的
+#   jobserver 回歸就是典型案例），全機無法再編任何東西，連「降級回官方版」都要靠 makepkg
+#   → 靠 make。換之前手上務必留一份官方 make 的 pkg 檔與可手動執行的 GNU make 二進位。
+#   另外本包自己的 build() 也要用 make 跑（bootstrap + configure + make），等於
+#   「用 make 造 make」，這是所有 make-git 的固有形態，不是這顆寫壞。
+#
+# ⚠️ 未驗證項（老實寫）：git 來源一定要跑 ./bootstrap（倉裡沒有預生成的 configure），
+#   而 bootstrap 需要 gnulib 原始碼。實測 `./bootstrap --no-git` 若沒給 GNULIB_SRCDIR 會直接報
+#   「--no-git requires $GNULIB_SRCDIR environment variable」，所以下方把 gnulib 當獨立 source
+#   釘在同一個分支（bootstrap.conf 的 GNULIB_REVISION=stable-202507，實測 savannah 上
+#   refs/heads/stable-202507 存在）。本機想完整跑一次 bootstrap 驗證，但 savannah 的 gnulib
+#   克隆中途被斷線（「過早的檔案結束符／fetch-pack：無效的 index-pack 輸出」），**這條鏈路
+#   沒有經過實測**，第一次進 CI 請當心；autoconf 2.73／automake 1.19 都滿足 bootstrap.conf
+#   的 buildreq（autoconf>=2.72、automake>=1.16.5）。
+#
+# 另一件事（更正任務給的「已存在/不存在」清單）：**AUR 其實有 make-git**（Chocobo1，
+#   現況 4.3.91.r0.g7c71df56-1，也就是停在 2022 年的 4.3.91 那一顆 pre-release tag），
+#   而且抓到的是「pkgver() + package() 兩段、**整份沒有 build()/configure/bootstrap**」的殘缺
+#   PKGBUILD——拿它替換系統 make 會直接把構建鏈打斷，所以這顆必須 in-tree 自己寫。
+#   AUR 也還有 tar-git（1.33.r106，缺 --enable-backup-scripts、缺 acl 依賴、缺翻譯），
+#   同樣不能沿用。tree-git／unzip-git／multitail-git 實測 AUR 上真的沒有。
+
+_name=make
+pkgname=$_name-git
+# 佔位值，僅供人讀：實際由 pkgver() 從 origin/master 現算。實測 origin/master = 4.4.1-146-gb3802782。
+pkgver=4.4.1.r146.gb3802782
+pkgrel=1
+# epoch=1：見 tar-git 的同一理由——describe 錨點漂移時避免被 repo-add 判降級而永遠拒收。
+epoch=1
+pkgdesc='GNU make utility to maintain groups of programs'
+arch=('x86_64')
+url='https://www.gnu.org/software/make'
+# 官方字串就寫 'GPL3'（不是 GPL-3.0-or-later），照抄不改，避免與穩定版的 license 欄位分岔。
+license=('GPL3')
+depends=('glibc' 'guile')
+# 官方沒有 makedepends（tarball 自帶 configure）。-git 必須 bootstrap，故補上整組鏈工具；
+# 同時把 make 本身列進來（用系統 make 造新 make）。
+makedepends=('autoconf' 'automake' 'git' 'make' 'patch')
+# 少了這兩行就是災難：pacman 會讓官方 make 與 make-git 並存，兩套 /usr/bin/make 互相
+# 覆蓋檔案，而且依賴 make 的包解析不出來。本倉範本（dae-git／jq-git 型）一律是
+# provides=('<穩定包名>') + conflicts=('<穩定包名>')，不加 replaces（慣例如此）。
+provides=("$_name")
+conflicts=("$_name")
+source=("git+https://git.savannah.gnu.org/git/${_name}.git#branch=master"
+        "git+https://git.savannah.gnu.org/git/gnulib.git#branch=stable-202507")
+sha256sums=('SKIP'
+            'SKIP')
+
+pkgver() {
+  # 目錄名必須是 ${pkgname%-git}=make，CI 的泛用版本探測就是照這個名字克隆/軟鏈，
+  # 對不上會恆 skip（踩過的坑）。
+  # 只看 origin/master 這個 ref，不看 HEAD：探測輪克隆預設分支、實建才 checkout，
+  # 只有釘 ref 兩邊算出來的才同值，否則每輪白編。
+  # make 的 tag 沒有 v 前綴（4.4.1、4.4.0.91…），所以 --match 用 '[0-9]*'；
+  # sed 的 s/\([^-]*-g\)/r\1/  capture 一定要連「-g」一起吃，才會得到
+  # <tag>.r<距離>.g<hash> 這個單調形狀；寫成 s/\([^--]*\)-g/r\1/ 那種變體會把 -g 吞掉、
+  # 距離與 hash 黏成一團，vercmp 因此比錯順序、新產物被 repo-add 判舊（本倉踩過）。
+  cd "${pkgname%-git}"
+  git describe --tags --long --match '[0-9]*' origin/master \
+    | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd "${_name}"
+  # git 倉沒有 configure，一定要 bootstrap；GNULIB_SRCDIR 指向同一輪克隆下來、
+  # 與 bootstrap.conf 同分支的 gnulib，--no-git 讓 bootstrap 不再自己上線抓 gnulib。
+  GNULIB_SRCDIR="${srcdir}/gnulib" ./bootstrap --no-git
+}
+
+build() {
+  cd "${_name}"
+  # 與官方逐字相同（官方就只有 --prefix=/usr，沒有任何 distro 旗標）
+  ./configure --prefix=/usr
+  make
+}
+
+check() {
+  cd "${_name}"
+  # 官方用 -k：GNU make 的測試集有已知環境性失敗，-k 讓它跑完全部再報，
+  # 這是最後一道品質閘門，不能因為「怕紅」就拿掉。
+  make -k check
+}
+
+package() {
+  cd "${_name}"
+  make DESTDIR="${pkgdir}" install
+}

@@ -1,0 +1,144 @@
+# GNU tar 的開發版（上游 master）。基準對照物是 Arch 官方 tar（pkgver 1.35-5），
+# 網址 https://gitlab.archlinux.org/archlinux/packaging/packages/tar/-/raw/main/PKGBUILD 。
+# 本機實測 Artix 來源全部抓不到（api.artixlinux.org / code.artixlinux.org 連 DNS 都解析
+# 不出來，僅 www.artixlinux.org 可解析），所以依賴、旗標、補丁一律以 Arch 為準並逐條抄過来；
+# Artix 有沒有額外差异（例如把 systemd 相關東西拿掉）本輪無法核實——tar 這包 Arch 本來就沒有
+# systemd unit/timer，只有一個純提示用的 tar.install（見下方說明），所以這塊風險為零。
+#
+# ⚠️⚠️ 風險標記（這顆是九個裡最危險的）：tar 是用戶包管理器與 makepkg 的命脈——
+#   .pkg.tar.zst 的解包、makepkg 建包、備份腳本全靠它。這包換上去之後如果 GNU tar 開發版
+#   有回歸，後果是「整機無法升級/無法建包」，而且 pacman 升級 tar 本身就是先解包再替換，
+#   出問題連回滾都要靠 tar。建議：這包先只進 CI 產出、**不要**直接 pacman -Syu 換裝，
+#   換之前手上先留一份可用的 /usr/bin/tar 與官方 tar 的 pkg 檔。
+#   另一點：本包是「跟 origin/master 走」的開發版（AC_INIT 已是 1.35.90），不是穩定版，
+#   上游隨時可能推進半成品；與 Arch 穩定包不同，這裡沒有 distro 補丁擋著。
+#
+# ⚠️ 與 tar 的循環依賴：makepkg 解壓源與打包都要用 tar，但 CI 容器用的是官方 tar，
+#   只有在「用戶機把 tar 換成 tar-git 之後再自己 build 東西」時才會形成自舉循環。
+
+_name=tar
+pkgname=$_name-git
+# 佔位值，僅供人讀：實際 pkgver 由下面 pkgver() 在構建時從 origin/master 現算覆寫。
+pkgver=1.35.r366.g5eff02ec
+pkgrel=1
+# epoch=1：describe 的錨點一旦被上游挪動（例如 tar 推了 1.36 又回退、或新增非版號 tag），
+# 算出來的版本可能比庫裡那條舊，repo-add 會直接判降級拒收（本倉最陰的一類故障，
+# 見 dae-git 的說明），不准用 --force 繞，靠 epoch 跨過去。
+epoch=1
+pkgdesc='Utility used to store, backup, and transport files'
+arch=('x86_64')
+url='https://www.gnu.org/software/tar/'
+license=('GPL-3.0-or-later')
+depends=('glibc' 'acl')
+# 官方 makedepends 只有 ('git')，因為 Arch 的 build chroot 裡自帶 base-devel。
+# 但 -git 一定要跑 ./bootstrap（git 倉沒有預生成的 configure），所以把 bootstrap
+# 真正需要的東西全部點名，免得在別的容器上靜默缺工具。
+makedepends=('autoconf' 'automake' 'gettext' 'git' 'patch')
+checkdepends=('attr')
+# 換上去要同時頂掉官方兩個包（見 package() 的拆包說明），少了任何一個都會讓
+# 「已裝 tar 的機器」能同時裝進 tar 與 tar-git，兩套 /usr/bin/tar 互相覆蓋檔案。
+provides=("$_name" 'tar-scripts')
+conflicts=("$_name" 'tar-scripts')
+# 官方 dist tarball 的穩定版 po 檔（見 build() 的說明）。_stablever 升級時要連 sha256sums 一起改。
+_stablever=1.35
+options=('!emptydirs')
+# 官方用 validpgpkeys + `#tag=...?signed` 驗 tar 的 tag 簽名（Sergey Poznyakoff）。
+# 追 master 沒有單一 tag/commit 可釘，`?signed` 無從套起；這裡保留金鑰只為驗那顆
+# dist tarball（Translations 來源），等於把官方那份的 PGP 覆蓋面原樣留住。
+validpgpkeys=('325F650C4C2B6AD58807327A3602B07F55D0C732') # Sergey Poznyakoff <gray@gnu.org>
+source=("git+https://git.savannah.gnu.org/git/tar.git#branch=master"
+        "git+https://git.savannah.gnu.org/git/gnulib.git"
+        "git+https://git.savannah.gnu.org/git/paxutils.git"
+        "https://ftp.gnu.org/gnu/tar/tar-${_stablever}.tar.gz"{,.sig})
+sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
+            '14d55e32063ea9526e057fbf35fcabd53378e769787eff7919c3755b02d2b57e'
+            'SKIP')
+
+pkgver() {
+  # CI 的版本探測會把第一個 git+ 源克隆成 ${pkgname%-git}=tar 這個目錄名，這裡必須對得上，
+  # 否則恆 skip（踩過的坑）。版本只看 origin/master 這個 ref，不看 HEAD：探測輪克隆的是
+  # 預設分支、實建才 checkout，只有釘 ref 兩邊才同值，不然每輪白編一次。
+  # --match 'v[0-9]*' 把錨點鎖死在版號 tag 上：tar 倉裡還有 release_1_34 這種舊分支 tag，
+  # 不限制就可能錨到它們上面，產出沒有排序意義的字串（實測 origin/master = v1.35-366-g5eff02ec）。
+  # sed 這三段是寫死的倉庫慣例，別自己簡化：s/\([^-]*-g\)/r\1/ 必須把「-g」留在 capture
+  # 內，才能得到 <tag>.r<距離>.g<hash> 這個單調形狀。本倉踩過的坑是寫成
+  # s/\([^--]*\)-g/r\1/（把 -g 吞掉），v18.3.2-5-g4886f21d 就變成 v18.3.2.r54886f21d，
+  # 距離與 hash 黏成一團，vercmp 去比這段前導數字 → 新產物被 repo-add 判比庫裡舊而拒收
+  # （見 oh-my-pi-git 的說明）。
+  cd "${pkgname%-git}"
+  git describe --tags --long --match 'v[0-9]*' origin/master \
+    | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd "${_name}"
+
+  # 與官方逐字相同：tar 的 gnulib/paxutils 是 submodule，先本地克隆再走 file:// 協議，
+  # 避免每次 build 都去 savannah 拉（也避開 protocol.file.allow 的預設封鎖）。
+  git submodule init
+  git config submodule.gnulib.url "${srcdir}/gnulib"
+  git config submodule.paxutils.url "${srcdir}/paxutils"
+  git -c protocol.file.allow=always submodule update
+
+  # 官方在這裡套 fix-libacl-conflicts.patch，**這顆 -git 故意不套**，因為該補丁的內容
+  # 就是上游 commit 08c3fc2e9337094aff01a511170fd35fdb8f1ee3「Avoid acl_ prefix for functions」，
+  # 官方註解也寫了「upstream commit doesn't cherry-pick cleanly to stable」＝只在穩定分支才需要。
+  # 實測（本輪 git -C tar merge-base --is-ancestor 08c3fc2e origin/master）該 commit 已在
+  # master 線上，硬套會 patch 失敗把 build 打紅。功能上沒有變少：這是同一份修正，只是來源
+  # 從「distro 補丁」變成「上游自己有了」。
+
+  # Don't pull unstable translations from web（官方同款）
+  # ⚠️ 未實測項：./bootstrap 這一整條鏈（autoconf/automake/gettext，可能還要 libtool）
+  # 在本機跑不起來——savannah 的 gnulib 克隆會被中斷，所以沒能驗證到綠。旁證是 AUR 現成的
+  # tar-git（Chocobo1，1.33.r106）就是直接 `./bootstrap` 建起來的，makedepends 只寫 ('git')
+  # （靠 chroot 的 base-devel 撐 autoconf/automake/gettext），所以這條鏈路是可行的；
+  # 本倉 CI 容器同樣有 base-devel。第一次進 CI 請盯 bootstrap 那段輸出。
+  ./bootstrap --skip-po
+}
+
+build() {
+  cd "${_name}"
+
+  # configure 旗標逐字抄官方，一個不動：--sbindir/--libexecdir/--enable-backup-scripts
+  # 少了任何一個都會讓 -git 版比穩定版少東西（例如少 backup/restore 腳本）。
+  ./configure --prefix=/usr --sbindir=/usr/bin --libexecdir=/usr/lib/tar --enable-backup-scripts
+  make WERROR_CFLAGS="" # -Werror is enabled by default and causes build failures
+
+  # Generate tar mo files from dist tarball（官方同款，https://archlinux.org/todo/unstable-gnu-translations/）
+  # 這段是「-git 不比穩定版功能少」的關鍵：master 的 po/ 在 --skip-po 之後是空的，
+  # 不做這件事就會失去所有翻譯，穩定版卻有。
+  cd "${srcdir}/${_name}-${_stablever}/po"
+  for po in *.po; do
+    msgfmt "${po}" -o "${po%.po}.mo"
+  done
+}
+
+check() {
+  cd "${_name}"
+  make check
+}
+
+package() {
+  cd "${_name}"
+
+  make DESTDIR="${pkgdir}" install
+
+  # Install tar mo files from dist tarball（官方同款；檔名用 ${_name}.mo，
+  # 因為 gettext domain 是 tar，不能跟著包名變成 tar-git.mo）
+  cd "${srcdir}/${_name}-${_stablever}/po"
+  for mo in *.mo; do
+    install -Dm 644 "${mo}" "${pkgdir}/usr/share/locale/${mo%.mo}/LC_MESSAGES/${_name}.mo"
+  done
+
+  # 官方把 usr/bin/{backup,restore} 與 usr/lib/tar/{backup.sh,dump-remind} 拆成第二個包
+  # tar-scripts。本倉的命名規矩是目錄與包名只能是純 <包名>-git，不做拆包，
+  # 所以這裡「tar + tar-scripts 一起裝貨」，再用 provides 同時頂掉兩個名字——
+  # 內容是官方兩包的並集，不會比穩定版少。
+  #
+  # 官方 install=tar.install **不搬**：它只有一個 post_upgrade()，作用是「把 backup/restore
+  # 移到 tar-scripts 時打一段公告」。本包沒拆、腳本還在，那段公告講的是假事；而且它的
+  # vercmp 條件吃的是穩定版 version（1.35-3），從穩定版升上 -git 時根本不會觸發。
+  # 純訊息、不碰任何檔案，因此 Artix/OpenRC 端也沒有需要補的東西（官方這包沒有 systemd unit）。
+}

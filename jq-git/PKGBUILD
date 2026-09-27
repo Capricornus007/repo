@@ -1,0 +1,74 @@
+# jq 的開發版（上游 master）。基準對照物是 Arch 官方 jq
+# （pkgver 1.8.2-1）：https://gitlab.archlinux.org/archlinux/packaging/packages/jq/-/raw/main/PKGBUILD
+# 本機實測 Artix 來源全部抓不到（api.artixlinux.org／code.artixlinux.org 連 DNS 都解析不出來），
+# 故 depends/makedepends/旗標/check() 全部以 Arch 為準逐條搬。
+#
+# 重點事實：**AUR 現成的 jq-git 不能沿用**。AUR 那份的 source 還指向
+# https://github.com/stedolan/jq.git（原作者棄守的舊倉，停在 1.7.1），而官方 jq 早已搬到
+# jqlang/jq（1.8.x 線）。拿 AUR 的 jq-git 換上去等於把 jq 降級，直接踩到「-git 不能比穩定版
+# 功能少」的底線，所以這顆必須 in-tree 自己寫。
+#
+# 官方這包本來就從 git 倉取源（source 是 git+github、#tag=jq-$pkgver），-git 化只改版本來源，
+# 構建邏輯（autoreconf -fi → configure → make → make check）一字不用動。
+#
+# ⚠️ 風險等級：低。jq 不是工具鏈依賴，裝壞了頂多 jq 自己不能用，不會讓機器無法升級
+#   （不像 tar-git／make-git／cmake-git 那三顆）。唯一要注意的是 oniguruma：倉裡另有
+#   oniguruma-git 在 CI 矩陣中，若同時換上 oniguruma-git，就是「兩個 -git 疊在一起」的組合風險。
+
+_name=jq
+pkgname=$_name-git
+# 佔位值，僅供人讀：實際由 pkgver() 從 origin/master 現算覆寫。
+# 實測 origin/master = jq-1.8.2-26-g9a75bb0（master 比最新 release jq-1.8.2 多 26 個 commit，
+# 最新一顆 2026-09-27，是「Improve performance of join/1 on large arrays (#3639)」這類真改動）。
+pkgver=1.8.2.r26.g9a75bb0
+pkgrel=1
+# epoch=1：見 tar-git。describe 錨點漂移時避免被 repo-add 判降級而永遠拒收。
+epoch=1
+pkgdesc='Command-line JSON processor'
+arch=('x86_64')
+url='https://jqlang.github.io/jq/'
+license=('MIT')
+depends=('glibc' 'oniguruma')
+# 官方那份已經是把 git 倉當源，所以 makedepends 裡本來就有 autoconf/automake/bison/flex/git/python
+# （autoreconf -fi 與文件都需要），逐字照抄，不要學 AUR 那份只寫 ('git')。
+makedepends=('autoconf' 'automake' 'bison' 'flex' 'git' 'python')
+provides=("$_name")
+conflicts=("$_name")
+source=("git+https://github.com/jqlang/${_name}.git#branch=master")
+sha512sums=('SKIP')
+
+pkgver() {
+  # 目錄名必須是 ${pkgname%-git}=jq，CI 的泛用版本探測照這個名字克隆，對不上會恆 skip。
+  # 只看 origin/master 這個 ref，不看 HEAD（探測輪與實建輪必須同值，否則每輪白編）。
+  # --match 'jq-[0-9]*' 是必需的不是裝飾：jq 倉裡有一顆沒有前綴的舊 tag `1.6rc2`，
+  # 不限制錨點就可能被它搶走，產出沒有排序意義的版本字串。
+  cd "${pkgname%-git}"
+  git describe --tags --long --match 'jq-[0-9]*' origin/master \
+    | sed 's/^jq-//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd "${_name}"
+  # 官方同款：git 來源沒有預生成的 configure，一定要 autoreconf。
+  autoreconf -fi
+}
+
+build() {
+  cd "${_name}"
+  # 官方只有 --prefix=/usr 這一個旗標。AUR 那份多塞了 --disable-docs，會讓 -git 版
+  # 比穩定版少 man page 與內建文件，這裡**不跟**。
+  ./configure --prefix=/usr
+  make
+}
+
+check() {
+  # 官方同款：jq 的測試集很完整，是這包最後一道閘門。本倉 in-tree 包在 CI 會真的跑
+  # check()（--nocheck 只加在 kind:aur 的包上），所以這裡保留。
+  make -C "${_name}" check
+}
+
+package() {
+  cd "${_name}"
+  make DESTDIR="${pkgdir}" prefix=/usr install
+  install -Dm644 COPYING "${pkgdir}/usr/share/licenses/${pkgname}/COPYING"
+}

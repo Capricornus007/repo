@@ -37,6 +37,11 @@ jobs:
       packages: |
         [
           {"key": "dae-git", "repo_name": "dae-git", "variant": "none"},
+          {"key": "tar-git", "repo_name": "tar-git", "variant": "none"},
+          {"key": "make-git", "repo_name": "make-git", "variant": "none"},
+          {"key": "cmake-git", "repo_name": "cmake-git", "variant": "none"},
+          {"key": "jq-git", "repo_name": "jq-git", "variant": "none"},
+          {"key": "multitail-git", "repo_name": "multitail-git", "variant": "none"},
           {"key": "ffmpeg-full-git", "repo_name": "ffmpeg-full-git", "variant": "nonfree"},
           {"key": "astc-encoder-git", "repo_name": "astc-encoder-git", "variant": "none"},
           {"key": "kew-git", "repo_name": "kew-git", "variant": "none"},
@@ -162,6 +167,6 @@ jobs:
           {"key": "python-magic-git", "repo_name": "python-magic-git", "variant": "none", "kind": "aur"},
           {"key": "ripgrep-git", "repo_name": "ripgrep-git", "variant": "none", "kind": "aur"},
           {"key": "taglib-git", "repo_name": "taglib-git", "variant": "none", "kind": "aur"},
-          {"key": "trash-cli-git", "repo_name": "trash-cli-git", "variant": "none", "kind": "aur"},
+          {"key": "trash-cli-git", "repo_name": "trash-cli-git", "variant": "none"},
           {"key": "xapp-symbolic-icons-git", "repo_name": "xapp-symbolic-icons-git", "variant": "none", "kind": "aur"}
         ]
