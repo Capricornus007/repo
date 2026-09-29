@@ -5,7 +5,7 @@
 # 然後把 prepare()/build() 兩處的本地改動重放一次即可（其餘段落刻意保持逐字相同）。
 
 pkgname=oh-my-pi-git
-pkgver=v13.10.1.r5817130cd3
+pkgver=v18.4.3.r0.gfc671eb
 # pkgrel 保持 1：-git 包的 pkgver 由上面的 pkgver() 在構建時從上游 HEAD 算出，
 # makepkg 的 update_pkgver_and_pkgrel() 一發現 pkgver 變了就順帶把 PKGBUILD 裡的
 # pkgrel 重寫回 1，所以在這裡把 pkgrel 抬到 2 並不會讓產物檔名變成 -2。
@@ -30,7 +30,14 @@ pkgrel=1
 # 頭部寫 2 會讓比對永遠找 -2、實物卻是 -1 → 每輪判定「產物不存在」，這包每小時重編一次
 # 15 分鐘的 rust 構建。pre-commit 的 bump-pkgrel 鉤子會自動 +1，所以改動本檔時要連 pkgver
 # 一行一起更新（鉤子見到 pkgver/pkgrel 已動就不會再加）。
-epoch=1
+# epoch 在 2026-09-29 再抬一等（1 → 2），這次不是公式的錯，是上游把 tag 移了：
+# 庫裡那條是 1:v18.4.3.r21.g33f887a（33f887a，09-29 00:21Z），接著上游把 v18.4.3 這顆 tag
+# 重新打在 fc671eb（03:45Z，"chore: bump version to 18.4.3"，compare 實測比 33f887a 領先
+# 1 個 commit），describe 的距離於是從 r21 掉回 r0 —— 同一個 tag 名、數字卻倒退，
+# repo-add 又判降版拒收（run #296 日誌 04:52:55 那行 WARNING），剛上傳的產物接著被
+# 「清理未引用資產」刪掉。tag 被往後移是上游的自由，公式無從預防，只能靠 epoch 跨過去；
+# 往後距離要爬到 r22 才會再換代，所以不抬就得讓用戶機停在舊碼上。
+epoch=2
 pkgdesc="AI Coding agent for the terminal — hash-anchored edits, optimized tool harness, LSP, Python, browser, subagents, and more (git build)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/can1357/oh-my-pi"
