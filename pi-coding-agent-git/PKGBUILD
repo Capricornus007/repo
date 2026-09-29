@@ -1,0 +1,100 @@
+# 底稿＝AUR 的 pi-coding-agent-git（維護者 dougefresh），我們改成 in-tree 只為修一件事：
+# 上游 HEAD 把 workspace 包 @earendil-works/pi-codemode 與 @earendil-works/pi-mcp 加進了
+# coding-agent 的 dependencies，但這兩顆**還沒發佈到 npm**（2026-09-29 實測 registry 回 404，
+# 而倉裡 packages/codemode、packages/mcp 確實存在、version 都是 0.87.1；實測另外四顆
+# chord/pi-agent-core/pi-ai/pi-tui 已發佈 0.87.1，所以只有這兩顆要處理）。AUR 的 build() 是
+# 「npm pack 出成品 → 到解開的目錄裡 npm install --omit=dev」，那一步會去註冊表要它們 → 整輪紅。
+# 修法是把「註冊表查無」的依賴指到本地 pack 出來的 tarball（file:），
+# 不去改上游清單、不降版、不關校驗，也不寫死包名清單。
+# ⚠️ 版本公式藏在兩處（本檔 pkgver() 與 build-packages.yml 的通用探測）；通用探測會把源
+#    克隆成 ${pkgname%-git}=pi-coding-agent 並軟鏈各種名字，所以 pkgver() 用 "$srcdir/$_pkgname"
+#    的絕對形式（相對 cd 在探測子殼裡會找不到目錄 → 「job 綠但永遠不產包」）。
+_pkgname=pi-coding-agent
+pkgname=pi-coding-agent-git
+pkgver=0.87.1.r50.g2b0a123de
+pkgrel=1
+pkgdesc="Coding agent CLI with read, bash, edit, write tools and session management (git build)"
+arch=('x86_64')
+url="https://github.com/earendil-works/pi"
+license=('MIT')
+depends=('nodejs')
+makedepends=('git' 'npm')
+conflicts=('pi-coding-agent')
+provides=('pi-coding-agent')
+install=pi-coding-agent-git.install
+source=(
+    "${_pkgname}::git+${url}"
+    'pi-wrapper'
+    'APPEND_SYSTEM.md.example'
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+options=('!strip' '!debug')
+
+pkgver() {
+    cd "$srcdir/$_pkgname"
+    git describe --long --tags | sed 's/^v//;s/-/.r/;s/-/./'
+}
+
+build() {
+    cd "$srcdir/$_pkgname"
+    npm ci --ignore-scripts --no-audit --no-fund
+    npm run build
+
+    local _stage="$srcdir/$_pkgname-package"
+    mkdir -p "$_stage"
+    # 不接 npm pack 的 stdout（新版 npm 會把檔名印到 stderr，抓錯就得到空字串），
+    # 一律照「@scope/name → scope-name-<ver>.tgz」的規則掃，掃不到就明講並讓 build 紅。
+    (cd packages/coding-agent && npm pack --ignore-scripts --pack-destination "$srcdir" >/dev/null 2>&1)
+    local _tarball
+    _tarball=$(find "$srcdir" -maxdepth 1 -name 'earendil-works-pi-coding-agent-*.tgz' -printf '%f\n' | sort | tail -1)
+    if [ -z "$_tarball" ]; then
+        echo "找不到本地 pack 出來的 pi-coding-agent tarball（上游可能改了 npm 包名）。" >&2
+        return 1
+    fi
+    bsdtar -xf "$srcdir/$_tarball" -C "$_stage" --strip-components=1
+
+    # 上游有把 workspace 包列進 dependencies、卻「還沒發佈到 npm」的（2026-09-29 實測 registry
+    # 404 的是 @earendil-works/pi-codemode 與 @earendil-works/pi-mcp 兩顆）。這裡**不寫死名單**：
+    # 逐個問註冊表，查無此版本才從倉內對應目錄本地 pack、把依賴指到 file:；已發佈的仍走註冊表
+    # （省得把整排 workspace 都重打包）。以後上游再漏發一顆也自動涵蓋，不用改這裡。
+    local _dep _dpath _dtgz _tname
+    for _dep in $(jq -r '.dependencies | keys[] | select(startswith("@earendil-works/"))' "$_stage/package.json"); do
+        if npm view "$_dep" version >/dev/null 2>&1; then
+            continue
+        fi
+        _dpath=$(grep -l "\"name\":[[:space:]]*\"$_dep\"" "$srcdir/$_pkgname"/packages/*/package.json 2>/dev/null | head -1)
+        if [ -z "$_dpath" ]; then
+            echo "$_dep 在 npm 查無、倉內 packages/ 也找不到對應目錄 —— 上游可能改了包名或 monorepo 結構。" >&2
+            return 1
+        fi
+        (cd "$(dirname "$_dpath")" && npm pack --ignore-scripts --pack-destination "$srcdir" >/dev/null 2>&1)
+        # 不接 npm pack 的 stdout（新版 npm 會把檔名印到 stderr，抓錯就是空字串）：
+        # 照「@scope/name → scope-name-<ver>.tgz」的命名規則掃檔，掃不到就明講並讓 build 紅，
+        # 不要靜默退回「去註冊表要一個不存在的版本」。
+        _tname="${_dep#@}"; _tname="${_tname%%/*}-${_tname##*/}"
+        _dtgz=$(find "$srcdir" -maxdepth 1 -name "${_tname}-*.tgz" -printf '%f\n' | sort | tail -1)
+        if [ -z "$_dtgz" ]; then
+            echo "$_dep 本地 npm pack 沒產出 ${_tname}-*.tgz；該 workspace 包可能缺 files/dist。" >&2
+            return 1
+        fi
+        (cd "$_stage" && npm pkg set "dependencies.$_dep=file:$srcdir/$_dtgz")
+    done
+
+    (
+        cd "$_stage"
+        npm install --omit=dev --ignore-scripts --no-audit --no-fund --package-lock=false
+    )
+}
+
+package() {
+    # wrapper script
+    install -Dm755 "$srcdir/pi-wrapper" "$pkgdir/usr/bin/pi"
+    # Install the upstream npm package layout, including its production dependencies.
+    local _destdir="$pkgdir/usr/lib/node_modules/$_pkgname"
+    mkdir -p "$_destdir"
+    cp -a "$srcdir/$_pkgname-package/." "$_destdir/"
+
+    # docs
+    install -Dm644 "$_destdir/README.md" "$pkgdir/usr/share/doc/$_pkgname/README.md"
+    install -Dm644 "$srcdir/APPEND_SYSTEM.md.example" "$pkgdir/usr/share/doc/$_pkgname/APPEND_SYSTEM.md.example"
+}

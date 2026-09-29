@@ -309,7 +309,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|trash-cli-git)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|trash-cli-git|pi-coding-agent-git)
               # 這批 in-tree 包（本倉同名目錄，PKGBUILD 要嘛是用戶 ~/.cache/yay 的本地版、
               # 要嘛是我方改過的版本）。**必須在這裡先攔掉**：下面的通用規則見 '-git$'
               # 就去 clone AUR，而 free-claude-code-git、qalculate-gtk-git 在 AUR 上
@@ -326,6 +326,13 @@ jobs:
               # 版本都由 makepkg build 時現算，所以都已列進下方「更新校驗和並回推」的
               # giant if 排除清單；不然那步會為 1.9GB 級別的 git 源重跑 updpkgsums
               # （連續失敗 5 次就 exit 1 把 job 判紅）。
+              # pi-coding-agent-git：AUR 那份（dougefresh）的 build() 到解開的 npm 包目錄裡
+              # 跑 `npm install --omit=dev`，會去註冊表要 @earendil-works/pi-codemode ——
+              # 而那個 workspace 包上游 HEAD 已列進 dependencies 卻**還沒發佈到 npm**
+              # （實測 registry 404、倉內 packages/codemode 存在），所以 AUR 版恆紅。
+              # 本倉目錄版把該依賴指到本地 `npm pack` 出來的 tarball（file:），
+              # 不改上游依賴清單、不降版、不關校驗。保留矩陣上的 kind:aur 只為借用
+              #  giant if 的 `matrix.kind != 'aur'` 自動跳過回推，**不是**要抓 AUR 那份。
               mkdir pkg_dir
               _it_repo="${{ github.repository }}"
               _it_pkg="${{ matrix.repo_name }}"
