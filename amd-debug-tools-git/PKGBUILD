@@ -1,0 +1,105 @@
+# 上游：Mario Limonciello（superm1）在 kernel.org 的 git 倉，amd_s2idle／amd_bios／amd_pstate／amd_ttm 四支工具。
+# 為什麼 in-tree（不是 kind:aur）：
+#   1) 穩定版 amd-debug-tools 住在 Arch 官方 extra（實測 0.2.21-1），**不是 AUR**，
+#      所以「參考非 -git 包的 PKGBUILD」這件事只能拿官方 GitLab 那份來改，本檔就是以它為底。
+#   2) AUR 的 amd-debug-tools-git（dreieck 維護）依賴清單照 pyproject 的 dependencies 全抄進 depends，
+#      並把版本號寫成 `0.2.21.r613.20260812.acc8749`（摻日期、且 hash 前沒有 g），
+#      与本倉其它 -git 的 `rN.gHASH` 慣例不一致；vercmp 上「多一段數字」也不會更舊，
+#      但為免日後兩源同名不同公式打架，這裡自己發一份。
+#   3) 依賴清單是自己量出來的（見下方 depends 註解），官方那份有兩處與上游實際 import 不符。
+# ⚠️ 版本公式藏在**兩處**：本檔的 pkgver() 與 .github/workflows/build-packages.yml 的「通用探測」分支。
+#    通用探測會把源克隆成 ${pkgname%-git}（=amd-debug-tools）並軟鏈 ${pkgbase} 等名字，
+#    所以 source 的「名字::」前綴必須正好是 amd-debug-tools，且 pkgver() 裡 cd 的目錄要對得上；
+#    只改一邊會造成「已在 release 裡」恆不命中 → 每輪白編（kew-git／oh-my-pi-git 踩過）。
+_pkgbase=amd-debug-tools
+pkgname=${_pkgbase}-git
+pkgver=0.2.21.r0.gacc8749
+pkgrel=1
+pkgdesc="A collection of Python-based tools for debugging AMD platforms, particularly Zen-based systems (git build)"
+arch=('any')
+url="https://git.kernel.org/pub/scm/linux/kernel/git/superm1/amd-debug-tools.git"
+license=('MIT')
+# 這組是「模組頂層就 import、缺了直接起不來」的量測結果：
+#   grep -rhoE '^(import|from) X' src *.py → jinja2 / numpy / packaging / pandas / pyudev / tabulate
+#   （markupsafe 是 jinja2 的依賴，會自動帶進）
+# acpica（acpidump/ecdump）與 fwupd（fwupdmgr）是外部命令，沿用官方穩定版的判斷。
+depends=(
+  acpica
+  fwupd
+  python
+  python-jinja
+  python-numpy
+  python-packaging
+  python-pandas
+  python-pyudev
+  python-seaborn      # sleep_report.py 畫圖；matplotlib 由它帶進
+  python-tabulate
+)
+# 全部是「函式內延遲 import ＋有退回路徑」，所以列 optdepends 而非 depends：
+#   - cysystemd／python-systemd：讀 kernel log 用的 systemd journal 實作，
+#     Artix 沒有 journald，本來就走 dmesg 那條（實測 import 在 CySystemdLogger/SystemdLogger 的 __init__ 裡）
+#   - python-dbus-fast／python-dbus：只有 reboot 動作要用（common.py 的 try: import dbus_fast）
+#     ⚠️ 官方穩定版把 python-dbus（dbus-python）列進 depends，但上游 import 的是 dbus_fast，
+#        全倉找不到 top-level `import dbus`——這條是官方清單與實際需求不符，這裡改成兩邊都列為選用
+#   - python-gobject：prerequisites.py 裡 `from gi.repository import Fwupd`，函式內 import
+optdepends=(
+  'python-cysystemd: 用 systemd journal 讀 kernel log（Artix 用不到，退回 dmesg）'
+  'python-systemd:   同上另一實作；amd-bios 需要'
+  'python-dbus-fast: 讓 amd-s2idle 能透過 D-Bus 下達重啟'
+  'python-dbus:      同上（舊實作）'
+  'python-gobject:   檢查 fwupd 版本時用'
+)
+makedepends=(
+  git
+  python-build
+  python-installer
+  python-setuptools
+  python-setuptools-scm
+  python-wheel
+)
+# 只取 HEAD，不鎖 tag：這條線就是跟上游尖端（規則 61）。
+source=("${_pkgbase}::git+${url}")
+sha256sums=('SKIP')
+provides=("${_pkgbase}=${pkgver}")
+conflicts=("${_pkgbase}")
+replaces=("${_pkgbase}")
+
+pkgver() {
+  # 必須用 "$srcdir/…" 的絕對形式，不能寫相對 cd：
+  # makepkg 叫 pkgver() 前會先 cd 到 srcdir，所以相對寫法在本地能過；
+  # 但 CI 的「通用版本探測」是把源克隆進 src/repo、再软鏈 src/<各種可能名字>，
+  # 而它自己的 CWD 停在 startdir —— 相對 cd 會找不到目錄，
+  # 結果是「探測拿不到版本 → skip → job 綠但永遠不產包」（2026-09-23 那批 i3-git 同因）。
+  cd "$srcdir/${_pkgbase}" || return 1
+  # 上游 tag 混了 debian/0.2.16-1、ubuntu/0.2.13-0ubuntu1 這種「非版號 tag」，
+  # describe 不帶 --match 會被它們劫持（同 dae-git 被 lastst 劫持那件事），
+  # 所以只認開頭是數字的 tag。輸出 0.2.21-0-gacc8749 → 0.2.21.r0.gacc8749。
+  git describe --tags --long --abbrev=7 --match '[0-9]*' \
+    | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd "${_pkgbase}"
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd "${_pkgbase}"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  # 官方穩定版這裡把 site-packages 寫死成 python3.14；改成問本人，
+  # 免得哪天 Artix 升 python 小版就「裝得出來但檔不在」。
+  local site_dir
+  site_dir="usr/lib/python$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')/site-packages"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+  # s2idle-hook：上游把它當 package-data 裝進 site-packages，官方額外再複製一份到
+  # systemd 的 system-sleep 目錄。**本機是 Artix＋OpenRC，systemd-sleep 不會讀它**，
+  # 這裡照官方裝只是留著給「哪天換系統／別的機器」用，本倉的量測不依賴它
+  # （~/bin/s2idle-check 直接讀 /sys/power/suspend_stats）。檔不在就跳過，
+  # 免得上游哪天改名讓整輪 build 紅。
+  if [ -f "$pkgdir/$site_dir/amd_debug/s2idle-hook" ]; then
+    install -Dm755 "$pkgdir/$site_dir/amd_debug/s2idle-hook" \
+      "$pkgdir/usr/lib/systemd/system-sleep/s2idle-hook"
+  fi
+}

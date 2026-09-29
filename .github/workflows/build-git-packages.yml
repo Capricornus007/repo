@@ -167,6 +167,7 @@ jobs:
           {"key": "python-magic-git", "repo_name": "python-magic-git", "variant": "none", "kind": "aur"},
           {"key": "ripgrep-git", "repo_name": "ripgrep-git", "variant": "none", "kind": "aur"},
           {"key": "taglib-git", "repo_name": "taglib-git", "variant": "none", "kind": "aur"},
+          {"key": "amd-debug-tools-git", "repo_name": "amd-debug-tools-git", "variant": "none"},
           {"key": "trash-cli-git", "repo_name": "trash-cli-git", "variant": "none"},
           {"key": "xapp-symbolic-icons-git", "repo_name": "xapp-symbolic-icons-git", "variant": "none", "kind": "aur"}
         ]
