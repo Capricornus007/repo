@@ -12,7 +12,7 @@
 _pkgname=pi-coding-agent
 pkgname=pi-coding-agent-git
 pkgver=0.87.1.r50.g2b0a123de
-pkgrel=1
+pkgrel=2
 pkgdesc="Coding agent CLI with read, bash, edit, write tools and session management (git build)"
 arch=('x86_64')
 url="https://github.com/earendil-works/pi"
@@ -57,7 +57,7 @@ build() {
     # 404 的是 @earendil-works/pi-codemode 與 @earendil-works/pi-mcp 兩顆）。這裡**不寫死名單**：
     # 逐個問註冊表，查無此版本才從倉內對應目錄本地 pack、把依賴指到 file:；已發佈的仍走註冊表
     # （省得把整排 workspace 都重打包）。以後上游再漏發一顆也自動涵蓋，不用改這裡。
-    local _dep _dpath _dtgz _tname
+    local _dep _dpath _dtgz _tname _pinned=""
     for _dep in $(jq -r '.dependencies | keys[] | select(startswith("@earendil-works/"))' "$_stage/package.json"); do
         if npm view "$_dep" version >/dev/null 2>&1; then
             continue
@@ -78,12 +78,25 @@ build() {
             return 1
         fi
         (cd "$_stage" && npm pkg set "dependencies.$_dep=file:$srcdir/$_dtgz")
+        # 記下「哪顆 → 哪個版號」，裝完要用實版號把 file: 路徑蓋回去（見下方迴圈）
+        _pinned="$_pinned $_dep:${_dtgz#${_tname}-}"
     done
 
     (
         cd "$_stage"
         npm install --omit=dev --ignore-scripts --no-audit --no-fund --package-lock=false
     )
+
+    # ⚠️ 上一步的 file: 依賴會把**建置機的絕對路徑**（CI 裡是 /__w/repo/repo/pkg_dir/…）
+    # 留在裝出去的 package.json 裡。執行期沒事（node 只看實體 node_modules 樹），
+    # 但在用戶機上對該目錄跑 `npm ci`／`npm ls` 會 ENOENT。依賴已經實體落地了，
+    # 所以裝完把這些 spec 蓋回真實版號，讓套件自述保持一致。
+    local _pair _pd _pv
+    for _pair in $_pinned; do
+        _pd="${_pair%%:*}"; _pv="${_pair#*:}"; _pv="${_pv%.tgz}"
+        [ -n "$_pd" ] && [ -n "$_pv" ] || continue
+        (cd "$_stage" && npm pkg set "dependencies.$_pd=$_pv")
+    done
 }
 
 package() {
