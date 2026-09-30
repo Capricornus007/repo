@@ -1341,6 +1341,23 @@ jobs:
               fi ;;
           esac
 
+          # ⚠️ makepkg 的硬性行為（PKGBUILD(5)／src/builtin/build.c 的 check_package）：
+          # 只要 PKGBUILD 定義了 pkgver()、且它算出的值與檔內**靜態 pkgver 不同**，
+          # makepkg 就把 **pkgrel 重置為 1**。本倉 -git 包的靜態 pkgver 永遠是陳舊佔位值
+          # （kind:aur 那批按設計根本不回推），所以「pkgver() ≠ 靜態 pkgver」是常態
+          # → 實物檔名恆為 `-1-`。
+          # 而 plan 之前拿「檔內 pkgrel」去拼資產名比對（scripts/bump-pkgrel 已把
+          # pi-coding-agent-git 抬到 3），於是永遠比不命中 → 從 09-27 起每個整點重編 25MB。
+          # 實測證據（run #314 job 日誌）：「Making package: pi-coding-agent-git
+          # 0.87.1.r50.g2b0a123de-3」→ 產出 `pi-coding-agent-git-0.99.1.r31.g2bbfcca437c3-1`。
+          # 所以這裡要**預測 makepkg 會做什麼**，而不是照抄檔裡的數字。
+          if grep -qE '^[[:space:]]*pkgver\(\)' PKGBUILD && [ "$TARGET_PKGVER" != "$CUR_PKGVER" ]; then
+            if [ "$TARGET_PKGREL" != "1" ]; then
+              echo "pkgver() 會改版本 → makepkg 必把 pkgrel 重置為 1；資產比對從 $TARGET_PKGREL 改成 1"
+            fi
+            TARGET_PKGREL=1
+          fi
+
           echo "目标版本: $TARGET_PKGVER-$TARGET_PKGREL"
 
           # 真正的「要不要构建」判据：产物是否已经发布到 release。
