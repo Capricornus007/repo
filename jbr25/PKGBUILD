@@ -1,0 +1,29 @@
+# JBR 25 —— 與 jbr21 同一套接法，差別只在版號與「建議／必須」的角色：
+#   jbr21 是 nashira 執行期的**必須**項（`jvmTarget=JVM_21` → class 65）；
+#   jbr25 是往後的相容性驗證用（JBR 25 跑得動 Java 21 位元碼，反之不然）。
+# 兩者可共裝：都裝到 /opt/jbrNN，且**都不宣告 provides/conflicts=('jbr')**。
+# 其餘設計理由（來源用官方 CDN、校驗和 SKIP、!strip、命名不參考 AUR、為何不出 17）
+# 全部同 jbr21，見該目錄檔頭，此處不重複。
+#
+# ⚠️ 版號由 CI 的專屬探測算（build-packages.yml 的 jbr25 case）。本檔 pkgver 是靜態佔位值。
+
+_pkgver=25.0.4.1
+_build=b623.69
+pkgname=jbr25
+pkgver=${_pkgver}.${_build#b}
+pkgrel=1
+pkgdesc="JetBrains Runtime (JBR) 25 with JCEF — 分版本、可與其它 jbrNN 共裝"
+arch=('x86_64')
+url='https://github.com/JetBrains/JetBrainsRuntime'
+license=('custom')
+options=('!strip' '!debug' '!emptydirs')
+source=("https://cache-redirector.jetbrains.com/intellij-jbr/jbr_jcef-${_pkgver}-linux-x64-${_build}.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  local d="jbr_jcef-${_pkgver}-linux-x64-${_build}"
+  install -dm755 "${pkgdir}/opt"
+  cp -a "${srcdir}/${d}" "${pkgdir}/opt/${pkgname}"
+  install -dm755 "${pkgdir}/usr/lib/jvm"
+  ln -s "/opt/${pkgname}" "${pkgdir}/usr/lib/jvm/${pkgname}"
+}

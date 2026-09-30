@@ -169,5 +169,7 @@ jobs:
           {"key": "taglib-git", "repo_name": "taglib-git", "variant": "none", "kind": "aur"},
           {"key": "amd-debug-tools-git", "repo_name": "amd-debug-tools-git", "variant": "none"},
           {"key": "trash-cli-git", "repo_name": "trash-cli-git", "variant": "none"},
-          {"key": "xapp-symbolic-icons-git", "repo_name": "xapp-symbolic-icons-git", "variant": "none", "kind": "aur"}
+          {"key": "xapp-symbolic-icons-git", "repo_name": "xapp-symbolic-icons-git", "variant": "none", "kind": "aur"},
+          {"key": "jbr21", "repo_name": "jbr21", "variant": "none"},
+          {"key": "jbr25", "repo_name": "jbr25", "variant": "none"}
         ]

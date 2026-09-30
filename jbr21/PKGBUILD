@@ -1,0 +1,46 @@
+# 上游：JetBrains Runtime（JBR）官方 CDN 直出的二進位重打包（不解碼、不編譯）。
+# 為什麼 in-tree ＋ 分版本命名（用戶 2026-09-30 指令）：
+#   1) 命名**不參考 AUR 那個 `jbr-linux-x64`**，一律走 `jbr21` 這種（像 clang22）。
+#      目的是**多版可共裝** → 所以刻意**不寫** `provides=('jbr')` / `conflicts=('jbr')`，
+#      否則 jbr21 與 jbr25 會互相踢掉，就跟 clang 系列一樣要能並存。
+#   2) 需求方是 nashira（Compose Multiplatform 桌面 app）：
+#      `shared/build.gradle.kts:47` 寫死 `jvmTarget = JVM_21` → class 檔版號 65，
+#      JBR 17 載入不了 class 65，所以**只出 21 與 25，不出 17**。
+#      mgx／xposedsmscode 只在**建置期**用 JDK（Gradle toolchain），不是執行期依賴，實測兩倉
+#      對 jbr／JetBrainsRuntime 的引用為 0 處，故不為它們出包。
+#   3) 來源用 JetBrains 自家 CDN 而非 GitHub release：實測 `JetBrains/JetBrainsRuntime` 的
+#      release 頁**一個資產都沒有**（assets=0），而
+#      `cache-redirector.jetbrains.com/intellij-jbr/…` → 307 → `d2xrhe97vsfxuc.cloudfront.net` → 200，
+#      本機網路抓得到，**不需要**規則 50 那套「NDK 由 runner 鏡像到自己 release」的做法。
+#   4) 校驗和 `SKIP`：JetBrains 的 `<檔名>.tar.gz.sha256` 路徑實測回 `AccessDenied`，
+#      拿不到官方摘要，而用戶指示「PKGBUILD 校驗和寫不齊就用 SKIP」（規則 25）。
+#      來源本身是官方 HTTPS CDN，不另增信任面。
+#   5) `options=('!strip')` 必留：JVM 附帶 native 庫（libjvm.so 等），strip 會弄壞。
+#   6) 骨架取自用戶本地的 `~/.cache/yay/jbr-linux-x64/PKGBUILD`（規則 25：要用本地那份、
+#      不是抓 raw），它的 `package()` 就是「解 tar.gz 全丟 /opt」。
+#
+# ⚠️ 版號由 CI 的專屬探測算（見 build-packages.yml 的 jbr21 case：查 JetBrains release tag
+#    再拼檔名）。本檔的 pkgver 是**靜態佔位值**，別把它當成上游現況。
+
+_pkgver=21.0.11
+_build=b1163.116
+pkgname=jbr21
+pkgver=${_pkgver}.${_build#b}
+pkgrel=1
+pkgdesc="JetBrains Runtime (JBR) 21 with JCEF — 分版本、可與其它 jbrNN 共裝"
+arch=('x86_64')
+url='https://github.com/JetBrains/JetBrainsRuntime'
+license=('custom')
+options=('!strip' '!debug' '!emptydirs')
+source=("https://cache-redirector.jetbrains.com/intellij-jbr/jbr_jcef-${_pkgver}-linux-x64-${_build}.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  local d="jbr_jcef-${_pkgver}-linux-x64-${_build}"
+  install -dm755 "${pkgdir}/opt"
+  cp -a "${srcdir}/${d}" "${pkgdir}/opt/${pkgname}"
+  # 讓 gradle／`-Djava.home` 那側能用 Arch 慣例路徑找到它（/usr/lib/jvm/<pkgname>）。
+  # 只放符號連結，不碰 /usr/lib/jvm/default，絕不干預系統預設 JVM。
+  install -dm755 "${pkgdir}/usr/lib/jvm"
+  ln -s "/opt/${pkgname}" "${pkgdir}/usr/lib/jvm/${pkgname}"
+}

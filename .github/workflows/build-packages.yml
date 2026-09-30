@@ -322,7 +322,12 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|trash-cli-git|pi-coding-agent-git)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|trash-cli-git|pi-coding-agent-git|jbr21|jbr25)
+              # jbr21／jbr25（用戶 2026-09-30 指令）：**必須**加在這裡，否則通用規則見
+              # 「不是 -git 結尾」就會掉到最後的 `git clone github.com/<owner>/<repo_name>.git`，
+              # 而 Capricornus007/jbr21 這個倉**不存在也不需要存在**（in-tree 包的 PKGBUILD
+              # 一律躺在本倉同名目錄，實證：bash-git／amd-debug-tools-git／pi-coding-agent-git
+              # 等六顆既有 in-tree 包都沒獨立倉）→ 會索要憑證、CI 無 TTY 直接 exit 128。
               # 這批 in-tree 包（本倉同名目錄，PKGBUILD 要嘛是用戶 ~/.cache/yay 的本地版、
               # 要嘛是我方改過的版本）。**必須在這裡先攔掉**：下面的通用規則見 '-git$'
               # 就去 clone AUR，而 free-claude-code-git、qalculate-gtk-git 在 AUR 上
