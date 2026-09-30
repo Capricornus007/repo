@@ -757,6 +757,10 @@ jobs:
           TARGET_PKGVER=""
           TARGET_PKGREL="$CUR_PKGREL"
           CACHY_TAG=""
+          # 只有 jbr21／jbr25 會填：pkgver 是 ${_pkgver}.${_build#b} 算出來的，
+          # 改寫步要動的是那兩個原料變數，不是 pkgver 那行。
+          NEW_JBR_VER=""
+          NEW_JBR_BUILD=""
 
           case "$PKG" in
             linux-zencjk)
@@ -945,6 +949,34 @@ jobs:
               # 固定版本包：pkgver 写死在各自仓库的 PKGBUILD 里，
               # 首次构建入库后 plan 的 release 资产比对应会永远跳过
               TARGET_PKGVER="$CUR_PKGVER"
+              ;;
+
+            jbr21|jbr25)
+              # JBR 分版本包（用戶 2026-09-30 指令：命名走 `jbr21` 這種、不參考 AUR）。
+              # 版號權威來源只有 tag 名 `jbr-release-<ver>b<build>`：JetBrains 的 GitHub
+              # release 頁**一個資產都沒有**（隔壁 09-30 實測 assets=0），二進位只在自家
+              # CDN（cache-redirector.jetbrains.com/intellij-jbr/），而 CDN 沒有目錄列表。
+              # 為什麼不用 /tags API：實測它**無視 filter 參數**（?filter=jbr-release-21 照樣
+              # 回 v1.2.0／test-jbr-release-…／jdk-27+…），而本倉有 15554 個 tag＝156 頁。
+              # `git ls-remote --tags` 單請求就吐全部 tag 名（實測 15554 行），省掉分頁。
+              _major="${PKG#jbr}"
+              _alltags=$(timeout 120 git ls-remote --tags https://github.com/JetBrains/JetBrainsRuntime 2>/dev/null \
+                         | awk '{print $2}' | sed 's|^refs/tags/||;s|\^{}||' || true)
+              [ -n "$_alltags" ] || skip "拿不到 JetBrainsRuntime 的 tag 清單"
+              _latest=$(printf '%s\n' "$_alltags" \
+                        | grep -E "^jbr-release-${_major}\.[0-9]+(\.[0-9]+)*b[0-9]+\.[0-9]+$" \
+                        | sort -V | tail -n1 || true)
+              [ -n "$_latest" ] || skip "tag 清單裡找不到 jbr-release-${_major}.* 線"
+              _v="${_latest#jbr-release-}"
+              NEW_JBR_VER="${_v%b*}"      # 21.0.11 ／ 25.0.4.1
+              NEW_JBR_BUILD="b${_v##*b}"  # b1163.116 ／ b623.69
+              case "$NEW_JBR_VER$NEW_JBR_BUILD" in
+                *[!0-9.b]*|"") skip "tag $_latest 解析不出版本與 build 兩段" ;;
+              esac
+              # 與 PKGBUILD 的 pkgver 公式**逐字同形**，否則後面「改寫後 pkgver 是否
+              # 等於 plan 目標」那道自證會永遠失敗。
+              TARGET_PKGVER="${NEW_JBR_VER}.${NEW_JBR_BUILD#b}"
+              echo "目標 tag=$_latest → pkgver=$TARGET_PKGVER（_pkgver=$NEW_JBR_VER _build=$NEW_JBR_BUILD）"
               ;;
 
             u1s1-bin)
@@ -1337,6 +1369,8 @@ jobs:
             echo "pkgrel=$TARGET_PKGREL"
             echo "cachy_tag=$CACHY_TAG"
             echo "pkgbase=$PKGBASE"
+            echo "jbr_ver=$NEW_JBR_VER"
+            echo "jbr_build=$NEW_JBR_BUILD"
           } >> "$GITHUB_OUTPUT"
 
       - name: 云端编译 protonvpn 的 AUR 依赖
@@ -1388,6 +1422,8 @@ jobs:
           NEW_SHA_X86: ${{ steps.plan.outputs.sha_x86 }}
           NEW_SHA_ARM: ${{ steps.plan.outputs.sha_arm }}
           CACHY_TAG: ${{ steps.plan.outputs.cachy_tag }}
+          NEW_JBR_VER: ${{ steps.plan.outputs.jbr_ver }}
+          NEW_JBR_BUILD: ${{ steps.plan.outputs.jbr_build }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
           REPO_OWNER: ${{ github.repository_owner }}
         run: |
@@ -1630,6 +1666,27 @@ jobs:
               echo "==== $PKG 改寫結果 ===="
               grep -nE '^(pkgver|sha256sums_x86_64|sha256sums_aarch64)=' PKGBUILD
               ;;
+            jbr21|jbr25)
+              # ⚠️ 這包的 pkgver 是**算出來的**（pkgver=${_pkgver}.${_build#b}），
+              # source URL 也由 _pkgver／_build 展開。只 sed ^pkgver= 會做出
+              # 「新版號、舊檔名」的包——正是 09-26「6b3fe1f 只改探測那半邊」同一類坑。
+              # 空值先擋掉：plan 沒吐出兩段原料時，sed 會寫出 `_pkgver=`（空），
+              # 而下方的 URL 自證在兩邊都空時仍會「自己對上自己」放過。
+              [ -n "$NEW_JBR_VER" ] && [ -n "$NEW_JBR_BUILD" ] \
+                || { echo "::error::$PKG 的 plan 沒有輸出 _pkgver／_build（=$NEW_JBR_VER／$NEW_JBR_BUILD）"; exit 1; }
+              sed -i "s/^_pkgver=.*/_pkgver=$NEW_JBR_VER/" PKGBUILD
+              sed -i "s/^_build=.*/_build=$NEW_JBR_BUILD/" PKGBUILD
+              echo "==== $PKG 改寫結果 ===="
+              grep -nE '^(_pkgver|_build|pkgver|pkgrel)=' PKGBUILD
+              # 自證：公式展開後的 pkgver 必須與 plan 的目標一致，且 URL 裡的檔名
+              # 必須同時含新 _pkgver 與新 _build（兩個都殘留舊值＝只改了半邊）。
+              source ./PKGBUILD >/dev/null 2>&1
+              [ "${pkgver:-}" = "$NEW_PKGVER" ] || { echo "::error::$PKG 改寫後 pkgver=${pkgver:-} 與 plan 目標 $NEW_PKGVER 不符"; exit 1; }
+              case "${source[0]:-}" in
+                *"${NEW_JBR_VER}-linux-x64-${NEW_JBR_BUILD}.tar.gz") echo "source URL 一致：${source[0]}" ;;
+                *) echo "::error::$PKG 的 source URL 沒跟著換：${source[0]:-（空）}"; exit 1 ;;
+              esac
+              ;;
             codex-desktop-git)
               # codex-desktop-git 由 AUR 提供，CI 無法預先知悉 build 時下載的 deb 版本。
               # 此處不修改 PKGBUILD，讓 makepkg 的 pkgver() 在 build 時自動設定版本。
@@ -1654,7 +1711,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'trash-cli-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'jbr21' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'trash-cli-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}

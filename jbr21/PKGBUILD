@@ -12,6 +12,14 @@
 #      release 頁**一個資產都沒有**（assets=0），而
 #      `cache-redirector.jetbrains.com/intellij-jbr/…` → 307 → `d2xrhe97vsfxuc.cloudfront.net` → 200，
 #      本機網路抓得到，**不需要**規則 50 那套「NDK 由 runner 鏡像到自己 release」的做法。
+#   3b) ⚠️ 變體選的是 **`jbrsdk_jcef`**，不是 AUR 那顆用的 `jbr_jcef`。理由（隔壁 09-30 21:5x 實測）：
+#      `jbr_jcef-`／`jbr-` 是 **runtime** 變體，解開後 `bin/javac` 有、但 **`jmods/` 是 0 個檔案**；
+#      而 nashira 的 #62 要用 gradle 的 `createDistributable`（jpackage → **jlink**）內建執行期，
+#      jlink 非要有 jmods 不可 → 用 runtime 變體做出來的包對 #62 無用。
+#      `jbrsdk` 才是 SDK（含 jmods）。jcef 與否的取捨：nashira 的托盤與字型渲染走 AWT，
+#      保留 jcef 才與 AUR 那顆行為一致 → 故取超集 `jbrsdk_jcef`。
+#      實測四變體大小（HEAD content-length）：jbr 99MB／jbr_jcef 242MB／jbrsdk 241MB／
+#      **jbrsdk_jcef 525MB**。體積大不是停下來問的理由（用戶 09-28：「超過也拉」）。
 #   4) 校驗和 `SKIP`：JetBrains 的 `<檔名>.tar.gz.sha256` 路徑實測回 `AccessDenied`，
 #      拿不到官方摘要，而用戶指示「PKGBUILD 校驗和寫不齊就用 SKIP」（規則 25）。
 #      來源本身是官方 HTTPS CDN，不另增信任面。
@@ -19,26 +27,31 @@
 #   6) 骨架取自用戶本地的 `~/.cache/yay/jbr-linux-x64/PKGBUILD`（規則 25：要用本地那份、
 #      不是抓 raw），它的 `package()` 就是「解 tar.gz 全丟 /opt」。
 #
-# ⚠️ 版號由 CI 的專屬探測算（見 build-packages.yml 的 jbr21 case：查 JetBrains release tag
-#    再拼檔名）。本檔的 pkgver 是**靜態佔位值**，別把它當成上游現況。
+# ⚠️ 版號由 CI 的專屬探測算（build-packages.yml 的 `jbr21|jbr25)` 共用 case：單次
+#    `git ls-remote --tags` 取 JetBrainsRuntime 全部 tag，認 `jbr-release-<ver>b<build>` 的最新版，
+#    再由「改写 PKGBUILD」步換掉**本檔的 _pkgver／_build 兩行**（不是 pkgver 那行——它是公式）。
+#    所以本檔的 pkgver 是**佔位值**，只保證格式正確，別把它當成上游現況。
 
 _pkgver=21.0.11
 _build=b1163.116
+_variant=jbrsdk_jcef
 pkgname=jbr21
 pkgver=${_pkgver}.${_build#b}
-pkgrel=1
-pkgdesc="JetBrains Runtime (JBR) 21 with JCEF — 分版本、可與其它 jbrNN 共裝"
+pkgrel=2
+pkgdesc="JetBrains Runtime (JBR) 21 SDK with JCEF — 含 jmods 可 jlink，分版本可共裝"
 arch=('x86_64')
 url='https://github.com/JetBrains/JetBrainsRuntime'
 license=('custom')
 options=('!strip' '!debug' '!emptydirs')
-source=("https://cache-redirector.jetbrains.com/intellij-jbr/jbr_jcef-${_pkgver}-linux-x64-${_build}.tar.gz")
+source=("https://cache-redirector.jetbrains.com/intellij-jbr/${_variant}-${_pkgver}-linux-x64-${_build}.tar.gz")
 sha256sums=('SKIP')
 
 package() {
-  local d="jbr_jcef-${_pkgver}-linux-x64-${_build}"
+  local d="${_variant}-${_pkgver}-linux-x64-${_build}"
   install -dm755 "${pkgdir}/opt"
   cp -a "${srcdir}/${d}" "${pkgdir}/opt/${pkgname}"
+  # jmods 必須跟著進包，否則裝完還是 jlink 不了（這是選 jbrsdk_jcef 的全部理由）。
+  [ -d "${pkgdir}/opt/${pkgname}/jmods" ] || { echo "錯誤：${d} 內沒有 jmods/，變體選錯了，jlink 用不了" >&2; return 1; }
   # 讓 gradle／`-Djava.home` 那側能用 Arch 慣例路徑找到它（/usr/lib/jvm/<pkgname>）。
   # 只放符號連結，不碰 /usr/lib/jvm/default，絕不干預系統預設 JVM。
   install -dm755 "${pkgdir}/usr/lib/jvm"
