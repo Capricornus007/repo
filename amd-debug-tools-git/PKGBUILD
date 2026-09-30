@@ -14,7 +14,7 @@
 _pkgbase=amd-debug-tools
 pkgname=${_pkgbase}-git
 pkgver=0.2.21.r0.gacc8749
-pkgrel=1
+pkgrel=2
 pkgdesc="A collection of Python-based tools for debugging AMD platforms, particularly Zen-based systems (git build)"
 arch=('any')
 url="https://git.kernel.org/pub/scm/linux/kernel/git/superm1/amd-debug-tools.git"
@@ -34,19 +34,27 @@ depends=(
   python-pyudev
   python-seaborn      # sleep_report.py 畫圖；matplotlib 由它帶進
   python-tabulate
+  # ⚠️ 2026-09-30 實測修正：`amd-s2idle test --logind` 會崩在 validator.py:761/808 的
+  #   函式內 `import dbus`（AttributeError: module 'dbus' has no attribute 'SystemBus'）。
+  #   這台裝了 python-pyqt6，它附一個沒有 __init__.py 的 site-packages/dbus/ 目錄，
+  #   會以「命名空間包」的身分搶走 import dbus 這個名字 → 不裝 python-dbus 就永遠拿到假貨，
+  #   而外層 except 抓的是 dbus.exceptions.DBusException，連 ModuleNotFoundError 都接不住。
+  #   在 Artix／OpenRC 上 --logind 是唯一會跑 system-sleep 鉤子的路徑（繞開它就必然
+  #   nvidia nv_pmops_suspend 回 -5），所以這是主用途、不是選用 → 列硬依賴。
+  python-dbus
 )
 # 全部是「函式內延遲 import ＋有退回路徑」，所以列 optdepends 而非 depends：
 #   - cysystemd／python-systemd：讀 kernel log 用的 systemd journal 實作，
 #     Artix 沒有 journald，本來就走 dmesg 那條（實測 import 在 CySystemdLogger/SystemdLogger 的 __init__ 裡）
-#   - python-dbus-fast／python-dbus：只有 reboot 動作要用（common.py 的 try: import dbus_fast）
-#     ⚠️ 官方穩定版把 python-dbus（dbus-python）列進 depends，但上游 import 的是 dbus_fast，
-#        全倉找不到 top-level `import dbus`——這條是官方清單與實際需求不符，這裡改成兩邊都列為選用
+#   - python-dbus-fast：common.py 的 try: import dbus_fast，只有「重啟」動作要用，有退路
 #   - python-gobject：prerequisites.py 裡 `from gi.repository import Fwupd`，函式內 import
+# ⚠️ 本檔舊註解曾寫「全倉找不到 top-level import dbus，所以 python-dbus 用不到」——**那是錯的**：
+#   延遲 import 一樣會炸，而且我當時只 grep 了 common.py、沒看 validator.py。
+#   python-dbus 已移到上面的 depends，勿再降回選用。
 optdepends=(
   'python-cysystemd: 用 systemd journal 讀 kernel log（Artix 用不到，退回 dmesg）'
   'python-systemd:   同上另一實作；amd-bios 需要'
   'python-dbus-fast: 讓 amd-s2idle 能透過 D-Bus 下達重啟'
-  'python-dbus:      同上（舊實作）'
   'python-gobject:   檢查 fwupd 版本時用'
 )
 makedepends=(
