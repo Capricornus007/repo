@@ -1843,6 +1843,17 @@ jobs:
           set -uo pipefail
           cd pkg_dir
           chown -R builder:builder .
+          # 2026-09-30 診斷（#79）：pi-coding-agent-git 每輪白編——plan 算出的目標是 `…-3`
+          # （TARGET_PKGREL 取自倉庫 checkout 的 PKGBUILD 頭部），但 makepkg 實際產出的是 `…-1`，
+          # 於是 yml 的「已在 release 裡」判據永不命中 → 每個整點重編一次 25MB。
+          # 已逐一否證的假因：u1s1-bin 那條「pkgrel 保持 1」註解、linux-cachyos 分支內的
+          # `sed pkgrel=$NEW_PKGREL`、以及「本檔有第二處 pkgrel 賦值」（全文只有一處）。
+          # 這一行把「構建側此刻真正讀到的那份 PKGBUILD」與 plan 傳過來的值並列印出，一輪定案。
+          echo "::group::pkgrel 診斷（構建側實際讀到的 vs plan 目標）"
+          echo "檔案內: $(grep -nE '^(pkgver|pkgrel|epoch)=' PKGBUILD | tr '\n' ' ')"
+          echo "plan 目標: pkgver=${{ steps.plan.outputs.pkgver }} pkgrel=${{ steps.plan.outputs.pkgrel }}"
+          echo "工作目錄: $(pwd)  PKGBUILD mtime=$(stat -c %y PKGBUILD 2>/dev/null)"
+          echo "::endgroup::"
           flags="-s --noconfirm -f"
           if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ]; then
             # CachyOS 的 config / 补丁是 CI 现抓的，校验和对不上，跳过完整性检查
