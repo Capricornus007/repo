@@ -12,7 +12,7 @@
 _pkgname=pi-coding-agent
 pkgname=pi-coding-agent-git
 pkgver=0.87.1.r50.g2b0a123de
-pkgrel=2
+pkgrel=3
 pkgdesc="Coding agent CLI with read, bash, edit, write tools and session management (git build)"
 arch=('x86_64')
 url="https://github.com/earendil-works/pi"
@@ -32,7 +32,13 @@ options=('!strip' '!debug')
 
 pkgver() {
     cd "$srcdir/$_pkgname"
-    git describe --long --tags | sed 's/^v//;s/-/.r/;s/-/./'
+    # --abbrev=12 是必要的，不是風格問題：CI 的通用探測用 `git clone --filter=blob:none`
+    # （blobless 克隆）再跑本函數，而 git 的**預設 abbrev 長度依倉庫物件數自適應**——
+    # 物件少的探測克隆吐 8 位、makepkg 的完整克隆吐 9 位，兩邊算出的 pkgver 就差一個字元，
+    # 於是 plan 步的「已在 release 裡」永不命中 → 這包每輪白編（2026-09-30 實測：
+    # 探測 `0.99.1.r13.g1b347794` vs 產物 `0.99.1.r13.g1b347794e`）。
+    # 12 位元 16 進對任何真實倉庫都唯一，兩側都會原樣使用，不再受物件數影響。
+    git describe --long --tags --abbrev=12 | sed 's/^v//;s/-/.r/;s/-/./'
 }
 
 build() {
