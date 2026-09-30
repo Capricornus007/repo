@@ -51,9 +51,22 @@ jobs:
           #  → failed to commit transaction）。這一步在 makepkg 之前，吃不到後面
           # 那套重試迴圈，所以自己包一層。
           _pi=0
-          until pacman -Syu --noconfirm git jq curl sudo devtools pacman-contrib gnupg github-cli; do
+          # --disable-download-timeout 才是這類的正解：實測死因都是
+          # `failed retrieving file … from fastly.mirror.pkgbuild.com :
+          #  OpenSSL SSL_read: unexpected eof / SSL_ERROR_SYSCALL`（#305 kglobalaccel-git、
+          # #306 kdbusaddons-git），pacman 預設的 low-speed 逾時會把 CDN 抖動直接判成失敗。
+          until pacman -Syu --noconfirm --disable-download-timeout git jq curl sudo devtools pacman-contrib gnupg github-cli; do
             _pi=$((_pi + 1))
-            [ "$_pi" -ge 4 ] && { echo "::error::初始化依賴 pacman 連續 4 次失敗"; exit 1; }
+            # 必須用 if，不能用 `[ … ] && { … ; exit 1; }`：本步驟的 shell 是 `sh -e`
+            # （runner 上就是 dash），而 dash 的 errexit 對「AND-OR 清單裡最後被執行的那條
+            # 失敗」會直接退出——測試為假時 [ ] 就是最後執行的命令，於是 set -e 殺掉整個腳本，
+            # 重試迴圈變成死碼（2026-09-30 實測：run #306 kdbusaddons-git 與 #305
+            # kglobalaccel-git 都是第一次 pacman 失敗後 7 秒內結束、日誌 0 條 ::warning::）。
+            # bash 會豁免這種寫法，所以本地測不出來。
+            if [ "$_pi" -ge 4 ]; then
+              echo "::error::初始化依賴 pacman 連續 4 次失敗"
+              exit 1
+            fi
             echo "::warning::鏡像瞬斷，初始化依賴重試（第 ${_pi} 次）"
             sleep $((_pi * 20))
           done
