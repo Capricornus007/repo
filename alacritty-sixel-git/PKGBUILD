@@ -13,7 +13,7 @@ pkgname='alacritty-sixel-git'
 _pkgname='alacritty-sixel'
 pkgdesc="A cross-platform, GPU-accelerated terminal emulator (with sixel graphics)"
 pkgver=0.18.0.2579.g8b9699bd
-pkgrel=1
+pkgrel=2
 epoch=1
 arch=('x86_64')
 url="https://github.com/Capricornus007/alacritty"
@@ -28,7 +28,7 @@ sha256sums=('SKIP')
 
 pkgver() {
 	cd "$_pkgname/alacritty"
-	echo "$(grep '^version =' Cargo.toml | head -n1 | cut -d\" -f2 | cut -d- -f1).$(git rev-list --count HEAD).g$(git rev-parse --short HEAD)"
+	echo "$(grep '^version =' Cargo.toml | head -n1 | cut -d\" -f2 | cut -d- -f1).$(git rev-list --count HEAD).g$(git rev-parse --short=8 HEAD)"
 }
 
 build() {

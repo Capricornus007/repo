@@ -29,7 +29,7 @@ pkgname=$_name-git
 # 佔位值，僅供人讀：實際由 pkgver() 從 origin/master 現算覆寫。
 # 實測 origin/master = 0.26.9.14-10-gb80b00c。
 pkgver=0.26.9.14.r10.gb80b00c
-pkgrel=2
+pkgrel=3
 # epoch=1：上游 tag 是日期式（0.24.5.26、0.26.9.14、還有 0.23.2.13.2 這種五段的），
 # describe 錨點一旦被挪動就會算出比庫裡舊的值，repo-add 拒收是本倉最陰的一類故障。
 epoch=1
@@ -54,7 +54,7 @@ pkgver() {
   # --match '[0-9]*'：實測上游 tag 全是數字開頭（含 0.22.10.20 這種多段式），加這道是防止
   # 日後有人掛 latest／test 之類的非版號 tag 搶走錨點（本倉 dae-git 踩過 lastst）。
   cd "${pkgname%-git}"
-  git describe --tags --long --match '[0-9]*' origin/master \
+  git describe --tags --long --abbrev=8 --match '[0-9]*' origin/master \
     | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
 }
 
