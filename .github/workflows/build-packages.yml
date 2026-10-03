@@ -322,7 +322,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|trash-cli-git|pi-coding-agent-git|jbr21|jbr25)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|trash-cli-git|pi-coding-agent-git|jbr21|jbr25|serein)
               # jbr21／jbr25（用戶 2026-09-30 指令）：**必須**加在這裡，否則通用規則見
               # 「不是 -git 結尾」就會掉到最後的 `git clone github.com/<owner>/<repo_name>.git`，
               # 而 Capricornus007/jbr21 這個倉**不存在也不需要存在**（in-tree 包的 PKGBUILD
@@ -351,6 +351,13 @@ jobs:
               # 本倉目錄版把該依賴指到本地 `npm pack` 出來的 tarball（file:），
               # 不改上游依賴清單、不降版、不關校驗。保留矩陣上的 kind:aur 只為借用
               #  giant if 的 `matrix.kind != 'aur'` 自動跳過回推，**不是**要抓 AUR 那份。
+              # serein（用戶 2026-10-03 點名）：AUR 上確實有同名包，但本倉要的是
+              # 「跟隨上游最新 nightly」＋「零 systemd」兩件事，AUR 那份版號寫死在檔內
+              # （每次更新要人手工抬），故走 in-tree。它的依賴清單本來就沒有 systemd 條目
+              # ——沾 systemd 的是上游自附的 `serein-bin`（prebuilt）配方，裡面列
+              # `systemd-libs>=262-1`，而 Artix 啟用的倉裡 systemd／systemd-libs／
+              # libsystemd 三顆全部查無 → 那條路根本裝不起來，只能從源碼建。
+              # 細節與閘門寫在 serein/PKGBUILD 檔頭。
               mkdir pkg_dir
               _it_repo="${{ github.repository }}"
               _it_pkg="${{ matrix.repo_name }}"
@@ -1065,6 +1072,29 @@ jobs:
                 TARGET_PKGVER="$CUR_PKGVER"
               fi
               ;;
+            serein)
+              # Serein 的 nightly tag 有兩套命名並存：舊式 `v1.0.0-nightly.10.1` 與
+              # 日期式 `v1.0.0-nightly.20261001.53`（實測 28 顆 tag 裡 6 顆舊式、22 顆日期式）。
+              # 用 sort -V 取「最大」會把 20261001 當成比 10 大，哪天上游改回舊式就永久
+              # 卡死在一顆舊 tag（本倉 sort -V 那一類坑的變體）。所以改取**發布時間最新**
+              # 那顆：/releases 端點本身按 created_at 倒序回，第一條匹配的就是它。
+              # 版號轉換照 AUR／上游慣例：去掉前綴 v，第一個 - 換成 pre.（上游 README
+              # 明寫「do not put - in pkgver」）。
+              latest_tag=$(gh_api "https://api.github.com/repos/ViceVerse-cz/Serein/releases?per_page=100" \
+                | jq -r '[.[].tag_name] | map(select(test("^v1\\.0\\.0-nightly\\.[0-9]"))) | .[0] // empty' 2>/dev/null || true)
+              [ -n "$latest_tag" ] || skip "拿不到 Serein 的 nightly release tag"
+              latest="${latest_tag#v}"
+              latest="${latest/-/pre.}"
+              case "$latest" in
+                ""|*[!0-9A-Za-z.]*) skip "Serein tag 展開出的版號不合法（=$latest）" ;;
+              esac
+              echo "当前 PKGBUILD=$CUR_PKGVER，上游最新發布 tag=$latest_tag"
+              if [ "$latest" != "$CUR_PKGVER" ]; then
+                TARGET_PKGVER="$latest"
+              else
+                TARGET_PKGVER="$CUR_PKGVER"
+              fi
+              ;;
             nashira-git)
               # 版本 = Nashira 主倉 master HEAD 的 git describe
               # （v0.1.0-74-gb1fcd2b → 0.1.0.r74.gb1fcd2b）。與 ffmpeg-full-git
@@ -1654,6 +1684,31 @@ jobs:
               sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
               grep -n '^pkgver=' PKGBUILD
               ;;
+            serein)
+              # ⚠️ 這包的 pkgver 是 `${_upver/-/pre.}` 展開出來的，source 的 `#tag=v$_upver`
+              # 也由同一行展開 → 只能改 `_upver=`。去 sed `^pkgver=` 會做出
+              # 「新版號、舊 tag」（而且 pkgver 那行根本不是賦值字面量），
+              # 與 jbr21／jbr25、09-26「6b3fe1f 只改探測那半邊」同一類坑。
+              # 反向轉換不憑信任：sed 完把 _upver 再正向展開一次，必須與 plan 目標逐字
+              # 相同，且 source[0] 要含新的 #tag=v<_upver>（jbr 同款自證）。
+              _serein_upver="${NEW_PKGVER/pre.nightly./-nightly.}"
+              if [ -z "$_serein_upver" ] || [ "$_serein_upver" = "$NEW_PKGVER" ]; then
+                echo "::error::$PKG 的 plan 目標不是 pre.nightly 形（=$NEW_PKGVER），不敢改寫"
+                exit 1
+              fi
+              sed -i "s|^_upver=.*|_upver='$_serein_upver'|" PKGBUILD
+              echo "==== $PKG 改寫結果 ===="
+              grep -nE '^(_upver|pkgver|pkgrel)=' PKGBUILD
+              source ./PKGBUILD >/dev/null 2>&1
+              if [ "${pkgver:-}" != "$NEW_PKGVER" ]; then
+                echo "::error::$PKG 改寫後 pkgver=${pkgver:-} 與 plan 目標 $NEW_PKGVER 不符"
+                exit 1
+              fi
+              case "${source[0]:-}" in
+                *"#tag=v$_serein_upver") echo "source tag 一致：${source[0]}" ;;
+                *) echo "::error::$PKG 的 source #tag 沒跟著換：${source[0]:-（空）}"; exit 1 ;;
+              esac
+              ;;
             nashira-git)
               # -git 包：版本跟 master HEAD 走（plan 已算好）；
               # source 是 git repo，無 URL 模板要改，只換 pkgver
@@ -1728,7 +1783,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'jbr21' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'trash-cli-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'jbr21' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'trash-cli-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -1788,9 +1843,9 @@ jobs:
           cp /tmp/PKGBUILD.ci PKGBUILD
           chown -R builder:builder .
 
-      - name: 回推 in-tree 套件的 PKGBUILD（Element / Nashira / Qoder 四包）
+      - name: 回推 in-tree 套件的 PKGBUILD（Element / Serein / Nashira / Qoder 四包）
         # 这些包的打包文件都维护在本仓库子目录里（element-desktop-nightly-bin/、
-        # nashira-git/、qoder-cli/、qoder-cli-cn/、qoder-gui-bin/、qoder-gui-cn/），
+        # serein/、nashira-git/、qoder-cli/、qoder-cli-cn/、qoder-gui-bin/、qoder-gui-cn/），
         # 源随版本滚动（nightly deb / master HEAD / 各官方 manifest），sha256 要么全为
         # SKIP、要么由「改写 PKGBUILD」步驟從官方端點直接更新，都不折腾 updpkgsums
         # （用户指示：sums 能跳过就跳过；Qoder 的源是 250MB 級大檔，讓 updpkgsums 再抓
@@ -1801,7 +1856,7 @@ jobs:
         # （自己 clone 之後 master 被對方推進，push 被拒而整個 job 變紅）——
         # 各個包改的檔案不相交，失敗就重新克隆最新 master 重放提交，
         # 隨機退避重試，最多 5 次
-        if: (matrix.repo_name == 'element-desktop-nightly-bin' || matrix.repo_name == 'nashira-git' || matrix.repo_name == 'qoder-cli' || matrix.repo_name == 'qoder-cli-cn' || matrix.repo_name == 'qoder-gui-bin' || matrix.repo_name == 'qoder-gui-cn') && steps.plan.outputs.build == 'true'
+        if: (matrix.repo_name == 'element-desktop-nightly-bin' || matrix.repo_name == 'serein' || matrix.repo_name == 'nashira-git' || matrix.repo_name == 'qoder-cli' || matrix.repo_name == 'qoder-cli-cn' || matrix.repo_name == 'qoder-gui-bin' || matrix.repo_name == 'qoder-gui-cn') && steps.plan.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
