@@ -29,16 +29,17 @@
 pkgname=ttf-jetbrains-maple-mono-nf-xx-xx-xx
 _rel_tag=pre
 pkgver=pre
-# 2 = 故意抬的一等：庫裡那顆 pre-1 建於 2026-09-18T17:47Z，而上游資產在
+# 3 = 故意抬的一等：庫裡那顆 pre-2 建於 2026-09-18T17:47Z，而上游資產在
 # 2026-09-20T20:20Z 原地重傳過（sha256 已是下面這個值），pre-1 裝的是舊檔。
 # 這一輪補建之後，往後的重建完全由「資產 sha256 變了沒變」驅動，人不用再抬。
-pkgrel=2
+pkgrel=3
 pkgdesc="JetBrains Maple Mono: The free and open-source font fused with JetBrains Mono & Maple Mono"
 arch=('any')
 url="https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono"
 license=('OFL')
 source=("https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono/releases/download/${_rel_tag}/JetBrainsMapleMono-NF-XX-XX-XX.zip")
 sha256sums=('48c99a86635fd8ddfcaf40e266ff95a55965eb4567d20a2aeb500788397a2b39')
+provides=('ttf-font')
 
 package() {
   _fontname=JetBrains-Maple-Mono-NF-XX-XX
