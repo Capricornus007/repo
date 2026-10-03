@@ -25,7 +25,7 @@ pkgname=serein
 # 教訓：CI 只 sed ^pkgver= 會做出「新版號、舊 tag」的包，所以回推改的是這一行）。
 _upver='1.0.0-nightly.20261001.53'
 pkgver="${_upver/-/pre.}"
-pkgrel=1
+pkgrel=2
 pkgdesc='Unofficial native Discord client'
 arch=('x86_64')
 url="https://github.com/${_upstream}"
@@ -82,12 +82,19 @@ package() {
     install -m644 LICENSE-MIT LICENSE-APACHE "$pkgdir/usr/share/licenses/$pkgname/"
 
     # Artix 閘門：產物裡出現任何 systemd 單檔就判失敗（詳見檔頭第 2 點）。
-    local _unit
-    _unit="$(find "$pkgdir/usr/lib/systemd" "$pkgdir/usr/lib/systemd/user" -type f -print -quit 2>/dev/null)"
+    # 注意 find 對不存在的目錄會回非零，而 makepkg 的 package() 跑在 errexit 下——
+    # 直接 `find "$pkgdir/usr/lib/systemd" ...` 會在「沒有 systemd 檔」（正常情況）
+    # 時讓整個 package() 靜默中止（CI 實測：日誌只有 "A failure occurred in package()"、
+    # 一行錯誤都沒有）。所以先判目錄在不在，再把 find 的退出碼吃掉。
+    local _unit=""
+    if [ -d "$pkgdir/usr/lib/systemd" ]; then
+      _unit="$(find "$pkgdir/usr/lib/systemd" -type f -print -quit 2>/dev/null || true)"
+    fi
     if [ -n "$_unit" ]; then
         echo "錯誤：產物含 systemd 檔案（$_unit），本倉的 Artix 版不接受 systemd 依賴。" >&2
         echo "      處置：確認上游是否新增了 unit／依賴；必要時在 package() 裡移除該檔，" >&2
         echo "      而不是把 systemd-libs 加回 depends。" >&2
         return 1
     fi
+    echo "systemd 閘門：產物內無 usr/lib/systemd/** 檔案（Artix 可裝）"
 }

@@ -768,6 +768,9 @@ jobs:
           # 改寫步要動的是那兩個原料變數，不是 pkgver 那行。
           NEW_JBR_VER=""
           NEW_JBR_BUILD=""
+          # 只有 ttf-jetbrains-maple-mono-nf-xx-xx-xx 會填：pkgver 恆為 pre，
+          # 觸發重建的是「上游資產換檔」這件事，所以傳給改寫步的是新 sha256 而不是新版號。
+          NEW_TTF_SHA=""
 
           case "$PKG" in
             linux-zencjk)
@@ -1152,12 +1155,45 @@ jobs:
               echo "sha_arm=$_qcli_sha_a" >> "$GITHUB_OUTPUT"
               ;;
 
-            nodejs-better-sqlite3|ttf-jetbrains-maple-mono-nf-xx-xx-xx)
-              # 這兩個的 source 是 tarball/zip 而非 git 倉：通用探測會拿 source 的第一個
-              # https URL 去 git clone，對 .tgz/.zip 必失敗（實測 CLONE-FAIL），會讓整輪
-              # 永久跳過。故直接採用 PKGBUILD 寫死的版本 —— 上游更新時由人改 pkgver，
-              # 改完 CI 自然看到新版本並重建。
+            nodejs-better-sqlite3)
+              # source 是 tarball 而非 git 倉：通用探測會拿 source 的第一個 https URL 去
+              # git clone，對 .tgz 必失敗（實測 CLONE-FAIL），會讓整輪永久跳過。故直接採用
+              # PKGBUILD 寫死的版本 —— 上游更新時由人改 pkgver，改完 CI 自然看到新版本並重建。
               TARGET_PKGVER="$CUR_PKGVER"
+              ;;
+
+            ttf-jetbrains-maple-mono-nf-xx-xx-xx)
+              # 滾動資產（上游在同一個 `pre` tag 下原地重傳 152MB 的 zip）→ 版號字串永遠
+              # 是 "pre"，拿版號比對當觸發條件無效（實測庫裡 pre-1 建於 09-18、資產 09-20
+              # 換過檔之後就再也沒重建）。觸發條件改成**資產自己的 sha256**：GitHub release
+              # API 的 assets[].digest 直接給 sha256，一個 call、不用拉檔。
+              # 換檔 ⇒ pkgrel 抬一（產物檔名才變、repo-add 才不會当成降级拒收），
+              # 新 sha 與新 pkgrel 由「改寫 PKGBUILD」步寫回、再經 in-tree 回推落地。
+              TARGET_PKGVER="pre"
+              _ttf_digest=$(gh_api "https://api.github.com/repos/SpaceTimee/Fusion-JetBrainsMapleMono/releases/tags/pre" \
+                | jq -r '.assets[]? | select(.name=="JetBrainsMapleMono-NF-XX-XX-XX.zip") | .digest // empty' 2>/dev/null || true)
+              _ttf_sha="${_ttf_digest#sha256:}"
+              case "$_ttf_sha" in
+                ""|*[!0-9a-f]*) skip "拿不到 ttf 資產的 sha256 digest（=$_ttf_digest）" ;;
+              esac
+              if [ "${#_ttf_sha}" -ne 64 ]; then
+                skip "ttf 資產 digest 不是 64 位十六進位（長度 ${#_ttf_sha}）"
+              fi
+              _ttf_cur=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "${sha256sums[0]:-}"')
+              if [ "$_ttf_sha" = "$_ttf_cur" ]; then
+                # 資產沒換檔 ⇒ 不抬 pkgrel，交给下方「產物是否已在 release 裡」這個本倉
+                # 通用判據決定。這裡**不直接 skip** 是有原因的：庫裡那顆 pre-1 是
+                # 09-18 拿舊資產建的、而 PKGBUILD 現在記的 sha 已經是新的，若在比對
+                # 相同時就 skip，這顆卡代會永遠補不起來。
+                echo "上游資產未變（sha256 $_ttf_cur），pkgrel 維持 $CUR_PKGREL"
+              else
+                case "$CUR_PKGREL" in
+                  ""|*[!0-9]*) skip "PKGBUILD 的 pkgrel 不是純數字（=$CUR_PKGREL），不敢自動抬版" ;;
+                esac
+                TARGET_PKGREL=$((CUR_PKGREL + 1))
+                NEW_TTF_SHA="$_ttf_sha"
+                echo "上游資產已換檔：sha256 $_ttf_cur -> $_ttf_sha；pkgrel $CUR_PKGREL -> $TARGET_PKGREL"
+              fi
               ;;
 
             unicode-emoji)
@@ -1418,6 +1454,7 @@ jobs:
             echo "pkgbase=$PKGBASE"
             echo "jbr_ver=$NEW_JBR_VER"
             echo "jbr_build=$NEW_JBR_BUILD"
+            echo "ttf_sha=$NEW_TTF_SHA"
           } >> "$GITHUB_OUTPUT"
 
       - name: 云端编译 protonvpn 的 AUR 依赖
@@ -1471,6 +1508,8 @@ jobs:
           CACHY_TAG: ${{ steps.plan.outputs.cachy_tag }}
           NEW_JBR_VER: ${{ steps.plan.outputs.jbr_ver }}
           NEW_JBR_BUILD: ${{ steps.plan.outputs.jbr_build }}
+          # ttf 那顆滾動資產用：plan 從 release API 讀回來的資產 sha256（未變就是空字串）
+          NEW_TTF_SHA: ${{ steps.plan.outputs.ttf_sha }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
           REPO_OWNER: ${{ github.repository_owner }}
         run: |
@@ -1709,6 +1748,35 @@ jobs:
                 *) echo "::error::$PKG 的 source #tag 沒跟著換：${source[0]:-（空）}"; exit 1 ;;
               esac
               ;;
+            ttf-jetbrains-maple-mono-nf-xx-xx-xx)
+              # 這包的 pkgver 恆為 pre（上游在同一個 tag 下原地重傳 152MB 資產），所以
+              # 要改寫的不是版號，而是「資產 sha256 ＋ pkgrel」兩個一起：只寫 sha 不抬
+              # pkgrel，產物檔名不變 → plan 的「已在 release 裡」永遠命中，等於沒修
+              # （09-26「6b3fe1f 只改探測那半邊」同一類坑）。
+              sed -i "s/^pkgrel=.*/pkgrel=$NEW_PKGREL/" PKGBUILD
+              if [ -n "$NEW_TTF_SHA" ]; then
+                sed -i "s/^sha256sums=.*/sha256sums=('$NEW_TTF_SHA')/" PKGBUILD
+              else
+                # 資產沒換檔、只是庫裡缺對應 pkgrel 的產物（例如這次補建）：
+                # sha 維持原值，只抬 pkgrel。
+                echo "本次沒有新 sha256（資產未換檔），維持 PKGBUILD 原值只改 pkgrel"
+              fi
+              echo "==== $PKG 改寫結果 ===="
+              grep -nE '^(pkgver|pkgrel|sha256sums)=' PKGBUILD
+              source ./PKGBUILD >/dev/null 2>&1
+              if [ "${pkgver:-}" != "pre" ]; then
+                echo "::error::$PKG 的 pkgver 被改壞（=${pkgver:-}），這包必須恆為 pre"
+                exit 1
+              fi
+              if [ "${pkgrel:-}" != "$NEW_PKGREL" ]; then
+                echo "::error::$PKG 改寫後 pkgrel=${pkgrel:-} 與 plan 目標 $NEW_PKGREL 不符"
+                exit 1
+              fi
+              if [ -n "$NEW_TTF_SHA" ] && [ "${sha256sums[0]:-}" != "$NEW_TTF_SHA" ]; then
+                echo "::error::$PKG 改寫後 sha256sums=${sha256sums[0]:-} 與 plan 目標 $NEW_TTF_SHA 不符"
+                exit 1
+              fi
+              ;;
             nashira-git)
               # -git 包：版本跟 master HEAD 走（plan 已算好）；
               # source 是 git repo，無 URL 模板要改，只換 pkgver
@@ -1856,7 +1924,7 @@ jobs:
         # （自己 clone 之後 master 被對方推進，push 被拒而整個 job 變紅）——
         # 各個包改的檔案不相交，失敗就重新克隆最新 master 重放提交，
         # 隨機退避重試，最多 5 次
-        if: (matrix.repo_name == 'element-desktop-nightly-bin' || matrix.repo_name == 'serein' || matrix.repo_name == 'nashira-git' || matrix.repo_name == 'qoder-cli' || matrix.repo_name == 'qoder-cli-cn' || matrix.repo_name == 'qoder-gui-bin' || matrix.repo_name == 'qoder-gui-cn') && steps.plan.outputs.build == 'true'
+        if: (matrix.repo_name == 'element-desktop-nightly-bin' || matrix.repo_name == 'serein' || matrix.repo_name == 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' || matrix.repo_name == 'nashira-git' || matrix.repo_name == 'qoder-cli' || matrix.repo_name == 'qoder-cli-cn' || matrix.repo_name == 'qoder-gui-bin' || matrix.repo_name == 'qoder-gui-cn') && steps.plan.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}

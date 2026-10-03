@@ -7,40 +7,38 @@
 #   2. pkgver 固定 "pre" → 源改成上游滾動 pre-release 的 JetBrainsMapleMono-NF-XX-XX-XX.zip
 #   3. 安裝路徑 /usr/share/fonts/TTF/<字體名>/ → /usr/share/fonts/TTF/monospace/
 #   4. 拿掉 upstream maintainer 註解、新增 .gitignore（.gitignore 屬打包倉自用，不入本倉）
-# 本倉唯一加動：sha256sums 改 SKIP——實查上游 pre-release 的
-# JetBrainsMapleMono-NF-XX-XX-XX.zip 在 2026-09-16 又被重傳（用戶 2026-08-04 錨的
-# 62f180bd… 已失配，原樣帶入必然 build 紅），而 `pre` 這種滾動資產按月重傳、
-# 沒有可比的版本字串，寫死校驗和只會定期炸；用戶規則亦為「sums 能跳過就跳過」。
+#
+# 卡代病灶與修法（2026-10-03 用戶定案）：上游把資產在**同一個滾動 tag** 下原地重傳，
+# 版號字串永遠是 "pre"，所以「版號有沒有變」根本無法當觸發條件；實測庫裡 pre-1 建於
+# 2026-09-18T17:47Z，上游資產 2026-09-20T20:20Z 換過檔，此後再沒重建。
+# 觸發條件改成**資產本身的 sha256**：CI 讀 GitHub release API 的 `digest` 欄（一個 API
+# call，不用拉 152MB），與本檔 sha256sums 比對，不同就把 pkgrel 抬一、寫回新 sha 並重建。
+# 所以這顆既不是 -git 類（沒有 commit 序號可算）也不是 kernel 類（不用等編譯），
+# 判據只有一句話：**source 的檔內容換了沒換**。
+# sha256sums 必須寫**真值**——它就是變更偵測的基準，寫 SKIP 等於把偵測器拆掉；
+# 值由 CI 自動維護（見 build-packages.yml 的 ttf 分支與 in-tree 回推），人不用手工抬。
+#
+# 歷史教訓（同一檔寫兩次會只改半邊）：本檔曾經用 `pkgver()` 把「資產 updated_at 日期」
+# 編進版號（pre.YYYYMMDD）。那個做法有兩個硬傷：① plan 步是 `source ./PKGBUILD` 讀
+# `$pkgver`，而 `pkgver()` 是**函式**不是變數 → 讀到空字串，實測日誌
+# 「当前 PKGBUILD: … pkgver=」「目标版本: -1」，job 直接紅；② 就算修好，日期欄位
+# （updated_at）與檔內容不同步的風險仍在。故改回靜態 pkgver=pre ＋ sha256 觸發。
 # 字體包不需要 .install hook：本機 fontconfig 已提供 /usr/share/libalpm/hooks/fontconfig.hook
 # 會在 usr/share/fonts/** 變動時跑 fc-cache，AUR 原版也沒有 hook。
 
 pkgname=ttf-jetbrains-maple-mono-nf-xx-xx-xx
 _rel_tag=pre
-# 卡代病灶（2026-10-03 稽核實查）：上游把資產在**同一個滾動 tag** 下原地重傳，
-# 版號字串永遠是 "pre" → plan 的「已在 release 裡」比對恆命中，庫裡 pre-1 建於
-# 2026-09-18T17:47Z，而上游資產 2026-09-20T20:20Z 就換過檔，此後再沒重建過。
-# 修法：把「資產 updated_at 的日期」編進版號（pre.YYYYMMDD），比對就自然成立。
-_VER_FLOOR=20260920
-pkgver() {
-  local d
-  d=$(curl -fsSL --connect-timeout 15 --retry 3 --retry-delay 10 \
-        "https://api.github.com/repos/SpaceTimee/Fusion-JetBrainsMapleMono/releases/tags/${_rel_tag}" 2>/dev/null \
-      | grep -oE '"updated_at": *"[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -n1 | grep -oE '[0-9]{8}' || true)
-  case "$d" in
-    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) ;;
-    *) d=$_VER_FLOOR ;;   # API 不可達：回退到現行已知最新值，絕不回裸 "pre"
-  esac
-  # 單調保護：回退值不低於 floor，否則 repo-add 會当成降级拒收（本倉最陰的故障）
-  [ "$d" \< "$_VER_FLOOR" ] && d=$_VER_FLOOR
-  printf "pre.%s" "$d"
-}
-pkgrel=1
+pkgver=pre
+# 2 = 故意抬的一等：庫裡那顆 pre-1 建於 2026-09-18T17:47Z，而上游資產在
+# 2026-09-20T20:20Z 原地重傳過（sha256 已是下面這個值），pre-1 裝的是舊檔。
+# 這一輪補建之後，往後的重建完全由「資產 sha256 變了沒變」驅動，人不用再抬。
+pkgrel=2
 pkgdesc="JetBrains Maple Mono: The free and open-source font fused with JetBrains Mono & Maple Mono"
 arch=('any')
 url="https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono"
 license=('OFL')
 source=("https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono/releases/download/${_rel_tag}/JetBrainsMapleMono-NF-XX-XX-XX.zip")
-sha256sums=('SKIP')
+sha256sums=('48c99a86635fd8ddfcaf40e266ff95a55965eb4567d20a2aeb500788397a2b39')
 
 package() {
   _fontname=JetBrains-Maple-Mono-NF-XX-XX
