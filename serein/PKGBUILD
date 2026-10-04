@@ -23,7 +23,7 @@ _upstream='ViceVerse-cz/Serein'
 pkgname=serein
 # 唯一版號來源：上游 nightly tag 拿掉前綴 v。pkgver 由這一行展開（jbr21／jbr25 同款
 # 教訓：CI 只 sed ^pkgver= 會做出「新版號、舊 tag」的包，所以回推改的是這一行）。
-_upver='1.0.0-nightly.20261001.53'
+_upver='1.0.0-nightly.20261004.54'
 pkgver="${_upver/-/pre.}"
 pkgrel=2
 pkgdesc='Unofficial native Discord client'
