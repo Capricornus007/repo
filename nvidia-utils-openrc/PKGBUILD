@@ -1,0 +1,42 @@
+# Maintainer: Capricornus007
+# Fork 自 Artix openrc-world 的 nvidia-utils-openrc 20210505-2
+# （原檔 https://gitea.artixlinux.org/artixlinux/packages-openrc ，內容一概保留），
+# 只補一件事：nvidia-utils 的 elogind 睡眠鉤子只有 post、沒有 pre，
+# 而 pre 在上游是 systemd unit 的活 → OpenRC 環境下 suspend 必然被 GPU 否決
+# （nv_pmops_suspend returns -5）。見 90-nvidia-sleep。
+#
+# ⚠️ 刻意不進 build-git-packages.yml 矩陣：depends 有 openrc，CI 的 Arch 容器沒有
+#    openrc 鏡像、必紅（同 adguardhome-openrc 的舊判例）。本目錄只當源碼備份，
+#    實際安裝走本地 makepkg + pacman -U。
+pkgname=nvidia-utils-openrc
+pkgver=20261005
+pkgrel=1
+pkgdesc="OpenRC glue for NVIDIA: persistenced init script + the missing pre branch of the elogind sleep hook"
+arch=('any')
+url="https://gitea.artixlinux.org/artixlinux/packages-openrc"
+license=('GPL2')
+depends=('openrc' 'nvidia-utils' 'elogind')
+provides=('init-nvidia-utils')
+conflicts=('init-nvidia-utils')
+backup=('etc/conf.d/nvidia-persistenced')
+source=(
+	'nvidia-persistenced.confd'
+	'nvidia-persistenced.initd'
+	'90-nvidia-sleep'
+)
+sha256sums=('347437868119e8ae12852a574597936e855f534a9ad290fef3f62b4083a38516'
+            'b672a70260d1370f462d3f0f9e027708118bb46e087c2be63890e97260dd2686'
+            '20888528a7414cc0b0c5d7e0f842a209f492fbdef1ca22d95f2c532eb734aca1')
+
+package() {
+	install -d "${pkgdir}/etc/conf.d"
+	install -d "${pkgdir}/etc/init.d"
+	install -d "${pkgdir}/usr/lib/elogind/system-sleep"
+
+	install -m 644 "${srcdir}/nvidia-persistenced.confd" \
+		"${pkgdir}/etc/conf.d/nvidia-persistenced"
+	install -m 755 "${srcdir}/nvidia-persistenced.initd" \
+		"${pkgdir}/etc/init.d/nvidia-persistenced"
+	install -m 755 "${srcdir}/90-nvidia-sleep" \
+		"${pkgdir}/usr/lib/elogind/system-sleep/90-nvidia-sleep"
+}

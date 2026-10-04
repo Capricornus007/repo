@@ -1,0 +1,48 @@
+#!/bin/sh
+# 只補 pre 分支。上游 nvidia-utils 的 /usr/lib/elogind/system-sleep/nvidia 只有
+# post) 一個 case，pre 的活在上游是 systemd 的 nvidia-suspend.service 在做；
+# OpenRC/elogind 沒有 systemd，所以「睡之前叫驅動把顯存搬進 RAM」這一步從來沒執行。
+# 後果：PreserveVideoMemoryAllocations=1 時 nvidia 的 PCI PM 回調發現 procfs suspend
+# interface 沒被用過，nv_pmops_suspend 直接回 -5，內核否決整樁 suspend（從未進 s2idle）。
+# 醒來後的 resume 與搶回 VT 仍交給 nvidia-utils 自己的 post 分支（它讀同一個 Xorg.vt_number），
+# 所以這裡故意不碰 post，避免對 /proc/driver/nvidia/suspend 重複下指令。
+
+PATH=/usr/bin:/bin:/usr/sbin:/sbin
+
+PROC=/proc/driver/nvidia/suspend
+RUN_DIR=/var/run/nvidia-sleep
+VT_FILE="${RUN_DIR}/Xorg.vt_number"
+
+[ "$1" = pre ] || exit 0
+[ -f "$PROC" ] || exit 0
+case "$2" in
+	suspend | hibernate) ;;
+	*) exit 0 ;;
+esac
+
+# fgconsole 在鉤子環境必然失敗（stdin 不是 console），會留下空檔，之後
+# RestoreVT 的 chvt "" 跟著失敗 → 整台卡在空白 VT63。改從 X 的 cmdline 取 vtN。
+active_vt=""
+for pid in $(pgrep -x Xorg); do
+	active_vt=$(tr '\0' '\n' <"/proc/${pid}/cmdline" 2>/dev/null |
+		sed -n 's/^vt\([0-9][0-9]*\)$/\1/p' | head -n 1)
+	[ -n "$active_vt" ] && break
+done
+
+mkdir -p "$RUN_DIR"
+
+# 不知道要回哪一個 VT 就乾脆不切走：寧可畫面難看，也不能把人鎖死在 63。
+if [ -n "$active_vt" ]; then
+	printf '%s\n' "$active_vt" >"$VT_FILE"
+	chvt 63
+fi
+
+if ! echo "$2" >"$PROC"; then
+	if [ -n "$active_vt" ]; then
+		chvt "$active_vt"
+		rm -f "$VT_FILE"
+	fi
+	exit 1
+fi
+
+exit 0
