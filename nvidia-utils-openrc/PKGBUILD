@@ -10,7 +10,7 @@
 #    實際安裝走本地 makepkg + pacman -U。
 pkgname=nvidia-utils-openrc
 pkgver=20261005
-pkgrel=1
+pkgrel=2
 pkgdesc="OpenRC glue for NVIDIA: persistenced init script + the missing pre branch of the elogind sleep hook"
 arch=('any')
 url="https://gitea.artixlinux.org/artixlinux/packages-openrc"
@@ -26,7 +26,7 @@ source=(
 )
 sha256sums=('347437868119e8ae12852a574597936e855f534a9ad290fef3f62b4083a38516'
             'b672a70260d1370f462d3f0f9e027708118bb46e087c2be63890e97260dd2686'
-            '20888528a7414cc0b0c5d7e0f842a209f492fbdef1ca22d95f2c532eb734aca1')
+            '2b850e25d9bfe0f98a0cd188d58b78baba66e9e85f97e89e405e297b6d90a5dc')
 
 package() {
 	install -d "${pkgdir}/etc/conf.d"

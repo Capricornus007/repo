@@ -5,16 +5,45 @@
 # 後果：PreserveVideoMemoryAllocations=1 時 nvidia 的 PCI PM 回調發現 procfs suspend
 # interface 沒被用過，nv_pmops_suspend 直接回 -5，內核否決整樁 suspend（從未進 s2idle）。
 # 醒來後的 resume 與搶回 VT 仍交給 nvidia-utils 自己的 post 分支（它讀同一個 Xorg.vt_number），
-# 所以這裡故意不碰 post，避免對 /proc/driver/nvidia/suspend 重複下指令。
+# 所以這裡的 post 分支**只寫記錄、不對 /proc/driver/nvidia/suspend 重複下指令**。
+#
+# 為什麼要 post 記錄（2026-10-05）：實測有一輪 180 秒睡眠之後再也沒回來，用戶長按電源強制
+# 重啟。事後無法判定是「內核根本沒醒」還是「醒了但畫面停在空白 VT63、看起來像死機」——
+# 因為 /var/run 是 tmpfs，重開線索全沒。所以 pre/post 各自往磁碟寫一行並 sync：
+#   只有 pre-enter、沒有 post-enter  → 內核沒醒（真睡死）
+#   pre-enter＋post-enter 都有        → 醒得來，問題在畫面/VT 恢復，屬另一條線
 
 PATH=/usr/bin:/bin:/usr/sbin:/sbin
 
 PROC=/proc/driver/nvidia/suspend
 RUN_DIR=/var/run/nvidia-sleep
 VT_FILE="${RUN_DIR}/Xorg.vt_number"
+LOG_DIR=/var/lib/nvidia-sleep
+LOG_FILE="${LOG_DIR}/state.log"
+
+log() {
+	mkdir -p "$LOG_DIR" 2>/dev/null || return 0
+	printf '%s %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$1" >>"$LOG_FILE" 2>/dev/null || return 0
+	sync 2>/dev/null
+}
+
+# 目前實際佔著螢幕的 VT（tty0/active 是內容檔、不是符號鏈接；fgconsole 在鉤子環境必然失敗）
+active_console() {
+	cat /sys/class/tty/tty0/active 2>/dev/null
+}
+
+case "$1" in
+	post)
+		_want=$(cat "$VT_FILE" 2>/dev/null)
+		_con=$(active_console)
+		log "post-enter action=${2:-?} vt_wanted=${_want:-none} console=${_con:-?}"
+		log "post-done action=${2:-?} console=${_con:-?}"
+		exit 0
+		;;
+esac
 
 [ "$1" = pre ] || exit 0
-[ -f "$PROC" ] || exit 0
+[ -f "$PROC" ] || { log "pre-skip action=${2:-?} reason=no-procfs-suspend"; exit 0; }
 case "$2" in
 	suspend | hibernate) ;;
 	*) exit 0 ;;
@@ -30,6 +59,8 @@ for pid in $(pgrep -x Xorg); do
 done
 
 mkdir -p "$RUN_DIR"
+_con=$(active_console)
+log "pre-enter action=$2 vt=${active_vt:-none} console=${_con:-?}"
 
 # 不知道要回哪一個 VT 就乾脆不切走：寧可畫面難看，也不能把人鎖死在 63。
 if [ -n "$active_vt" ]; then
@@ -38,6 +69,7 @@ if [ -n "$active_vt" ]; then
 fi
 
 if ! echo "$2" >"$PROC"; then
+	log "pre-fail action=$2 reason=procfs-suspend-rejected vt=${active_vt:-none}"
 	if [ -n "$active_vt" ]; then
 		chvt "$active_vt"
 		rm -f "$VT_FILE"
@@ -45,4 +77,5 @@ if ! echo "$2" >"$PROC"; then
 	exit 1
 fi
 
+log "pre-ok action=$2 vt=${active_vt:-none}"
 exit 0
