@@ -271,7 +271,12 @@ jobs:
             # 用 -Si 查 DB，不用 qmake —— 這個時刻容器裡根本還沒裝 qt6-base
             # （它是 PKGBUILD 的 depends，makepkg 之後才裝），實測 run #358 就在
             # /usr/lib/qt6/bin/qmake 上吃 127 No such file or directory。
-            pacman -Si qt6-base 2>/dev/null | grep -aE '^(version|repository)' | head -4
+            # ⚠ 欄位名是大寫（Version / Repository），用小寫正則會一條都不命中，
+            #   而這個 step 是 bash -e：grep 回 1 就直接把整個 job 打死、
+            #   日誌裡只留一個 exit 1（run #359 就這樣紅的）。所以 -i 加大寫，
+            #   再用 || echo 兜住，絕不讓檢查本身變成失敗原因。
+            LC_ALL=C pacman -Si qt6-base 2>/dev/null | grep -aiE '^(repository|version|architecture)' \
+              || echo "（DB 裡查不到 qt6-base，Artix 倉順序可能有問題）"
             pacman -Q qt6-base 2>/dev/null || echo "（qt6-base 尚未安裝，屬預期；由 PKGBUILD 的 depends 帶入）"
           fi
 
@@ -2265,12 +2270,12 @@ jobs:
             #   `-T qt6-base=9.9.9` rc=1 並印出那條 → 等號比的是 pkgver、略過 pkgrel；
             #   若在這裡寫死「要等於 pacman -Q 的 6.12.0-2」反而會誤殺好包。）
             pin="$(for f in ./*.pkg.tar.zst; do [ -e "$f" ] || continue; bsdtar -xOf "$f" .PKGINFO 2>/dev/null; done \
-                   | grep -a '^depend = qt6-base=' | head -n1 | sed 's/^depend = //; s/ *$//')"
+                   | grep -a '^depend = qt6-base=' | head -n1 | sed 's/^depend = //; s/ *$//')" || pin=""
             echo "產物依賴=[${pin:-（沒有 qt6-base= 的釘選）}]  容器實裝=[$(pacman -Q qt6-base 2>/dev/null)]"
             if [ -z "$pin" ]; then
               echo "::error::產物沒有釘住 qt6-base 版本（Qt 換代後這顆不會被列為過期重編，會靜默失靈）"; exit 1
             fi
-            missing="$(pacman -T "$pin" 2>&1)"
+            missing="$(pacman -T "$pin" 2>&1)" || true
             if [ -n "$missing" ]; then
               echo "::error::$pin 在容器裡滿足不了（libalpm 回報：$missing）——發出去就是裝不上的包"; exit 1
             fi
