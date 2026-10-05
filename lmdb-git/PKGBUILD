@@ -1,0 +1,149 @@
+# Maintainer: Capricornus007
+#
+# ⚠️ 規則 25 要的「本地基準」查無此物（如實回報，不假裝有）：
+#   ~/.cache/yay/ 底下**沒有** lmdb/、lmdb-git/，也沒有任何含 lmdb 的目錄
+#   （`ls ~/.cache/yay | grep -i lmdb` 空；全盤 `find ~/ -iname PKGBUILD` 餵
+#   `grep -lE 'symas.*lmdb|lmdb.git'` 也空）。本機那顆 lmdb 1.0.0-1 是 Artix 世界樹的
+#   二進位包（`pacman -Qi lmdb` → Packager: LemonPie <lemonpie@artixlinux.org>、
+#   Install Reason: 作為別的包的依賴被裝），不是用戶自己 build 的，所以沒有本地 PKGBUILD 可抄。
+#   → 基準改拿**兩份权威配方**當輸入、自己寫 in-tree 版（這正是規則 25「不准抓 raw 版了事」
+#     要的那件事）：
+#       · Arch 官方穩定版 extra/lmdb 1.0.0-1
+#         https://gitlab.archlinux.org/archlinux/packaging/packages/lmdb/-/raw/main/PKGBUILD
+#         （build/check/package 三段照它的 Flags 走，見下方註解）
+#       · AUR Chocobo1/lmdb-git 0.9.30.r22965.g6b77544ab-2 —— **只當反面教材**：
+#         RPC 實查 LastModified=1684592600（2023-05-20），三年沒動，算出來的版本
+#         `vercmp 0.9.30.r22965.g6b77544ab 1.0.0` = -1，比用戶本機實裝的 lmdb 1.0.0
+#         還舊。照抄它 = 把系統庫降版（規則 15「版本衝突一律以最新優先」直接違反），
+#         所以本包不沿用它的源、分支與版本公式，只借用「provides/conflicts 換裝」的結構。
+#
+# 源與分支的取捨（全部實測，不是猜）：
+#   真上游是 OpenLDAP 的 git（Symas 已把 LMDB 捐給 OpenLDAP Foundation；Arch 官方穩定版
+#   也是從 git.openldap.org/openldap/openldap.git 取 tag），GitHub 的 LMDB/lmdb 是同一專案的
+#   官方鏡像。**本包的最終選擇是鏡像，不是官方域名**，理由是可用性而不是代碼差異：
+#     · 實測本機對 openldap.git 連 5 次裡有 2 次 TLS 中斷（`fatal: unable to access …
+#       TLS connect error: error:0A000126 … unexpected eof while reading`），而 GitHub 端
+#       一律穩定（CI 也跑在 GitHub runner 上）。
+#     · 探測步（plan）克隆失敗只會 `skip`，下一輪重來；但真正 makepkg 那一步的克隆失敗
+#       **不在** build-packages.yml 重試迴圈的分類字串裡（它只認 Failure while downloading /
+#       RPC failed / HTTP 5xx / curl: (N) / failed retrieving file…，不含
+#       `unable to access … TLS connect error`）→ 一次抖動就把 job 判紅（規則 55 那條
+#       「盯到全綠」會在這裡被外部網路拖死）。
+#     · 內容差異為零：`git ls-remote --heads` 對照過 mdb.master=a76084d、
+#       mdb.master3=700e10f 兩條 SHA 與官方**完全相同**；mdb.RE/1.0 官方是 c279e04、
+#       鏡像落在 3e655fa，差的只有「Prep for release (LMDB 1.0.2)」那一個
+#       版號巨集＋CHANGES 的 release-engineering 提交，代碼沒變（實測兩條 tip 的
+#       libraries/liblmdb diff 只有 CHANGES/Doxyfile/man 日期/lmdb.h 版號/mdb.c 兩行註解）。
+#     · 要改回官方域名只需換這行的 host 與倉名，版本公式不用動。
+#   三條候選分支（`git ls-remote` 對照後逐條 diff）：
+#     mdb.master    0.9.70 dev，最後提交 2026-06-24 → 舊線，淘汰
+#     mdb.master3   開發尖端（GitHub 的 HEAD 就是它），0.9.90 dev，2026-08-19 14:58:16
+#     mdb.RE/1.0    官方倉最新提交 2026-09-08 17:17:51（c279e04「Prep for release
+#                   (LMDB 1.0.2)」）；鏡像落在 3e655fa（LMDB_1.0.1 之後第 8 個提交、
+#                   2026-08-19 14:59:33，比 master3 的 14:58:16 還晚）
+#                   → 規則 61 的「穩定線有更晚提交就一併採用」在此命中：RE/1.0 是
+#                     三條線裡提交時間最晚的，且內容已含 master3 的全部代碼
+#   ⚠️ 為什麼選 mdb.RE/1.0 而不是名字最「不穩定」的 mdb.master3：實測 `git diff` 兩條 tip 的
+#     libraries/liblmdb，只差 CHANGES／Doxyfile／man 日期、mdb.c 兩行**註解＋空白**
+#     （`#define MDB_MAXKEYSIZE 0` 兩邊同值）、以及 lmdb.h 的版號巨集（0.9.90 vs 1.0.1）
+#     → **代碼完全相同**。而 master3 的 lmdb.h 自我宣告 0.9.90，裝上去後 `mdb_stat -V` 與
+#     生成的 lmdb.pc `Version:` 都會報 0.9.90，比用戶現裝的 lmdb 1.0.0 還舊（名義降版，
+#     也違反規則 15）。所以這顆的「最新」只能是 RE/1.0：代碼等價、提交時間更晚、
+#     版號宣告更新（鏡像上 1.0.1 > 實裝 1.0.0）。日後若 mdb.master3 出現**真正的**代碼提交，
+#     改 source 那行的 #branch= 即可，版本公式不用動（但要留意上面那句：它會把基版號降回
+#     0.9.90，到時要連「比實裝舊」這件事一起重新評估）。
+#
+# 換裝的硬門檻（lmdb 是被依賴的執行期庫，不是自用包）：
+#   本機 `pacman -Qi lmdb` → Required By: krb5、ldb；兩邊都是**未帶版本的 `lmdb` 依賴**
+#   （krb5 1.22.2-1 與 ldb 2:4.25.0-1 的 Depends 裡是裸 `lmdb`），所以
+#   provides=('lmdb=<pkgver>') 一定解析得到（裸依賴對任何版本的 provides 都滿足）。
+#   倉庫裡另外三顆也依賴裸 `lmdb`：lmdbxx、postfix-lmdb、bogofilter-lmdb（實查 -Si）。
+#   replaces=('lmdb') 讓 `pacman -Syu` 自己完成換裝、不用「先卸再裝」；
+#   conflicts=('lmdb') 擋下兩版共存。
+#   ⚠️ 執行期真正咬的是**檔名而不是依賴名**：實測 `objdump -p` 發現
+#     /usr/lib/krb5/plugins/kdb/klmdb.so 與 /usr/lib/samba/libldb-mdb-int-private-samba.so
+#     的 NEEDED 都是 `liblmdb.so`（**未帶版號的 dev symlink**），不是 liblmdb.so.1。
+#     所以本包必須照上游 install 目標把 /usr/lib/liblmdb.so、liblmdb.so.1、liblmdb.so.1.0
+#     三樣都產齊（RE/1.0 的 Makefile：LIBVER=1、ABIVER=0 → soname liblmdb.so.1，
+#     與實裝的 lmdb 1.0.0-1 同一個 soname，所以 krb5/ldb 的既有二進位不用重建也能續跑）。
+#     本包檔案清單一對照實裝 lmdb 的 26 檔：同一套 bin/include/lib/pkgconfig/man/licenses；
+#     liblmdb.a 由 makepkg 預設的 !staticlibs 拿掉（與 Arch／Artix 那兩顆一致）。
+#
+# ⚠️ pkgver() 一律用絕對路徑 `cd "$srcdir/lmdb/libraries/liblmdb"`：本倉 CI 的泛用版本探測
+#   把源克隆成 ${pkgname%-git}=lmdb、软鏈到 src/，而它自己的 CWD 停在 startdir；寫相對路徑
+#   會「本地能過、CI 探測必敗」→ badge 全綠卻永遠不產包（amd-debug-tools、那批 i3-git 踩過）。
+#   探測的软鏈清單裡**沒有 ${_pkgbase}**，所以 source 前綴與 cd 目標都必須是 `lmdb`。
+#   另外 `#branch=` 片段探測是支援的（build-packages.yml 的 branch=* 那條），克隆下來與
+#   makepkg 同一分支，兩邊算出的版本才會一致。
+#
+# ⚠️ 基版號為什麼讀 lmdb.h 的巨集、**不用 `git describe --tags`**（2026-10-05 實測教訓）：
+#   本倉探測對帶 #branch= 的源是用 `git clone --filter=blob:none --branch <br>`，這樣克隆
+#   **不會把 tag 物件帶進來**（實測 `git describe --tags --abbrev=0` 回空），而 makepkg 自己
+#   的完整克隆看得到 LMDB_1.0.1（官方域名那條甚至已有 LMDB_1.0.2 tag）
+#   → 用 describe 就會兩邊算出不同 pkgver。目標版與實際產出一旦不一致，
+#   yml 的「已在 release 裡」判據恆不命中 → 每個整點白編一次（kew-git／oh-my-pi-git／
+#   pi-coding-agent-git 都是同一類坑）。lmdb.h 是工作樹裡的檔案，任何克隆方式都讀到同一個值，
+#   而且它正是 mdb_stat -V 與生成的 lmdb.pc 報的那個版 → 一致性最好。
+#   同理 `--short=7`：裸 `git rev-parse --short` 的長度由「這個克隆裡有幾個物件」決定，
+#   blobless 克隆與完整克隆可能一個給 7 字元、另一個給 10 字元（實測本 repo 回 c279e0477），
+#   那也會讓兩邊版本字串不同 → 一律釘死 7 字元。
+_pkgbase=lmdb
+pkgname=${_pkgbase}-git
+pkgver=1.0.1.r1410.g3e655fa
+pkgrel=1
+pkgdesc="Symas Lightning Memory-Mapped Database (development branch)"
+arch=('x86_64')
+url="https://symas.com/lmdb"
+license=('OLDAP-2.8')
+depends=('glibc')
+makedepends=('git')
+provides=("${_pkgbase}=${pkgver}")
+conflicts=("${_pkgbase}")
+replaces=("${_pkgbase}")
+options=('!emptydirs')
+source=("${_pkgbase}::git+https://github.com/LMDB/lmdb.git#branch=mdb.RE/1.0")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/${_pkgbase}/libraries/liblmdb" || return 1
+  local _base _rev _hash
+  # 基版號 = lmdb.h 的 MDB_VERSION_MAJOR/MINOR/PATCH 三個巨集拼出來（鏡像 mdb.RE/1.0 tip 3e655fa 是 1.0.1）。
+  # 不用 git describe：見上方檔頭那條「探測克隆沒 tag」的實測說明。
+  _base=$(awk '/^#define[[:space:]]+MDB_VERSION_(MAJOR|MINOR|PATCH)/ {printf "%s%s", sep, $3; sep="."}' lmdb.h)
+  _rev=$(git rev-list --count HEAD)
+  _hash=$(git rev-parse --short=7 HEAD)
+  printf '%s.r%s.g%s' "${_base:-0}" "$_rev" "$_hash"
+}
+
+build() {
+  cd "$srcdir/${_pkgbase}/libraries/liblmdb" || return 1
+  # 照 Arch 官方穩定版的 Flags：上游 Makefile 不讀標準 CFLAGS 環境，只吃 OPT/CPPFLAGS/LDFLAGS
+  # 這三個變數，不餵就拿到它寫死的 -O2 -g；-pthread 是上游 LDFLAGS 少列的（官方也補）。
+  make OPT="$CFLAGS" CPPFLAGS="$CPPFLAGS" LDFLAGS="$LDFLAGS -pthread" prefix=/usr
+}
+
+check() {
+  cd "$srcdir/${_pkgbase}/libraries/liblmdb" || return 1
+  # 上游 test 目標 = make all 後 `rm -rf testdb && ./mtest && ./mdb_stat testdb`，
+  # 只做一次功能自測（不是 mtest_enc/mtest_remap 那批），秒級、穩定；Arch 官方也跑。
+  make OPT="$CFLAGS" CPPFLAGS="$CPPFLAGS" LDFLAGS="$LDFLAGS -pthread" prefix=/usr test
+}
+
+package() {
+  cd "$srcdir/${_pkgbase}/libraries/liblmdb" || return 1
+  make DESTDIR="$pkgdir" prefix=/usr install
+
+  # 上游 install 目標只裝 a/so/headers/程式/man，**不裝 lmdb.pc**；
+  # pc 檔是 `all` 目標在 build() 階段生成的（Version 由 ./mdb_stat -V 現算）。
+  install -Dm644 lmdb.pc -t "$pkgdir/usr/lib/pkgconfig/"
+
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname/"
+  install -Dm644 COPYRIGHT -t "$pkgdir/usr/share/licenses/$pkgname/"
+
+  # 0.9.x 的 Makefile 是 mandir=$(prefix)/man，Arch 官方那份固定做 usr/man → usr/share/man
+  # 搬移；RE/1.0 已經改成 datarootdir=/usr/share（直接落在 /usr/share/man），
+  # 這裡無條件 mv 會在「目錄不存在」時非零返回、把 package() 打紅 → 加存在性判斷。
+  if [ -d "$pkgdir/usr/man" ]; then
+    mv "$pkgdir/usr/man" "$pkgdir/usr/share/man"
+  fi
+}
