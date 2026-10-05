@@ -267,9 +267,12 @@ jobs:
             [ "$synced" = true ] || { echo "::error::Artix 倉連續 5 次同步失敗"; exit 1; }
             # 全量升到 gremlins 態，讓編譯用的 Qt 與目標機同版
             pacman -Syu --noconfirm
-            # 實物檢查：這輪若還印 6.11.x，PKGBUILD 的釘選就會發出裝不上的包
-            /usr/lib/qt6/bin/qmake -query QT_VERSION
-            pacman -Q qt6-base
+            # 實物檢查：這輪若還印 6.11.x，PKGBUILD 的釘選就會發出裝不上的包。
+            # 用 -Si 查 DB，不用 qmake —— 這個時刻容器裡根本還沒裝 qt6-base
+            # （它是 PKGBUILD 的 depends，makepkg 之後才裝），實測 run #358 就在
+            # /usr/lib/qt6/bin/qmake 上吃 127 No such file or directory。
+            pacman -Si qt6-base 2>/dev/null | grep -aE '^(version|repository)' | head -4
+            pacman -Q qt6-base 2>/dev/null || echo "（qt6-base 尚未安裝，屬預期；由 PKGBUILD 的 depends 帶入）"
           fi
 
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
@@ -2249,6 +2252,29 @@ jobs:
               *"$want"*) echo "✓ mesa 产物 LLVM soname 与容器一致" ;;
               *) echo "::error::mesa 产物链接的 libLLVM 与容器不一致（产物：$got ／ 容器：$want）——装到目标机会 GLX 崩"; exit 1 ;;
             esac
+          fi
+          if [ "${{ matrix.repo_name }}" = "qt6ct-git" ]; then
+            # ── 釘選落地驗收（只認產物實物，不認 makepkg 綠燈）
+            # Qt6 的 platform theme 插件有 minor 硬閘（6.12 拒載 6.11 編的 .so），
+            # 所以這顆包的 depends 必須釘在「建它時那套 Qt」。PKGBUILD 早期把版本查詢
+            # 寫在檔頭，而 makepkg 是「先 source、後裝 depends」→ 乾淨容器裡查不到
+            # qmake，會靜默發出「不釘版」的包，CI 全綠也看不出來。
+            # 判準不自己拼字串比對，直接問 libalpm：`pacman -T <dep>` 的語意是
+            # 「列出滿不了的依賴」，回空字串且 rc=0 才是真的裝得下去。
+            # （實測校準：本機裝 qt6-base=6.12.0-2，`-T qt6-base=6.12.0` 通過、
+            #   `-T qt6-base=9.9.9` rc=1 並印出那條 → 等號比的是 pkgver、略過 pkgrel；
+            #   若在這裡寫死「要等於 pacman -Q 的 6.12.0-2」反而會誤殺好包。）
+            pin="$(for f in ./*.pkg.tar.zst; do [ -e "$f" ] || continue; bsdtar -xOf "$f" .PKGINFO 2>/dev/null; done \
+                   | grep -a '^depend = qt6-base=' | head -n1 | sed 's/^depend = //; s/ *$//')"
+            echo "產物依賴=[${pin:-（沒有 qt6-base= 的釘選）}]  容器實裝=[$(pacman -Q qt6-base 2>/dev/null)]"
+            if [ -z "$pin" ]; then
+              echo "::error::產物沒有釘住 qt6-base 版本（Qt 換代後這顆不會被列為過期重編，會靜默失靈）"; exit 1
+            fi
+            missing="$(pacman -T "$pin" 2>&1)"
+            if [ -n "$missing" ]; then
+              echo "::error::$pin 在容器裡滿足不了（libalpm 回報：$missing）——發出去就是裝不上的包"; exit 1
+            fi
+            echo "✓ $pin 與容器實裝一致，libalpm 認可"
           fi
           ls -lh ./*.pkg.tar.zst
 

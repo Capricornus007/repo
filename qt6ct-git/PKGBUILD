@@ -10,22 +10,18 @@
 #   4. depends 釘死 qt6-base=<建置時的 Qt 版本>：Qt6 的 platform theme 插件有
 #      minor 版本硬閘（6.12 拒載 6.11 編的 .so），釘版本讓 yay 在 Qt 換代時
 #      立刻把這顆列為過期並重編，不會再出現「主題靜默失靈好幾天」。
+#      钉版在 package() 里做，不在檔頭做——理由寫在該函式内。
 _pkgname=qt6ct
 pkgname="$_pkgname-git"
 # 不帶 epoch：本倉的 pkgver() 產出 0.11.rN.gHASH，段數多於倉庫的 0.11，
 # rpmvercmp 本來就比較大；加 epoch 反而會在上游真的出 0.12 時擋住正常換代。
 pkgver=0.11.r0.g00823e4   # 佔位值，實際由下方 pkgver() 覆寫（pacman 7.1 解析階段就要求存在）
-pkgrel=1
+pkgrel=2
 pkgdesc='Qt6 Configuration Tool (official upstream git)'
 arch=('x86_64')
 url="https://www.opencode.net/trialuser/$_pkgname"
 license=('BSD-3-Clause')
-_qtver=$(/usr/lib/qt6/bin/qmake -query QT_VERSION 2>/dev/null)
-if [[ -n $_qtver ]]; then
-	depends=('qt6-base'"=$_qtver" 'qt6-svg' 'hicolor-icon-theme')
-else
-	depends=('qt6-base' 'qt6-svg' 'hicolor-icon-theme')
-fi
+depends=('qt6-base' 'qt6-svg' 'hicolor-icon-theme')
 makedepends=('git' 'cmake' 'qt6-tools')
 provides=("$_pkgname")
 conflicts=("$_pkgname")
@@ -45,6 +41,18 @@ build() {
 }
 
 package() {
+	# 釘版本只能在 package() 裡算，不能在檔頭做：makepkg 是「先 source PKGBUILD、
+	# 後安裝 depends/makedepends」，乾淨容器（CI 那顆 artixlinux base-devel 沒裝 Qt）
+	# 在 source 階段呼叫 qmake 必然失敗 → 靜默退回不釘版，包照樣發出去，第 4 條保護
+	# 就這樣不見（實測 run #358 的初始檢查报 /usr/lib/qt6/bin/qmake: No such file）。
+	# .PKGINFO 是 package() 跑完之後才寫的，所以在這裡覆寫 depends 會進產物。
+	local _qtv
+	_qtv="$(/usr/lib/qt6/bin/qmake -query QT_VERSION 2>/dev/null || qmake -query QT_VERSION 2>/dev/null)"
+	if [[ -n $_qtv ]]; then
+		depends=("qt6-base=$_qtv" 'qt6-svg' 'hicolor-icon-theme')
+	else
+		echo "WARN: 找不到 qmake，qt6-base 將不釘版本（Qt 換代後這顆不會被列為過期重編）" >&2
+	fi
 	cd "$_pkgname"
 	DESTDIR="$pkgdir" cmake --install build
 	install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
