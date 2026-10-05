@@ -57,7 +57,15 @@ jobs:
           # `failed retrieving file … from fastly.mirror.pkgbuild.com :
           #  OpenSSL SSL_read: unexpected eof / SSL_ERROR_SYSCALL`（#305 kglobalaccel-git、
           # #306 kdbusaddons-git），pacman 預設的 low-speed 逾時會把 CDN 抖動直接判成失敗。
-          until pacman -Syu --noconfirm --disable-download-timeout git jq curl sudo devtools pacman-contrib gnupg github-cli; do
+          # devtools 是 Arch 專有的 chroot 建置工具鏈（makechrootpkg 等），Artix 倉裡
+          # 沒有這顆：實測 kind=artix 的 job 在換成 artixlinux/artixlinux:base-devel 之後，
+          # 這一步會 `error: target not found: devtools` 並連重試 4 次全紅（run #356 的
+          # qt6ct-git job，紅在「初始化 Arch Linux 環境」，根本還沒走到我的 artix 區塊）。
+          # 我們這裡是直接 makepkg、不走 chroot，所以 artix 基座下跳過它是對的，
+          # 不是繞過問題。
+          _init_pkgs='git jq curl sudo pacman-contrib gnupg github-cli'
+          if [ '${{ matrix.kind }}' != 'artix' ]; then _init_pkgs="$_init_pkgs devtools"; fi
+          until pacman -Syu --noconfirm --disable-download-timeout $_init_pkgs; do
             _pi=$((_pi + 1))
             # 必須用 if，不能用 `[ … ] && { … ; exit 1; }`：本步驟的 shell 是 `sh -e`
             # （runner 上就是 dash），而 dash 的 errexit 對「AND-OR 清單裡最後被執行的那條
