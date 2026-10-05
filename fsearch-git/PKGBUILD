@@ -1,0 +1,132 @@
+# Maintainer: Capricornus007
+#
+# ⚠️ 規則 25 要的「本地基準」查無此物（如實回報，不假裝有）：
+#   ~/.cache/yay/ 底下**沒有** fsearch-git/，也沒有任何 fsearch 相關目錄
+#   （`ls ~/.cache/yay | grep -i fsearch` 空；再把 ~/ 全盤 `find -iname PKGBUILD`
+#   餵給 `grep -l 'cboxdoerfer'` 也空）。本機那顆 fsearch-git 0.3.1.r44.g975be2f-1
+#   是 pacman 直接裝的 chaotic-aur **二進位包**（`pacman -Qi fsearch-git` →
+#   Packager: Garuda Builder <team@garudalinux.org>），從沒在本機建過源碼，
+#   所以不存在「用戶改過的 PKGBUILD」可以抄。
+#   → 本檔拿 AUR xiota/fsearch-git（RPC 實查 0.3.r43.g975be2f-2，LastModified 2026-08-29）
+#   的配方當**輸入**、對照本機實裝重寫，並改掉下面三處「照抄 raw 就會出事」的地方。
+#   這才是規則 25「不准抓 AUR raw 版了事」要的東西。
+#
+# 1) 版本公式——這顆的坑比別的 -git 深，逐條實測過：
+#    AUR 用 `git describe --tags --exclude='*[a-zA-Z][a-zA-Z]*'`，只認「當前分支的祖先 tag」。
+#    但上游的 0.3.1／0.3.2 兩個 tag **不在 master 上**（實測
+#    `git branch -a --contains 0.3.2` → 只有 origin/fsearch_0.3 那條維護分支），
+#    describe 遂退回 0.3，在 master HEAD cb6cd67 算出 `0.3.r55.gcb6cd67`。
+#    而 `vercmp 0.3.1.r44.g975be2f 0.3.r55.gcb6cd67` = 1 → 「本機已裝的那顆比較新」
+#    → 進倉後 `pacman -Syu` 認定已是最新、**永遠換不過來**（用戶點名這顆的起因就是這個
+#    字串錯覺：local 0.3.1.r44 被判定比 chaotic-aur 0.3.r55 新，其實 commit 比較舊）。
+#    本檔把基版號取「倉庫內最高編號 tag」（0.3.2，就是 chaotic-aur／archlinuxcn 的
+#    穩定版 fsearch 0.3.2-1 同一支 tag），提交數改用 master 的**總提交數**（單調遞增、
+#    不受 tag 落在哪條分支影響）→ `0.3.2.r2935.gcb6cd67`：
+#      · 尖端照跟 master（規則 61：master HEAD 2026-10-04 比 fsearch_0.3 分支
+#        2026-09-20 還新，所以主軸就是 master，不是那個 release 分支）
+#      · 嚴格比實裝那顆新（規則 15）→ 換裝真的動作出來
+#    ⚠️ pkgver() 一律用絕對路徑 `cd "$srcdir/fsearch"`：本倉 CI 的泛用版本探測把源克隆成
+#    ${pkgname%-git}=fsearch、软鏈到 src/，而它自己的 CWD 停在 startdir。寫相對路徑會
+#    「本地能過、CI 探測必敗」→ badge 全綠卻永遠不產包（本倉踩過兩次：amd-debug-tools、
+#    那批 i3-git）。探測的软鏈清單是 ${pkgname}／${pkgname%-git}／${_pkgname}／${_gitname}／
+#    ${_base}／${_gitrepo}／${pkgbase}，**沒有 ${_pkgbase}**，所以 source 的「名字::」前綴
+#    與 pkgver() 裡 cd 的目標都必須正好是 `fsearch`（= ${pkgname%-git}）。
+#
+# 2) arch-meson：AUR 那版直接叫 arch-meson，它是 **devtools** 提供的殼子，meson 本身沒有。
+#    本倉 CI 的「初始化 Arch Linux 環境」（build-packages.yml:58）剛好裝了 devtools，
+#    但那是「碰巧可用」而不是宣告出來的依賴；這裡把 devtools 寫進 makedepends
+#    （容器內已存在 → makepkg -s 用 --needed，不會多裝、也不會拖入 docker 之外的東西）。
+#
+# 3) 0001-fix_new_window.patch 留著（規則 14「一方有一方無 → 補上」）：實測 master HEAD
+#    cb6cd67 的 src/fsearch.c:290 仍是 `gboolean minimized = g_variant_get_boolean(parameter);`，
+#    而選單項 app.new_window 沒有 target、Ctrl+N 那條 accel 是以 parameter=NULL 啟動的
+#    → 踩 GLib critical／新建視窗狀態錯，上游沒修。已在 master HEAD 上跑過
+#    `git apply --check`（乾淨通過），所以 prepare() 用 patch 的**預設 fuzz**，
+#    不抄 AUR 的 `-F100`——那個在上游漂移後會靜默錯套，紅也紅得不明不白。
+#    改這個檔要連同 sha256sums 一起更新（本包不標 kind:aur，校驗和是真的在驗）。
+_pkgbase=fsearch
+pkgname=${_pkgbase}-git
+pkgver=0.3.2.r2935.gcb6cd67
+pkgrel=1
+pkgdesc="A fast graphical file search utility (development branch)"
+arch=('x86_64')
+url="https://github.com/cboxdoerfer/fsearch"
+license=('GPL-2.0-or-later')
+# 與本機實裝（chaotic-aur 那顆）完全一致的執行期依賴：gtk3 / libicuuc.so / pcre2。
+# libicuuc.so 不寫版本：由 icu 的 provides（本機是 libicuuc.so=78-64）以「未帶版本的
+# 依賴」身分被滿足，寫死版反而會在 icu 升版時自己先紅。
+depends=(
+  'gtk3'
+  'libicuuc.so'
+  'pcre2'
+)
+makedepends=(
+  'devtools'
+  'git'
+  'glib2-devel'
+  'itstool'
+  'meson'
+)
+# 穩定版 fsearch 住在 chaotic-aur／archlinuxcn（實測兩者都是 0.3.2-1），換裝靠這三條：
+# provides 讓「依賴 fsearch 的包」繼續解析、conflicts 擋下兩版共存、
+# replaces 讓 `pacman -Syu` 自己完成換裝（不用先用戶卸再裝）。
+provides=("${_pkgbase}")
+conflicts=("${_pkgbase}")
+replaces=("${_pkgbase}")
+source=(
+  "${_pkgbase}::git+${url}.git"
+  '0001-fix_new_window.patch'
+)
+sha256sums=(
+  'SKIP'
+  '66b92a2bcba6006469d8aecb94612d4f633f47800bbe502d6e2061d5218478b1'
+)
+
+prepare() {
+  cd "$srcdir/${_pkgbase}" || return 1
+  patch -Np1 -i "$srcdir/0001-fix_new_window.patch"
+}
+
+pkgver() {
+  cd "$srcdir/${_pkgbase}" || return 1
+  local _base _rev _hash
+  # 倉庫內最高編號 tag；純數字 glob 把 v0.1beta*／0.3-beta* 這種帶字母的排掉。
+  # 實測 --sort=-v:refname 的前三名是 0.3.2、0.3.1、0.3-beta2 → 取 0.3.2。
+  # 一個 tag 都拿不到（上游哪天清 tag）才退回 meson.build 自己宣告的 version。
+  _base=$(git tag --list '[0-9]*.[0-9]*' --sort=-v:refname | head -n1)
+  [ -n "$_base" ] || _base=$(sed -n "s/^[[:space:]]*version[[:space:]]*:[[:space:]]*'\([0-9.]*\)'.*/\1/p" meson.build | head -n1)
+  [ -n "$_base" ] || _base=0
+  _rev=$(git rev-list --count HEAD)
+  # --short=7 是刻意釘死的：裸 `git rev-parse --short` 的長度取決於「這個克隆裡有多少物件」，
+  # 探測用的 blobless 克隆與 makepkg 的完整克隆可能一個給 7 字元、一個給 10 字元，
+  # 兩邊版本字串就對不上 →「已在 release 裡」恆不命中、每輪白編（同 lmdb-git 檔頭那條）。
+  _hash=$(git rev-parse --short=7 HEAD)
+  printf '%s.r%s.g%s' "$_base" "$_rev" "$_hash"
+}
+
+build() {
+  local _meson_options=(
+    -Dchannel=AUR-devel
+  )
+
+  arch-meson "${_meson_options[@]}" "${_pkgbase}" build
+
+  # 上游 meson.build 的 project version 寫死 0.3，About 對話框與 --version 都會顯示錯版；
+  # 跟 AUR 一樣把 configure 產物 build/config.h 的 PACKAGE_VERSION／VERSION 蓋成本包實算字串。
+  local rx_pkgver rx_version
+  printf -v rx_pkgver '/\\bPACKAGE_VERSION\\b/s/"\\S+"/"%s-%s"/' "$pkgver" "$pkgrel"
+  printf -v rx_version '/\\bVERSION\\b/s/"\\S+"/"%s"/' "$pkgver"
+  sed -E -e "$rx_pkgver" -e "$rx_version" -i build/config.h
+
+  meson compile -C build
+}
+
+check() {
+  # 本專案的 meson.build 裡沒有任何 test()（實查），`meson test -C build` 會印
+  # 「No tests defined.」並 exit 0（本地 meson 1.12.99 實測）→ 留著不拖慢、也不會紅。
+  meson test -C build
+}
+
+package() {
+  DESTDIR="$pkgdir" meson install -C build
+}

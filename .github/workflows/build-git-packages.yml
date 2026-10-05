@@ -173,6 +173,7 @@ jobs:
           {"key": "amd-debug-tools-git", "repo_name": "amd-debug-tools-git", "variant": "none"},
           {"key": "nano-git", "repo_name": "nano-git", "variant": "none", "kind": "aur"},
           {"key": "xapp-symbolic-icons-git", "repo_name": "xapp-symbolic-icons-git", "variant": "none", "kind": "aur"},
+          {"key": "fsearch-git", "repo_name": "fsearch-git", "variant": "none"},
           {"key": "jbr21", "repo_name": "jbr21", "variant": "none"},
           {"key": "jbr25", "repo_name": "jbr25", "variant": "none"}
         ]
