@@ -611,6 +611,22 @@ jobs:
           # 21000」的解析上限（run #231 整個 workflow 因此無效、一個 job 都沒起）。
           # 現在 clone 留在上一步的通用分支，這裡只做 PKGBUILD 手術。
           case "${{ matrix.repo_name }}" in
+            topgrade-git)
+              # aws-lc-sys 0.45（topgrade 的 Rust 依賴鏈拉進來的）要編 jitterentropy-base.c，
+              # 那顆檔自帶硬性 #error：不準用最佳化編譯、必須 -O0。crate 確實給了 -O0，
+              # 但 cc-rs 把環境 CFLAGS 附加在它後面，而 makepkg 的 -O2 在最後面生效。
+              # run #360 的實物命令行（節錄）：
+              #   "cc" "-O3" … "-O0" … "-O2" "-O2" … -c …/jitterentropy-base.c
+              #     → error: #error "The CPU Jitter random number generator must not be
+              #        compiled with optimizations. … Use the compiler switch -O0"
+              # 對策：只把環境旗標裡的 -O* 拿掉（-D_FORTIFY_SOURCE、-fstack-clash-protection、
+              # -fcf-protection 等加固全部保留），優化等級交給 crate 與 cargo profile 自己決定。
+              # 本地對真 AUR PKGBUILD 驗過注入結果與效果：注入後 build() 頭兩行正確，
+              # 拿日誌裡那串真實 CFLAGS 跑一次 → -O2 消失、其餘旗標原樣保留。
+              sed -i "/^build() {/a\\  CXXFLAGS=\"\$(printf %s \"\$CXXFLAGS\" | sed -E 's/-O[0-9s]+//g')\"; export CXXFLAGS" pkg_dir/PKGBUILD
+              sed -i "/^build() {/a\\  CFLAGS=\"\$(printf %s \"\$CFLAGS\" | sed -E 's/-O[0-9s]+//g')\"; export CFLAGS" pkg_dir/PKGBUILD
+              sed -n "/^build() {/,+3p" pkg_dir/PKGBUILD
+              ;;
             sway-git)
               # AUR PKGBUILD 用 arch-meson … -D sd-bus-provider=libsystemd 且 sway
               # 上游 meson.build 写死 werror=true：容器 libinput 一旦比 sway 支持的
