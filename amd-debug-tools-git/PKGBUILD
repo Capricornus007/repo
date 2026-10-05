@@ -14,7 +14,7 @@
 _pkgbase=amd-debug-tools
 pkgname=${_pkgbase}-git
 pkgver=0.2.21.r0.gacc8749
-pkgrel=2
+pkgrel=3
 pkgdesc="A collection of Python-based tools for debugging AMD platforms, particularly Zen-based systems (git build)"
 arch=('any')
 url="https://git.kernel.org/pub/scm/linux/kernel/git/superm1/amd-debug-tools.git"
@@ -101,13 +101,23 @@ package() {
   site_dir="usr/lib/python$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')/site-packages"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 
-  # s2idle-hook：上游把它當 package-data 裝進 site-packages，官方額外再複製一份到
-  # systemd 的 system-sleep 目錄。**本機是 Artix＋OpenRC，systemd-sleep 不會讀它**，
-  # 這裡照官方裝只是留著給「哪天換系統／別的機器」用，本倉的量測不依賴它
-  # （~/bin/s2idle-check 直接讀 /sys/power/suspend_stats）。檔不在就跳過，
-  # 免得上游哪天改名讓整輪 build 紅。
+  # s2idle-hook：上游把它當 package-data 裝進 site-packages，官方額外複製一份到 systemd
+  # 的 system-sleep 目錄。**本機是 Artix＋OpenRC，systemd-sleep 永遠不會被叫**，
+  # 所以必須同時裝進 elogind 的目錄，否則：
+  #   · `amd-s2idle test` 收不到 SleepValidator 的 pre/post 樣本 → `amd-s2idle report` 永遠空；
+  #   · 更要命的是「誰會去寫 /proc/driver/nvidia/suspend」這件事只有 system-sleep 鉤子做，
+  #     實測用 `rtcwake -m mem` 那條路（直接寫 /sys/power/state、繞開所有鉤子）第 1 輪就
+  #     被內核否決：suspend_stats 報 step=suspend dev=0000:01:00.0 errno=-5，
+  #     也就是本倉 nvidia-utils-openrc 補的那個 pre 分支根本沒被叫到。
+  # ⚠️ 2026-10-05 更正：本檔舊註解曾寫「本倉的量測不依賴它（~/bin/s2idle-check 直接讀
+  #   suspend_stats）」——那是錯的。讀 suspend_stats 只能告訴你「成敗」，
+  #   而用戶要的「硬體休眠率」與喚醒源歸因是 amd-s2idle 的活，而它的資料來源就是這支鉤子。
+  # elogind 與 systemd 的呼叫協定相同（$1=pre|post、$2=suspend|hibernate），所以直接裝同一份。
+  # 檔不在就跳過，免得上游哪天改名讓整輪 build 紅。
   if [ -f "$pkgdir/$site_dir/amd_debug/s2idle-hook" ]; then
     install -Dm755 "$pkgdir/$site_dir/amd_debug/s2idle-hook" \
       "$pkgdir/usr/lib/systemd/system-sleep/s2idle-hook"
+    install -Dm755 "$pkgdir/$site_dir/amd_debug/s2idle-hook" \
+      "$pkgdir/usr/lib/elogind/system-sleep/90-s2idle-hook"
   fi
 }
