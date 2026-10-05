@@ -216,25 +216,52 @@ jobs:
             # 而 Arch extra 同期只有 6.11.2-3。Qt6 對 platform theme 插件有 minor 硬閘
             # （6.12 拒載 6.11 編的 .so，實測 "Ignoring QPA plugin due to mismatching Qt
             # versions 396288 396032"），基座錯位就會發出「裝得上卻靜默失靈」的插件包。
-            cp /etc/pacman.conf /etc/pacman.conf.orig
-            {
-              awk '/^\[/{exit} {print}' /etc/pacman.conf.orig
-              for _r in system-goblins system-gremlins world-goblins world-gremlins \
-                        galaxy-goblins galaxy-gremlins lib32-goblins lib32-gremlins; do
-                printf '\n[%s]\nServer = https://artix.wheaton.edu/repos/%s/os/$arch\n' "$_r" "$_r"
-              done
-              for _r in system world galaxy lib32; do
-                printf '\n[%s]\nInclude = /etc/pacman.d/mirrorlist\n' "$_r"
-              done
-            } > /etc/pacman.conf
+            # 目標機 [options] 的實際內容（實讀 /etc/pacman.conf）。
+            # ⚠ 不能用「原檔第一段之前」的寫法搬：Artix 預設檔的 [options] 就在第一行，
+            #   `awk '/^\[/{exit}'` 會直接輸出空字串 → 整份檔案沒有 [options]
+            #   → 沒有 Architecture，而下面的 Server 全用 $arch，
+            #   pacman 報 "mirror '…$arch' contains the '$arch' variable, but no
+            #   'Architecture' is defined"（run #357 qt6ct-git 實測，5 次重試全同一句）。
+            # 刻意不带过去的三项：
+            #   IgnorePkg   = 本機钉住（networkmanager/noto-fonts 等），在容器裡只会掩盖依赖问题
+            #   DownloadUser= alpm 建不建得出来取决于镜像里有没有该用户，缺了会整批失败
+            #   DisableDownloadTimeout = 目標機不分青紅皂白不超时；CI 要的是卡住就紅、換一輪重跑
+            printf '%s\n' \
+              '[options]' \
+              'HoldPkg     = pacman glibc' \
+              'Architecture = auto' \
+              'Color' \
+              'VerbosePkgLists' \
+              'ParallelDownloads = 4' \
+              'SigLevel = Never' \
+              'LocalFileSigLevel = Never' \
+              'RemoteFileSigLevel = Never' > /etc/pacman.conf
+            for _r in system-goblins system-gremlins world-goblins world-gremlins \
+                      galaxy-goblins galaxy-gremlins lib32-goblins lib32-gremlins; do
+              printf '\n[%s]\nServer = https://artix.wheaton.edu/repos/%s/os/$arch\n' "$_r" "$_r" >> /etc/pacman.conf
+            done
+            # system / world / galaxy / lib32 用 Include 走鏡像清單，與目標機一致
+            for _r in system world galaxy lib32; do
+              printf '\n[%s]\nInclude = /etc/pacman.d/mirrorlist\n' "$_r" >> /etc/pacman.conf
+            done
             grep -q '^\[world-gremlins\]' /etc/pacman.conf || { echo "::error::Artix 倉順序重寫失敗"; exit 1; }
+            grep -q '^Architecture' /etc/pacman.conf || { echo "::error::[options] 段遺失（Architecture 沒了 → \$arch 無法展開）"; exit 1; }
             # wheaton 是唯一承載 goblins/gremlins 的 Artix 鏡像（實測 gigenet 與 dotsrc
             # 的 world-gremlins 都 404、openmode 連不上），且它推新包時有幾分鐘
             # DB 還沒落地的窗口 → 退避重試。
+            # ⚠ 重試原因不能寫死成「推送窗口」：run #357 五次全是同一句設定檔錯誤，
+            #   被這行誤診成網絡問題、白等兩分鐘。改成把 pacman 的真實輸出印出來。
             synced=false
             for _try in 1 2 3 4 5; do
-              if pacman -Sy --noconfirm; then synced=true; break; fi
-              echo "Artix 倉同步失敗（第 ${_try}/5 次），撞上推送窗口，退避重試"
+              # 不能用 `pacman -Sy | tee`：管線回的是 tee 的狀態，pacman 失敗會被吞掉、
+              # 于是 synced 永遠 true（這個坑本機踩過兩次）。先落檔再查 $?,最後把原文吐出來。
+              if pacman -Sy --noconfirm > /tmp/pacman-sy.log 2>&1; then
+                cat /tmp/pacman-sy.log
+                synced=true
+                break
+              fi
+              cat /tmp/pacman-sy.log
+              echo "Artix 倉同步失敗（第 ${_try}/5 次）， pacman 原文：$(grep -a 'error' /tmp/pacman-sy.log | head -n 2 | tr '\n' ' ')"
               sleep $(( _try * 20 ))
             done
             [ "$synced" = true ] || { echo "::error::Artix 倉連續 5 次同步失敗"; exit 1; }
