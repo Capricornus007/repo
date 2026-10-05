@@ -190,6 +190,56 @@ jobs:
             readlink -f /usr/lib/libLLVM.so
           fi
 
+          if [ "${{ matrix.kind }}" = 'artix' ]; then
+            # ── 目標機倉庫順序對齊（用戶 2026-10-05 指令：「把我倉庫配置順序全部搬上去」）
+            # 容器是 archlinux:base-devel（Arch 基座），用戶機器是 Artix：實測
+            # Artix [world-gremlins] 的 qt6-base 是 6.12.0-2，而 Arch extra 同期只有
+            # 6.11.2-3。Qt6 對 platform theme 插件有 minor 版本硬閘——6.12 直接拒載
+            # 6.11 編的 .so（實測 "Ignoring QPA plugin due to mismatching Qt versions
+            # 396288 396032"），所以在 Arch 容器裡編的 Qt 插件裝到他機器上會靜默失靈。
+            # qt6ct-git 的第一版就是這樣發出一顆 depends=qt6-base=6.11.2 的包
+            # （PKGBUILD 的版本釘選讓它大聲拒裝而不是靜默壞，這點救回來）。
+            # 這裡依用戶機器上的相對順序把 Artix 的 world/galaxy/lib32 三段插到
+            # [extra] **之前**（pacman 是 first-repo-wins），讓 Artix 版優先。
+            # ⚠️ 故意**不搬** [system] / [asteroids*] / [xlibre-beta]：Artix 的 qt6-base
+            #   依賴 libelogind，只有 Artix [system] 提供；把 system 加進來會讓 -Syu
+            #   在 build 中途把容器的 glibc/gcc 換成 Artix 重建版，142 個 job 一起賭。
+            #   改為下方 --nodeps 只取 Qt 本體——容器裡 dbus/glib2/icu 等 soname 都在，
+            #   編譯只要標頭與連結檔，不缺東西。
+            # ⚠️ wheaton 是唯一承載 gremlins/goblins 的 Artix 鏡像（實測 gigenet、
+            #   dotsrc 的 world-gremlins 都 404，openmode 連不上），所以只能重試撐過
+            #   它推新包時那幾分鐘的同步窗口。
+            ARTIX_MIRROR=https://artix.wheaton.edu/repos
+            if ! grep -q '^\[world-gremlins\]' /etc/pacman.conf; then
+              {
+                printf '\n'
+                for _r in world-goblins world-gremlins world galaxy-goblins galaxy-gremlins galaxy lib32-goblins lib32-gremlins lib32; do
+                  printf '[%s]\nSigLevel = Never\nServer = %s/%s/os/$arch\n\n' "$_r" "$ARTIX_MIRROR" "$_r"
+                done
+              } > /tmp/artix-repos.conf
+              if grep -q '^\[extra\]' /etc/pacman.conf; then
+                awk '/^\[extra\]/{while ((getline _l < "/tmp/artix-repos.conf") > 0) print _l; close("/tmp/artix-repos.conf")} {print}' \
+                  /etc/pacman.conf > /tmp/pacman.conf.new
+                mv /tmp/pacman.conf.new /etc/pacman.conf
+              else
+                cat /tmp/artix-repos.conf >> /etc/pacman.conf
+              fi
+              grep -q '^\[world-gremlins\]' /etc/pacman.conf || { echo "::error::Artix 倉段插入失敗"; exit 1; }
+            fi
+            synced=false
+            for _try in 1 2 3 4 5; do
+              if pacman -Sy --noconfirm; then synced=true; break; fi
+              echo "Artix 源同步失敗（第 ${_try}/5 次），撞上 wheaton 推送窗口，退避重試"
+              sleep $(( _try * 20 ))
+            done
+            [ "$synced" = true ] || { echo "::error::Artix 源連續 5 次同步失敗"; exit 1; }
+            # 一次把三個 Qt 包都指定給 pacman：分三次呼叫會在第二次又去解析到
+            # Arch 版而把剛裝好的 Artix 版降回去。
+            pacman -S --noconfirm --nodeps qt6-base qt6-svg qt6-tools
+            # 印出來當實物：這輪若還是 6.11.x，PKGBUILD 的釘選就會發出裝不上的包
+            /usr/lib/qt6/bin/qmake -query QT_VERSION
+          fi
+
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
           # 结果最重的 CachyOS 内核是单线程编译的，必然撞 6 小时上限。
           # 直接追加到文件末尾，比 sed 匹配注释行可靠（上游默认值改过好几次）。
