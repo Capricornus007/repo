@@ -412,7 +412,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein|qt6ct-git|npm-git|pnpm-git|go-git|fzf-git|git-lfs-git)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein|qt6ct-git|npm-git|pnpm-git|go-git)
               # npm-git／pnpm-git／go-git（用戶 2026-10-06 點名，全走本倉目錄版）：
               #   · npm-git：AUR 上根本沒有（實測 RPC info resultcount=0）。
               #   · pnpm-git：AUR 有，但那顆**編不過當前 master**（run #366 實測
@@ -484,14 +484,6 @@ jobs:
               #     （6.12 實測拒載 6.11 編的 .so，訊息 Ignoring QPA plugin due to mismatching
               #     Qt versions），釘版本讓 Qt 換代時 yay 立刻判這顆過期並重編，
               #     不會再出現「Qt 升級後主題靜默失靈、yay 因為 epoch 永遠不換代」。
-              # fzf-git／git-lfs-git（用戶 2026-10-06「讓所有跟 go 有關的項目全去最尖端」）：
-              #   兩顆都是 Go 建置、且上游近期 freeze（fzf HEAD b1be3a8=09-14、
-              #   git-lfs HEAD 0043a64=09-22），走 AUR 那份時我方無法抬版 →
-              #   「換了建置工具鏈」這件事永远表達不出來（-git 包的 pkgrel 會被
-              #   makepkg 重置為 1，只有 pkgver／epoch 能推動換代）。所以收進本倉
-              #   目錄版並各抬一等（fzf 2→3、git-lfs 0→1）。矩陣仍留 kind:aur 只為
-              #   借用回推 giant if 的 `matrix.kind != 'aur'`（與 pnpm-git 同一手法）；
-              #   case 首命中即中，實際抓的是本倉目錄，不會去 clone AUR。
               # 這三包都**不標 kind**（純 in-tree），所以下方的「更新校驗和並回推」那步要
               # 手動把它們排除掉——那步會 updpkgsums 再 push 到 Capricornus007/<包名>.git，
               # 而 in-tree 包根本沒有那個獨立倉。
