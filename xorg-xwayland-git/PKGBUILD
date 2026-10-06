@@ -53,7 +53,7 @@ makedepends=('meson' 'xorgproto' 'xtrans' 'libxkbfile' 'dbus'
 source=("xorg-xwayland::git+https://gitlab.freedesktop.org/xorg/xserver.git#branch=xwayland-24.1"
         hidpi.patch)
 sha256sums=('SKIP'
-            'c00b014b2a74079da30b9f3a94358157a4d390bb90a84af78ee384bacf37193a')
+            '8b0d2f15e9bb42620a7b396c3e1d6904d193890e59614b699d520f77b31bc722')
 
 provides=('xorg-xwayland' 'xorg-server-xwayland' 'xorg-server-xwayland-git'
           'xorg-xwayland-hidpi-xprop' 'xorg-xwayland-hidpi-xprop-git')
