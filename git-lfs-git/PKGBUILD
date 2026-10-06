@@ -1,0 +1,59 @@
+# Maintainer: Chocobo1 <chocobo1 AT archlinux DOT net>
+
+pkgname=git-lfs-git
+pkgver=3.3.0.r104.gbea0287c
+pkgrel=1
+# epoch=1（AUR 那份沒有 epoch）：本包自 2026-10-06 起改由本倉 in-tree 維護
+# （見 build-packages.yml 的 in-tree 攔截分支）。抬 epoch 的理由同 fzf-git：
+# Go 建置工具鏈換成自有 go-git（尖端 1.28-devel），而 -git 包的 pkgrel 會被
+# makepkg 重置為 1，「換編譯器重出一版」只能靠 epoch 表達；否則上游 git-lfs
+# 不打新 tag，這包就會永遠停在 go1.27.1 建的產物。
+epoch=1
+pkgdesc="Git extension for versioning large files"
+arch=('i686' 'x86_64')
+url="https://git-lfs.github.com/"
+license=('MIT')
+depends=('glibc')
+makedepends=('git' 'go' 'go-tools' 'ruby-ronn')
+provides=("git-lfs=$pkgver")
+conflicts=('git-lfs')
+source=("git+https://github.com/git-lfs/git-lfs.git")
+sha256sums=('SKIP')
+
+
+export CGO_CPPFLAGS="${CPPFLAGS}"
+export CGO_CFLAGS="${CFLAGS}"
+export CGO_CXXFLAGS="${CXXFLAGS}"
+export CGO_LDFLAGS="${LDFLAGS}"
+export GOFLAGS="-buildmode=pie -ldflags=-linkmode=external -trimpath -mod=readonly -modcacherw"
+
+pkgver() {
+  cd "git-lfs"
+
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd "git-lfs"
+
+  go build \
+    ./
+  make man
+}
+
+check() {
+  cd "git-lfs"
+
+  go test \
+    ./...
+}
+
+package() {
+  cd "git-lfs"
+
+  install -Dm755 "git-lfs" -t "$pkgdir/usr/bin"
+
+  install -Dm644 "LICENSE.md" -t "$pkgdir/usr/share/licenses/git-lfs"
+  install -Dm644 "man"/*.1 -t "$pkgdir/usr/share/man/man1"
+  install -Dm644 "man"/*.5 -t "$pkgdir/usr/share/man/man5"
+}

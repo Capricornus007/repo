@@ -1,7 +1,7 @@
 _name=dae
 pkgname=$_name-git
 pkgver=2.1.1.r576.gd43924d1
-pkgrel=2
+pkgrel=3
 # 這條 pkgver() 原本只寫 `git describe --tags --long`，會錨到「距離最近的祖先 tag」，
 # 而上游在 main 上掛了一顆非版號的輕量 tag `lastst`（2026-08-08，指 1d52465d）。它離
 # HEAD 只有 396 步，比正經的 v2.1.1（576 步）更近，所以 describe 寧可選它，產物會變成
@@ -13,7 +13,11 @@ pkgrel=2
 # 就再也沒換過代。當時 v2.1.1／lastst 這兩顆 tag 還沒推進 fork，describe 才一路退到 rc1。
 # epoch=1 保留：萬一上游再挪 tag、或 fork 的 tag 推送慢一拍，讓 describe 退回舊錨點時，
 # 這包還能繼續餵養而不是永遠被拒收（不准用 --force 繞，拒收是唯一擋住全網降級的閘門）。
-epoch=1
+# 2026-10-06 抬到 2：Go 建置工具鏈換成自有 go-git（尖端 1.28-devel）。dae 上游一動
+# （r690.gc5203f0）就停在原地不換代，而 -git 包的 pkgrel 會被 makepkg 重置為 1，
+# 所以「用新編譯器重出一版」這件事只能靠 epoch 表達（用戶實測 `dae --version` 裡
+# 鑲的是 go1.27.1，就是這一類卡代）。
+epoch=2
 pkgdesc="A Linux lightweight and high-performance transparent proxy solution based on eBPF."
 arch=('x86_64' 'aarch64')
 url="https://github.com/Capricornus007/dae"
