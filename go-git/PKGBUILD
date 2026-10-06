@@ -1,0 +1,96 @@
+# Maintainer: Capricornus007 <contact@capricornus007.com>
+#
+# ── 這顆的存在理由（用戶 2026-10-06 明確：「對啊我要的就是尖端啊」）────────
+# 用戶原本問「AUR 不是有 go-git 嗎」——有，但那顆**已經死了**：實測
+# `aur/rpc?type=info&arg[]=go-git` 回 `LastModified=1596822758`＝**2020-08-07**，
+# 版本停在 `1:go1.15beta1.r138.gba9e1088997-1`（Go 1.15 beta 時代），而且它自己
+# `makedepends=(git go)`。裝那顆等於把 1.27.1 降回 2020 年的東西，所以不能走 AUR，
+# 只能自己照 golang/go 的 master 編。
+#
+# build()/package() 的流程照 Arch 官方 PKGBUILD（gitlab.archlinux.org/.../go），
+# 只把「抓 go$pkgver.src.tar.gz」換成「抓 master 尖端」並補 pkgver()。
+#
+# ⚠️ 已知代價（用戶已裁決要吃尖端，這裡只是留字據）：本機 sing-box / nb4a libcore
+#    / dae 的編譯會改用**未發佈的 Go**。上游 master 壞掉時，本機 go build 跟著壞；
+#    feed 裡那些用 go 構建的包**不受影響**（CI 容器用的是 Arch 官方 go，
+#    見 build-packages.yml 的 init env 段）。要退回穩定版：`pacman -S go`。
+_pkgname=go
+pkgname="$_pkgname-git"
+# epoch 必須跟上 Arch 那顆的 `2:`，否則 `2:1.27.1` 在 vercmp 眼裡永遠比我們新，
+# 裝機時會被判定降版（本倉吃過同型教訓：qt6ct／ttf 那兩次的修法就是補 epoch）。
+epoch=2
+pkgver=1.27.1.r1041.g77fb1abef   # 佔位值，實際由下方 pkgver() 覆寫
+pkgrel=1
+pkgdesc='Core compiler tools for the Go programming language (master tip)'
+arch=(x86_64)
+url='https://go.dev/'
+license=(BSD-3-Clause)
+makedepends=(git go)
+depends=()
+provides=(go go-pie)
+conflicts=(go go-pie)
+replaces=(go go-pie)
+options=(!strip staticlibs)
+source=("$_pkgname::git+https://github.com/golang/go.git#branch=master")
+sha256sums=('SKIP')
+
+pkgver() {
+	# ⚠️ Go 這倉**不能用 `git describe`**，加了 --match 也不行。逐字複現 CI 探測
+	#    實測回 `1.19beta1.r15032.g77fb1abefe`：golang/go 的發佈 tag 打在
+	#    `release-branch.go1.x` 上、master 不帶近代 release tag，describe 沿祖先找
+	#    「距離最近」的匹配 tag，只能退到 2022 年的 go1.19beta1（倉裡另外還有一整批
+	#    weekly.2012-* 週報 tag，同样是地雷）。
+	#
+	# 改法：取倉內最高**穩定** tag（排掉 beta/rc）當基版號 ＋ 該 tag 到 HEAD 的分岔
+	# 距離當 r ＋ HEAD 短 hash。master 往前走 r 單調遞增；上游真發了 1.28.0 之後基
+	# 版號自己跳上去，vercmp 仍判遞增（1.28 > 1.27），不會卡代。
+	cd "$srcdir/$_pkgname" || return 1
+	local base dist hash
+	base=$(git tag --list 'go[0-9]*' --sort=-v:refname \
+		| grep -avE '(beta|rc)[0-9]*$' | head -1)
+	case "$base" in
+	go[0-9]*) : ;;
+	*) echo "找不到 go1.x 穩定 tag（base=$base）" >&2; return 1 ;;
+	esac
+	dist=$(git rev-list --count "$base..HEAD") || return 1
+	hash=$(git rev-parse --short=9 HEAD) || return 1
+	printf '%s.r%s.g%s\n' "${base#go}" "$dist" "$hash"
+}
+
+build() {
+	cd "$_pkgname"
+	export GOARCH=amd64
+	export GOAMD64=v1          # 與 Arch 主包同基線，不假裝跑在 v3 機器上
+	export GOROOT_FINAL=/usr/lib/go
+	export GOROOT_BOOTSTRAP=/usr/lib/go   # makedepends 那顆 go 就是 bootstrap
+	export GOEXPERIMENT=nodwarf5          # Arch 因 debugedit 尚未吃 dwarf5 而關掉
+	cd src || return 1
+	./make.bash
+}
+
+package() {
+	cd "$_pkgname" || return 1
+
+	install -d "$pkgdir/usr/bin" "$pkgdir/usr/lib/go" "$pkgdir/usr/share/doc/go" \
+		"$pkgdir/usr/lib/go/pkg/linux_amd64_"{dynlink,race}
+
+	cp -a bin pkg src lib misc api test "$pkgdir/usr/lib/go"
+	# 不能整包 strip：會連 testdata 裡的檔一起剝掉、上游測試就壞（Arch 同樣只剝二進位）
+	strip $STRIP_BINARIES "$pkgdir/usr/lib/go"{/bin/*,/pkg/tool/*/*}
+
+	cp -r doc/* "$pkgdir/usr/share/doc/go"
+
+	ln -sf /usr/lib/go/bin/go "$pkgdir/usr/bin/go"
+	ln -sf /usr/lib/go/bin/gofmt "$pkgdir/usr/bin/gofmt"
+	ln -sf /usr/share/doc/go "$pkgdir/usr/lib/go/doc"
+
+	install -Dm644 VERSION "$pkgdir/usr/lib/go/VERSION"
+
+	# 建置期殘留，不進包
+	rm -rf "$pkgdir/usr/lib/go/pkg/bootstrap" "$pkgdir"/usr/lib/go/pkg/obj/go-build
+
+	# https://github.com/golang/go/issues/57179
+	install -Dm644 go.env "$pkgdir/usr/lib/go/go.env"
+
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

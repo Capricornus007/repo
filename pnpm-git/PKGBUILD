@@ -1,0 +1,103 @@
+# Maintainer: Capricornus007 <contact@capricornus007.com>
+#
+# ── 為什麼這顆是本倉 in-tree 而不是直接吃 AUR（2026-10-06 實測）──────────
+# 用戶要的是尖端。AUR 上確實有 pnpm-git（oech3），但它 `prepare()` 只有
+# `rm .cargo/config.toml` 然後 `cargo build --release --bin pnpm`，在當前 master
+# 上**編不過**（本倉 run #366 實測）：
+#   error: couldn't read `pnpm/crates/deps-restorer/src/cas-loader.mjs.inc`:
+#          No such file or directory (os error 2)
+#   error: could not compile `pnpm-deps-restorer` (lib)
+# 那顆 `.inc` 是上游新增的**建置期產物**：`pnpm/esm-loader/scripts/bundle-runtime.mjs`
+# 用 esbuild 把 `install-register.mjs` 打包成 `.inc`，再由 Rust `include_str!` 吃進去。
+# 實測 `git/trees/main?recursive=1` 裡 `.inc` 只有 `pnp_loader.cjs.inc` 入庫，
+# `cas-loader.mjs.inc` 不在倉裡 → cargo 自己不會生，AUR 也沒跑那一步。
+# 這也解釋了 AUR 那顆為什麼卡在 `v12.9.0.1.gbf5cdd3390`（上游早已發到 12.10.0）：
+# 它自己追不动了。
+#
+# 所以這裡把缺的那一步補上，其餘照 AUR 的可行部分（刪 cargo 源覆蓋 + cargo build）。
+#
+# 為什麼不能「照 Arch 那樣從源碼編 pnpm」：Arch 官方 pnpm 的 build() 走
+# `pnpm11/pnpm`，那是 **TypeScript 舊產品線**（實測 `git show v12.9.1:pnpm11/pnpm/
+# package.json` → version 11.28.4），pkgver 卻抄 tag → 造出「標籤 12.9.1、內容
+# 11.28.4」的包，Artix 原封不動繼承，這就是用戶那顆假 pnpm 的由來。
+_pkgname=pnpm
+pkgname="$_pkgname-git"
+pkgver=12.10.0.r1.g251582898   # 佔位值，實際由下方 pkgver() 覆寫
+pkgrel=1
+pkgdesc='Fast, disk space efficient package manager (upstream git, Rust line)'
+arch=(x86_64)
+url='https://pnpm.io'
+license=(MIT)
+depends=(node-gyp)
+optdepends=('git: for dependencies using Git URL'"'"'s')
+makedepends=(git rust nodejs npm)
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+replaces=("$_pkgname")
+source=("$_pkgname::git+https://github.com/pnpm/pnpm.git#branch=main")
+sha256sums=('SKIP')
+
+pkgver() {
+	# 絕對路徑（CI 探測殼停在 startdir）＋ --match：倉裡同時存在
+	# `pnpr@1.2.3` 這種另一條產品的 tag，裸 describe 會被劫持（本倉第四次踩
+	# describe 病：dae-git/lastst、amd-debug-tools/debian/、npm-git/config-v11.2.0）。
+	cd "$srcdir/$_pkgname" || return 1
+	git describe --tags --long --match 'v[0-9]*' \
+		| sed -e 's/^v//' -e 's/\([^-]*-g\)/r\1/' -e 's/-/./g'
+}
+
+prepare() {
+	cd "$srcdir/$_pkgname" || return 1
+
+	# 倉內 .cargo/config.toml 有一段 `# >>> pnpm-managed cargo sources >>>`，把
+	# crates-io 整個 replace-with 到 `directory = ".pnpm/crates/crates-io"`，而那顆
+	# 目錄是由 pnpm 自己的安裝流程生成的、不在 git 裡 → 不刪掉它 cargo 找不到任何
+	# 依賴。刪掉就退回正常的 crates.io（AUR 也是這麼做的）。
+	rm -f .cargo/config.toml
+
+	# 補 AUR 漏掉的那一步：產生 deps-restorer 要 include_str! 的 esm loader bundle。
+	# 版號不寫死在我這裡，問倉內 pnpm-workspace.yaml 的 catalog（上游抬版自動跟）。
+	local esb
+	esb=$(awk '/^catalog:/{c=1;next} /^[^[:space:]#]/{c=0}
+	           c && /^[[:space:]]+esbuild:/{gsub(/[^0-9.]/,"",$2); print $2; exit}' pnpm-workspace.yaml)
+	case "$esb" in
+	""|*[!0-9.]*) echo "無法從 pnpm-workspace.yaml 的 catalog 解析 esbuild 版號" >&2; return 1 ;;
+	esac
+	msg "esbuild（取自倉內 catalog）= $esb"
+
+	mkdir -p "$srcdir/_esbuild-tool"
+	cd "$srcdir/_esbuild-tool" || return 1
+	npm init -y >/dev/null 2>&1
+	npm install --no-save --no-audit --no-fund "esbuild@$esb" || return 1
+
+	# bundle-runtime.mjs 用 import.meta.url 定位輸入與輸出，所以從哪裡叫都對；
+	# 它 `import esbuild from 'esbuild'` 要靠腳本目錄往上找 node_modules，
+	# 於是把剛裝好的那份軟鏈過去（不污染倉庫工作區之外的東西）。
+	ln -sfn "$srcdir/_esbuild-tool/node_modules" \
+		"$srcdir/$_pkgname/pnpm/esm-loader/node_modules"
+	cd "$srcdir/$_pkgname/pnpm/esm-loader" || return 1
+	node scripts/bundle-runtime.mjs || return 1
+	[ -s "$srcdir/$_pkgname/pnpm/crates/deps-restorer/src/cas-loader.mjs.inc" ] || {
+		echo "cas-loader.mjs.inc 沒生出來，cargo 一定會紅" >&2; return 1
+	}
+}
+
+build() {
+	cd "$srcdir/$_pkgname" || return 1
+	cargo build --release --bin pnpm
+}
+
+package() {
+	cd "$srcdir/$_pkgname" || return 1
+
+	install -Dm755 target/release/pnpm -t "$pkgdir/usr/bin"
+	install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+
+	cd "$pkgdir/usr/bin" || return 1
+	# 上游只發一顆執行檔：pn 靠 argv[0] 分流，pnpx/pnx 是 `pnpm dlx` 的殼
+	# （與 AUR／Arch 的做法一致）
+	ln pnpm pn
+	printf '#!/bin/sh\nexec /usr/bin/pnpm dlx "$@"\n' > pnpx
+	chmod 755 pnpx
+	ln pnpx pnx
+}

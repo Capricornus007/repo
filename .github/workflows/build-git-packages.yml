@@ -179,5 +179,6 @@ jobs:
           {"key": "jbr25", "repo_name": "jbr25", "variant": "none"},
           {"key": "qt6ct-git", "repo_name": "qt6ct-git", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
           {"key": "npm-git", "repo_name": "npm-git", "variant": "none"},
-          {"key": "pnpm-git", "repo_name": "pnpm-git", "variant": "none", "kind": "aur"}
+          {"key": "pnpm-git", "repo_name": "pnpm-git", "variant": "none", "kind": "aur"},
+          {"key": "go-git", "repo_name": "go-git", "variant": "none"}
         ]
