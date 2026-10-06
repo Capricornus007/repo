@@ -33,7 +33,11 @@ build() {
   cd actionlint
   export CGO_CPPFLAGS="${CPPFLAGS}" CGO_CFLAGS="${CFLAGS}" CGO_CXXFLAGS="${CXXFLAGS}" CGO_LDFLAGS="${LDFLAGS}"
   export GOFLAGS="-buildmode=pie -trimpath -ldflags=-linkmode=external -mod=readonly -modcacherw"
-  go build -ldflags "-X github.com/rhysd/actionlint.version=$(git describe --tags)" -o build ./cmd/actionlint
+  # ⚠️ 必須寫死 -o build/actionlint：Arch 那份靠 prepare() 先 mkdir build/，
+  # 改成 -git 時若漏掉 prepare()，`go build -o build` 在目錄不存在時會產出一個
+  # **名叫 build 的檔案**，接著 package() 的 install build/actionlint 必炸
+  # （run #374 實測：==> ERROR: A failure occurred in package()）。
+  go build -ldflags "-X github.com/rhysd/actionlint.version=$(git describe --tags)" -o build/actionlint ./cmd/actionlint
 }
 
 check() {
