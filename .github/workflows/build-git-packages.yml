@@ -177,5 +177,7 @@ jobs:
           {"key": "lmdb-git", "repo_name": "lmdb-git", "variant": "none"},
           {"key": "jbr21", "repo_name": "jbr21", "variant": "none"},
           {"key": "jbr25", "repo_name": "jbr25", "variant": "none"},
-          {"key": "qt6ct-git", "repo_name": "qt6ct-git", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"}
+          {"key": "qt6ct-git", "repo_name": "qt6ct-git", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
+          {"key": "npm-git", "repo_name": "npm-git", "variant": "none"},
+          {"key": "pnpm-bin", "repo_name": "pnpm-bin", "variant": "none"}
         ]

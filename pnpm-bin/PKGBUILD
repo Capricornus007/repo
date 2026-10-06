@@ -1,0 +1,77 @@
+# Maintainer: Capricornus007 <contact@capricornus007.com>
+#
+# ── 為什麼這顆叫 -bin 而不是 -git（查證於 2026-10-06）────────────────────
+# 用戶原本的痛：Artix 的 `pnpm 12.9.1-1` 裝完 `pnpm --version` 報 11.28.4，
+# /usr/lib/node_modules/pnpm/package.json 白紙黑字寫 "version": "11.28.4"。
+# 根因不在 Artix 蓋壞，也不在校驗和，而在**上游 pnpm 倉現在有兩條產品線共用
+# 同一個 `v<版號>` tag**（倉內 RELEASING.md 的表格寫得很清楚）：
+#   · pnpm（TypeScript 線）  清單檔 pnpm11/pnpm/package.json   → 內容是 11.28.x
+#   · pnpm（Rust 線＝pacquet）清單檔 pnpm/npm/pnpm/package.json → 內容是 12.x
+# Arch 官方 PKGBUILD 的 build() 走的還是 `cd pnpm/pnpm11/$pkgname` 那條 TypeScript
+# 舊線，pkgver 卻直接抄 tag，所以 v12.9.1 那顆 tag 建出來的實物是 11.28.4
+# （實測：`git show v12.9.1:pnpm11/pnpm/package.json` → version 11.28.4；
+#  v12.10.0 → 11.28.5）。Artix 原封不動繼承同一份 PKGBUILD，於是照樣謊報。
+#
+# 那能不能照 Rust 線源碼直出、做成一顆真正的 pnpm-git？不能，理由三條都是硬的：
+#   1. 倉內 .cargo/config.toml 有一段 `# >>> pnpm-managed cargo sources >>>`，
+#      把 crates-io 整個 replace-with 到 `directory = ".pnpm/crates/crates-io"`，
+#      而那顆目錄**不在 git 裡**，是由 pnpm 自己的安裝流程生成的 → 要先有一顆
+#      能跑的 pnpm 才能編 pnpm（自舉）。
+#   2. 官方 release 工作流 besides cargo 還有「Bundle WebContainer runtime」
+#      （要釘定 WASI toolchain，跑 `pnpm build:pnpm:wasm`）與「Bundle node-gyp」
+#      兩條前置 job 把 dist/ 塞進產品目錄，缺一就不是上游認可的那顆包。
+#   3. 上游自己對 12.x 的**正式發行形態就是預編二進位**：npm 上那顆 `pnpm@12`
+#      的 package.json 裡 optionalDependencies 是空的、檔名清單是
+#      pnpm/pn/pnpx/pnx/bin/install.js/native-binary.mjs —— 它是个會去抓
+#      GitHub release 平台的執行檔的啟動器，不是純 JS 產品。
+# 所以「拿上游 release 的 linux 執行檔」不是偷工減料，而是**照上游唯一認可的
+# 分發方式**裝；反過來說，把它硬取名 pnpm-git 就又造了一顆「標籤與內容不符」
+# 的包——正是這次要修的那個毛病。跟版由 CI 的 plan 步從 GitHub releases 取
+# 「近 30 條裡版號最大的三段式穩定 tag」，外加一道 vercmp 防降版。為什麼不能
+# 問 npm registry 的 latest（它停在 12.9.1，GitHub 已經有 12.10.0）、也不能問
+# releases/latest（v11 舊線與 v12 新線共用 tag 前綴，回序是交錯的），實測數據
+# 寫在 build-packages.yml 的 pnpm-bin) case 裡。
+# ────────────────────────────────────────────────────────────────────────
+_pkgname=pnpm
+pkgname="$_pkgname-bin"
+pkgver=12.10.0
+pkgrel=1
+pkgdesc='Fast, disk space efficient package manager (official prebuilt binary)'
+arch=('x86_64' 'aarch64')
+url="https://pnpm.io"
+license=('MIT')
+# 與 distro 那顆 pnpm 保持同一組依賴（node-gyp 拉進 nodejs），
+# 換包時不會讓原本吃 pnpm 依賴鏈的東西少東西。
+depends=('node-gyp')
+optdepends=('git: for dependencies using Git URL'"'"'s')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+replaces=("$_pkgname")
+# 校驗和一律 SKIP（用戶指示：能跳過就跳過）。這顆的源每輪由 CI 換 pkgver，
+# 上游又不會為同一個 tag 重傳檔案，钉死 sha 只是多一個會過期的東西。
+source=("LICENSE::https://raw.githubusercontent.com/pnpm/pnpm/v$pkgver/LICENSE")
+sha256sums=('SKIP')
+source_x86_64=("https://github.com/pnpm/pnpm/releases/download/v$pkgver/pnpm-linux-x64.tar.gz")
+sha256sums_x86_64=('SKIP')
+source_aarch64=("https://github.com/pnpm/pnpm/releases/download/v$pkgver/pnpm-linux-arm64.tar.gz")
+sha256sums_aarch64=('SKIP')
+
+package() {
+	# 上游那顆 tar.gz 不是單一執行檔：pnpm 旁邊還有一整棵 dist/（內含 node-gyp、
+	# undici、get-pnpm 等），是 `pnpm rebuild`／原生模組編譯與 self-update 要用到的
+	# 資料。執行檔用「自己 realpath 旁邊的 dist」定位，所以兩者必須同目錄。
+	# 實測（2026-10-06）：把 pnpm 單獨拷走仍能跑 `--version`／`config get`，
+	# 但照上游佈局整包裝才不會悄悄失去功能。
+	install -d "$pkgdir/usr/lib/$_pkgname"
+	cp -a pnpm dist "$pkgdir/usr/lib/$_pkgname"
+	install -d "$pkgdir/usr/bin"
+	ln -s /usr/lib/$_pkgname/$_pkgname "$pkgdir/usr/bin/$_pkgname"
+	# 上游只發一顆執行檔；pn 是同一支二進位的別名（靠 argv[0] 分流），
+	# pnpx/pnx 則是 `pnpm dlx` 的殼——與 Arch 對 TypeScript 線的做法一致。
+	ln -s /usr/lib/$_pkgname/$_pkgname "$pkgdir/usr/bin/pn"
+	for b in pnpx pnx; do
+		printf '#!/bin/sh\nexec /usr/bin/%s dlx "$@"\n' "$_pkgname" > "$pkgdir/usr/bin/$b"
+		chmod 755 "$pkgdir/usr/bin/$b"
+	done
+	install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

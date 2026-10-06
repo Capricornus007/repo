@@ -1,0 +1,92 @@
+# Maintainer: Capricornus007 <contact@capricornus007.com>
+#
+# 為什麼本倉要自己出這顆（而不是等 distro）：
+#   系統那顆 npm 是 Arch 官方包，釘在 release tag 上，換代要等打包者手動抬。
+#   這裡改成直接追 npm/cli 的預設分支 `latest` 尖端（規則 61：不稳定/開發尖端為主軸）。
+#
+# build()/package() 的流程照 Arch 官方 PKGBUILD（gitlab.archlinux.org/.../npm），
+# 只把 `#tag=v$pkgver` 換成 `#branch=latest` 並補上 pkgver()。
+# npm 的倉庫把執行期依賴（node_modules/）一起提交進 git，所以源碼直出沒有
+# 「要先有 npm 才能裝 npm」的自舉問題——這點跟 pnpm 不一樣（見 pnpm-bin 的說明）。
+_pkgname=npm
+pkgname="$_pkgname-git"
+pkgver=12.2.0.r1.gb317f16c8   # 佔位值，實際由下方 pkgver() 覆寫
+pkgrel=1
+pkgdesc='JavaScript package manager (upstream git)'
+arch=('any')
+url="https://www.npmjs.com"
+license=('Artistic-2.0')
+depends=('node-gyp' 'nodejs>=20.17.0' 'nodejs-nopt' 'semver')
+makedepends=('git' 'jq')
+optdepends=('git: for dependencies using Git URL'"'"'s')
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+replaces=("$_pkgname")
+options=(!zipman)
+# 目錄名必須是 `npm`（= ${pkgname%-git}）：CI 的通用版本探測只把克隆軟鏈到
+# pkgname / ${pkgname%-git} / _pkgname / pkgbase 這幾個名字，取名 npm-cli 會
+# 讓探測 cd 不進去、拿不到版本而恆 skip（綠燈卻永遠不出包那一類坑）。
+source=("$_pkgname::git+https://github.com/npm/cli.git#branch=latest")
+sha256sums=('SKIP')
+
+pkgver() {
+	# 一律用 "$srcdir/..." 絕對路徑：makepkg 會先 cd $srcdir，但 CI 的版本探測
+	# 殼停在 startdir，相對寫法本地能過、探測必敗（amd-debug-tools-git 的教訓）。
+	#
+	# --match 是必要的，不是美化：npm/cli 倉裡混了各子套件自己的 tag
+	# （config-v11.2.0、init-v7.2.0…），裸 describe 會挑中距離最近的子套件 tag，
+	# 實測探測回 `config.v11.2.0.r1.gb317f16c8` —— 版號被劫持成 11.2.0 還多一個
+	# 前綴（與 dae-git 被 lastst 劫持、amd-debug-tools 的 debian/ 前綴同一類）。
+	cd "$srcdir/$_pkgname" || return 1
+	git describe --tags --long --match 'v[0-9]*' \
+		| sed -e 's/^v//' -e 's/\([^-]*-g\)/r\1/' -e 's/-/./g'
+}
+
+build() {
+	cd "$_pkgname"
+	node scripts/resetdeps.js
+	node . run build -w docs
+}
+
+package() {
+	local mod_dir=/usr/lib/node_modules/$_pkgname
+
+	install -d "$pkgdir"/usr/{bin,share/{bash-completion/completions,licenses/$pkgname}} "$pkgdir/$mod_dir"
+	ln -s $mod_dir/bin/npm-cli.js "$pkgdir"/usr/bin/$_pkgname
+	ln -s $mod_dir/bin/npx-cli.js "$pkgdir"/usr/bin/npx
+	ln -s $mod_dir/LICENSE "$pkgdir"/usr/share/licenses/$pkgname/LICENSE
+
+	cd "$_pkgname"
+	mapfile -t mod_files < <(node . pack --ignore-scripts --dry-run --json | jq -r '.[].files[].path')
+	cp --parents -a "${mod_files[@]}" "$pkgdir/$mod_dir"
+	node . completion > "$pkgdir"/usr/share/bash-completion/completions/npm
+	echo 'globalconfig=/etc/npmrc' > "$pkgdir/$mod_dir/npmrc"
+
+	cd "$pkgdir/$mod_dir"
+	# 這些是上游附的 Windows 批次檔與第二份 node-gyp，Linux 上用不到
+	rm -r bin/{node-gyp-bin,np{m,x}{,.{cmd,ps1}}}
+	# 這三顆改由系統提供（depends 已列），不要藏在包裡重複一份
+	rm -r node_modules/{node-gyp,nopt,semver}
+
+	cd man
+	# npm help 會自己帶 .TH 標題，不改名會跟系統 man page 撞名
+	# （上游 issue npm/cli#780，Arch 也是這樣繞的）
+	local name page sec title
+	for page in man5/folders.5 man5/install.5 man7/*.7; do
+		sec=${page##*.}
+		name=$(basename "$page" ."$sec")
+		title=${name@U}
+		sed -Ei "s/^\.TH \"$title\"/.TH \"NPM-$title\"/" "$page"
+		sed -Ei 's/^(\.TH "NPM-'"$title"'" "[^"]+") "[^"]+"/\1 ""/' "$page"
+		mv "$page" "${page/\///npm-}"
+	done
+
+	gzip --no-name man?/*
+
+	local dest sec_dir
+	for sec_dir in man?; do
+		dest="$pkgdir"/usr/share/man/$sec_dir
+		install -d "$dest"
+		ln -rs "$sec_dir"/* "$dest"
+	done
+}
