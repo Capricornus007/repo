@@ -8,6 +8,11 @@
 pkgname=gh-git
 pkgver=2.102.0.r0.g0000000
 pkgrel=1
+# epoch=1 是為了讓「只改中繼資料」的那一版能發佈出去：本包有 pkgver()，上游一動
+# makepkg 就把算出來的 pkgver 寫入並**把 pkgrel 重置為 1**（實測 feed 裡六顆 -git
+# 全是 -1，抬 pkgrel 無效），所以資產名不會變、repo-add 會判「不比現有條目新」而拒收。
+# 抬 epoch 才是 -git 包的換代抓手（actionlint-git 同款）。
+epoch=1
 pkgdesc="GitHub's official command line tool"
 arch=('x86_64')
 url="https://github.com/cli/cli"
@@ -15,8 +20,14 @@ license=('MIT')
 depends=('glibc' 'git')
 makedepends=('go' 'git' 'make')
 provides=('gh')
-conflicts=('gh')
-replaces=('gh')
+# ⚠️ conflicts/replaces 一定要把 **安裝用的包名 github-cli** 也列進去，不能只寫 'gh'：
+#    Artix 那顆包叫 github-cli、它的 provides 是「無」（實測 pacman -Si github-cli），
+#    所以只寫 gh 的話 pacman 認為兩顆不衝突 → 直接撞檔中止（實測 2026-10-07：
+#    「gh-git：檔案系統中已存在 /usr/bin/gh（由 github-cli 擁有）… 發生錯誤，
+#    沒有軟體包被更新」）。列了 github-cli 之後 `pacman -S --ask=20 gh-git`
+#    才會先移除它、再平順換檔。
+conflicts=('gh' 'github-cli')
+replaces=('gh' 'github-cli')
 # 上游倉叫 cli、預設分支是 trunk、目錄名要與通用版本探測的 ${pkgname%-git}=gh 對得上，
 # 所以 source 必須寫 `gh::` 前綴。
 source=("gh::git+${url}.git")
