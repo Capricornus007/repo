@@ -8,6 +8,11 @@
 pkgname=warp-plus-git
 pkgver=1.2.6.r0.g0000000
 pkgrel=1
+# epoch=1：這輪改的是「產物內容」（見下方 prepare() 的 replace），不是上游版號。
+# 有 pkgver() 的包抬 pkgrel 無效——上游一動 makepkg 就會把 pkgrel 重置回 1，
+# 上游不動的話資產名根本沒變 → repo-add 判「不比現有條目新」直接拒收，
+# 修好的二進制永遠發不出去。抬 epoch 才是 -git 包的換代抓手（gh-git 同款教訓）。
+epoch=1
 pkgdesc="Open-source WarpVer proxy client with IPScramble and Malgo support"
 arch=('x86_64')
 url="https://github.com/bepass-org/warp-plus"
@@ -25,6 +30,40 @@ sha256sums=('SKIP')
 pkgver() {
   cd warp-plus
   git describe --tags --long | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd warp-plus
+  # ── 為什麼要 replace 一顆間接依賴（2026-10-07 實測定位）────────────────
+  # 用 go1.28-devel 建置出來的 warp-plus **任何指令都立刻掛**（feed 裡
+  # 1.2.6.r12.gf70ea7e 實測）：
+  #   panic: tls: ConnectionState is not equal to tls.ConnectionState:
+  #          struct field count mismatch: 18 vs 16
+  #   github.com/Psiphon-Labs/psiphon-tls.init.0()  unsafe.go:44
+  # 鏈路是 warp-plus → psiphon-tunnel-core → psiphon-tls；後者是 crypto/tls 的
+  # fork，自己在 common.go 裡維持一份 `ConnectionState` 鏡像，並在 init() 用
+  # reflect 逐欄比對標準函式庫那份——因為 UnsafeFromConnectionState() 直接把
+  # 兩種指標互轉，版面一旦不同就會錯讀，所以它宁可 panic 也不將就。
+  # Go 1.28 幫 tls.ConnectionState 長到 18 欄，鏡像跟不上 ⇒ 啟動即死。
+  #
+  # 為什麼不是「抬版就好」：實測 psiphon-tls 最新公開發布版
+  # v0.0.0-20260612202619-4944f00a8304（psiphon-tunnel-core master 用的那版）
+  # 仍然差一欄，panic 變成 18 vs 17；而它 GitHub 鏡像 master 根本停在
+  # 2a2fae2db378（2025-03-18）。也就是說上游還沒跟上 go1.28。
+  #
+  # 所以走自有 fork：Capricornus007/psiphon-tls 的 go1.28-sync 分支
+  # = 上述 2026-06-12 版本體（從雜湊驗證過的模組快取 vendor 進去，因為 GitHub
+  # 鏡像沒有該 commit）+ 只補一欄
+  #   LocalCertificate [][]byte   （插在 HelloRetryRequest 之後、ekm 之前）
+  # 欄位**順序**是關鍵（unsafe 轉型看的是版面，不是名字），所以照 stdlib 的位置插。
+  # 驗證方式不是看註解：用反射探針（同一支 go1.28-devel_77fb1abefe）跑
+  #   replace => github.com/Capricornus007/psiphon-tls v0.0.0-20261006165317-1d411e06f398
+  # 結果 `stdlib: 18  psiphon-tls: 18 / 完全一致: true`，不再 panic。
+  # 注意 fork 刻意**不改 module 路徑**（仍宣告 github.com/Psiphon-Labs/psiphon-tls），
+  # 這樣 consumer 端才能用單純的 replace 指過去；實測 go mod tidy 解析正常。
+  go mod edit -replace github.com/Psiphon-Labs/psiphon-tls=github.com/Capricornus007/psiphon-tls@v0.0.0-20261006165317-1d411e06f398
+  # tidy 會把新模組的雜湊寫進 go.sum，之後 build() 才能繼續用 -mod=readonly。
+  go mod tidy
 }
 
 build() {
