@@ -35,5 +35,6 @@ jobs:
           {"key": "linux-zencjk", "repo_name": "linux-zencjk", "variant": "none"},
           {"key": "linux-ltscjk", "repo_name": "linux-ltscjk", "variant": "none"},
           {"key": "linux-cachyos-cjktty-release", "repo_name": "linux-cachyos-cjktty", "variant": "release"},
-          {"key": "linux-cachyos-cjktty-rc", "repo_name": "linux-cachyos-cjktty", "variant": "rc"}
+          {"key": "linux-cachyos-cjktty-rc", "repo_name": "linux-cachyos-cjktty", "variant": "rc"},
+          {"key": "nvidia-utils-openrc", "repo_name": "nvidia-utils-openrc", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"}
         ]

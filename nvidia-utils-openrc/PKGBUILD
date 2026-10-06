@@ -5,9 +5,13 @@
 # 而 pre 在上游是 systemd unit 的活 → OpenRC 環境下 suspend 必然被 GPU 否決
 # （nv_pmops_suspend returns -5）。見 90-nvidia-sleep。
 #
-# ⚠️ 刻意不進 build-git-packages.yml 矩陣：depends 有 openrc，CI 的 Arch 容器沒有
-#    openrc 鏡像、必紅（同 adguardhome-openrc 的舊判例）。本目錄只當源碼備份，
-#    實際安裝走本地 makepkg + pacman -U。
+# ✅ 2026-10-07 起正式進 CI（build-kernels.yml 的套件清單，kind=artix +
+#    artixlinux/artixlinux:base-devel 容器）。舊註解寫「刻意不進矩陣，因為 Arch
+#    容器沒有 openrc 鏡像必紅」——那個前提已經被 qt6ct-git 那輪換代打掉：
+#    kind=artix 的 job 跑在同發行版容器裡，[system] 原生就有 openrc／elogind，
+#    nvidia-utils 在 [world]，所以不需要再靠「本地 makepkg + pacman -U」手工發佈。
+#    會留這條註解是因為實測到 feed 停在 20261005-1、本機已是 -2：沒有矩陣就沒人
+#    重建 -2，重灌機器會拿到「沒有 pre 分支 → 睡眠被 GPU 否決」的舊版。
 pkgname=nvidia-utils-openrc
 pkgver=20261005
 pkgrel=2
