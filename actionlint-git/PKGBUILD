@@ -1,0 +1,60 @@
+# 用戶 2026-10-06 指令「所有跟 go 有關的項目全去最尖端」：Artix 官方那顆是用
+# Go 1.27.1（最新**正式**版）編的穩定版，這顆改吃上游分支尖端、並由本倉 CI 用
+# 自有 go-git（1.28-devel）建置。取代穩定版靠 provides/conflicts/replaces 三件套
+# （與 lmdb-git、qt6ct-git 同一手法），用戶 `pacman -Syu` 即平順換檔。
+# ⚠️ 這是 in-tree 包：必須同時列進 build-packages.yml 的 in-tree 攔截分支，
+#    否則通用規則見 '-git$' 會去 clone AUR（這幾個 AUR 全查無對應 -git 包）。
+
+pkgname=actionlint-git
+pkgver=1.7.12.r0.g0000000
+pkgrel=1
+# epoch=1 是必要的：本倉矩陣**本來就有一條 actionlint-git（kind:aur，aminvakil 那份，
+# 產物 actionlint-git-r2388.011a6d1-1-any）**，我改成 in-tree 之後包名不變，
+# 若不抬 epoch，repo-add 會判「不比現有條目新」而拒收，feed 裡那條會永遠停在舊的 -any 產物。
+epoch=1
+pkgdesc="Static checker for GitHub Actions workflow files"
+arch=('x86_64')
+url="https://github.com/rhysd/actionlint"
+license=('MIT')
+makedepends=('go' 'git')
+optdepends=('python-pyflakes' 'shellcheck')
+provides=('actionlint')
+conflicts=('actionlint')
+replaces=('actionlint')
+source=("actionlint::git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd actionlint
+  git describe --tags --long | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd actionlint
+  export CGO_CPPFLAGS="${CPPFLAGS}" CGO_CFLAGS="${CFLAGS}" CGO_CXXFLAGS="${CXXFLAGS}" CGO_LDFLAGS="${LDFLAGS}"
+  export GOFLAGS="-buildmode=pie -trimpath -ldflags=-linkmode=external -mod=readonly -modcacherw"
+  go build -ldflags "-X github.com/rhysd/actionlint.version=$(git describe --tags)" -o build ./cmd/actionlint
+}
+
+check() {
+  cd actionlint
+  # actionlint 靠 .git 找倉庫根，缺目錄測試會紅（Arch 官方配方同一招）。
+  mkdir -p .git
+  # 排除 scripts/* 那三個**上游維護用腳本**的測試：
+  #   · scripts/check-checks          要比對一段編進 URL hash 的 playground 連結，
+  #                                    本機實測 diff 只差在編碼尾部（環境相關，非代碼問題）
+  #   · scripts/generate-popular-actions  會真打 GitHub API 期待拿到 400；
+  #                                    Arch 的 chroot 沒網路所以「恰好」通過，
+  #                                    我們的建置環境有網路 → TestDetectErrorBadRequest 必紅
+  # 真正的 linter 本體（根套件 + cmd/actionlint）照樣跑完整測試。
+  local pkgs
+  pkgs=$(go list ./... | grep -v '/scripts/')
+  go test $pkgs
+}
+
+package() {
+  cd actionlint
+  install -Dm755 build/actionlint "$pkgdir/usr/bin/actionlint"
+  install -Dm644 README.md -t "$pkgdir/usr/share/doc/actionlint"
+  install -Dm644 LICENSE.txt -t "$pkgdir/usr/share/licenses/actionlint"
+}

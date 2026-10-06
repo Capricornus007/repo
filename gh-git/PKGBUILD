@@ -1,0 +1,41 @@
+# 用戶 2026-10-06 指令「所有跟 go 有關的項目全去最尖端」：Artix 官方那顆是用
+# Go 1.27.1（最新**正式**版）編的穩定版，這顆改吃上游分支尖端、並由本倉 CI 用
+# 自有 go-git（1.28-devel）建置。取代穩定版靠 provides/conflicts/replaces 三件套
+# （與 lmdb-git、qt6ct-git 同一手法），用戶 `pacman -Syu` 即平順換檔。
+# ⚠️ 這是 in-tree 包：必須同時列進 build-packages.yml 的 in-tree 攔截分支，
+#    否則通用規則見 '-git$' 會去 clone AUR（這幾個 AUR 全查無對應 -git 包）。
+
+pkgname=gh-git
+pkgver=2.102.0.r0.g0000000
+pkgrel=1
+pkgdesc="GitHub's official command line tool"
+arch=('x86_64')
+url="https://github.com/cli/cli"
+license=('MIT')
+depends=('glibc' 'git')
+makedepends=('go' 'git' 'make')
+provides=('gh')
+conflicts=('gh')
+replaces=('gh')
+# 上游倉叫 cli、預設分支是 trunk、目錄名要與通用版本探測的 ${pkgname%-git}=gh 對得上，
+# 所以 source 必須寫 `gh::` 前綴。
+source=("gh::git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd gh
+  git describe --tags --long | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd gh
+  # 上游 Makefile 的預設目標只有 bin/gh；manpages 與 completions 要點名，
+  # 而且 completions 會**執行剛建的 bin/gh** 來產檔，所以三步一起跑。
+  make bin/gh manpages completions
+}
+
+package() {
+  cd gh
+  make install DESTDIR="$pkgdir" prefix=/usr
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/gh"
+}

@@ -1,0 +1,48 @@
+# 用戶 2026-10-06 指令「所有跟 go 有關的項目全去最尖端」：Artix 官方那顆是用
+# Go 1.27.1（最新**正式**版）編的穩定版，這顆改吃上游分支尖端、並由本倉 CI 用
+# 自有 go-git（1.28-devel）建置。取代穩定版靠 provides/conflicts/replaces 三件套
+# （與 lmdb-git、qt6ct-git 同一手法），用戶 `pacman -Syu` 即平順換檔。
+# ⚠️ 這是 in-tree 包：必須同時列進 build-packages.yml 的 in-tree 攔截分支，
+#    否則通用規則見 '-git$' 會去 clone AUR（這幾個 AUR 全查無對應 -git 包）。
+
+pkgname=warp-plus-git
+pkgver=1.2.6.r0.g0000000
+pkgrel=1
+pkgdesc="Open-source WarpVer proxy client with IPScramble and Malgo support"
+arch=('x86_64')
+url="https://github.com/bepass-org/warp-plus"
+license=('MIT')
+depends=('glibc')
+makedepends=('go' 'git')
+provides=('warp-plus' 'warp-scan')
+conflicts=('warp-plus')
+replaces=('warp-plus')
+# ⚠️ 上游最後一次推送是 2025-12-15（實測 GitHub API pushed_at），
+# 所以這顆「尖端」≈ 1.2.6 之後的少量提交；換代價值主要在編譯器與不再依賴 Artix 打包節奏。
+source=("warp-plus::git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd warp-plus
+  git describe --tags --long | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd warp-plus
+  export CGO_CPPFLAGS="${CPPFLAGS}" CGO_CFLAGS="${CFLAGS}" CGO_LDFLAGS="${LDFLAGS}"
+  local _ver
+  _ver=$(git describe --tags)
+  go build -trimpath -buildmode=pie -mod=readonly -modcacherw \
+    -ldflags "-linkmode=external -extldflags \"${LDFLAGS}\" -X 'github.com/bepass-org/warp-plus/app.version=${_ver}' -s -w" \
+    -o bin/warp-plus ./cmd/warp-plus
+  go build -trimpath -buildmode=pie -mod=readonly -modcacherw \
+    -ldflags "-linkmode=external -extldflags \"${LDFLAGS}\" -s -w" \
+    -o bin/warp-scan ./cmd/warp-scan
+}
+
+package() {
+  cd warp-plus
+  install -Dm755 bin/warp-plus "$pkgdir/usr/bin/warp-plus"
+  install -Dm755 bin/warp-scan "$pkgdir/usr/bin/warp-scan"
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/warp-plus"
+}

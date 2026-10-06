@@ -180,5 +180,10 @@ jobs:
           {"key": "qt6ct-git", "repo_name": "qt6ct-git", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
           {"key": "npm-git", "repo_name": "npm-git", "variant": "none"},
           {"key": "pnpm-git", "repo_name": "pnpm-git", "variant": "none", "kind": "aur"},
-          {"key": "go-git", "repo_name": "go-git", "variant": "none"}
+          {"key": "go-git", "repo_name": "go-git", "variant": "none"},
+          {"key": "gdu-git", "repo_name": "gdu-git", "variant": "none"},
+          {"key": "gh-git", "repo_name": "gh-git", "variant": "none"},
+          {"key": "glab-git", "repo_name": "glab-git", "variant": "none"},
+          {"key": "warp-plus-git", "repo_name": "warp-plus-git", "variant": "none"},
+          {"key": "nwg-look-git", "repo_name": "nwg-look-git", "variant": "none"}
         ]

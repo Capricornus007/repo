@@ -1,0 +1,45 @@
+# 用戶 2026-10-06 指令「所有跟 go 有關的項目全去最尖端」：Artix 官方那顆是用
+# Go 1.27.1（最新**正式**版）編的穩定版，這顆改吃上游分支尖端、並由本倉 CI 用
+# 自有 go-git（1.28-devel）建置。取代穩定版靠 provides/conflicts/replaces 三件套
+# （與 lmdb-git、qt6ct-git 同一手法），用戶 `pacman -Syu` 即平順換檔。
+# ⚠️ 這是 in-tree 包：必須同時列進 build-packages.yml 的 in-tree 攔截分支，
+#    否則通用規則見 '-git$' 會去 clone AUR（這幾個 AUR 全查無對應 -git 包）。
+
+pkgname=nwg-look-git
+pkgver=1.1.2.r0.g0000000
+pkgrel=1
+pkgdesc="GTK settings editor adapted to work on wlroots-based compositors"
+arch=('x86_64')
+url="https://github.com/nwg-piotr/nwg-look"
+license=('MIT')
+depends=('glibc' 'gtk3' 'at-spi2-core' 'cairo' 'fontconfig' 'freetype2' 'gdk-pixbuf2' 'glib2' 'harfbuzz' 'pango' 'zlib' 'xcur2png')
+makedepends=('go' 'git' 'make')
+# ⚠️ 它是 **GTK3 桌面程式**，X11 照樣跑（用戶 2026-10-06 在 i3 上實測使用中）。
+# 之前有人以「Wayland 專用」為由建議移除，那個判斷是錯的，別再拿它當 Wayland 殘留清掉。
+provides=('nwg-look')
+conflicts=('nwg-look')
+replaces=('nwg-look')
+source=("nwg-look::git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd nwg-look
+  git describe --tags --long | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd nwg-look
+  go build \
+    -trimpath \
+    -buildmode=pie \
+    -mod=readonly \
+    -modcacherw \
+    -ldflags "-linkmode external -extldflags \"${LDFLAGS}\"" \
+    -o bin/nwg-look \
+    .
+}
+
+package() {
+  make DESTDIR="${pkgdir}" install -C nwg-look
+  install -Dm644 nwg-look/LICENSE "$pkgdir/usr/share/licenses/nwg-look/LICENSE"
+}

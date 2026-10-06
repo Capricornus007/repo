@@ -46,6 +46,23 @@ for f in "${files[@]}"; do
   [ "$ov" = "$nv" ] || continue                          # pkgver 變了 → 本來就會重建
   [ "$or_" = "$nr" ] || continue                         # 人已自行 +1
 
+  # epoch 變動本身就是換代訊號（CI 的 plan 拿 pkgbase-pkgver-pkgrel 比資產，
+  # 而資產名前綴帶 epoch，例如 dae-git-1.2.1.1…），此時再動 pkgrel 只是疊噪音。
+  oe=$(var_of "$old" epoch); ne=$(var_of "$new" epoch)
+  if [ "$oe" != "$ne" ]; then
+    echo "bump-pkgrel：$f 的 epoch ${oe:-無} → ${ne:-無} 已是換代訊號，pkgrel 保持 $nr"
+    continue
+  fi
+
+  # 有 pkgver() 的包（所有 -git 包）：makepkg 只要算出的 pkgver 與檔內靜態值不同，
+  # 就會把 **pkgrel 重置為 1**（PKGBUILD(5) 的 check_package），CI 的資產比對也按 1 算
+  # （見 build-packages.yml 那段註解）。對這類包 +1 pkgrel 對產物檔名完全沒影響，
+  # 只會讓檔裡的數字每輪無意義遞增 → 直接跳過。
+  if grep -qE '^[[:space:]]*pkgver\(\)' "$f"; then
+    echo "bump-pkgrel：$f 定義了 pkgver()，makepkg 會把 pkgrel 重置為 1 → 抬它無效，跳過"
+    continue
+  fi
+
   # 點分 pkgrel（如 1.1）只進最後一段，跟 makepkg 的習慣一致
   last="${nr##*.}"
   if [[ "$last" =~ ^[0-9]+$ ]]; then
