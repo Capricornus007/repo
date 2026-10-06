@@ -23,7 +23,7 @@
 _pkgname=pnpm
 pkgname="$_pkgname-git"
 pkgver=12.10.0.r1.g251582898   # 佔位值，實際由下方 pkgver() 覆寫
-pkgrel=1
+pkgrel=2
 pkgdesc='Fast, disk space efficient package manager (upstream git, Rust line)'
 arch=(x86_64)
 url='https://pnpm.io'
@@ -57,28 +57,44 @@ prepare() {
 
 	# 補 AUR 漏掉的那一步：產生 deps-restorer 要 include_str! 的 esm loader bundle。
 	# 版號不寫死在我這裡，問倉內 pnpm-workspace.yaml 的 catalog（上游抬版自動跟）。
-	local esb
+	#
+	# ⚠️ 這三步是 2026-10-06 在本地逐字重跑 CI 紅的那一步測出來的，不是推上去試：
+	#   1. 只裝 esbuild 不夠。bundle-runtime.mjs 會去打包 resolver.mjs，而它
+	#      `import enhancedResolve from 'enhanced-resolve'` → 少這顆就報
+	#      `Could not resolve "enhanced-resolve"`，實測 BUNDLE_RC=1。
+	#   2. 兩顆**必須同一條 npm install**。分開跑第二條時 npm 把第一條的 esbuild
+	#      當成多餘套件拔掉（實測輸出 `added 3 packages, and removed 2 packages`）。
+	#   3. npm 12 會對 esbuild 的 postinstall 發 install-scripts 警告，但平台包
+	#      `@esbuild/linux-x64` 照裝、二進位照用 → 不需要额外放行。
+	# 兩步都過之後實測生出 `cas-loader.mjs.inc`（113K），cargo 那一步才有的吃。
+	local esb eres
 	esb=$(awk '/^catalog:/{c=1;next} /^[^[:space:]#]/{c=0}
 	           c && /^[[:space:]]+esbuild:/{gsub(/[^0-9.]/,"",$2); print $2; exit}' pnpm-workspace.yaml)
-	case "$esb" in
-	""|*[!0-9.]*) echo "無法從 pnpm-workspace.yaml 的 catalog 解析 esbuild 版號" >&2; return 1 ;;
+	eres=$(awk '/^catalog:/{c=1;next} /^[^[:space:]#]/{c=0}
+	            c && /^[[:space:]]+enhanced-resolve:/{gsub(/[^0-9.]/,"",$2); print $2; exit}' pnpm-workspace.yaml)
+	case "$esb$eres" in
+	""|*[!0-9.]*)
+		echo "無法從 pnpm-workspace.yaml 的 catalog 解析版號（esbuild=$esb enhanced-resolve=$eres）" >&2
+		return 1 ;;
 	esac
-	msg "esbuild（取自倉內 catalog）= $esb"
+	msg "catalog：esbuild=$esb enhanced-resolve=$eres"
 
-	mkdir -p "$srcdir/_esbuild-tool"
-	cd "$srcdir/_esbuild-tool" || return 1
-	npm init -y >/dev/null 2>&1
-	npm install --no-save --no-audit --no-fund "esbuild@$esb" || return 1
+	mkdir -p "$srcdir/_bundle-tool"
+	cd "$srcdir/_bundle-tool" || return 1
+	printf '{"name":"bundle-tool","version":"1.0.0","private":true}\n' > package.json
+	npm install --no-save --no-audit --no-fund \
+		"esbuild@$esb" "enhanced-resolve@$eres" || return 1
 
-	# bundle-runtime.mjs 用 import.meta.url 定位輸入與輸出，所以從哪裡叫都對；
-	# 它 `import esbuild from 'esbuild'` 要靠腳本目錄往上找 node_modules，
-	# 於是把剛裝好的那份軟鏈過去（不污染倉庫工作區之外的東西）。
-	ln -sfn "$srcdir/_esbuild-tool/node_modules" \
+	# bundle-runtime.mjs 用 import.meta.url 定位輸入與輸出，從哪裡叫都對；而
+	# `import esbuild from 'esbuild'` 與 resolver.mjs 的 enhanced-resolve 都是
+	# 「從腳本所在目錄往上找 node_modules」→ 把裝好的那份軟鏈過去就行。
+	ln -sfn "$srcdir/_bundle-tool/node_modules" \
 		"$srcdir/$_pkgname/pnpm/esm-loader/node_modules"
 	cd "$srcdir/$_pkgname/pnpm/esm-loader" || return 1
 	node scripts/bundle-runtime.mjs || return 1
 	[ -s "$srcdir/$_pkgname/pnpm/crates/deps-restorer/src/cas-loader.mjs.inc" ] || {
-		echo "cas-loader.mjs.inc 沒生出來，cargo 一定會紅" >&2; return 1
+		echo "cas-loader.mjs.inc 沒生出來，cargo 一定會紅" >&2
+		return 1
 	}
 }
 
