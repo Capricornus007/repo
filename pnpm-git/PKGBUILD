@@ -23,14 +23,14 @@
 _pkgname=pnpm
 pkgname="$_pkgname-git"
 pkgver=12.10.0.r1.g251582898   # 佔位值，實際由下方 pkgver() 覆寫
-pkgrel=2
+pkgrel=3
 pkgdesc='Fast, disk space efficient package manager (upstream git, Rust line)'
 arch=(x86_64)
 url='https://pnpm.io'
 license=(MIT)
 depends=(node-gyp)
 optdepends=('git: for dependencies using Git URL'"'"'s')
-makedepends=(git rust nodejs npm)
+makedepends=(git rust nodejs npm mold)
 provides=("$_pkgname")
 conflicts=("$_pkgname")
 replaces=("$_pkgname")
@@ -100,6 +100,15 @@ prepare() {
 
 build() {
 	cd "$srcdir/$_pkgname" || return 1
+	# ⚠️ 必須換連結器，否則 build() 必紅（run #368 實測）：
+	#   ld.lld: error: undefined symbol: aws_lc_0_45_0_SHA256 / _EVP_aead_aes_256_gcm / ...
+	#   error: could not compile `pnpm-cli` (bin "pnpm")
+	# 這倉依賴 aws-lc-sys，而 Arch 的 gcc 現在預設把 lld 當 ld 用，aws-lc 那顆
+	# 靜態庫在 ld.lld 下符號解不掉。AUR 的 pnpm-git 正是靠 mold 繞過：
+	#   export RUSTFLAGS+=" -C link-args=-fuse-ld=mold"   # needed for aws-lc ?
+	# 我上一輪看到那行註解帶問號就判定「多一個依賴、可能不需要」而沒抄，結果
+	# prepare() 我本地驗過了、build() 卻在 CI 炸——帶問號不代表沒用，實測為真。
+	export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-args=-fuse-ld=mold"
 	cargo build --release --bin pnpm
 }
 
