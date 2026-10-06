@@ -20,7 +20,7 @@ pkgname="$_pkgname-git"
 # 裝機時會被判定降版（本倉吃過同型教訓：qt6ct／ttf 那兩次的修法就是補 epoch）。
 epoch=2
 pkgver=1.27.1.r1041.g77fb1abef   # 佔位值，實際由下方 pkgver() 覆寫
-pkgrel=1
+pkgrel=2
 pkgdesc='Core compiler tools for the Go programming language (master tip)'
 arch=(x86_64)
 url='https://go.dev/'
@@ -84,7 +84,16 @@ package() {
 	ln -sf /usr/lib/go/bin/gofmt "$pkgdir/usr/bin/gofmt"
 	ln -sf /usr/share/doc/go "$pkgdir/usr/lib/go/doc"
 
-	install -Dm644 VERSION "$pkgdir/usr/lib/go/VERSION"
+	# ⚠️ 這裡不能照 Arch 無條件 install：Arch 的源是 release tarball、裡面**有**
+	#    VERSION 檔；golang/go 的 master **沒有這顆檔**（實測
+	#    raw.githubusercontent.com/golang/go/master/VERSION → HTTP 404，
+	#    `git cat-file -e HEAD:VERSION` 也不存在），版本是 make.bash 跑完由 dist
+	#    工具生成到 GOROOT 根。所以有就裝、沒有就跳過——go 二進位本身已經內嵌版號。
+	if [ -f VERSION ]; then
+		install -Dm644 VERSION "$pkgdir/usr/lib/go/VERSION"
+	else
+		warning "master 工作區沒有 VERSION 檔（make.bash 未生成），跳過安裝"
+	fi
 
 	# 建置期殘留，不進包
 	rm -rf "$pkgdir/usr/lib/go/pkg/bootstrap" "$pkgdir"/usr/lib/go/pkg/obj/go-build
