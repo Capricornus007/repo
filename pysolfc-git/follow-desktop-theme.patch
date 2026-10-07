@@ -76,6 +76,32 @@ index 64e14d5..e2605f4 100644
 +            label=_("Follow the &desktop theme (KDE/Kvantum/GTK)"),
 +            variable=self.tkopt.follow_desktop_theme,
 +            command=self.mOptFollowDesktopTheme)
+diff --git a/pysollib/tile/selectcardset.py b/pysollib/tile/selectcardset.py
+index d93d19d..92c478a 100644
+--- a/pysollib/tile/selectcardset.py
++++ b/pysollib/tile/selectcardset.py
+@@ -52,10 +52,20 @@ class SelectCardsetLeaf(SelectDialogTreeLeaf):
+ class SelectCardsetNode(SelectDialogTreeNode):
+     def _getContents(self):
+         contents = []
++        # 樹上每一列原本只有牌面名，使用者看不出「這套牌能配哪一種玩法」
++        # （實測反應：「我看不懂它哪個適用於具體哪個遊戲」）。型別名本來就在
++        # CSI.TYPE_NAME 裡、而且走 gettext，所以直接掛在名字後面，
++        # 省得他到「按類型」那棵樹來回比對。
++        by_type = isinstance(self.tree.data, SelectCardsetByTypeData)
+         for obj in self.tree.data.all_objects:
+             if self.select_func(obj):
++                text = obj.name
++                if not by_type:
++                    type_name = CSI.TYPE_NAME.get(obj.si.type)
++                    if type_name:
++                        text = '%s（%s）' % (obj.name, type_name)
+                 node = SelectCardsetLeaf(
+-                    self.tree, self, text=obj.name, key=obj.index)
++                    self.tree, self, text=text, key=obj.index)
+                 contents.append(node)
+         return contents or self.tree.data.no_contents
+ 
 diff --git a/pysollib/ui/tktile/menubar.py b/pysollib/ui/tktile/menubar.py
 index cddf152..c099cdc 100644
 --- a/pysollib/ui/tktile/menubar.py

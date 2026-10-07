@@ -117,12 +117,12 @@ msgstr ""
 #: pysollib\ui\tktile\gameinfodialog.py:152
 #: pysollib\ui\tktile\tkhtml.py:439
 msgid "&OK"
-msgstr "&確定"
+msgstr "確定(&O)"
 
 #: pysollib\actions.py:330
 #: pysollib\app.py:580
 msgid "&Next number"
-msgstr "&下一編號"
+msgstr "下一編號(&N)"
 
 #: pysollib\actions.py:330
 #: pysollib\app.py:568
@@ -169,7 +169,7 @@ msgstr "&下一編號"
 #: pysollib\ui\tktile\colorsdialog.py:124
 #: pysollib\ui\tktile\edittextdialog.py:40
 msgid "&Cancel"
-msgstr "&取消"
+msgstr "取消(&C)"
 
 #: pysollib\actions.py:348
 msgid "Select random game"
@@ -392,77 +392,77 @@ msgstr "找不到遊戲：%(game)s"
 #: pysollib\tk\selectgame.py:443
 #: pysollib\ui\tktile\menubar.py:547
 msgid "&Select"
-msgstr "&選擇"
+msgstr "選擇(&S)"
 
 #: pysollib\app.py:559
 #: pysollib\help.py:46
 msgid "&Nice"
-msgstr "&不錯"
+msgstr "不錯(&N)"
 
 #: pysollib\app.py:560
 #: pysollib\help.py:48
 msgid "&Enjoy"
-msgstr "&盡情玩"
+msgstr "盡情玩(&E)"
 
 #: pysollib\app.py:561
 #: pysollib\game\__init__.py:3003
 msgid "&Great"
-msgstr "&太棒了"
+msgstr "太棒了(&G)"
 
 #: pysollib\app.py:562
 #: pysollib\game\__init__.py:3003
 msgid "&Cool"
-msgstr "&好酷"
+msgstr "好酷(&C)"
 
 #: pysollib\app.py:563
 #: pysollib\game\__init__.py:3004
 msgid "&Yeah"
-msgstr "&好耶"
+msgstr "好耶(&Y)"
 
 #: pysollib\app.py:564
 #: pysollib\game\__init__.py:3004
 msgid "&Wow"
-msgstr "&哇"
+msgstr "哇(&W)"
 
 #: pysollib\app.py:565
 #: pysollib\game\__init__.py:3037
 msgid "&Oh well"
-msgstr "&算了"
+msgstr "算了(&O)"
 
 #: pysollib\app.py:566
 #: pysollib\game\__init__.py:3037
 msgid "&That's life"
-msgstr "&這就是人生"
+msgstr "這就是人生(&T)"
 
 #: pysollib\app.py:567
 #: pysollib\game\__init__.py:3037
 msgid "&Hmm"
-msgstr "&嗯"
+msgstr "嗯(&H)"
 
 #: pysollib\app.py:569
 #: pysollib\game\__init__.py:2446
 #: pysollib\tile\solverdialog.py:59
 #: pysollib\tk\solverdialog.py:65
 msgid "&Close"
-msgstr "&關閉"
+msgstr "關閉(&C)"
 
 #: pysollib\app.py:570
 #: pysollib\tile\soundoptionsdialog.py:160
 #: pysollib\tk\soundoptionsdialog.py:155
 msgid "&Apply"
-msgstr "&套用"
+msgstr "套用(&A)"
 
 #: pysollib\app.py:571
 #: pysollib\tile\solverdialog.py:59
 #: pysollib\tk\solverdialog.py:65
 msgid "&Start"
-msgstr "&開始"
+msgstr "開始(&S)"
 
 #: pysollib\app.py:572
 #: pysollib\tile\solverdialog.py:59
 #: pysollib\tk\solverdialog.py:65
 msgid "&New"
-msgstr "&新增"
+msgstr "新增(&N)"
 
 #: pysollib\app.py:573
 #: pysollib\game\__init__.py:2420
@@ -472,33 +472,33 @@ msgstr "&新增"
 #: pysollib\game\__init__.py:3250
 #: pysollib\ui\tktile\menubar.py:488
 msgid "&New game"
-msgstr "&新遊戲"
+msgstr "新遊戲(&N)"
 
 #: pysollib\app.py:574
 #: pysollib\game\__init__.py:2420
 #: pysollib\game\__init__.py:2437
 msgid "&Back to game"
-msgstr "&回到遊戲"
+msgstr "回到遊戲(&B)"
 
 #: pysollib\app.py:575
 #: pysollib\kivy\tkstats.py:250
 #: pysollib\tile\tkstats.py:105
 #: pysollib\tk\tkstats.py:280
 msgid "&Reset..."
-msgstr "&重設…"
+msgstr "重設(&R)…"
 
 #: pysollib\app.py:576
 #: pysollib\game\__init__.py:2465
 #: pysollib\game\__init__.py:3250
 msgid "&Restart"
-msgstr "&重新開始"
+msgstr "重新開始(&R)"
 
 #: pysollib\app.py:577
 #: pysollib\pysolgtk\selectgame.py:325
 #: pysollib\tile\selectgame.py:506
 #: pysollib\tk\selectgame.py:442
 msgid "&Rules"
-msgstr "&規則"
+msgstr "規則(&R)"
 
 #: pysollib\app.py:578
 #: pysollib\kivy\menubar.py:2417
@@ -507,38 +507,38 @@ msgstr "&規則"
 #: pysollib\tile\selectcardset.py:420
 #: pysollib\tk\menubar.py:99
 msgid "&Info..."
-msgstr "&資訊…"
+msgstr "資訊(&I)…"
 
 #: pysollib\app.py:579
 #: pysollib\help.py:46
 msgid "&Credits"
-msgstr "&製作名單"
+msgstr "製作名單(&C)"
 
 #: pysollib\app.py:581
 #: pysollib\tile\solverdialog.py:59
 #: pysollib\tk\solverdialog.py:65
 msgid "&Play"
-msgstr "&開玩"
+msgstr "開玩(&P)"
 
 #: pysollib\app.py:582
 #: pysollib\tile\tkstats.py:103
 #: pysollib\tile\tkstats.py:611
 msgid "&Play this game"
-msgstr "&玩這個遊戲"
+msgstr "玩這個遊戲(&P)"
 
 #: pysollib\app.py:583
 #: pysollib\tile\selectcardset.py:1014
 #: pysollib\tile\selectgame.py:1324
 #: pysollib\tile\selecttile.py:708
 msgid "C&lear"
-msgstr "&清除"
+msgstr "清除(&L)"
 
 #: pysollib\app.py:584
 #: pysollib\pysolgtk\selecttile.py:174
 #: pysollib\tile\selecttile.py:381
 #: pysollib\tk\selecttile.py:167
 msgid "&Solid color..."
-msgstr "&純色…"
+msgstr "純色(&S)…"
 
 #: pysollib\app.py:585
 #: pysollib\tile\tkstats.py:613
@@ -546,7 +546,7 @@ msgstr "&純色…"
 #: pysollib\tk\tkstats.py:580
 #: pysollib\tk\tkstats.py:597
 msgid "&Save to file"
-msgstr "&存成檔案"
+msgstr "存成檔案(&S)"
 
 #: pysollib\app.py:586
 #: pysollib\pysolgtk\tkstats.py:559
@@ -554,7 +554,7 @@ msgstr "&存成檔案"
 #: pysollib\tk\tkstats.py:646
 #: pysollib\ui\tktile\menubar.py:616
 msgid "&Statistics..."
-msgstr "&統計…"
+msgstr "統計(&S)…"
 
 #: pysollib\app.py:779
 #, python-format
@@ -1140,7 +1140,7 @@ msgstr ""
 #: pysollib\main.py:320
 #: pysollib\ui\tktile\menubar.py:541
 msgid "&Quit"
-msgstr "&離開"
+msgstr "離開(&Q)"
 
 #: pysollib\main.py:71
 #, python-format
@@ -3962,7 +3962,7 @@ msgstr ""
 #: pysollib\tk\menubar.py:99
 #: pysollib\tk\selectcardset.py:311
 msgid "&Load"
-msgstr "&載入"
+msgstr "載入(&L)"
 
 #: pysollib\kivy\menubar.py:2420
 #: pysollib\pysolgtk\menubar.py:702
@@ -4384,7 +4384,7 @@ msgstr "總計："
 #: pysollib\kivy\tkstats.py:248
 #: pysollib\tk\tkstats.py:278
 msgid "&All games..."
-msgstr "&全部遊戲…"
+msgstr "全部遊戲(&A)…"
 
 #: pysollib\kivy\tkwidget.py:190
 msgid "Error"
@@ -5115,7 +5115,7 @@ msgstr "選擇 "
 
 #: pysollib\tile\menubar.py:124
 msgid "Set t&heme"
-msgstr "&設定主題"
+msgstr "設定主題(&H)"
 
 #: pysollib\tile\menubar.py:135
 msgid "Alt/Revitalized"
@@ -5806,15 +5806,15 @@ msgstr "啟用音效"
 
 #: pysollib\tk\tkstats.py:512
 msgid "&Reset all..."
-msgstr "&重設全部…"
+msgstr "重設全部(&R)…"
 
 #: pysollib\tk\tkstats.py:579
 msgid "Session &log..."
-msgstr "&對局紀錄…"
+msgstr "對局紀錄(&L)…"
 
 #: pysollib\tk\tkstats.py:596
 msgid "&Full log..."
-msgstr "&完整紀錄…"
+msgstr "完整紀錄(&F)…"
 
 #: pysollib\winsystems\common.py:65
 msgid "invalid theme name: "
@@ -6384,47 +6384,47 @@ msgstr "圖文並列"
 
 #: pysollib\ui\tktile\menubar.py:76
 msgid "Show &statusbar"
-msgstr "顯示&狀態列"
+msgstr "顯示狀態列(&S)"
 
 #: pysollib\ui\tktile\menubar.py:89
 msgid "&Button icons"
-msgstr "&按鈕圖示"
+msgstr "按鈕圖示(&B)"
 
 #: pysollib\ui\tktile\menubar.py:103
 msgid "&Demo logo"
-msgstr "&示範標誌"
+msgstr "示範標誌(&D)"
 
 #: pysollib\ui\tktile\menubar.py:117
 msgid "D&ialog icons"
-msgstr "對話窗&圖示"
+msgstr "對話窗圖示(&I)"
 
 #: pysollib\ui\tktile\menubar.py:127
 msgid "&Pause text"
-msgstr "暫停&文字"
+msgstr "暫停文字(&P)"
 
 #: pysollib\ui\tktile\menubar.py:138
 msgid "&Redeal icons"
-msgstr "循環發牌&圖示"
+msgstr "循環發牌圖示(&R)"
 
 #: pysollib\ui\tktile\menubar.py:148
 msgid "&Tree icons"
-msgstr "樹狀&圖示"
+msgstr "樹狀圖示(&T)"
 
 #: pysollib\ui\tktile\menubar.py:161
 msgid "R&esampling"
-msgstr "重新&取樣"
+msgstr "重新取樣(&E)"
 
 #: pysollib\ui\tktile\menubar.py:163
 msgid "&Nearest Neighbor"
-msgstr "&最近鄰"
+msgstr "最近鄰(&N)"
 
 #: pysollib\ui\tktile\menubar.py:168
 msgid "&Bilinear"
-msgstr "&雙線性"
+msgstr "雙線性(&B)"
 
 #: pysollib\ui\tktile\menubar.py:173
 msgid "B&icubic"
-msgstr "雙&三次"
+msgstr "雙三次(&I)"
 
 #: pysollib\ui\tktile\menubar.py:178
 msgid "&Lanczos"
@@ -6432,7 +6432,7 @@ msgstr "&Lanczos"
 
 #: pysollib\ui\tktile\menubar.py:183
 msgid "&Antialiasing"
-msgstr "&反鋸齒"
+msgstr "反鋸齒(&A)"
 
 #: pysollib\ui\tktile\menubar.py:188
 msgid "B&ox"
@@ -6445,103 +6445,103 @@ msgstr "&Hamming"
 #: pysollib\ui\tktile\menubar.py:484
 #, python-format
 msgid "&About %s"
-msgstr "&關於 %s"
+msgstr "關於 %s(&A)"
 
 #: pysollib\ui\tktile\menubar.py:486
 msgid "&File"
-msgstr "&檔案"
+msgstr "檔案(&F)"
 
 #: pysollib\ui\tktile\menubar.py:489
 msgid "R&ecent games"
-msgstr "最近&遊戲"
+msgstr "最近遊戲(&E)"
 
 #: pysollib\ui\tktile\menubar.py:492
 msgid "Select &random game"
-msgstr "選擇&隨機遊戲"
+msgstr "選擇隨機遊戲(&R)"
 
 #: pysollib\ui\tktile\menubar.py:494
 msgid "&All games"
-msgstr "&全部遊戲"
+msgstr "全部遊戲(&A)"
 
 #: pysollib\ui\tktile\menubar.py:498
 msgid "&Games played"
-msgstr "已玩&遊戲"
+msgstr "已玩遊戲(&G)"
 
 #: pysollib\ui\tktile\menubar.py:501
 msgid "Games played and &won"
-msgstr "已玩且&獲勝"
+msgstr "已玩且獲勝(&W)"
 
 #: pysollib\ui\tktile\menubar.py:504
 msgid "Games played and &not won"
-msgstr "已玩但未&獲勝"
+msgstr "已玩但未獲勝(&N)"
 
 #: pysollib\ui\tktile\menubar.py:507
 msgid "Games not &played"
-msgstr "尚未玩的&遊戲"
+msgstr "尚未玩的遊戲(&P)"
 
 #: pysollib\ui\tktile\menubar.py:510
 msgid "Select game by nu&mber..."
-msgstr "依編號選擇&遊戲…"
+msgstr "依編號選擇遊戲(&M)…"
 
 #: pysollib\ui\tktile\menubar.py:513
 msgid "Next game by num&ber"
-msgstr "依編號跳下一&遊戲"
+msgstr "依編號跳下一遊戲(&B)"
 
 #: pysollib\ui\tktile\menubar.py:516
 msgid "Fa&vorite games"
-msgstr "我的&最愛遊戲"
+msgstr "我的最愛遊戲(&V)"
 
 #: pysollib\ui\tktile\menubar.py:517
 msgid "A&dd to favorites"
-msgstr "加入&最愛"
+msgstr "加入最愛(&D)"
 
 #: pysollib\ui\tktile\menubar.py:519
 msgid "Remove &from favorites"
-msgstr "從&最愛移除"
+msgstr "從最愛移除(&F)"
 
 #: pysollib\ui\tktile\menubar.py:523
 msgid "&Open..."
-msgstr "&開啟…"
+msgstr "開啟(&O)…"
 
 #: pysollib\ui\tktile\menubar.py:526
 msgid "&Save"
-msgstr "&儲存"
+msgstr "儲存(&S)"
 
 #: pysollib\ui\tktile\menubar.py:528
 msgid "Save &as..."
-msgstr "儲存&為…"
+msgstr "儲存為(&A)…"
 
 #: pysollib\ui\tktile\menubar.py:530
 msgid "E&xport current layout..."
-msgstr "匯出目前&版面…"
+msgstr "匯出目前版面(&X)…"
 
 #: pysollib\ui\tktile\menubar.py:533
 msgid "&Import starting layout..."
-msgstr "&匯入開局版面…"
+msgstr "匯入開局版面(&I)…"
 
 #: pysollib\ui\tktile\menubar.py:537
 msgid "&Hold and quit"
-msgstr "&保留局面並結束"
+msgstr "保留局面並結束(&H)"
 
 #: pysollib\ui\tktile\menubar.py:553
 msgid "&Edit"
-msgstr "&編輯"
+msgstr "編輯(&E)"
 
 #: pysollib\ui\tktile\menubar.py:555
 msgid "&Undo"
-msgstr "&復原"
+msgstr "復原(&U)"
 
 #: pysollib\ui\tktile\menubar.py:558
 msgid "&Redo"
-msgstr "&重做"
+msgstr "重做(&R)"
 
 #: pysollib\ui\tktile\menubar.py:560
 msgid "Redo &all"
-msgstr "&全部重做"
+msgstr "全部重做(&A)"
 
 #: pysollib\ui\tktile\menubar.py:568
 msgid "&Set bookmark"
-msgstr "設定&書籤"
+msgstr "設定書籤(&S)"
 
 #: pysollib\ui\tktile\menubar.py:570
 #: pysollib\ui\tktile\menubar.py:576
@@ -6551,47 +6551,47 @@ msgstr "書籤 %d"
 
 #: pysollib\ui\tktile\menubar.py:574
 msgid "Go&to bookmark"
-msgstr "跳到&書籤"
+msgstr "跳到書籤(&T)"
 
 #: pysollib\ui\tktile\menubar.py:582
 msgid "&Clear bookmarks"
-msgstr "&清除書籤"
+msgstr "清除書籤(&C)"
 
 #: pysollib\ui\tktile\menubar.py:587
 msgid "Solitaire &Wizard..."
-msgstr "接龍設定&精靈…"
+msgstr "接龍設定精靈(&W)…"
 
 #: pysollib\ui\tktile\menubar.py:590
 msgid "&Edit current game..."
-msgstr "&編輯目前遊戲…"
+msgstr "編輯目前遊戲(&E)…"
 
 #: pysollib\ui\tktile\menubar.py:593
 msgid "&Delete current game"
-msgstr "&刪除目前遊戲"
+msgstr "刪除目前遊戲(&D)"
 
 #: pysollib\ui\tktile\menubar.py:596
 msgid "&Game"
-msgstr "&遊戲"
+msgstr "遊戲(&G)"
 
 #: pysollib\ui\tktile\menubar.py:598
 msgid "&Deal cards"
-msgstr "&發牌"
+msgstr "發牌(&D)"
 
 #: pysollib\ui\tktile\menubar.py:601
 msgid "&Auto drop"
-msgstr "&自動移牌"
+msgstr "自動移牌(&A)"
 
 #: pysollib\ui\tktile\menubar.py:604
 msgid "Shu&ffle tiles"
-msgstr "重排&牌張"
+msgstr "重排牌張(&F)"
 
 #: pysollib\ui\tktile\menubar.py:607
 msgid "&Pause"
-msgstr "&暫停"
+msgstr "暫停(&P)"
 
 #: pysollib\ui\tktile\menubar.py:613
 msgid "S&tatus..."
-msgstr "&狀態…"
+msgstr "狀態(&T)…"
 
 #: pysollib\ui\tktile\menubar.py:619
 msgid "Log..."
@@ -6599,7 +6599,7 @@ msgstr "對局紀錄…"
 
 #: pysollib\ui\tktile\menubar.py:623
 msgid "D&emo statistics..."
-msgstr "示範&統計…"
+msgstr "示範統計(&E)…"
 
 #: pysollib\ui\tktile\menubar.py:626
 msgid "Demo log..."
@@ -6607,296 +6607,296 @@ msgstr "示範紀錄…"
 
 #: pysollib\ui\tktile\menubar.py:630
 msgid "&Comments..."
-msgstr "&備註…"
+msgstr "備註(&C)…"
 
 #: pysollib\ui\tktile\menubar.py:633
 msgid "&Assist"
-msgstr "&輔助"
+msgstr "輔助(&A)"
 
 #: pysollib\ui\tktile\menubar.py:635
 msgid "&Hint"
-msgstr "提&示"
+msgstr "提示(&H)"
 
 #: pysollib\ui\tktile\menubar.py:638
 msgid "Highlight p&iles"
-msgstr "突顯&牌堆"
+msgstr "突顯牌堆(&I)"
 
 #: pysollib\ui\tktile\menubar.py:641
 msgid "&Find card..."
-msgstr "&尋找卡牌…"
+msgstr "尋找卡牌(&F)…"
 
 #: pysollib\ui\tktile\menubar.py:644
 msgid "Sh&ow full picture..."
-msgstr "顯示&完整圖樣…"
+msgstr "顯示完整圖樣(&O)…"
 
 #: pysollib\ui\tktile\menubar.py:648
 msgid "&Demo"
-msgstr "&示範"
+msgstr "示範(&D)"
 
 #: pysollib\ui\tktile\menubar.py:651
 msgid "Demo (&all games)"
-msgstr "示範（&全部遊戲）"
+msgstr "示範（全部遊戲）(&A)"
 
 #: pysollib\ui\tktile\menubar.py:654
 #: pysollib\ui\tktile\menubar.py:656
 msgid "&Solver..."
-msgstr "求解&程式…"
+msgstr "求解程式(&S)…"
 
 #: pysollib\ui\tktile\menubar.py:659
 msgid "&Piles description"
-msgstr "牌&堆說明"
+msgstr "牌堆說明(&P)"
 
 #: pysollib\ui\tktile\menubar.py:665
 msgid "&Options"
-msgstr "&選項"
+msgstr "選項(&O)"
 
 #: pysollib\ui\tktile\menubar.py:667
 msgid "&Player options..."
-msgstr "&玩家選項…"
+msgstr "玩家選項(&P)…"
 
 #: pysollib\ui\tktile\menubar.py:669
 msgid "&Automatic play"
-msgstr "自動&出牌"
+msgstr "自動出牌(&A)"
 
 #: pysollib\ui\tktile\menubar.py:671
 msgid "Auto &face-up"
-msgstr "自動&翻正面"
+msgstr "自動翻正面(&F)"
 
 #: pysollib\ui\tktile\menubar.py:674
 msgid "A&uto drop"
-msgstr "自動&移牌"
+msgstr "自動移牌(&U)"
 
 #: pysollib\ui\tktile\menubar.py:677
 msgid "Auto &deal"
-msgstr "自動&發牌"
+msgstr "自動發牌(&D)"
 
 #: pysollib\ui\tktile\menubar.py:681
 msgid "&Quick play"
-msgstr "&快速模式"
+msgstr "快速模式(&Q)"
 
 #: pysollib\ui\tktile\menubar.py:683
 msgid "Assist &level"
-msgstr "輔助&等級"
+msgstr "輔助等級(&L)"
 
 #: pysollib\ui\tktile\menubar.py:685
 msgid "Enable &undo"
-msgstr "啟用&復原"
+msgstr "啟用復原(&U)"
 
 #: pysollib\ui\tktile\menubar.py:688
 msgid "Enable &bookmarks"
-msgstr "啟用&書籤"
+msgstr "啟用書籤(&B)"
 
 #: pysollib\ui\tktile\menubar.py:691
 msgid "Enable &hint"
-msgstr "啟用&提示"
+msgstr "啟用提示(&H)"
 
 #: pysollib\ui\tktile\menubar.py:694
 msgid "Enable shu&ffle"
-msgstr "啟用&洗牌"
+msgstr "啟用洗牌(&F)"
 
 #: pysollib\ui\tktile\menubar.py:697
 msgid "Free hin&ts"
-msgstr "免費&提示"
+msgstr "免費提示(&T)"
 
 #: pysollib\ui\tktile\menubar.py:700
 msgid "Enable highlight p&iles"
-msgstr "啟用突顯&牌堆"
+msgstr "啟用突顯牌堆(&I)"
 
 #: pysollib\ui\tktile\menubar.py:704
 msgid "Enable highlight &cards"
-msgstr "啟用突顯&卡牌"
+msgstr "啟用突顯卡牌(&C)"
 
 #: pysollib\ui\tktile\menubar.py:708
 msgid "Enable highlight same &rank/suit"
-msgstr "啟用同&點數/花色突顯"
+msgstr "啟用同點數/花色突顯(&R)"
 
 #: pysollib\ui\tktile\menubar.py:712
 msgid "Enable face-down &peek"
-msgstr "啟用暗牌&偷看"
+msgstr "啟用暗牌偷看(&P)"
 
 #: pysollib\ui\tktile\menubar.py:716
 msgid "Highlight &no matching"
-msgstr "突顯&不相符牌"
+msgstr "突顯不相符牌(&N)"
 
 #: pysollib\ui\tktile\menubar.py:720
 msgid "Stuc&k notification"
-msgstr "&卡死通知"
+msgstr "卡死通知(&K)"
 
 #: pysollib\ui\tktile\menubar.py:725
 msgid "&Show removed tiles (in Mahjongg games)"
-msgstr "&顯示已移除的牌張（麻將遊戲）"
+msgstr "顯示已移除的牌張（麻將遊戲）(&S)"
 
 #: pysollib\ui\tktile\menubar.py:729
 msgid "Show hint &arrow (in Shisen-Sho games)"
-msgstr "顯示提示&箭頭（四川省遊戲）"
+msgstr "顯示提示箭頭（四川省遊戲）(&A)"
 
 #: pysollib\ui\tktile\menubar.py:733
 msgid "Show ca&scade (in Match Three games)"
-msgstr "顯示&連鎖（三消遊戲）"
+msgstr "顯示連鎖（三消遊戲）(&S)"
 
 #: pysollib\ui\tktile\menubar.py:737
 msgid "&Deal all cards (in Accordion type games)"
-msgstr "&發全部牌（手風琴類遊戲）"
+msgstr "發全部牌（手風琴類遊戲）(&D)"
 
 #: pysollib\ui\tktile\menubar.py:741
 msgid "A&uto-remove first card (in Pegged games)"
-msgstr "自動移除&首張牌（孔明棋遊戲）"
+msgstr "自動移除首張牌（孔明棋遊戲）(&U)"
 
 #: pysollib\ui\tktile\menubar.py:745
 msgid "&Sound..."
-msgstr "&音效…"
+msgstr "音效(&S)…"
 
 #: pysollib\ui\tktile\menubar.py:750
 msgid "Card si&ze"
-msgstr "卡牌&尺寸"
+msgstr "卡牌尺寸(&Z)"
 
 #: pysollib\ui\tktile\menubar.py:752
 msgid "&Increase the card size"
-msgstr "&放大卡牌"
+msgstr "放大卡牌(&I)"
 
 #: pysollib\ui\tktile\menubar.py:755
 msgid "&Decrease the card size"
-msgstr "&縮小卡牌"
+msgstr "縮小卡牌(&D)"
 
 #: pysollib\ui\tktile\menubar.py:758
 msgid "&Reset the card size"
-msgstr "&重設卡牌尺寸"
+msgstr "重設卡牌尺寸(&R)"
 
 #: pysollib\ui\tktile\menubar.py:762
 msgid "&Auto scaling"
-msgstr "&自動縮放"
+msgstr "自動縮放(&A)"
 
 #: pysollib\ui\tktile\menubar.py:765
 msgid "&Preview scaling"
-msgstr "預&覽縮放"
+msgstr "預覽縮放(&P)"
 
 #: pysollib\ui\tktile\menubar.py:769
 msgid "Pr&eserve aspect ratio"
-msgstr "保持&長寬比"
+msgstr "保持長寬比(&E)"
 
 #: pysollib\ui\tktile\menubar.py:774
 msgid "Game la&yout"
-msgstr "遊戲&版面"
+msgstr "遊戲版面(&Y)"
 
 #: pysollib\ui\tktile\menubar.py:776
 msgid "&Fullscreen"
-msgstr "&全螢幕"
+msgstr "全螢幕(&F)"
 
 #: pysollib\ui\tktile\menubar.py:782
 msgid "&Spread stacks"
-msgstr "&展開牌疊"
+msgstr "展開牌疊(&S)"
 
 #: pysollib\ui\tktile\menubar.py:785
 msgid "&Center layout"
-msgstr "置中&版面"
+msgstr "置中版面(&C)"
 
 #: pysollib\ui\tktile\menubar.py:788
 msgid "Save games &geometry"
-msgstr "儲存遊戲&視窗設定"
+msgstr "儲存遊戲視窗設定(&G)"
 
 #: pysollib\ui\tktile\menubar.py:792
 msgid "&Keep dialogs on top"
-msgstr "&對話窗置頂"
+msgstr "對話窗置頂(&K)"
 
 #: pysollib\ui\tktile\menubar.py:798
 msgid "Cards&et..."
-msgstr "牌&面…"
+msgstr "牌面(&E)…"
 
 #: pysollib\ui\tktile\menubar.py:801
 msgid "Table t&ile..."
-msgstr "桌面&磁磚…"
+msgstr "桌面磁磚(&I)…"
 
 #: pysollib\ui\tktile\menubar.py:804
 msgid "Card &background"
-msgstr "卡牌&背景"
+msgstr "卡牌背景(&B)"
 
 #: pysollib\ui\tktile\menubar.py:805
 msgid "Card &view"
-msgstr "卡牌&視角"
+msgstr "卡牌視角(&V)"
 
 #: pysollib\ui\tktile\menubar.py:807
 msgid "Card shado&w"
-msgstr "卡牌&陰影"
+msgstr "卡牌陰影(&W)"
 
 #: pysollib\ui\tktile\menubar.py:810
 msgid "Shade &legal moves"
-msgstr "淡化&合法走法"
+msgstr "淡化合法走法(&L)"
 
 #: pysollib\ui\tktile\menubar.py:813
 msgid "&Negative cards bottom"
-msgstr "負片&牌背"
+msgstr "負片牌背(&N)"
 
 #: pysollib\ui\tktile\menubar.py:821
 msgid "Shade &filled stacks"
-msgstr "淡化&已滿牌疊"
+msgstr "淡化已滿牌疊(&F)"
 
 #: pysollib\ui\tktile\menubar.py:825
 msgid "&Compact long stacks"
-msgstr "&壓縮長牌疊"
+msgstr "壓縮長牌疊(&C)"
 
 #: pysollib\ui\tktile\menubar.py:829
 msgid "&Randomize card placement"
-msgstr "&隨機擺放卡牌"
+msgstr "隨機擺放卡牌(&R)"
 
 #: pysollib\ui\tktile\menubar.py:832
 msgid "A&nimations"
-msgstr "動&畫"
+msgstr "動畫(&N)"
 
 #: pysollib\ui\tktile\menubar.py:834
 msgid "&None"
-msgstr "&無"
+msgstr "無(&N)"
 
 #: pysollib\ui\tktile\menubar.py:837
 msgid "&Very fast"
-msgstr "&極快"
+msgstr "極快(&V)"
 
 #: pysollib\ui\tktile\menubar.py:840
 msgid "&Fast"
-msgstr "&快"
+msgstr "快(&F)"
 
 #: pysollib\ui\tktile\menubar.py:843
 msgid "&Medium"
-msgstr "中&等"
+msgstr "中等(&M)"
 
 #: pysollib\ui\tktile\menubar.py:846
 msgid "&Slow"
-msgstr "&慢"
+msgstr "慢(&S)"
 
 #: pysollib\ui\tktile\menubar.py:849
 msgid "V&ery slow"
-msgstr "極&慢"
+msgstr "極慢(&E)"
 
 #: pysollib\ui\tktile\menubar.py:853
 msgid "&Redeal animation"
-msgstr "循環發牌&動畫"
+msgstr "循環發牌動畫(&R)"
 
 #: pysollib\ui\tktile\menubar.py:857
 msgid "F&lip animation"
-msgstr "翻牌&動畫"
+msgstr "翻牌動畫(&L)"
 
 #: pysollib\ui\tktile\menubar.py:862
 msgid "&Winning animation"
-msgstr "獲勝&動畫"
+msgstr "獲勝動畫(&W)"
 
 #: pysollib\ui\tktile\menubar.py:865
 msgid "&Mouse"
-msgstr "滑&鼠"
+msgstr "滑鼠(&M)"
 
 #: pysollib\ui\tktile\menubar.py:867
 msgid "&Drag-and-Drop"
-msgstr "&拖放"
+msgstr "拖放(&D)"
 
 #: pysollib\ui\tktile\menubar.py:871
 msgid "&Point-and-Click"
-msgstr "&點按"
+msgstr "點按(&P)"
 
 #: pysollib\ui\tktile\menubar.py:875
 msgid "&Sticky mouse"
-msgstr "&黏性滑鼠"
+msgstr "黏性滑鼠(&S)"
 
 #: pysollib\ui\tktile\menubar.py:880
 msgid "D&rag cards cursor"
-msgstr "拖&牌游標"
+msgstr "拖牌游標(&R)"
 
 #: pysollib\ui\tktile\menubar.py:884
 msgid "Use mouse for undo/redo"
@@ -6904,35 +6904,35 @@ msgstr "用滑鼠復原/重做"
 
 #: pysollib\ui\tktile\menubar.py:888
 msgid "&Fonts..."
-msgstr "&字型…"
+msgstr "字型(&F)…"
 
 #: pysollib\ui\tktile\menubar.py:889
 msgid "&Colors..."
-msgstr "&顏色…"
+msgstr "顏色(&C)…"
 
 #: pysollib\ui\tktile\menubar.py:890
 msgid "Time&outs..."
-msgstr "&逾時…"
+msgstr "逾時(&O)…"
 
 #: pysollib\ui\tktile\menubar.py:893
 msgid "&Toolbar"
-msgstr "&工具列"
+msgstr "工具列(&T)"
 
 #: pysollib\ui\tktile\menubar.py:895
 msgid "Stat&usbar"
-msgstr "狀態&列"
+msgstr "狀態列(&U)"
 
 #: pysollib\ui\tktile\menubar.py:897
 msgid "Othe&r graphics"
-msgstr "其他&圖形"
+msgstr "其他圖形(&R)"
 
 #: pysollib\ui\tktile\menubar.py:915
 msgid "&Help"
-msgstr "&說明"
+msgstr "說明(&H)"
 
 #: pysollib\ui\tktile\menubar.py:918
 msgid "&Contents"
-msgstr "&目錄"
+msgstr "目錄(&C)"
 
 #: pysollib\ui\tktile\menubar.py:921
 msgid "&How to use PySol"
@@ -6940,60 +6940,60 @@ msgstr "如何使用 &PySol"
 
 #: pysollib\ui\tktile\menubar.py:924
 msgid "&Rules for this game"
-msgstr "本遊戲&規則"
+msgstr "本遊戲規則(&R)"
 
 #: pysollib\ui\tktile\menubar.py:928
 msgid "What's &new?"
-msgstr "新增&功能"
+msgstr "新增功能(&N)"
 
 #: pysollib\ui\tktile\menubar.py:931
 msgid "R&eport a bug"
-msgstr "回報&錯誤"
+msgstr "回報錯誤(&E)"
 
 #: pysollib\ui\tktile\menubar.py:934
 msgid "&License terms"
-msgstr "&授權條款"
+msgstr "授權條款(&L)"
 
 #: pysollib\ui\tktile\menubar.py:939
 #, python-format
 msgid "&About %s..."
-msgstr "&關於 %s…"
+msgstr "關於 %s(&A)…"
 
 #: pysollib\ui\tktile\menubar.py:1091
 msgid "All &games..."
-msgstr "全部&遊戲…"
+msgstr "全部遊戲(&G)…"
 
 #: pysollib\ui\tktile\menubar.py:1153
 msgid "&Mahjongg games"
-msgstr "&麻將遊戲"
+msgstr "麻將遊戲(&M)"
 
 #: pysollib\ui\tktile\menubar.py:1178
 msgid "&Popular games"
-msgstr "熱門&遊戲"
+msgstr "熱門遊戲(&P)"
 
 #: pysollib\ui\tktile\menubar.py:1186
 msgid "&French games"
-msgstr "法式&遊戲"
+msgstr "法式遊戲(&F)"
 
 #: pysollib\ui\tktile\menubar.py:1193
 msgid "&Oriental games"
-msgstr "東方&遊戲"
+msgstr "東方遊戲(&O)"
 
 #: pysollib\ui\tktile\menubar.py:1201
 msgid "&Special games"
-msgstr "特殊&遊戲"
+msgstr "特殊遊戲(&S)"
 
 #: pysollib\ui\tktile\menubar.py:1207
 msgid "&Custom games"
-msgstr "自訂&遊戲"
+msgstr "自訂遊戲(&C)"
 
 #: pysollib\ui\tktile\menubar.py:1216
 msgid "&All games by name"
-msgstr "依名稱列&全部遊戲"
+msgstr "依名稱列全部遊戲(&A)"
 
 #: pysollib\ui\tktile\menubar.py:1381
 msgid "&Clear recent games"
-msgstr "&清除最近遊戲"
+msgstr "清除最近遊戲(&C)"
 
 #: pysollib\ui\tktile\menubar.py:1487
 msgid "Clear recent games"
@@ -7145,4 +7145,4 @@ msgstr "設定字型"
 
 #: pysollib/tile/menubar.py (in-tree follow-desktop-theme patch)
 msgid "Follow the &desktop theme (KDE/Kvantum/GTK)"
-msgstr "跟隨&桌面主題（KDE/Kvantum/GTK）"
+msgstr "跟隨桌面主題(&D)（KDE/Kvantum/GTK）"
