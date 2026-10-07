@@ -1,13 +1,14 @@
 # Maintainer: Capricornus007 <capricornus@outlook.com>
 # Serein 的「源碼直出」版：吃上游 main 尖端，讓還沒發 nightly 的改動能立刻看到。
 #
-# 為什麼要另開一顆、而不是把既有的 `serein` 改成跟 main：
+# 為什麼是「取代」舊的 `serein` 而不是並存：
 #   `serein` 那顆按上游 nightly tag（`v1.0.0-nightly.YYYYMMDD.NN`）走，CI 從 release
-#   現算版號、發新版就自動換代，這是「可用版」的語意，不該被浮動 HEAD 污染。
-#   實測例子（2026-10-07）：中文語系 PR #573 在 10-06 23:29Z 就進 main 了，但上游最新
-#   nightly 仍是 10-04 的 `.54` → 只升 `serein` 拿不到中文，得等他們下一發（節奏 1–3 天）。
-#   這顆就是那個「等不到」的出口；兩顆只差來源固定與否，建置流程、依賴清單、Artix 閘門
-#   全部沿用 `serein` 那份（同一個 build() 與 package()，改一处要兩处同步）。
+#   現算版號、發新版就自動換代，語意是「可用版」。但 2026-10-07 的實況是：中文語系
+#   PR #573 在 10-06 23:29Z 就進 main 了，上游最新 nightly 仍停在 10-04 的 `.54`
+#   → 只升 `serein` 拿不到中文，得等他們下一發（節奏 1–3 天）。
+#   使用者對 gh／actionlint 同一批已拍過「刪非 -git 的、換 -git」，所以這裡用
+#   provides/conflicts/replaces 把 `serein` 換掉、舊目錄一併移除。
+#   ⚠️ 哪天要把「可用版」那條線贖回來：別改這顆，另開目錄、另開矩陣條目。
 #
 # ⚠️ in-tree 包四接點（少一個就永遠進不了 feed）：
 #   1) 本目錄（CI 用 contents API 抓整目錄，只抓 PKGBUILD 會缺檔）
@@ -73,9 +74,13 @@ pkgver() {
 
 prepare() {
     cd "$srcdir/serein"
-    # 上游的版號燒錄腳本吃「去掉 v 的原始字串」；這裡給 describe 的結果（含 .rN.gHASH），
-    # 讓 about 頁能看出這是尖端版而非某個 nightly。
-    python3 .github/release/version.py "$(git describe --tags)"
+    # 上游 version.py 的正則只收 `MAJOR.MINOR.PATCH[-nightly.N.M]`：多一個 `v` 前綴、
+    # 或帶 describe 的 `-16-g884fb73` 後綴，都會 `ValueError: Expected a stable or
+    # nightly semantic version`（run #382 實測紅在 prepare()）。所以餵「最近一個 tag 去掉 v」，
+    # 「比 tag 尖端 N 筆」這件事由 pkgver 的 .rN.gHASH 段表達，兩邊各司其職。
+    _semver=$(git describe --tags --abbrev=0 | sed 's/^v//')
+    [ -n "$_semver" ] || { echo "::error::拿不到最近的 nightly tag"; exit 1; }
+    python3 .github/release/version.py "$_semver"
 }
 
 build() {
