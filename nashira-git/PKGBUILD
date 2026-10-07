@@ -26,8 +26,15 @@ sha256sums=('SKIP')
 
 pkgver() {
   cd nashira
-  # v0.1.0-74-gb1fcd2b → 0.1.0.r74.gb1fcd2b（dae-git 同款轉換）
-  git describe --tags --long | sed 's/^v//; s/\([^-]*-g\)/r\1/; s/-/./g'
+  # 前綴取**代碼裡的 nashiraVersion**，不取 git tag。
+  # 用 tag 的話會永遠比介面「關於」頁落後一個版本：tag 是發版流程在 CI 跑完之後才打的，
+  # 而 -git 包抓的是 master HEAD（用戶 2026-10-07 兩度點名「你又開始不對齊版本號了」）。
+  # 後半段仍用 describe 的「tag 之後第幾個提交 + 短碼」，保留自報 commit 的格式。
+  local base rev
+  base=$(sed -n 's/^nashiraVersion=//p' gradle.properties)
+  [ -n "$base" ] || base=$(git describe --tags --long | sed 's/^v//; s/-.*$//')
+  rev=$(git describe --tags --long | sed 's/^[^-]*-//')      # 例：1-g8fb9a30
+  printf '%s.r%s\n' "$base" "$rev" | tr '-' '.'             # 例：0.1.45.r1.g8fb9a30
 }
 
 build() {

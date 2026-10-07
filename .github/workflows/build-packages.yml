@@ -1173,13 +1173,16 @@ jobs:
               fi
               ;;
             nashira-git)
-              # 版本 = Nashira 主倉 master HEAD 的 git describe
-              # （v0.1.0-74-gb1fcd2b → 0.1.0.r74.gb1fcd2b）。與 ffmpeg-full-git
-              # 同款：blob 過濾克隆保留 tags，嚴格復現 PKGBUILD pkgver() 的算法
+              # ⚠️ 算法必須跟 nashira-git/PKGBUILD 的 pkgver() **逐字一致**，
+              # 否則 plan 每輪都算出不同值 → 每輪都白編（契約「改一處要兩處同步」）。
+              # 前綴取代碼裡的 nashiraVersion，不取 git tag：tag 由發版流程在 CI 跑完後
+              # 才打，用 tag 會永遠比介面「關於」頁落後一版（用戶 2026-10-07 兩度點名）。
               rm -rf /tmp/nashira-version
               git clone --filter=blob:none https://github.com/Capricornus007/nashira.git /tmp/nashira-version
-              latest_pkgver=$(git -C /tmp/nashira-version describe --tags --long \
-                | sed 's/^v//; s/\([^-]*-g\)/r\1/; s/-/./g')
+              nv_base=$(sed -n 's/^nashiraVersion=//p' /tmp/nashira-version/gradle.properties)
+              [ -n "$nv_base" ] || nv_base=$(git -C /tmp/nashira-version describe --tags --long | sed 's/^v//; s/-.*$//')
+              nv_rev=$(git -C /tmp/nashira-version describe --tags --long | sed 's/^[^-]*-//')
+              latest_pkgver=$(printf '%s.r%s\n' "$nv_base" "$nv_rev" | tr '-' '.')
               case "$latest_pkgver" in
                 *[!0-9a-zA-Z.+-r]*|"") skip "拿不到 Nashira HEAD 版本号" ;;
               esac
