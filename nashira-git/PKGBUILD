@@ -13,7 +13,11 @@ arch=('x86_64')
 url="https://github.com/Capricornus007/nashira"
 license=('AGPL-3.0-only')
 depends=('xdg-utils')
-makedepends=('git' 'jdk21-openjdk' 'unzip')
+# 構建用哪顆 JDK，直接決定裝機後跑的是什麼 JVM：app image 的執行期是 jpackage
+# 現場 jlink 出來的（取 $JAVA_HOME/jmods），不是依賴系統 java。
+# 換 JBR 的理由見主倉 #62：OpenJDK 沒有 sun.awt.X11.XInputMethod$ClientComponentCaretPositionTracker，
+# 輸入法候選窗就不會跟光標。JBR 只有 **sdk** 變體帶 jmods（runtime 變體的 jmods/ 是空的）。
+makedepends=('git' 'jbr21' 'unzip')
 provides=('nashira')
 conflicts=('nashira')
 options=('!strip' '!debug')
@@ -30,6 +34,12 @@ build() {
   cd nashira
   # 只建桌面 app image（不碰 androidApp；configuration 階段不需要 Android
   # SDK——上游 release.yml 同一條命令在無 SDK 的 runner 上驗證過可行）。
+  # 缺 JBR 就直接紅，**不要靜默退回系統 OpenJDK**：退回去做出來的包照樣能裝能跑，
+  # 只是輸入法候選窗又不跟光標，而 CI 全綠——這正是規則 71「配置寫了不等於套上」那個坑。
+  export JAVA_HOME=/opt/jbr21
+  [ -x "$JAVA_HOME/bin/jlink" ] && [ -n "$(ls "$JAVA_HOME/jmods"/*.jmod 2>/dev/null)" ] \
+    || { echo "找不到 $JAVA_HOME（含 jmods）；jbr21 沒裝成？" >&2; return 1; }
+  export PATH="$JAVA_HOME/bin:$PATH"
   # --no-daemon：容器/CI 友好，不留常駐 JVM
   ./gradlew :desktopApp:createDistributable --no-daemon --console=plain
 }
@@ -67,4 +77,14 @@ EOF
 
   install -dm755 "${pkgdir}/usr/bin"
   ln -s /opt/nashira/bin/nashira "${pkgdir}/usr/bin/nashira"
+
+  # 產物收口（規則 71）：驗「裝機後真的會跑的那個 runtime」有沒有光標上報類，
+  # 而不是驗 build 環境用了哪顆 JDK——後者綠了不代表包裡是 JBR。
+  # jpackage 的 app image 佈局是 lib/runtime（不是頂層 runtime/）。
+  local modules="${pkgdir}/opt/nashira/lib/runtime/lib/modules"
+  if ! /opt/jbr21/bin/jimage list "$modules" 2>/dev/null \
+       | grep -qi 'ClientComponentCaretPositionTracker'; then
+    echo "::error:: 包裡的 runtime 不是 JBR（$modules 查不到光標上報類），拒絕出貨" >&2
+    return 1
+  fi
 }

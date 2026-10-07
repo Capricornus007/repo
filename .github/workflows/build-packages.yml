@@ -124,11 +124,17 @@ jobs:
             pacman -Syu --noconfirm --needed
           fi
 
-          if [ "${{ matrix.kind }}" = 'kde' ] || [ "${{ matrix.kind }}" = 'wayland' ] || [ "${{ matrix.kind }}" = 'aur' ]; then
+          if [ "${{ matrix.kind }}" = 'kde' ] || [ "${{ matrix.kind }}" = 'wayland' ] || [ "${{ matrix.kind }}" = 'aur' ] \
+             || [ "${{ matrix.repo_name }}" = 'nashira-git' ]; then
             # 把自有 junlin03-aur 掛成匿名 pacman 源。矩陣 job 並行，靠它看見
             # 兄弟 job 已發布的 KDE 依賴產物（release 資產公開可取，實測
             # …/current-repo/junlin03-aur.db 與包檔均 HTTP 200）。冷啟動時
             # 依賴尚未發布 → plan 步跳過，靠每小時排程按依賴 DAG 逐層收斂。
+            #
+            # nashira-git 也點名掛進來（2026-10-07）：它的 makedepends 現在是
+            # `jbr21`，而 jbr21 是本倉自己出的包、不在任何官方倉。不掛源就
+            # `package not found` → makepkg -s 紅。它不屬於 kde/wayland/aur 任何
+            # 一類，所以只能按包名點名，別指望改 kind。
             {
               echo ''
               echo '[junlin03-aur]'
