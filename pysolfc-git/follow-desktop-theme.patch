@@ -77,10 +77,10 @@ index 64e14d5..e2605f4 100644
 +            variable=self.tkopt.follow_desktop_theme,
 +            command=self.mOptFollowDesktopTheme)
 diff --git a/pysollib/tile/selectcardset.py b/pysollib/tile/selectcardset.py
-index d93d19d..92c478a 100644
+index d93d19d..7906d67 100644
 --- a/pysollib/tile/selectcardset.py
 +++ b/pysollib/tile/selectcardset.py
-@@ -52,10 +52,20 @@ class SelectCardsetLeaf(SelectDialogTreeLeaf):
+@@ -52,10 +52,21 @@ class SelectCardsetLeaf(SelectDialogTreeLeaf):
  class SelectCardsetNode(SelectDialogTreeNode):
      def _getContents(self):
          contents = []
@@ -94,7 +94,8 @@ index d93d19d..92c478a 100644
 +                text = obj.name
 +                if not by_type:
 +                    type_name = CSI.TYPE_NAME.get(obj.si.type)
-+                    if type_name:
++                    # 名字本身就帶型別時不要再掛一遍（Hex A Deck（Hex A Deck）那種）
++                    if type_name and type_name.lower() not in obj.name.lower():
 +                        text = '%s（%s）' % (obj.name, type_name)
                  node = SelectCardsetLeaf(
 -                    self.tree, self, text=obj.name, key=obj.index)
