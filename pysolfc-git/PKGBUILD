@@ -8,7 +8,7 @@ pkgver=3.6.1.r23.g7a3d146
 # 日誌原話「pkgver() 會改版本 → makepkg 必把 pkgrel 重置為 1」）。實測 10-07：
 # 抬 pkgrel=2 之後仍「跳过构建：pysolfc-git-3.6.1.r37.gc39976f-1 已在 release 里」，
 # feed 那顆停在 13:48 的純上游版（無語系／無主題補丁）。改完補丁或語系就 +1 epoch。
-epoch=1
+epoch=2
 pkgrel=1
 pkgdesc="PySol (Fan Club edition) is an exciting collection of more than 1000 solitaire games (git version)"
 arch=('any')
@@ -37,22 +37,29 @@ optdepends=(
 )
 provides=('pysolfc')
 conflicts=('pysolfc')
-# 我方語系（上游 po/ 裡沒有中文）。每個語系有兩份目錄：
+# 我方語系（上游 po/ 裡沒有中文）。每個語系有三份目錄：
 #   <lang>_pysol.po  ＝ 介面字串（對應 po/pysol.pot，1324 條）
 #   <lang>_games.po  ＝ 遊戲名稱（對應 po/games.pot，1848 條）
-# 新增語言＝把這兩個檔丟進本目錄並列進 source，prepare()/build() 用萬用字元掃，不用改腳本。
-# build() 會 msgcat 把兩份合併成 po/<lang>.po 再 msgfmt（與上游 `make mo` 同一條公式）。
+#   <lang>_help.po   ＝ 說明頁文字節點（localize-help.py 用，6572 段）
+# 新增語言＝把這三個檔丟進本目錄並列進 source，腳本用萬用字元掃，不用改邏輯。
+# build() 會 msgcat 把 pysol+games 合併成 po/<lang>.po 再 msgfmt（與上游 `make mo` 同一條公式）；
+# help 那份不進 locale，是打包時拿来改寫 data/html 的。
 # follow-desktop-theme.patch + systemtheme.py：讓 Tk 元件跟隨桌面調色盤（見檔內說明）。
+# localized-help.patch：讓 DataLoader 優先取 html/<語系>/ 下的翻譯說明頁。
 source=(
   "git+https://github.com/shlomif/PySolFC.git"
   'zh_TW_pysol.po'
   'zh_TW_games.po'
+  'zh_TW_help.po'
   'zh_CN_pysol.po'
   'zh_CN_games.po'
+  'zh_CN_help.po'
   'systemtheme.py'
+  'localize-help.py'
   'follow-desktop-theme.patch'
+  'localized-help.patch'
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 pkgver() {
   cd PySolFC
@@ -81,13 +88,19 @@ prepare() {
   # 帶入我方語系（見上方 source 註解）。缺檔要紅：CI 的「拉取对应的套件仓库」步驟
   # 過去對本包只 curl 了 PKGBUILD，語系檔根本沒下來，結果徽章全綠、包裡一個中文
   # 字都沒有（10-07 實測）。靜默跳過等于騙人，所以逐檔點名。
-  for _po in "$srcdir"/zh_*.po; do
+  for _po in "$srcdir"/zh_*_pysol.po "$srcdir"/zh_*_games.po; do
     [ -e "$_po" ] || continue
     install -Dm644 "$_po" "po/$(basename "$_po")"
   done
   for _need in zh_TW_pysol.po zh_TW_games.po zh_CN_pysol.po zh_CN_games.po; do
     if [ ! -f "po/$_need" ]; then
       echo "ERROR: 缺 po/$_need —— 語系檔沒被抓進 build 目錄，別發沒中文的包"
+      exit 1
+    fi
+  done
+  for _need in zh_TW_help.po zh_CN_help.po localize-help.py; do
+    if [ ! -f "$srcdir/$_need" ]; then
+      echo "ERROR: 缺 $_need —— 說明頁語系檔沒下來，包裝完會是純英文說明頁"
       exit 1
     fi
   done
@@ -102,6 +115,13 @@ prepare() {
     # ui/tktile/menubar.py / tile/menubar.py 其中之一。靜默跳過會發出一個
     # 「看起來正常、其實沒跟隨主題」的包，所以寧可紅，別偷跑。
     echo "ERROR: follow-desktop-theme.patch 套用失敗——照 pysollib/systemtheme.py 的文件重做補丁"
+    exit 1
+  fi
+
+  # 說明頁語系化：DataLoader.__findFile 優先試 html/<語系>/，缺檔退回英文。
+  # 只這一處收口（help_html／mHelpRules／getGameRulesFilename 全走 findFile）。
+  if ! patch -p1 -N -i "$srcdir/localized-help.patch"; then
+    echo "ERROR: localized-help.patch 套用失敗——上游動過 pysollib/util.py 的 DataLoader"
     exit 1
   fi
 }
@@ -124,6 +144,14 @@ build() {
     install -d "locale/${_lng}/LC_MESSAGES"
     msgfmt --check -o "locale/${_lng}/LC_MESSAGES/pysol.mo" "po/${_lng}.po"
   done
+  # 說明頁的對照表：編到 helpmo/ 給 package() 的 localize-help.py 用。
+  # 不進 /usr/share/locale——它不是 runtime gettext 目錄，是打包期改寫 HTML 的資料表。
+  install -d "$srcdir/helpmo"
+  for _po in "$srcdir"/zh_*_help.po; do
+    _lng=${_po##*/}
+    _lng=${_lng%_help.po}
+    msgfmt --check -o "$srcdir/helpmo/${_lng}.mo" "$_po"
+  done
   python -m build --wheel --no-isolation
 }
 
@@ -135,4 +163,15 @@ check() {
 package() {
   cd PySolFC
   python -m installer --destdir="$pkgdir" dist/*.whl
+  # 依 helpmo/*.mo 生出 html/<語系>/，localized-help.patch 讓 DataLoader 優先取它。
+  _html=$(find "$pkgdir/usr/share" -maxdepth 2 -type d -name html | head -1)
+  if [ -z "$_html" ] || [ ! -f "$_html/license.html" ]; then
+    echo "ERROR: 找不到裝好的 data/html（上游改了安裝路徑？）——說明頁語系化做不了"
+    exit 1
+  fi
+  for _mo in "$srcdir"/helpmo/*.mo; do
+    _lng=${_mo##*/}
+    _lng=${_lng%.mo}
+    python "$srcdir/localize-help.py" "$_html" "$_lng" "$_mo"
+  done
 }

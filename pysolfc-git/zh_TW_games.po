@@ -2145,7 +2145,7 @@ msgid "Isabel"
 msgstr "伊莎貝爾（Isabel）"
 
 msgid "Ishido"
-msgstr "伊士多（Ishido）"
+msgstr "石戶（Ishido）"
 
 msgid "Ishido Relaxed"
 msgstr "寬鬆伊士多（Ishido Relaxed）"

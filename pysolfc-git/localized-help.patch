@@ -1,0 +1,45 @@
+diff --git a/pysollib/util.py b/pysollib/util.py
+index ae91eaa1..e2a38b9b 100644
+--- a/pysollib/util.py
++++ b/pysollib/util.py
+@@ -153,6 +153,7 @@ class DataLoader:
+             subdirs = ("",)
+         elif isinstance(subdirs, str):
+             subdirs = (subdirs,)
++        subdirs = self._localeFirstSubdirs(subdirs)
+         for dir in subdirs:
+             f = os.path.join(self.dir, dir, filename)
+             f = os.path.normpath(f)
+@@ -163,6 +164,32 @@ class DataLoader:
+                           self.dir+" "+str(subdirs))
+         return None
+ 
++    def _localeFirstSubdirs(self, subdirs):
++        """說明頁優先找 html/<語系>/ 下的翻譯版（打包時由 localize-help.py 產生），
++        缺檔就自動退回英文原版。只對 html 生效——images／sounds／cardsets 的
++        解析路徑完全不動。"""
++        out = []
++        for lang in self._candidateLocales():
++            for d in subdirs:
++                parts = [p for p in d.split('/') if p]
++                if parts and parts[0] == 'html':
++                    out.append('/'.join(['html', lang] + parts[1:]))
++        return tuple(out) + tuple(subdirs)
++
++    @staticmethod
++    def _candidateLocales():
++        from pysollib.mygettext import myGettext
++        raw = [myGettext.language, os.environ.get('LANGUAGE'),
++               os.environ.get('LC_ALL'), os.environ.get('LC_MESSAGES'),
++               os.environ.get('LANG')]
++        out = []
++        for r in raw:
++            for part in (r or '').split(':'):
++                code = part.split('.')[0].split('@')[0].strip()
++                if code and code not in ('C', 'POSIX') and code not in out:
++                    out.append(code)
++        return out
++
+     def findFile(self, filename, subdirs=None):
+         return self.__findFile(os.path.isfile, filename, subdirs)
+ 

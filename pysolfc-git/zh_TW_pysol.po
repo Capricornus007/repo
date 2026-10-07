@@ -733,13 +733,13 @@ msgstr "十化身環形牌"
 
 #: pysollib\gamedb.py:165
 msgid "Cribbage"
-msgstr "克里比奇（Cribbage）"
+msgstr "克里比奇"
 
 #: pysollib\gamedb.py:166
 #: pysollib\resource.py:216
 #: pysollib\resource.py:316
 msgid "Hex A Deck"
-msgstr "六角A牌組（Hex A Deck）"
+msgstr "六角A牌組"
 
 #: pysollib\gamedb.py:167
 #: pysollib\resource.py:223
@@ -5119,7 +5119,7 @@ msgstr "設定主題(&H)"
 
 #: pysollib\tile\menubar.py:135
 msgid "Alt/Revitalized"
-msgstr "Alt/Revitalized"
+msgstr "另類／復甦版"
 
 #: pysollib\tile\menubar.py:136
 msgid "ITFT1"
@@ -5127,43 +5127,43 @@ msgstr "ITFT1"
 
 #: pysollib\tile\menubar.py:137
 msgid "Scid Blue"
-msgstr "Scid Blue"
+msgstr "Scid 藍"
 
 #: pysollib\tile\menubar.py:138
 msgid "Scid Green"
-msgstr "Scid Green"
+msgstr "Scid 綠"
 
 #: pysollib\tile\menubar.py:139
 msgid "Scid Grey"
-msgstr "Scid Grey"
+msgstr "Scid 灰"
 
 #: pysollib\tile\menubar.py:140
 msgid "Scid Mint"
-msgstr "Scid Mint"
+msgstr "Scid 薄荷"
 
 #: pysollib\tile\menubar.py:141
 msgid "Scid Pink"
-msgstr "Scid Pink"
+msgstr "Scid 粉紅"
 
 #: pysollib\tile\menubar.py:142
 msgid "Scid Purple"
-msgstr "Scid Purple"
+msgstr "Scid 紫"
 
 #: pysollib\tile\menubar.py:143
 msgid "Scid Sand"
-msgstr "Scid Sand"
+msgstr "Scid 沙色"
 
 #: pysollib\tile\menubar.py:144
 msgid "Windows Native"
-msgstr "Windows Native"
+msgstr "Windows 原生"
 
 #: pysollib\tile\menubar.py:145
 msgid "Windows XP Blue"
-msgstr "Windows XP Blue"
+msgstr "Windows XP 藍"
 
 #: pysollib\tile\menubar.py:146
 msgid "XP Native"
-msgstr "XP Native"
+msgstr "XP 原生"
 
 #: pysollib\tile\playeroptionsdialog.py:50
 #: pysollib\tile\playeroptionsdialog.py:57
@@ -6436,7 +6436,7 @@ msgstr "反鋸齒(&A)"
 
 #: pysollib\ui\tktile\menubar.py:188
 msgid "B&ox"
-msgstr "&Box"
+msgstr "箱子(&B)"
 
 #: pysollib\ui\tktile\menubar.py:193
 msgid "&Hamming"
