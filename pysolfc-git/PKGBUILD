@@ -3,7 +3,9 @@
 # Carl Smedstad and Eric Bélanger; switched to the upstream git tree.
 pkgname=pysolfc-git
 pkgver=3.6.1.r23.g7a3d146
-pkgrel=1
+# 抬補丁/語系而 pkgver 不動時必須同步 +1：CI 的「已在 release 裡」比對帶 pkgrel，
+# 不抬就會整輪靜默跳過構建（實測 10-07：主題補丁＋牌面樹四筆提交全沒進 feed）。
+pkgrel=2
 pkgdesc="PySol (Fan Club edition) is an exciting collection of more than 1000 solitaire games (git version)"
 arch=('any')
 url="https://github.com/shlomif/PySolFC"
