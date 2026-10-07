@@ -20,6 +20,7 @@ depends=(
 )
 makedepends=(
   'git'
+  'gettext'
   'python-build'
   'python-installer'
   'python-setuptools'
@@ -30,8 +31,14 @@ optdepends=(
 )
 provides=('pysolfc')
 conflicts=('pysolfc')
-source=("git+https://github.com/shlomif/PySolFC.git")
-sha256sums=('SKIP')
+# 我方語系（上游 po/ 裡沒有中文）。新增語言＝丟一個 <lang>_pysol.po 進本目錄並列進 source，
+# prepare()/build() 是用萬用字元掃的，不用改腳本。
+source=(
+  "git+https://github.com/shlomif/PySolFC.git"
+  'zh_TW_pysol.po'
+  'zh_CN_pysol.po'
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP')
 
 pkgver() {
   cd PySolFC
@@ -56,10 +63,32 @@ prepare() {
   if [ ! -f data/html/license.html ]; then
     make rules
   fi
+
+  # 帶入我方語系（見上方 source 註解）
+  for _po in "$srcdir"/*_pysol.po; do
+    [ -e "$_po" ] || continue
+    install -Dm644 "$_po" "po/$(basename "$_po")"
+  done
 }
 
 build() {
   cd PySolFC
+  # 上游 `make mo` 的語言清單是寫死的（de fr pl it ru pt_BR），中文不在內，
+  # 所以照同一條公式（msgcat 合併 games+pysol → msgfmt）單獨編我方語系。
+  # 產物落 locale/<lang>/LC_MESSAGES/pysol.mo，由 setup.py 的
+  # get_data_files('locale', 'share/locale') 進 wheel → 裝到 /usr/share/locale。
+  for _po in po/zh_*_pysol.po; do
+    [ -e "$_po" ] || continue
+    _lng=${_po##*/}
+    _lng=${_lng%_pysol.po}
+    if [ -f "po/${_lng}_games.po" ]; then
+      msgcat --use-first "po/${_lng}_games.po" "$_po" > "po/${_lng}.po"
+    else
+      cp "$_po" "po/${_lng}.po"
+    fi
+    install -d "locale/${_lng}/LC_MESSAGES"
+    msgfmt --check -o "locale/${_lng}/LC_MESSAGES/pysol.mo" "po/${_lng}.po"
+  done
   python -m build --wheel --no-isolation
 }
 
