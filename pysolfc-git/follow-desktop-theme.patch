@@ -1,5 +1,5 @@
 diff --git a/pysollib/options.py b/pysollib/options.py
-index d4d2be7..a0433d0 100644
+index d4d2be73..a0433d0b 100644
 --- a/pysollib/options.py
 +++ b/pysollib/options.py
 @@ -145,6 +145,7 @@ solver_iterations_output_step = integer
@@ -37,7 +37,7 @@ index d4d2be7..a0433d0 100644
              self.tile_theme = self.default_tile_theme = 'aqua'
          #
 diff --git a/pysollib/tile/menubar.py b/pysollib/tile/menubar.py
-index 64e14d5..e2605f4 100644
+index 64e14d57..e2605f47 100644
 --- a/pysollib/tile/menubar.py
 +++ b/pysollib/tile/menubar.py
 @@ -123,6 +123,26 @@ class PysolMenubarTk(PysolMenubarTkCommon):
@@ -77,34 +77,57 @@ index 64e14d5..e2605f4 100644
 +            variable=self.tkopt.follow_desktop_theme,
 +            command=self.mOptFollowDesktopTheme)
 diff --git a/pysollib/tile/selectcardset.py b/pysollib/tile/selectcardset.py
-index d93d19d..7906d67 100644
+index d93d19da..bb3a3ee8 100644
 --- a/pysollib/tile/selectcardset.py
 +++ b/pysollib/tile/selectcardset.py
-@@ -52,10 +52,21 @@ class SelectCardsetLeaf(SelectDialogTreeLeaf):
+@@ -49,13 +49,29 @@ class SelectCardsetLeaf(SelectDialogTreeLeaf):
+     pass
+ 
+ 
++def _cardset_leaf_text(obj, by_type):
++    """樹上每列的文字。型別名本來就在 CSI.TYPE_NAME 裡且走 gettext，
++    直接掛在牌面名後面，省得使用者到「按類型」那棵樹來回比對
++    （實測反應：「我看不懂它哪個適用於具體哪個遊戲」）。
++    名字本身已含型別時不再掛第二遍（Hex A Deck（Hex A Deck）那種）。"""
++    if by_type:
++        return obj.name
++    text = obj.name
++    type_name = CSI.TYPE_NAME.get(obj.si.type)
++    if type_name and type_name.lower() not in obj.name.lower():
++        text = '%s（%s）' % (obj.name, type_name)
++    return text
++
++
  class SelectCardsetNode(SelectDialogTreeNode):
      def _getContents(self):
          contents = []
-+        # 樹上每一列原本只有牌面名，使用者看不出「這套牌能配哪一種玩法」
-+        # （實測反應：「我看不懂它哪個適用於具體哪個遊戲」）。型別名本來就在
-+        # CSI.TYPE_NAME 裡、而且走 gettext，所以直接掛在名字後面，
-+        # 省得他到「按類型」那棵樹來回比對。
 +        by_type = isinstance(self.tree.data, SelectCardsetByTypeData)
          for obj in self.tree.data.all_objects:
              if self.select_func(obj):
-+                text = obj.name
-+                if not by_type:
-+                    type_name = CSI.TYPE_NAME.get(obj.si.type)
-+                    # 名字本身就帶型別時不要再掛一遍（Hex A Deck（Hex A Deck）那種）
-+                    if type_name and type_name.lower() not in obj.name.lower():
-+                        text = '%s（%s）' % (obj.name, type_name)
                  node = SelectCardsetLeaf(
 -                    self.tree, self, text=obj.name, key=obj.index)
-+                    self.tree, self, text=text, key=obj.index)
++                    self.tree, self,
++                    text=_cardset_leaf_text(obj, by_type), key=obj.index)
                  contents.append(node)
          return contents or self.tree.data.no_contents
  
+@@ -258,6 +274,14 @@ class SelectCardsetDialogWithPreview(MfxDialog):
+ 
+         # Tree
+         font = app.getFont("default")
++        # 每列掛上型別標註後標籤變長，寫死的 275px 會把「Hanafuda 200 Years
++        # Small（花札）」這種截斷；照最長標籤的實測寬度放寬，上限仍是對話框的 1/2.5。
++        if font:
++            widest = max(
++                [int(self.top.tk.call('font', 'measure', font,
++                                      _cardset_leaf_text(obj, False)))
++                 for obj in self.TreeDataHolder_Class.data.all_objects] + [0])
++            w1 = int(max(w1, min(pw / 2.5, widest + 78)))
+         self.tree = self.Tree_Class(self, tree_frame, key=key,
+                                     default=kw.default,
+                                     font=font, width=w1)
 diff --git a/pysollib/ui/tktile/menubar.py b/pysollib/ui/tktile/menubar.py
-index cddf152..c099cdc 100644
+index cddf152f..c099cdc3 100644
 --- a/pysollib/ui/tktile/menubar.py
 +++ b/pysollib/ui/tktile/menubar.py
 @@ -350,6 +350,7 @@ class PysolMenubarTkCommon:
@@ -124,7 +147,7 @@ index cddf152..c099cdc 100644
          tkopt.autofaceup.set(opt.autofaceup)
          tkopt.autodrop.set(opt.autodrop)
 diff --git a/pysollib/winsystems/common.py b/pysollib/winsystems/common.py
-index a91d7c4..4c52015 100644
+index a91d7c41..4c52015b 100644
 --- a/pysollib/winsystems/common.py
 +++ b/pysollib/winsystems/common.py
 @@ -64,6 +64,10 @@ def set_theme(app, top, theme):
@@ -139,7 +162,7 @@ index a91d7c4..4c52015 100644
  
  def get_font_name(font):
 diff --git a/pysollib/winsystems/x11.py b/pysollib/winsystems/x11.py
-index 2b66f06..a026116 100644
+index 2b66f06d..a0261164 100644
 --- a/pysollib/winsystems/x11.py
 +++ b/pysollib/winsystems/x11.py
 @@ -127,6 +127,11 @@ def init_root_window(root, app):
