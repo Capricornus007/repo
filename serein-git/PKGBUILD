@@ -1,0 +1,108 @@
+# Maintainer: Capricornus007 <capricornus@outlook.com>
+# Serein 的「源碼直出」版：吃上游 main 尖端，讓還沒發 nightly 的改動能立刻看到。
+#
+# 為什麼要另開一顆、而不是把既有的 `serein` 改成跟 main：
+#   `serein` 那顆按上游 nightly tag（`v1.0.0-nightly.YYYYMMDD.NN`）走，CI 從 release
+#   現算版號、發新版就自動換代，這是「可用版」的語意，不該被浮動 HEAD 污染。
+#   實測例子（2026-10-07）：中文語系 PR #573 在 10-06 23:29Z 就進 main 了，但上游最新
+#   nightly 仍是 10-04 的 `.54` → 只升 `serein` 拿不到中文，得等他們下一發（節奏 1–3 天）。
+#   這顆就是那個「等不到」的出口；兩顆只差來源固定與否，建置流程、依賴清單、Artix 閘門
+#   全部沿用 `serein` 那份（同一個 build() 與 package()，改一处要兩处同步）。
+#
+# ⚠️ in-tree 包四接點（少一個就永遠進不了 feed）：
+#   1) 本目錄（CI 用 contents API 抓整目錄，只抓 PKGBUILD 會缺檔）
+#   2) `.github/workflows/build-git-packages.yml` 的矩陣條目
+#   3) `.github/workflows/build-packages.yml` 的 in-tree 取檔 case（見檔頭註解那串包名）
+#   4) 同檔「更新校驗和並回推」那步的排除鏈（in-tree 沒有 Capricornus007/serein-git.git 那個獨立倉）
+#
+# ⚠️ provides/conflicts/replaces 列的是「安裝用的包名」`serein`（不是虛擬名）——
+#   這是 gh-git 那輪撞檔（github-cli 不提供 gh）學到的：聲稱必須對上真實包名。
+
+_upstream='ViceVerse-cz/Serein'
+pkgname=serein-git
+pkgver=1.0.0.nightly.20261004.54.r0.g000000000
+pkgrel=1
+pkgdesc='Unofficial native Discord client (git version, built from upstream main)'
+arch=('x86_64')
+url="https://github.com/${_upstream}"
+license=('MIT' 'Apache-2.0')
+depends=(
+    'alsa-lib'
+    'dbus'
+    'glib2'
+    'glibc'
+    'gst-plugin-pipewire'
+    'gst-plugins-base'
+    'gst-plugins-base-libs'
+    'gst-plugins-good'
+    'gstreamer'
+    'gtk4'
+    'hicolor-icon-theme'
+    'libgcc'
+    'libpulse'
+    'libsoup3'
+    'libstdc++'
+    'libxkbcommon-x11'
+    'webkitgtk-6.0'
+    'xdg-desktop-portal'
+)
+makedepends=('cmake' 'desktop-file-utils' 'git' 'pkgconf' 'python' 'rust')
+optdepends=(
+    'gnome-keyring: Secret Service credential provider'
+    'gst-plugins-bad: hardware screen encoding'
+    'gst-libav: inline video'
+    'xdg-desktop-portal-gtk: screen sharing and global shortcuts on GTK desktops'
+    'xdg-desktop-portal-kde: screen sharing and global shortcuts on KDE Plasma'
+)
+provides=('serein')
+conflicts=('serein')
+replaces=('serein')
+options=('!debug' '!lto')
+# 目錄名前綴 `serein::`（= ${pkgname%-git}）是必須的：CI 的通用 pkgver 探測把源克隆進
+# ${pkgname%-git} 再跑 pkgver()，對不上就會恆 skip（job 綠但永不產包）。
+source=("serein::git+https://github.com/${_upstream}.git#branch=main")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd serein
+    # 上游 tag 形如 v1.0.0-nightly.20261004.54；describe 的距離 r 在兩次 nightly 之間單調遞增，
+    # 新 tag 出現時距離歸零但 tag 段本身變大，所以整體仍單調。--abbrev=12 釘死 hash 長度，
+    # 免得 blobless 探測克隆與 makepkg 完整克隆因 core.abbrev=auto 給出不同長度（本倉 pi-coding-agent 實測過）。
+    git describe --tags --long --abbrev=12 | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+    cd "$srcdir/serein"
+    # 上游的版號燒錄腳本吃「去掉 v 的原始字串」；這裡給 describe 的結果（含 .rN.gHASH），
+    # 讓 about 頁能看出這是尖端版而非某個 nightly。
+    python3 .github/release/version.py "$(git describe --tags)"
+}
+
+build() {
+    cd "$srcdir/serein"
+    rm -rf -- dist
+    cargo xtask package --format dir
+}
+
+package() {
+    cd "$srcdir/serein"
+    install -d "$pkgdir"
+    cp -a -- dist/linux-root/usr "$pkgdir/"
+    install -d "$pkgdir/usr/share/licenses/$pkgname"
+    install -m644 LICENSE-MIT LICENSE-APACHE "$pkgdir/usr/share/licenses/$pkgname/"
+
+    # Artix 閘門（與 serein 那顆同一條）：產物裡出現任何 systemd 檔就判失敗。
+    # find 對不存在目錄回非零、而 package() 在 errexit 下跑 → 先判目錄存在再吃退出碼，
+    # 否則「正常情況（無 systemd 檔）」會讓 package() 靜默中止、日誌一行錯誤都沒有。
+    local _unit=""
+    if [ -d "$pkgdir/usr/lib/systemd" ]; then
+      _unit="$(find "$pkgdir/usr/lib/systemd" -type f -print -quit 2>/dev/null || true)"
+    fi
+    if [ -n "$_unit" ]; then
+        echo "錯誤：產物含 systemd 檔案（$_unit），本倉的 Artix 版不接受 systemd 依賴。" >&2
+        echo "      處置：確認上游是否新增了 unit／依賴；必要時在 package() 裡移除該檔，" >&2
+        echo "      而不是把 systemd-libs 加回 depends。" >&2
+        return 1
+    fi
+    echo "systemd 閘門：產物內無 usr/lib/systemd/** 檔案（Artix 可裝）"
+}
