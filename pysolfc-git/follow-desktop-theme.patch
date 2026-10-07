@@ -1,0 +1,129 @@
+diff --git a/pysollib/options.py b/pysollib/options.py
+index d4d2be7..a0433d0 100644
+--- a/pysollib/options.py
++++ b/pysollib/options.py
+@@ -145,6 +145,7 @@ solver_iterations_output_step = integer
+ solver_preset = string
+ display_win_message = boolean
+ language = string
++follow_desktop_theme = integer(0, 1)
+ table_zoom = list
+ 
+ [sound_samples]
+@@ -288,6 +289,7 @@ class Options:
+         ('tree_icon_style', 'str'),
+         ('button_icon_style', 'str'),
+         ('tile_theme', 'str'),
++        ('follow_desktop_theme', 'int'),
+         ('default_tile_theme', 'str'),
+         ('toolbar', 'int'),
+         ('toolbar_land', 'int'),
+@@ -401,6 +403,7 @@ class Options:
+         self.tree_icon_style = DEFAULT_TREE_ICON_STYLE
+         self.button_icon_style = DEFAULT_BUTTON_ICON_STYLE
+         self.tile_theme = 'default'
++        self.follow_desktop_theme = 0
+         self.default_tile_theme = 'default'
+         self.toolbar = 1       # 0 == hide, 1,2,3,4 == top, bottom, left, right
+         # used with 'kivy' version in addition:
+@@ -590,6 +593,9 @@ class Options:
+         elif WIN_SYSTEM == 'x11':
+             self.tile_theme = 'clam'
+             self.default_tile_theme = 'default'
++            # 跟隨桌面調色盤（KDE/Qt/Kvantum 的 kdeglobals，或 GTK 主題的 css）。
++            # 只有 x11 預設開：win32/aqua 本來就用原生主題。
++            self.follow_desktop_theme = 1
+         elif WIN_SYSTEM == 'aqua':
+             self.tile_theme = self.default_tile_theme = 'aqua'
+         #
+diff --git a/pysollib/tile/menubar.py b/pysollib/tile/menubar.py
+index 64e14d5..e2605f4 100644
+--- a/pysollib/tile/menubar.py
++++ b/pysollib/tile/menubar.py
+@@ -123,6 +123,26 @@ class PysolMenubarTk(PysolMenubarTkCommon):
+         if self.app.refreshToolbarImages():
+             self.top.update_idletasks()
+ 
++    def mOptFollowDesktopTheme(self, *event):
++        on = bool(self.tkopt.follow_desktop_theme.get())
++        self.app.opt.follow_desktop_theme = int(on)
++        try:
++            from ttkthemes import themed_style
++            style = themed_style.ThemedStyle(self.top)
++        except ImportError:
++            style = ttk.Style(self.top)
++        from pysollib import systemtheme
++        try:
++            style.theme_use(self.app.opt.tile_theme)
++        except Exception:
++            pass
++        if on:
++            systemtheme.apply(self.top, style)
++        else:
++            systemtheme.reset(self.top, style)
++        if self.app.refreshToolbarImages():
++            self.top.update_idletasks()
++
+     def createThemesMenu(self, menu):
+         submenu = MfxMenu(menu, label=n_("Set t&heme"))
+ 
+@@ -155,3 +175,8 @@ class PysolMenubarTk(PysolMenubarTkCommon):
+                 n = t.capitalize()
+             submenu.add_radiobutton(label=n, variable=self.tkopt.theme,
+                                     value=t, command=self.mOptTheme)
++        submenu.add_separator()
++        submenu.add_checkbutton(
++            label=_("Follow the &desktop theme (KDE/Kvantum/GTK)"),
++            variable=self.tkopt.follow_desktop_theme,
++            command=self.mOptFollowDesktopTheme)
+diff --git a/pysollib/ui/tktile/menubar.py b/pysollib/ui/tktile/menubar.py
+index cddf152..c099cdc 100644
+--- a/pysollib/ui/tktile/menubar.py
++++ b/pysollib/ui/tktile/menubar.py
+@@ -350,6 +350,7 @@ class PysolMenubarTkCommon:
+             negative_bottom=tkinter.BooleanVar(),
+             pause=tkinter.BooleanVar(),
+             theme=tkinter.StringVar(),
++            follow_desktop_theme=tkinter.BooleanVar(),
+             toolbar_vars={},
+             statusbar_vars={},
+         )
+@@ -360,6 +361,7 @@ class PysolMenubarTkCommon:
+ 
+     def _setOptions(self):
+         tkopt, opt = self.tkopt, self.app.opt
++        tkopt.follow_desktop_theme.set(bool(getattr(opt, 'follow_desktop_theme', 0)))
+         # set state of the menu items
+         tkopt.autofaceup.set(opt.autofaceup)
+         tkopt.autodrop.set(opt.autodrop)
+diff --git a/pysollib/winsystems/common.py b/pysollib/winsystems/common.py
+index a91d7c4..4c52015 100644
+--- a/pysollib/winsystems/common.py
++++ b/pysollib/winsystems/common.py
+@@ -64,6 +64,10 @@ def set_theme(app, top, theme):
+     except Exception:
+         print_err(_('invalid theme name: ') + theme)
+         style.theme_use(app.opt.default_tile_theme)
++    if getattr(app.opt, 'follow_desktop_theme', 0):
++        # ttk 主題只決定「形狀」，顏色由桌面調色盤蓋上去（見 pysollib/systemtheme.py）
++        from pysollib import systemtheme
++        systemtheme.apply(top, style)
+ 
+ 
+ def get_font_name(font):
+diff --git a/pysollib/winsystems/x11.py b/pysollib/winsystems/x11.py
+index 2b66f06..a026116 100644
+--- a/pysollib/winsystems/x11.py
++++ b/pysollib/winsystems/x11.py
+@@ -127,6 +127,11 @@ def init_root_window(root, app):
+         if app.opt.tile_theme == 'clam':
+             style.configure('TLabelframe', labeloutside=False,
+                             labelmargins=(8, 0, 8, 0))
++        if app.opt.follow_desktop_theme:
++            # 上面那串 option_add 把 Listbox/Text 寫死成白底、選取色寫死 #0a5f89，
++            # 所以覆蓋必須放在最後，否則會被它們吃掉。
++            from pysollib import systemtheme
++            systemtheme.apply(root, style)
+ 
+     #
+     else:

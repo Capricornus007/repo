@@ -7142,3 +7142,7 @@ msgstr "总步数"
 msgid "Set font"
 msgstr "设置字体"
 
+
+#: pysollib/tile/menubar.py (in-tree follow-desktop-theme patch)
+msgid "Follow the &desktop theme (KDE/Kvantum/GTK)"
+msgstr "跟随&桌面主题（KDE/Kvantum/GTK）"

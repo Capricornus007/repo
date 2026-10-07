@@ -4703,7 +4703,7 @@ msgstr "全部背景"
 #: pysollib\tile\selecttile.py:75
 #: pysollib\tk\selecttile.py:67
 msgid "(no tiles)"
-msgstr "（無桌面背景）"
+msgstr "（無背景）"
 
 #: pysollib\pysolgtk\selecttile.py:190
 #: pysollib\tile\selecttile.py:402
@@ -7142,3 +7142,7 @@ msgstr "總步數"
 msgid "Set font"
 msgstr "設定字型"
 
+
+#: pysollib/tile/menubar.py (in-tree follow-desktop-theme patch)
+msgid "Follow the &desktop theme (KDE/Kvantum/GTK)"
+msgstr "跟隨&桌面主題（KDE/Kvantum/GTK）"

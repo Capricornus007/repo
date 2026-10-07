@@ -33,12 +33,15 @@ provides=('pysolfc')
 conflicts=('pysolfc')
 # 我方語系（上游 po/ 裡沒有中文）。新增語言＝丟一個 <lang>_pysol.po 進本目錄並列進 source，
 # prepare()/build() 是用萬用字元掃的，不用改腳本。
+# follow-desktop-theme.patch + systemtheme.py：讓 Tk 元件跟隨桌面調色盤（見檔內說明）。
 source=(
   "git+https://github.com/shlomif/PySolFC.git"
   'zh_TW_pysol.po'
   'zh_CN_pysol.po'
+  'systemtheme.py'
+  'follow-desktop-theme.patch'
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 pkgver() {
   cd PySolFC
@@ -69,6 +72,19 @@ prepare() {
     [ -e "$_po" ] || continue
     install -Dm644 "$_po" "po/$(basename "$_po")"
   done
+
+  # in-tree 補丁：讓 Tk 元件跟隨桌面調色盤（KDE/Qt/Kvantum 的 kdeglobals，或 GTK 主題的 css）。
+  # 上游 pysollib/winsystems/x11.py 把 Listbox/Text 寫死成白底、選取色寫死 #0a5f89，
+  # 所以深色桌面下整個視窗框架還是 90 年代的灰。零新依賴——ttkthemes 在 Arch 與 AUR
+  # 都不存在（只有 PyPI 有），這裡只用 Tk 內建的 clam 主題自己上色。
+  install -Dm644 "$srcdir/systemtheme.py" pysollib/systemtheme.py
+  if ! patch -p1 -N -i "$srcdir/follow-desktop-theme.patch"; then
+    # 打不上＝上游動過 options.py / winsystems/common.py / winsystems/x11.py /
+    # ui/tktile/menubar.py / tile/menubar.py 其中之一。靜默跳過會發出一個
+    # 「看起來正常、其實沒跟隨主題」的包，所以寧可紅，別偷跑。
+    echo "ERROR: follow-desktop-theme.patch 套用失敗——照 pysollib/systemtheme.py 的文件重做補丁"
+    exit 1
+  fi
 }
 
 build() {
