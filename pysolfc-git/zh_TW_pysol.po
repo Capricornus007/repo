@@ -609,7 +609,7 @@ msgstr "載入外掛 %(file)s 時出錯：%(err)s"
 
 #: pysollib\gamedb.py:136
 msgid "Baker's Dozen"
-msgstr "Baker's Dozen"
+msgstr "貝克一打（Baker's Dozen）"
 
 #: pysollib\gamedb.py:137
 msgid "Beleaguered Castle"
@@ -617,7 +617,7 @@ msgstr "圍城"
 
 #: pysollib\gamedb.py:138
 msgid "Canfield"
-msgstr "Canfield"
+msgstr "坎菲爾德（Canfield）"
 
 #: pysollib\gamedb.py:139
 msgid "Fan"
@@ -733,19 +733,19 @@ msgstr "十化身環形牌"
 
 #: pysollib\gamedb.py:165
 msgid "Cribbage"
-msgstr "Cribbage"
+msgstr "克里比奇（Cribbage）"
 
 #: pysollib\gamedb.py:166
 #: pysollib\resource.py:216
 #: pysollib\resource.py:316
 msgid "Hex A Deck"
-msgstr "Hex A Deck"
+msgstr "六角A牌組（Hex A Deck）"
 
 #: pysollib\gamedb.py:167
 #: pysollib\resource.py:223
 #: pysollib\resource.py:318
 msgid "Ishido"
-msgstr "Ishido"
+msgstr "石戶（Ishido）"
 
 #: pysollib\gamedb.py:168
 msgid "Lights Out"
@@ -2239,7 +2239,7 @@ msgstr "發到暫存堆"
 
 #: pysollib\wizardutil.py:153
 msgid "Grounds for a Divorce"
-msgstr "Grounds for a Divorce"
+msgstr "離婚理由（Grounds for a Divorce）"
 
 #: pysollib\wizardutil.py:156
 #: pysollib\wizardutil.py:204

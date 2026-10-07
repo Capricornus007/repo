@@ -3,9 +3,13 @@
 # Carl Smedstad and Eric Bélanger; switched to the upstream git tree.
 pkgname=pysolfc-git
 pkgver=3.6.1.r23.g7a3d146
-# 抬補丁/語系而 pkgver 不動時必須同步 +1：CI 的「已在 release 裡」比對帶 pkgrel，
-# 不抬就會整輪靜默跳過構建（實測 10-07：主題補丁＋牌面樹四筆提交全沒進 feed）。
-pkgrel=2
+# epoch 是這包唯一的換代開關，別用 pkgrel：本包有 pkgver()，只要它算出的版本與這裡的
+# 靜態 pkgver 不同，makepkg 就會把 pkgrel 重置為 1（CI 的 plan 步也照這個預測比對，
+# 日誌原話「pkgver() 會改版本 → makepkg 必把 pkgrel 重置為 1」）。實測 10-07：
+# 抬 pkgrel=2 之後仍「跳过构建：pysolfc-git-3.6.1.r37.gc39976f-1 已在 release 里」，
+# feed 那顆停在 13:48 的純上游版（無語系／無主題補丁）。改完補丁或語系就 +1 epoch。
+epoch=1
+pkgrel=1
 pkgdesc="PySol (Fan Club edition) is an exciting collection of more than 1000 solitaire games (git version)"
 arch=('any')
 url="https://github.com/shlomif/PySolFC"
@@ -33,17 +37,22 @@ optdepends=(
 )
 provides=('pysolfc')
 conflicts=('pysolfc')
-# 我方語系（上游 po/ 裡沒有中文）。新增語言＝丟一個 <lang>_pysol.po 進本目錄並列進 source，
-# prepare()/build() 是用萬用字元掃的，不用改腳本。
+# 我方語系（上游 po/ 裡沒有中文）。每個語系有兩份目錄：
+#   <lang>_pysol.po  ＝ 介面字串（對應 po/pysol.pot，1324 條）
+#   <lang>_games.po  ＝ 遊戲名稱（對應 po/games.pot，1848 條）
+# 新增語言＝把這兩個檔丟進本目錄並列進 source，prepare()/build() 用萬用字元掃，不用改腳本。
+# build() 會 msgcat 把兩份合併成 po/<lang>.po 再 msgfmt（與上游 `make mo` 同一條公式）。
 # follow-desktop-theme.patch + systemtheme.py：讓 Tk 元件跟隨桌面調色盤（見檔內說明）。
 source=(
   "git+https://github.com/shlomif/PySolFC.git"
   'zh_TW_pysol.po'
+  'zh_TW_games.po'
   'zh_CN_pysol.po'
+  'zh_CN_games.po'
   'systemtheme.py'
   'follow-desktop-theme.patch'
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 pkgver() {
   cd PySolFC
@@ -69,10 +78,18 @@ prepare() {
     make rules
   fi
 
-  # 帶入我方語系（見上方 source 註解）
-  for _po in "$srcdir"/*_pysol.po; do
+  # 帶入我方語系（見上方 source 註解）。缺檔要紅：CI 的「拉取对应的套件仓库」步驟
+  # 過去對本包只 curl 了 PKGBUILD，語系檔根本沒下來，結果徽章全綠、包裡一個中文
+  # 字都沒有（10-07 實測）。靜默跳過等于騙人，所以逐檔點名。
+  for _po in "$srcdir"/zh_*.po; do
     [ -e "$_po" ] || continue
     install -Dm644 "$_po" "po/$(basename "$_po")"
+  done
+  for _need in zh_TW_pysol.po zh_TW_games.po zh_CN_pysol.po zh_CN_games.po; do
+    if [ ! -f "po/$_need" ]; then
+      echo "ERROR: 缺 po/$_need —— 語系檔沒被抓進 build 目錄，別發沒中文的包"
+      exit 1
+    fi
   done
 
   # in-tree 補丁：讓 Tk 元件跟隨桌面調色盤（KDE/Qt/Kvantum 的 kdeglobals，或 GTK 主題的 css）。
