@@ -44,6 +44,10 @@ KEYS = (
 
 _RGB = re.compile(r'^\s*(\d{1,3})[,\s]+(\d{1,3})[,\s]+(\d{1,3})\s*$')
 _HEX = re.compile(r'#([0-9a-fA-F]{6})\b')
+# Kvantum 的 kvconfig 會寫 `highlight.text.color=white` 這種 X11 色名，
+# 只認 #rrggbb 的話會回 None，而 None 進 tk_setPalette 的鍵值對清單
+# 會炸成 "list must have an even number of elements"（實測過）。
+_NAMED = re.compile(r'^[A-Za-z]+$')
 
 
 def _rgb(value):
@@ -59,11 +63,98 @@ def _rgb(value):
             return None
         return '#%02x%02x%02x' % (r, g, b)
     m = _HEX.search(str(value))
-    return m.group(1).lower() and '#' + m.group(1).lower() if m else None
+    if m:
+        return '#' + m.group(1).lower()
+    text = str(value).strip()
+    if _NAMED.match(text):
+        # 交給 Tk 自己解 X11 色名，但一定要回字串、不能回 None
+        return text.lower()
+    return None
 
 
 def _home(*p):
     return os.path.join(os.path.expanduser('~'), *p)
+
+
+# --------------------------------------------------------------------------
+# Kvantum theme config (the colours Qt/Kvantum actually paint with)
+# --------------------------------------------------------------------------
+def _kvantum_theme_files():
+    """Yield candidate kvconfig paths for the *active* Kvantum theme."""
+    import glob
+    active = None
+    cfg = _home('.config', 'Kvantum', 'kvantum.kvconfig')
+    if os.path.isfile(cfg):
+        cp = configparser.ConfigParser(interpolation=None)
+        cp.optionxform = str
+        try:
+            cp.read(cfg, encoding='utf-8')
+            active = cp.get('General', 'theme', fallback=None) or \
+                cp.get('General', 'Theme', fallback=None)
+        except Exception:
+            active = None
+    names = [active] if active else []
+    if active and '/' in active:
+        names.append(active.split('/')[-1])
+    names.append('LayanDark')  # harmless: only used if nothing else resolves
+    out = []
+    for name in names:
+        for pattern in (
+                _home('.config', 'Kvantum', '*', name + '.kvconfig'),
+                '/usr/share/Kvantum/' + name + '/' + name + '.kvconfig',
+                '/usr/share/Kvantum/' + name + '.kvconfig'):
+            out.extend(sorted(glob.glob(pattern)))
+    seen, uniq = set(), []
+    for path in out:
+        if path not in seen and os.path.isfile(path):
+            seen.add(path)
+            uniq.append(path)
+    return uniq
+
+
+def _from_kvantum_file(path):
+    cp = configparser.ConfigParser(interpolation=None)
+    cp.optionxform = str
+    try:
+        cp.read(path, encoding='utf-8')
+    except Exception:
+        return None
+    sec = 'GeneralColors'
+    if not cp.has_section(sec):
+        return None
+    get = lambda key: _rgb(cp.get(sec, key, fallback=None))
+    pal = {
+        'background': get('window.color'),
+        'foreground': get('window.text.color'),
+        'base': get('base.color'),
+        'text': get('text.color'),
+        'button': get('button.color'),
+        'button_text': get('button.text.color'),
+        'selection': get('highlight.color'),
+        'selection_text': get('highlight.text.color'),
+        'tooltip': get('window.color'),
+        'tooltip_text': get('tooltip.text.color'),
+        'inactive': get('disabled.text.color'),
+        # Kvantum 的 focus/選取強調色就是 highlight，不是 kdeglobals 的 DecorationFocus
+        'focus': get('highlight.color'),
+    }
+    alt = get('alt.base.color')
+    if alt:
+        pal['alternate'] = alt
+    shade = get('dark.color')
+    if shade:
+        pal['shade'] = shade
+    if not pal.get('background'):
+        return None
+    return pal
+
+
+def _from_kvantum():
+    for path in _kvantum_theme_files():
+        pal = _from_kvantum_file(path)
+        if pal:
+            return pal
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -196,7 +287,17 @@ def _from_gtk(theme_name, prefer_dark):
 # public API
 # --------------------------------------------------------------------------
 def read_palette():
-    """Return a palette dict, or None when nothing usable was found."""
+    """Return a palette dict, or None when nothing usable was found.
+
+    Source order matters and was measured on a real Layan-Dark + Kvantum
+    desktop: kdeglobals said window=#3d3d3e / selection=#737373 while
+    Kvantum's own theme file (and the qt5ct palette) paint window=#31313a
+    / highlight=#5657f5.  So the theme engine that actually draws the
+    widgets wins.
+    """
+    pal = _from_kvantum()
+    if pal:
+        return pal
     for path in (
             os.environ.get('KDE_CONFIG_HOME') and
             os.path.join(os.environ['KDE_CONFIG_HOME'], 'kdeglobals'),
@@ -311,18 +412,20 @@ def apply(root, style=None):
     pal = _fill_gaps(pal)
     dark = is_dark(pal)
 
-    root.tk_setPalette(
-        background=pal['background'],
-        foreground=pal['foreground'],
-        selectBackground=pal['selection'],
-        selectForeground=pal['selection_text'],
-        activeBackground=pal['button'],
-        activeForeground=pal['button_text'],
-        disabledForeground=pal['inactive'],
-        highlightColor=pal['focus'],
-        highlightBackground=pal['selection'],
-        troughColor=pal['alternate'],
-    )
+    palette_args = {
+        'background': pal['background'],
+        'foreground': pal['foreground'],
+        'selectBackground': pal['selection'],
+        'selectForeground': pal['selection_text'],
+        'activeBackground': pal['button'],
+        'activeForeground': pal['button_text'],
+        'disabledForeground': pal['inactive'],
+        'highlightColor': pal['focus'],
+        'highlightBackground': pal['selection'],
+        'troughColor': pal['alternate'],
+    }
+    # 少一個顏色就少傳一個鍵，不要讓 None 混進鍵值對
+    root.tk_setPalette(**{k: v for k, v in palette_args.items() if v})
     add = root.option_add
     add('*Menu.background', pal['background'], 60)
     add('*Menu.foreground', pal['foreground'], 60)
@@ -355,7 +458,7 @@ def apply(root, style=None):
     except Exception:
         return pal
 
-    border = _mix(pal['background'], pal['foreground'], 0.35)
+    border = pal.get('shade') or _mix(pal['background'], pal['foreground'], 0.35)
     edge = _mix(pal['background'], pal['foreground'], 0.2)
     style.configure(
         '.',
