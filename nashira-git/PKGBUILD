@@ -7,7 +7,7 @@
 
 pkgname=nashira-git
 pkgver=0.1.75.r1.g9dc76fa
-pkgrel=1
+pkgrel=2
 pkgdesc="Nashira — Matrix messenger for Android and Linux (Kotlin/Compose Multiplatform, built from master)"
 arch=('x86_64')
 url="https://github.com/Capricornus007/nashira"
@@ -17,7 +17,9 @@ depends=('xdg-utils')
 # 現場 jlink 出來的（取 $JAVA_HOME/jmods），不是依賴系統 java。
 # 換 JBR 的理由見主倉 #62：OpenJDK 沒有 sun.awt.X11.XInputMethod$ClientComponentCaretPositionTracker，
 # 輸入法候選窗就不會跟光標。JBR 只有 **sdk** 變體帶 jmods（runtime 變體的 jmods/ 是空的）。
-makedepends=('git' 'jbr21' 'unzip')
+# jbr21 與 jbr25 都要：用哪顆是**讀倉庫自己宣告的 jvmToolchain(N)** 決定的（見下面 nashira_jbr_home），
+# 所以兩條版本線都得能建。這兩個包是分版本可共裝的（jbrNN），不會互相踢掉。
+makedepends=('git' 'jbr21' 'jbr25' 'unzip' 'python3' 'zip')
 provides=('nashira')
 conflicts=('nashira')
 options=('!strip' '!debug')
@@ -37,15 +39,31 @@ pkgver() {
   printf '%s.r%s\n' "$base" "$rev" | tr '-' '.'             # 例：0.1.45.r1.g8fb9a30
 }
 
+# 該用哪顆 JBR，由倉庫自己宣告的 `jvmToolchain(N)` 決定，不寫死在本檔。
+# 寫死的下場剛剛發生過：上游把 toolchain 從 21 升到 25，本機這條路若還釘死 /opt/jbr21，
+# 做出來的包用的執行期就跟 CI 不是同一顆（規則 71「配置寫了不等於套上」的同一類坑）。
+nashira_jbr_home() {
+  local need
+  need=$(grep -oE 'jvmToolchain\(([0-9]+)\)' desktopApp/build.gradle.kts | grep -oE '[0-9]+' | tail -1)
+  if [ -z "$need" ]; then
+    echo "讀不到 desktopApp/build.gradle.kts 裡的 jvmToolchain(N)，不知道该用哪顆 JBR——拒絕瞎猜預設值" >&2
+    return 1
+  fi
+  printf '/opt/jbr%s' "$need"
+}
+
 build() {
   cd nashira
   # 只建桌面 app image（不碰 androidApp；configuration 階段不需要 Android
   # SDK——上游 release.yml 同一條命令在無 SDK 的 runner 上驗證過可行）。
   # 缺 JBR 就直接紅，**不要靜默退回系統 OpenJDK**：退回去做出來的包照樣能裝能跑，
   # 只是輸入法候選窗又不跟光標，而 CI 全綠——這正是規則 71「配置寫了不等於套上」那個坑。
-  export JAVA_HOME=/opt/jbr21
+  local jbr
+  jbr="$(nashira_jbr_home)" || return 1
+  export JAVA_HOME="$jbr"
+  echo "構建用 $JAVA_HOME（倉庫宣告的 jvmToolchain 版本）"
   [ -x "$JAVA_HOME/bin/jlink" ] && [ -n "$(ls "$JAVA_HOME/jmods"/*.jmod 2>/dev/null)" ] \
-    || { echo "找不到 $JAVA_HOME（含 jmods）；jbr21 沒裝成？" >&2; return 1; }
+    || { echo "找不到 $JAVA_HOME（含 jmods）；對應的 jbrNN 沒裝成？" >&2; return 1; }
   export PATH="$JAVA_HOME/bin:$PATH"
   # --no-daemon：容器/CI 友好，不留常駐 JVM
   ./gradlew :desktopApp:createDistributable --no-daemon --console=plain
@@ -58,6 +76,18 @@ package() {
 
   install -dm755 "${pkgdir}/opt/nashira"
   cp -a "${dist}/." "${pkgdir}/opt/nashira/"
+
+  # 體積精簡（用戶 2026-10-07「186+27 那咋辦，能不能壓到 150 以下」）。
+  # 腳本在主倉 packaging/ 底下，release.yml 的 arch job 跑同一份——兩邊同一把刀，
+  # 不是只有 AUR 版比較小（規則 71：驗產物；這裡直接印出前後體積）。
+  # 失敗就讓打包紅：寧可不出貨，也不要「以為有套上」。
+  local before after
+  before=$(du -sm "${pkgdir}/opt/nashira" | cut -f1)
+  python3 packaging/shrink-app-image.py "${pkgdir}/opt/nashira" \
+    || { echo "::error:: 體積精簡腳本失敗" >&2; return 1; }
+  after=$(du -sm "${pkgdir}/opt/nashira" | cut -f1)
+  echo "==> 體積精簡：${before}MB → ${after}MB（省 $((before - after))MB）"
+  [ "$after" -lt "$before" ] || { echo "::error:: 精簡後沒有變小" >&2; return 1; }
 
   # desktop entry：jpackage 的 app image 不含 .desktop（只在 deb/rpm 打包時
   # 生成；上游 release 的 .pkg.tar.zst 同樣缺——真實缺口，這裡補上）。
@@ -89,7 +119,9 @@ EOF
   # 而不是驗 build 環境用了哪顆 JDK——後者綠了不代表包裡是 JBR。
   # jpackage 的 app image 佈局是 lib/runtime（不是頂層 runtime/）。
   local modules="${pkgdir}/opt/nashira/lib/runtime/lib/modules"
-  if ! /opt/jbr21/bin/jimage list "$modules" 2>/dev/null \
+  local jbr
+  jbr="$(nashira_jbr_home)" || return 1
+  if ! "$jbr/bin/jimage" list "$modules" 2>/dev/null \
        | grep -qi 'ClientComponentCaretPositionTracker'; then
     echo "::error:: 包裡的 runtime 不是 JBR（$modules 查不到光標上報類），拒絕出貨" >&2
     return 1
