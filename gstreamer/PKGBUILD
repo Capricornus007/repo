@@ -332,30 +332,14 @@ check() (
   export CK_TIMEOUT_MULTIPLIER=5
   export NO_AT_BRIDGE=1 GTK_A11Y=none
 
-  # elements_gdkpixbufoverlay 在 CI 容器挂在 gst_element_set_state(PLAYING) 回 FAILURE。
-  # 該測試用 gdk_pixbuf_new_from_file() 讀一張圖，而 gdk-pixbuf 沒有 loader 清單時
-  # 所有格式都不認得 → 建不出解碼鏈 → 狀態切換失敗。容器是乾淨鏡像、gdk-pixbuf2 是
-  # 我們在 CI 裡才補裝的，alpm 那条「更新 loader cache」hook 未必有跑到，所以自己生成
-  # 一份並用 GDK_PIXBUF_MODULE_FILE 指過去（不寫 /usr，不碰系統）。
-  # 出處：repo CI #400，578 條測試裡唯一兩條紅之一。
-  if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1; then
-    gdk-pixbuf-query-loaders > "$PWD/loaders.cache" 2>/dev/null || true
-    export GDK_PIXBUF_MODULE_FILE="$PWD/loaders.cache"
-    echo ">> 自產 loaders.cache：$(grep -c ' loader"' "$PWD/loaders.cache" || true) 個 loader"
-  else
-    echo ">> 容器裡沒有 gdk-pixbuf-query-loaders（代表 gdk-pixbuf2 真的沒裝起來）"
-  fi
-  ls -d /usr/lib/gdk-pixbuf-2.0 /usr/lib64/gdk-pixbuf-2.0 2>/dev/null \
-    || echo ">> /usr/lib/gdk-pixbuf-2.0 與 /usr/lib64/gdk-pixbuf-2.0 都不存在"
-  # CI #401 實測：上面那行在「已裝完 gdk-pixbuf2、跑完 hooks」之後仍報目錄不存在，
-  # 表示問題不是 loader cache 沒生成，而是**套件檔案根本沒落地**。下面三行是要把
-  # 「包註冊了哪些檔／實際看到哪些檔／連結器找不找得到 lib」三者對齊，一次問清楚。
-  echo ">> pacman -Ql gdk-pixbuf2（前 8 行）："
-  pacman -Ql gdk-pixbuf2 2>/dev/null | head -8 || echo "  本地資料庫查不到 gdk-pixbuf2"
-  echo ">> /usr/lib 下含 pixbuf 的實際路徑："
-  ls -d /usr/lib/*pixbuf* 2>/dev/null || echo "  無"
-  echo ">> ldconfig 看到的 gdk_pixbuf："
-  ldconfig -p 2>/dev/null | grep -i gdk_pixbuf | head -3 || echo "  無"
+  # 本機實測（2026-10-08）推翻我原先的假設，故這裡只留觀測、不再覆寫環境：
+  #  - Arch 的 gdk-pixbuf2 2.44.8 共 372 個檔案，**根本不含 /usr/lib/gdk-pixbuf-2.0 目錄**
+  #    （只有 bin／include／libgdk_pixbuf 與兩個 alpm hook），所以容器裡看不到那個目錄是正常。
+  #  - png／jpeg 等格式是內建的：把 GDK_PIXBUF_MODULE_FILE 指向空檔或不存在的檔，
+  #    實測格式數只從 29 掉到 28（少掉目錄中那顆 wmf 模組），PNG 仍讀得到。
+  #  → 「loader cache 缺」不是 elements_gdkpixbufoverlay 失敗的原因，之前自產 cache 的
+  #    改動是在治錯病（還會順帶讓測試看不到 wmf 模組），已收回。
+  echo ">> gdk-pixbuf 觀測：目錄=$(ls -d /usr/lib/gdk-pixbuf-2.0 2>/dev/null || echo 無) 目錄內模組數=$(ls /usr/lib/gdk-pixbuf-2.0/*/loaders/*.so 2>/dev/null | wc -l) query-loaders 行數=$(gdk-pixbuf-query-loaders 2>/dev/null | wc -l)"
 
   # Flaky due to timeouts
   xvfb-run -s "-nolisten local" \
