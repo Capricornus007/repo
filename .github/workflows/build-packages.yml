@@ -203,10 +203,26 @@ jobs:
           fi
 
           if [ "${{ matrix.repo_name }}" = 'gstreamer' ]; then
-            # CI run #396 實測 gst-plugins-good 的 elements_gdkpixbufoverlay FAIL：那條測試
-            # 要用 Pango 實際繪字，而 base-devel 鏡像有 fontconfig 卻**一顆字體都沒有**，
-            # fc-match 回不到實體檔 → 繪字結果全空。補一顆字體把環境補齊，不是讓測試缺席。
-            pacman -S --noconfirm --needed ttf-dejavu
+            # 字體這題是真的缺（base-devel 鏡像有 fontconfig 卻一顆字體都沒有，fc-match 落空），
+            # 但我 10-08 第一次把它寫成「gdkpixbufoverlay 紅是因為 Pango 沒字可繪」是**錯的**：
+            # #397 裝了 ttf-dejavu 之後同一條照樣紅，而且紅點在 set_state 回 FAILURE
+            # （= 元素在 NULL→READY 就掛），同套件的 353 號 elements_gdkpixbufsink 卻是綠的
+            # → 問題在「把 image.jpg 解出來」這條路，不是繪字。字體仍留著（其它測試與渲染
+            # 真的需要），但原因改由下面的 loaders 清單來定。
+            pacman -S --noconfirm --needed ttf-dejavu fontconfig gdk-pixbuf2 libjpeg-turbo libpng shared-mime-info
+            fc-cache -fB || true
+            # gdk-pixbuf2 的 loaders.cache 是**裝包時由 alpm hook 生成**的（pacman -Ql gdk-pixbuf2
+            # 實查有 usr/share/libalpm/hooks/gdk-pixbuf-query-loaders.hook）。容器鏡像是快照日生成的，
+            # 之後我們再 -S 拉新 libjpeg/libpng 時 hook 不一定重跑 → 快取可能少 jpeg 這顆。
+            # 這裡主動重建，並把清單印進日誌：下一輪不管紅綠，都能直接看到 jpeg/png loader 在不在。
+            if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1; then
+              gdk-pixbuf-query-loaders --update-cache || true
+              echo ">> gdk-pixbuf loaders: $(gdk-pixbuf-query-loaders 2>/dev/null | grep -c '^## GdkPixbuf module')"
+              gdk-pixbuf-query-loaders 2>/dev/null | grep -oE '"/usr/lib/gdk-pixbuf-2.0/[0-9.]+/loaders/libpixbufloader-[a-z0-9]+\.so"' | tr '\n' ' '
+              echo
+            else
+              echo ">> gdk-pixbuf-query-loaders 不存在"
+            fi
           fi
 
           if [ "${{ matrix.kind }}" = 'tkg' ]; then
