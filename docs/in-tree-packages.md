@@ -132,3 +132,17 @@ gstreamer／lib32-glib2（用戶 2026-10-08 點名：「lib32-glib2 跟 gst 那�
   · 兩顆都要在「更新校驗和並回推」的 giant if 裡排除（`repo_name` 兩條＋
     `matrix.kind != 'multilib'`），否則 updpkgsums 之後會往**不存在的獨立倉**
     `Capricornus007/gstreamer.git` push（實測該倉不存在也不需要存在）。
+
+CI run #394 的兩記紅與修法（實測，不是推測）：
+  · gstreamer 紅在 `install file (gstreamer.install) does not exist`：
+    該檔是 PKGBUILD 第 361 行用 `install=gstreamer.install` 宣告的，
+    **不在 `source=()` 陣列裡**，所以照 source 陣列抓輔助檔會漏掉它。
+    已從 Arch 官方目錄補抓（144 bytes，內容是給 gst-ptp-helper 上
+    setcap 的 post_install/post_upgrade）。教訓：in-tree 包的輔助檔清單
+    要同時掃 `source=()` **與** `install=`／`backup=` 等變數，不能只看 source。
+  · lib32-glib2 紅在 check()：391 支 gio 測試 Ok 381 / Fail 2，失敗的是
+    `gdbus-peer` 與 `gdbus-address-get-session`，兩支都是 SIGABRT（容器裡
+    沒有 session/system bus，拿不到總線位址），不是断言失敗。Arch 自己的
+    构建環境帶 bus 所以不會遇到。修法：makedepends 加 `dbus`、check() 改成
+    `dbus-run-session -- meson test ...`，給它一個真的 session bus；
+    **不用 --nocheck、也不 --no-suite 跳過整個 gio**，那是放棄 391 支測試。

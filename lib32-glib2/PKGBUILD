@@ -43,6 +43,7 @@ depends=(
   lib32-zlib
 )
 makedepends=(
+  dbus            # 只要 dbus-run-session 這個執行檔，見下方 check() 的說明
   gettext
   git
   lib32-dbus
@@ -124,7 +125,13 @@ build() {
 }
 
 check() {
-  meson test -C build --no-suite flaky --no-suite slow --print-errorlogs
+  # 容器沒有 systemd、也沒有任何 D-Bus 總線：CI run #394 實測 391 支測試
+  # Ok 381 / Fail 2，失敗的正是 gdbus-peer 與 gdbus-address-get-session，
+  # 且兩支都是 killed by signal 6 SIGABRT（拿不到總線位址）而不是断言錯誤。
+  # Arch 自己的构建環境帶 session bus，所以不會遇到——這是我們容器缺環境，
+  # 不是上游測試壞了。修法是給它一個真的 session bus，而不是跳過測試或
+  # --nocheck：那等於放棄 391 支測試，屬降級路徑。
+  dbus-run-session -- meson test -C build --no-suite flaky --no-suite slow --print-errorlogs
 }
 
 package_lib32-glib2() {
