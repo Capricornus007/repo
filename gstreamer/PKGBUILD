@@ -332,6 +332,22 @@ check() (
   export CK_TIMEOUT_MULTIPLIER=5
   export NO_AT_BRIDGE=1 GTK_A11Y=none
 
+  # elements_gdkpixbufoverlay 在 CI 容器挂在 gst_element_set_state(PLAYING) 回 FAILURE。
+  # 該測試用 gdk_pixbuf_new_from_file() 讀一張圖，而 gdk-pixbuf 沒有 loader 清單時
+  # 所有格式都不認得 → 建不出解碼鏈 → 狀態切換失敗。容器是乾淨鏡像、gdk-pixbuf2 是
+  # 我們在 CI 裡才補裝的，alpm 那条「更新 loader cache」hook 未必有跑到，所以自己生成
+  # 一份並用 GDK_PIXBUF_MODULE_FILE 指過去（不寫 /usr，不碰系統）。
+  # 出處：repo CI #400，578 條測試裡唯一兩條紅之一。
+  if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1; then
+    gdk-pixbuf-query-loaders > "$PWD/loaders.cache" 2>/dev/null || true
+    export GDK_PIXBUF_MODULE_FILE="$PWD/loaders.cache"
+    echo ">> 自產 loaders.cache：$(grep -c ' loader"' "$PWD/loaders.cache" || true) 個 loader"
+  else
+    echo ">> 容器裡沒有 gdk-pixbuf-query-loaders（代表 gdk-pixbuf2 真的沒裝起來）"
+  fi
+  ls -d /usr/lib/gdk-pixbuf-2.0 /usr/lib64/gdk-pixbuf-2.0 2>/dev/null \
+    || echo ">> /usr/lib/gdk-pixbuf-2.0 與 /usr/lib64/gdk-pixbuf-2.0 都不存在"
+
   # Flaky due to timeouts
   xvfb-run -s "-nolisten local" \
     meson test -C build --no-rebuild --print-errorlogs -t $CK_TIMEOUT_MULTIPLIER
