@@ -1,0 +1,147 @@
+# 用戶 2026-10-08 指令：「lib32-glib2 跟 gst 那些軟件包爲什麼沒弄源碼直出軟件包？」
+# 查證結論不客套：**沒有正當理由，就是漏了**——本倉矩陣 149 條裡 0 條、
+# `git log --all -S'lib32-glib'` 空，這顆從未進過倉；用戶機上那顆來自
+# Artix [lib32] 的 2.90.1-1（packager ndowens@artixlinux.org）。
+#
+# 配方逐字沿用 Arch 官方 packaging 倉（含 3 個 .patch 與 2 個 .hook 共 5 個輔助檔，
+# in-tree 分支是用 contents API 動態全抓，所以同目錄放著就會自動進建置），
+# 只動兩處：加 epoch=1、加本檔頭。
+#   1. epoch=1 讓版號嚴格大於 [lib32] 的 2.90.1-1（同包名，靠 epoch 取得換代抓手，
+#      手法同 gh-git commit 6b01eba）。
+#   2. 這顆要 [multilib]：`--cross-file lib32` 需要 /usr/share/meson/cross/lib32，
+#      實查 extra 與 world 的 meson-1.12.0-1 都有該檔；`arch-meson` 來自 devtools，
+#      工作流在 kind != artix 時已裝 → 走預設 archlinux:base-devel 容器即可。
+#   3. checkdepends 含 lib32-glib2 自己（bootstrap 迴圈）→ 本倉 in-tree 包目前是
+#      **照跑 check**（`--nocheck` 只給 kind:aur），所以這顆的測試會實跑；
+#      不准用 kind:aur 混過（那會連 --skipchecksums 一起吞掉）。
+# ⚠️ 這是 in-tree 包：必須同時列進 build-packages.yml 的 in-tree 攔截分支與
+#    「更新校验和并回推」的排除清單，並需要在「初始化 Arch Linux 環境」開 [multilib]。
+
+# Maintainer: Jan Alexander Steffens (heftig) <heftig@archlinux.org>
+# Contributor: Ionut Biru <ibiru@archlinux.org>
+# Contributor: Pierre Schmitz <pierre@archlinux.de>
+# Contributor: Mikko Seppälä <t-r-a-y@mbnet.fi>
+
+pkgbase=lib32-glib2
+pkgname=(
+  lib32-glib2
+)
+pkgver=2.90.1
+pkgrel=1
+epoch=1
+pkgdesc="Low level core library - 32-bit"
+url="https://gitlab.gnome.org/GNOME/glib"
+license=(LGPL-2.1-or-later)
+arch=(x86_64)
+depends=(
+  glib2
+  lib32-gcc-libs
+  lib32-glibc
+  lib32-libffi
+  lib32-pcre2
+  lib32-util-linux
+  lib32-zlib
+)
+makedepends=(
+  gettext
+  git
+  lib32-dbus
+  lib32-libelf
+  meson
+  python
+  python-packaging
+  shared-mime-info
+  util-linux
+)
+checkdepends=(
+  desktop-file-utils
+  lib32-glib2
+)
+source=(
+  "git+https://gitlab.gnome.org/GNOME/glib.git?signed#tag=$pkgver"
+  "git+https://gitlab.gnome.org/GNOME/gvdb.git"
+  0001-glib-compile-schemas-Remove-noisy-deprecation-warnin.patch
+  0002-gdesktopappinfo-Add-more-known-terminals.patch
+  0003-build-Mark-timer-test-as-flaky-on-x86.patch
+  gio-querymodules-32.hook
+  gio-remove-module-cache-32.hook
+)
+b2sums=('d2a3b7c9745b4473621bc77d1fa690c062510cb53dd24555abceb0216ddb9c3f18214774a6c4a948daf0edcf4738db9ed1cba47ec92481d4eee18906bc0e78a3'
+        'SKIP'
+        '4ddbd31f5f466fce99d82890292ff922555a9ab379d22202aeea5127f58798668f871dea0485cc0f458069276ad512412285ede6c8f3e36bea899358f49e931a'
+        '194275a464f96d3539d26d7ae83f88b616e7de7beda0ba82714e4ffbab7a09cf1acee792c9d8278095f097074a5f4eaaa95490b11748f2ad85204fef3f04ccb4'
+        'aebe30447936ef52f31ae71c3f1b0b76d5adb3a7c33d86c45644a32eaf41f227f4e028d1dd11000c7896b28277da3d581ff252eb0db9a983e51c0e2fe31ee36c'
+        '678ea2d010fd64b6c55106510096363c54c357d65615c666e9cc3a0e280c0878257a45e646dd88f6bdd0623f7268c4afd2d4f98f82a5489bbfc028c5864252f1'
+        '0971103c526d72196bd56fe4733bb1edd104e198ad2371929dd90745f5717e650bd2340e3040b720bcf3741946f1dcf2ab246b7837a25312932c0e008c558a39')
+validpgpkeys=(
+  53EF3DC3B63E2899271BD26322E8091EEA11BBB7 # Emmanuele Bassi <ebassi@gnome.org>
+  923B7025EE03C1C59F42684CF0942E894B2EAFA0 # Philip Withnall <pwithnall@gnome.org>
+)
+
+prepare() {
+  cd glib
+
+  # Suppress noise from glib-compile-schemas.hook
+  git apply -3 ../0001-glib-compile-schemas-Remove-noisy-deprecation-warnin.patch
+
+  # Add ghostty and ptyxis to known terminals list
+  # This is a downstream only patch; GNOME will not add new terminal emulators.
+  # https://gitlab.gnome.org/GNOME/glib/-/issues/338#note_1076172
+  git apply -3 ../0002-gdesktopappinfo-Add-more-known-terminals.patch
+
+  # Timer test doesn't work right on i686
+  # https://gitlab.gnome.org/GNOME/glib/-/work_items/820
+  git apply -3 ../0003-build-Mark-timer-test-as-flaky-on-x86.patch
+
+  git submodule init
+  git submodule set-url subprojects/gvdb "$srcdir/gvdb"
+  git -c protocol.file.allow=always -c protocol.allow=never submodule update
+}
+
+build() {
+  local meson_options=(
+    --cross-file lib32
+    -D documentation=false
+    -D dtrace=disabled
+    -D glib_debug=disabled
+    -D introspection=disabled
+    -D man-pages=disabled
+    -D selinux=disabled
+    -D sysprof=disabled
+    -D systemtap=disabled
+  )
+
+  # Produce more debug info: GLib has a lot of useful macros
+  CFLAGS+=" -g3"
+  CXXFLAGS+=" -g3"
+
+  # Avoid crashing some old binaries
+  CFLAGS+=" -mstackrealign"
+  CXXFLAGS+=" -mstackrealign"
+
+  arch-meson glib build "${meson_options[@]}"
+  meson compile -C build
+}
+
+check() {
+  meson test -C build --no-suite flaky --no-suite slow --print-errorlogs
+}
+
+package_lib32-glib2() {
+  depends+=(
+    libffi.so
+    libmount.so
+  )
+  provides+=(libg{lib,io,irepository,module,object,thread}-2.0.so)
+
+  meson install -C build --no-rebuild --destdir "$pkgdir"
+
+  rm -r "$pkgdir"/usr/{lib,share,include}
+  find "$pkgdir/usr/bin" -type f -not -name gio-querymodules -printf 'Removing %P\n' -delete
+  mv "$pkgdir"/usr/bin/gio-querymodules{,-32}
+
+  install -Dt "$pkgdir/usr/share/libalpm/hooks" -m644 *.hook
+  touch "$pkgdir/usr/lib32/gio/modules/.keep"
+}
+
+# vim:set sw=2 sts=-1 et:

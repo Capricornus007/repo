@@ -87,3 +87,48 @@ free-claude-code-git 的 .install 都是 source/install 引用的本地檔，
 用 contents API（帶 github.token，免 60/hr 限流）動態列檔，以後目錄再加
 輔助檔也不用改 CI；API 萬一異常（限流 / 非 JSON）就退回只抓 PKGBUILD，
 至少維持舊行為，不會把本來能過的 nodejs/ttf/qalculate 也帶崩。
+
+---
+
+gstreamer／lib32-glib2（用戶 2026-10-08 點名：「lib32-glib2 跟 gst 那些軟件包
+爲什麼沒弄源碼直出軟件包？」）：
+  · **為什麼原本是缺席的**：查證結論沒有客套——**沒有正當理由，就是漏了**。
+    倉裡 149 條矩陣 0 命中、`git log --all -S'lib32-glib'` 為空，這批東西
+    **從未進過倉**（不是被降級成 kind:aur、也不是被移走）。用戶機上現裝的是
+    Artix 官方：`lib32-glib2 2.90.1-1`（[lib32]，packager ndowens）、
+    `gstreamer 1.28.7-3`（[world]，packager Dudemanguy），
+    `/var/log/pacman.log` 實寫 `pacman -S world/gst-libav world/gst-plugins-bad`。
+  · **gstreamer 必頌整組收**：`pkgbase=gstreamer` 一次拆 25 個子包
+    （Arch 官方 PKGBUILD 1318 行、pkgname 陣列 25 項、makedepends 165 條）。
+    只收其中幾顆會造成 feed 與官方混裝，同一支 `libgst*-1.0.so` 由不同 build
+    提供 → ABI 錯位。所以 `pkgname` 陣列**逐字沿用官方、不自己裁**。
+  · **不準走 kind:artix 容器**：官方 makedepends 有 `systemd-libs`，而實查
+    world／world-goblins／system／galaxy／lib32 五倉**全部查無**
+    `systemd-libs` 與 `libsystemd` → 丟進 artix 容器必恆紅（qt6ct 的
+    `devtools` 就是同一類坑）。走預設 archlinux:base-devel 容器。
+    另外實測本機 world 版所有 `libgst*.so` 與 `libgstreamer-1.0.so` 都沒有
+    連結 libsystemd（ldd 掃 0 hits）→ 不會重演 fcitx5「裝完載不到動態庫」。
+  · **lib32-glib2 標 `kind: multilib`**（新 kind）：需要 [multilib] 倉與
+    `/usr/share/meson/cross/lib32`（實查 extra 與 world 的 meson-1.12.0-1 都有
+    該檔）；`arch-meson` 來自 devtools，工作流在 `kind != artix` 時已裝。
+    「初始化 Arch Linux 環境」那步新增一段 `kind == 'multilib'`：開 [multilib]
+    ＋`pacman -Syu`＋預裝 lib32 底層鏈。**不與 kind:tkg 共用分支**——tkg 那段
+    還要做 LLVM 對齊與 customization.cfg，混進來會把 mesa 專有邏輯帶進 lib32。
+  · **checkdepends 有 bootstrap 迴圈**（含 lib32-glib2 自己）＋ 3 條 glib 測試
+    補丁；`--nocheck` 目前**只給 kind:aur**，in-tree 包照跑 check，所以這顆的
+    測試會實跑（多 20–40 分鐘）。**不准用 kind:aur 混過**——那會連
+    `--skipchecksums` 一起吞掉，等於把校驗和也放棄了。
+  · **epoch=1 的取捨**（用戶「不準設計降級路徑／憑什麼要讓它缺席」的代價）：
+    同包名要蓋過官方，只能靠 epoch 取得換代抓手（手法同 gh-git commit 6b01eba；
+    `repo-add -p` 與 pacman 都只比版號，版號相同時 feed 完全沒意義）。
+    代價是**之後每顆都要跟著官方抬版，停更就會卡在舊版**；因此驗收不能只看
+    badge：唯一判據是 deploy job「整合並更新 repo.db 數據庫」日誌裡有沒有
+    `A newer version for '<pkg>' is already present in database`（字串實查自
+    `/usr/bin/repo-add:256`，出現即代表寫庫被拒）。
+  · 輔助檔：lib32-glib2 五個（3 個 .patch ＋ `gio-querymodules-32.hook`、
+    `gio-remove-module-cache-32.hook`）、gstreamer 兩個 .patch，全部從
+    `gitlab.archlinux.org/archlinux/packaging/packages/<包>/-/raw/main/` 原樣取，
+    與 PKGBUILD 同目錄；in-tree 分支用 contents API 動態全抓，不用改 CI。
+  · 兩顆都要在「更新校驗和並回推」的 giant if 裡排除（`repo_name` 兩條＋
+    `matrix.kind != 'multilib'`），否則 updpkgsums 之後會往**不存在的獨立倉**
+    `Capricornus007/gstreamer.git` push（實測該倉不存在也不需要存在）。

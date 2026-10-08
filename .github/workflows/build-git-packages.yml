@@ -185,5 +185,7 @@ jobs:
           {"key": "gh-git", "repo_name": "gh-git", "variant": "none"},
           {"key": "glab-git", "repo_name": "glab-git", "variant": "none"},
           {"key": "warp-plus-git", "repo_name": "warp-plus-git", "variant": "none"},
-          {"key": "nwg-look-git", "repo_name": "nwg-look-git", "variant": "none"}
+          {"key": "nwg-look-git", "repo_name": "nwg-look-git", "variant": "none"},
+          {"key": "gstreamer", "repo_name": "gstreamer", "variant": "none"},
+          {"key": "lib32-glib2", "repo_name": "lib32-glib2", "variant": "none", "kind": "multilib"}
         ]

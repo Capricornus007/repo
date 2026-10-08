@@ -172,6 +172,22 @@ jobs:
             pacman -S --noconfirm --needed shiboken6 shiboken6-generator pyside6 python-build python-setuptools
           fi
 
+          if [ "${{ matrix.kind }}" = 'multilib' ]; then
+            # lib32-* 需要 [multilib] 倉：容器預設只有 core/extra 且 [multilib] 是註解掉的。
+            # 與 kind:tkg 那段同一手法（mesa-tkg 早就在吃 lib32-* 依賴），但這裡不跟
+            # tkg 共用分支：tkg 還要做 LLVM 對齊與 customization.cfg，混在一起會把
+            # mesa 專有的東西帶進 lib32 建置。
+            printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
+            # 必須 -Syu 全量升級：容器鏡像是建置快照日的舊庫，跨倉依賴（glibc/gcc-libs）
+            # 不同步會導致 makepkg 的依賴解析直接失敗。
+            pacman -Syu --noconfirm
+            # 先預裝 lib32 底層鏈：lib32-glib2 的 makedepends 會拉這些，但 bootstrap
+            # 迴圈（checkdepends 含 lib32-glib2 自己）在乾淨容器裡要靠這幾顆先站穩。
+            pacman -S --noconfirm --needed \
+              lib32-gcc-libs lib32-glibc lib32-libffi lib32-pcre2 lib32-util-linux \
+              lib32-zlib lib32-dbus lib32-libelf
+          fi
+
           if [ "${{ matrix.kind }}" = 'tkg' ]; then
             # mesa-tkg 的 customization.cfg 是 _lib32=true，需要 multilib 的 lib32-* 依賴。
             # 容器只有 core/extra、預設 [multilib] 是註解掉的，補一段未註解的進去再同步。
@@ -418,7 +434,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|npm-git|pnpm-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|npm-git|pnpm-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer|lib32-glib2)
               # 這批包為什麼走本倉目錄版（逐包理由）：見 docs/in-tree-packages.md。
               # 那個 step 的表達式有 21000 字元上限、註解也計入，加包只加清單、
               # 說明寫進該檔，別寫回這裡。
@@ -1929,7 +1945,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'jbr21' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'jbr21' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer' && matrix.repo_name != 'lib32-glib2' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
