@@ -347,6 +347,15 @@ check() (
   fi
   ls -d /usr/lib/gdk-pixbuf-2.0 /usr/lib64/gdk-pixbuf-2.0 2>/dev/null \
     || echo ">> /usr/lib/gdk-pixbuf-2.0 與 /usr/lib64/gdk-pixbuf-2.0 都不存在"
+  # CI #401 實測：上面那行在「已裝完 gdk-pixbuf2、跑完 hooks」之後仍報目錄不存在，
+  # 表示問題不是 loader cache 沒生成，而是**套件檔案根本沒落地**。下面三行是要把
+  # 「包註冊了哪些檔／實際看到哪些檔／連結器找不找得到 lib」三者對齊，一次問清楚。
+  echo ">> pacman -Ql gdk-pixbuf2（前 8 行）："
+  pacman -Ql gdk-pixbuf2 2>/dev/null | head -8 || echo "  本地資料庫查不到 gdk-pixbuf2"
+  echo ">> /usr/lib 下含 pixbuf 的實際路徑："
+  ls -d /usr/lib/*pixbuf* 2>/dev/null || echo "  無"
+  echo ">> ldconfig 看到的 gdk_pixbuf："
+  ldconfig -p 2>/dev/null | grep -i gdk_pixbuf | head -3 || echo "  無"
 
   # Flaky due to timeouts
   xvfb-run -s "-nolisten local" \
