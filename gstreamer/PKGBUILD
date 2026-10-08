@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=3
+pkgrel=4
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -332,18 +332,41 @@ check() (
   export CK_TIMEOUT_MULTIPLIER=5
   export NO_AT_BRIDGE=1 GTK_A11Y=none
 
-  # 本機實測（2026-10-08）推翻我原先的假設，故這裡只留觀測、不再覆寫環境：
-  #  - Arch 的 gdk-pixbuf2 2.44.8 共 372 個檔案，**根本不含 /usr/lib/gdk-pixbuf-2.0 目錄**
-  #    （只有 bin／include／libgdk_pixbuf 與兩個 alpm hook），所以容器裡看不到那個目錄是正常。
-  #  - png／jpeg 等格式是內建的：把 GDK_PIXBUF_MODULE_FILE 指向空檔或不存在的檔，
-  #    實測格式數只從 29 掉到 28（少掉目錄中那顆 wmf 模組），PNG 仍讀得到。
-  #  → 「loader cache 缺」不是 elements_gdkpixbufoverlay 失敗的原因，之前自產 cache 的
-  #    改動是在治錯病（還會順帶讓測試看不到 wmf 模組），已收回。
-  echo ">> gdk-pixbuf 觀測：目錄=$(ls -d /usr/lib/gdk-pixbuf-2.0 2>/dev/null || echo 無) 目錄內模組數=$(ls /usr/lib/gdk-pixbuf-2.0/*/loaders/*.so 2>/dev/null | wc -l) query-loaders 行數=$(gdk-pixbuf-query-loaders 2>/dev/null | wc -l)"
+  # 2026-10-09 更正：容器印出的「query-loaders 行數=7」是**正常值**，不是缺 loader。
+  # 本機 14 行的差額全來自 io-wmf.so，而 `pacman -Qo` 查明那顆檔屬於 libwmf、不屬於
+  # gdk-pixbuf2（2.44.8 的檔案清單裡根本沒有 loaders 目錄）；實測本機 29 個可用格式
+  # 含 jpeg/png/tiff/webp，全部內建。→ 「loader cache 缺」這條線徹底死，收掉觀測行。
+  #
+  # elements_gdkpixbufoverlay 仍是 4/4 必掛（#399/#400/#401/#403），而且 0.26 秒就
+  # 同步失敗：測試只做 videotestsrc ! gdkpixbufoverlay location=<tests>/image.jpg
+  # ! fakesink，然後 assert set_state(PLAYING)==ASYNC，拿到 FAILURE(0)。ck 斷言不會
+  # 把 GStreamer 貼在 bus 上的錯誤印出來，所以單獨重跑一次並開 GST_DEBUG 取實物。
+  # ⚠️ 這一段是**一次性診斷**，拿到原因後要連同下面的分類一起刪掉。
+  echo ">> 診斷：image.jpg 落地於 $(find "$srcdir" -path '*gst-plugins-good/tests/check/elements/*.jpg' 2>/dev/null | head -2 | tr '\n' ' ')"
+  GST_DEBUG=3 GST_DEBUG_NO_COLOR=1 xvfb-run -s "-nolisten local" \
+    meson test -C build --no-rebuild elements_gdkpixbufoverlay 2>&1 | tail -45
+  echo ">> 診斷結束"
 
   # Flaky due to timeouts
+  local rc=0
   xvfb-run -s "-nolisten local" \
-    meson test -C build --no-rebuild --print-errorlogs -t $CK_TIMEOUT_MULTIPLIER
+    meson test -C build --no-rebuild --print-errorlogs -t $CK_TIMEOUT_MULTIPLIER || rc=$?
+
+  # 取實物判斷另外兩條到底是「必掛」還是「平行跑才被擠到」：單獨重跑一次。
+  # gst_gstdevice 在 #401 綠、#403 紅（同一支測試、斷言拿到的是自訂訊息 +9 而非
+  # DEVICE_ADDED +1，那是它用無過濾的 gst_bus_timed_pop 去取第一條訊息的時序競態）；
+  # elements_avaudenc 是 test_audioenc_drain 逾時 100.74s，而 Arch 自己的註解就寫
+  # 「Flaky due to timeouts」、上游 HACK patch 也已關掉同 suite 的 16_channels。
+  if [ "$rc" -ne 0 ]; then
+    for t in gst_gstdevice elements_avaudenc; do
+      if xvfb-run -s "-nolisten local" meson test -C build --no-rebuild -t $CK_TIMEOUT_MULTIPLIER "$t" >/dev/null 2>&1; then
+        echo ">> 單獨重跑 $t：通過（代表它是平行負載下的 flaky，不是這條配置必掛）"
+      else
+        echo ">> 單獨重跑 $t：仍失敗（必掛，需要真正的原因）"
+      fi
+    done
+  fi
+  return $rc
 )
 
 _install() {
