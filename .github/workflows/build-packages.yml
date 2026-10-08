@@ -188,6 +188,27 @@ jobs:
               lib32-zlib lib32-dbus lib32-libelf
           fi
 
+          if [ "${{ matrix.kind }}" = 'multilib' ] || [ "${{ matrix.repo_name }}" = 'gstreamer' ]; then
+            # 容器沒有 machine-id：CI run #396 實測 glib 的 gdbus 測試报
+            # 「GDBus.Error:org.freedesktop.DBus.Error.Failed: Unable to load
+            #  /var/lib/dbus/machine-id or /etc/machine-id: ... No such file or directory」
+            # → codegen-peer-to-peer FAIL。Arch 的 builder 是 systemd-nspawn，天生帶
+            # machine-id，所以他們碰不到。這是我們容器缺環境，補環境，不跳測試。
+            if [ ! -s /etc/machine-id ]; then
+              head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' > /etc/machine-id
+              echo >> /etc/machine-id
+            fi
+            mkdir -p /var/lib/dbus
+            ln -sf /etc/machine-id /var/lib/dbus/machine-id
+          fi
+
+          if [ "${{ matrix.repo_name }}" = 'gstreamer' ]; then
+            # CI run #396 實測 gst-plugins-good 的 elements_gdkpixbufoverlay FAIL：那條測試
+            # 要用 Pango 實際繪字，而 base-devel 鏡像有 fontconfig 卻**一顆字體都沒有**，
+            # fc-match 回不到實體檔 → 繪字結果全空。補一顆字體把環境補齊，不是讓測試缺席。
+            pacman -S --noconfirm --needed ttf-dejavu
+          fi
+
           if [ "${{ matrix.kind }}" = 'tkg' ]; then
             # mesa-tkg 的 customization.cfg 是 _lib32=true，需要 multilib 的 lib32-* 依賴。
             # 容器只有 core/extra、預設 [multilib] 是註解掉的，補一段未註解的進去再同步。

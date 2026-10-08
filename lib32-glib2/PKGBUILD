@@ -55,8 +55,10 @@ makedepends=(
   util-linux
 )
 checkdepends=(
+  dbus
   desktop-file-utils
   lib32-glib2
+  xorg-server-xvfb
 )
 source=(
   "git+https://gitlab.gnome.org/GNOME/glib.git?signed#tag=$pkgver"
@@ -131,7 +133,13 @@ check() {
   # Arch 自己的构建環境帶 session bus，所以不會遇到——這是我們容器缺環境，
   # 不是上游測試壞了。修法是給它一個真的 session bus，而不是跳過測試或
   # --nocheck：那等於放棄 391 支測試，屬降級路徑。
-  dbus-run-session -- meson test -C build --no-suite flaky --no-suite slow --print-errorlogs
+  #
+  # run #396 補完總線後換成另兩條紅：codegen-peer-to-peer 抱怨拿不到
+  # /var/lib/dbus/machine-id（由 job 的容器初始化補），gdbus-address-get-session
+  # 的 x11-autolaunch 需要 X 連線（這裡補 xvfb）。三輪都指向同一件事：缺的是
+  # 環境，不是測試本身，所以逐項把環境補齊。
+  xvfb-run -a dbus-run-session -- \
+    meson test -C build --no-suite flaky --no-suite slow --print-errorlogs
 }
 
 package_lib32-glib2() {
