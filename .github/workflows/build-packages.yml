@@ -386,13 +386,24 @@ jobs:
           # 以及 root 與建置使用者兩種身分下的 bwrap 結果）。降級與否由 PKGBUILD
           # 的探針決定，這裡只負責留證據。
           pacman -S --noconfirm --needed bubblewrap libcap util-linux || true
+          # ⚠️ 這倉的 run 跑在 `sh -e {0}` 下（不是 bash），任何一條非零就整步中止：
+          # #414 實測 `setcap -r` 對「本來就沒有 caps 的檔」回非零，直接把這步殺在
+          # 第一行 echo 之前（連一行證據都沒留下）。所以這裡每一條探測都要 `|| rc=$?`
+          # 把返回碼接進變數，不用 `; echo $?`（那個在 -e 下根本輪不到執行）。
           for b in /usr/sbin/bwrap /usr/bin/bwrap; do
-            [ -x "$b" ] && { setcap -r "$b" 2>/dev/null; echo ">> 已清 caps: $b [$(getcap "$b")]"; }
+            if [ -x "$b" ]; then
+              setcap -r "$b" 2>/dev/null || true
+              echo ">> 已清 caps: $b [$(getcap "$b" 2>/dev/null)]"
+            fi
           done
-          echo ">> mount: $(findmnt -no OPTIONS / | tr -d ' ') | $(findmnt -no OPTIONS /usr 2>/dev/null | tr -d ' ')"
+          echo ">> mount: $(findmnt -no OPTIONS / 2>/dev/null | tr -d ' ') | $(findmnt -no OPTIONS /usr 2>/dev/null | tr -d ' ')"
           echo ">> root  CapBnd=$(awk '/CapBnd/{print $2}' /proc/self/status)  CapEff=$(awk '/CapEff/{print $2}' /proc/self/status)"
-          echo ">> bwrap(root) rc=0:"; bwrap --unshare-all --ro-bind /usr /usr --symlink /usr/lib /lib64 --dev /dev --proc /proc /usr/bin/true; echo "   -> rc=$?"
-          echo ">> bwrap(unshare-user only):"; bwrap --unshare-user --ro-bind / / /usr/bin/true; echo "   -> rc=$?"
+          broot=0
+          bwrap --unshare-all --ro-bind /usr /usr --symlink /usr/lib /lib64 --dev /dev --proc /proc /usr/bin/true 2>&1 || broot=$?
+          echo ">> bwrap(root, --unshare-all) rc=$broot"
+          buser=0
+          bwrap --unshare-user --ro-bind / / /usr/bin/true 2>&1 || buser=$?
+          echo ">> bwrap(root, 只 --unshare-user) rc=$buser"
 
       - name: 拉取对应的套件仓库
         run: |
