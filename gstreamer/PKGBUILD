@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=12
+pkgrel=13
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -465,8 +465,11 @@ PY
     obin="$(find build -type f -name 'elements_gdkpixbufoverlay' 2>/dev/null | head -1)"
     echo ">> 診斷前提：image=${img1:-找不到}  launch=${launch1:-找不到}  testbin=${obin:-找不到}"
     if [ -n "$img1" ] && [ -n "$launch1" ]; then
+      # ⚠️ pipeline 一定要**逐詞當多個參數**傳：#419 實測我把整句用引號包成一個 token，
+      # gst-launch 就把它當成單一元素名，只回 `erroneous pipeline: syntax error`，
+      # 一行 GError 都拿不到（這個坑是我自己挖的，不是容器的问题）。
       GST_REGISTRY=/tmp/gst-diag.registry GST_PLUGIN_PATH_1_0="$PWD/build" GST_PLUGIN_SYSTEM_PATH_1_0='' \
-        "$launch1" -e "videotestsrc num-buffers=3 ! gdkpixbufoverlay location=file://$PWD/$img1 ! fakesink" \
+        "$launch1" -e videotestsrc num-buffers=3 ! gdkpixbufoverlay location="file://$PWD/$img1" ! fakesink \
         > /tmp/gst-diag.out 2>&1 || dg1=$?
       echo ">> 診斷 1) gst-launch 重組同一條 pipeline rc=$dg1，輸出全文："
       cat /tmp/gst-diag.out 2>/dev/null | head -25
@@ -476,6 +479,21 @@ PY
         "$obin" > /tmp/gst-diag2.out 2>&1 || dg2=$?
       echo ">> 診斷 2) 直接跑測試二進位 rc=$dg2，其中的 error/could not/unable 行："
       grep -aiE 'error|could not|unable|failed to|Loader|sandbox|glycin' /tmp/gst-diag2.out 2>/dev/null | head -20
+    fi
+
+    # ── 診斷 3（#420 加）：#419 的 stderr 出現 `External plugin loader failed`
+    # 與 `gst_plugin_loader_try_helper` 的 ERROR，指向 **gst-plugin-scanner 這個 helper
+    # 在容器裡起不來**。這跟先前定案的 glycin/bwrap 沙箱是兩件事，別混在一起：
+    # 前者是 GStreamer 自己要不要另開行程去載插件，後者是 gdk-pixbuf 解圖。
+    # 所以直接問 scanner 本體：能不能執行、能不能列出一個插件。
+    local scanrc=0 scanner=""
+    scanner="$(find build -type f -name 'gst-plugin-scanner' 2>/dev/null | head -1)"
+    if [ -n "$scanner" ]; then
+      "$scanner" > /tmp/gst-scan.out 2>&1 || scanrc=$?
+      echo ">> 診斷 3) gst-plugin-scanner=$scanner 直接執行 rc=$scanrc，輸出前 8 行："
+      head -8 /tmp/gst-scan.out 2>/dev/null
+    else
+      echo ">> 診斷 3) 找不到 gst-plugin-scanner 二進位（這本身就是一條答案）"
     fi
   fi
   return $rc
