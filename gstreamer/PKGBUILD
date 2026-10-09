@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=6
+pkgrel=7
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -226,7 +226,11 @@ makedepends=(
   zxing-cpp
 )
 makedepends_x86_64=(svt-hevc)
-checkdepends=(xorg-server-xvfb)
+# gdkpixbufoverlay 要能載 jpg，路徑是 gdk-pixbuf → glycin → bwrap 沙箱（見 check() 註解）。
+# 這三顆在 Arch 上是 gdk-pixbuf2 的運行期鏈，但 chroot 建置環境不一定裝齊，
+# 而它們只被 check 用到，所以寫成顯式 checkdepends，缺了就會在裝依賴階段報出來，
+# 而不是讓測試以「Loader process exited early」這種難讀的形式紅掉。
+checkdepends=(xorg-server-xvfb glycin bubblewrap)
 source=(
   "git+https://gitlab.freedesktop.org/gstreamer/gstreamer.git?signed#tag=$pkgver"
   "https://gstreamer.freedesktop.org/src/gstreamer-docs/gstreamer-docs-$pkgver.tar.xz"{,.asc}
@@ -332,24 +336,26 @@ check() (
   export CK_TIMEOUT_MULTIPLIER=5
   export NO_AT_BRIDGE=1 GTK_A11Y=none
 
-  # ── 2026-10-09 #406 實測已確立的事（拿到最後一條的原因後整段刪掉）
-  # 1) 「loader cache 缺」徹底死：容器那 7 行 query-loaders 是**正常值**，本機 14 行的
-  #    差額全來自 io-wmf.so，而 pacman -Qo 證明它屬於 libwmf、不屬於 gdk-pixbuf2。
-  # 2) gst_gstdevice 與 elements_avaudenc **單獨重跑都通過** → 平行負載下的 flaky，
-  #    交給下面統一的「失敗就重跑一次」處理，不跳過、不忽略。
-  # 3) 只剩 elements_gdkpixbufoverlay 真必掛。⚠️ 上一輪 find 的 pattern 寫成
-  #    tests/check/elements/*.jpg 是**錯的**：meson 定義 GST_TEST_FILES_PATH 是
-  #    tests/check/../files，圖在 tests/files/image.jpg（上游 1.28.7 實抓 200、3017
-  #    bytes）→ 那個「找不到圖」是我自己量出來的假訊號。這輪改成印出 bake 進測試
-  #    二進位的真實路徑，並用 --print-errorlogs 把 GStreamer 貼在 bus 上的錯誤取出來。
-  local tpath
-  # ⚠️ makepkg 的 build 函式是 errexit 環境：grep 沒命中就回 1，整段 check() 會在
-  # 13 毫秒內中止、一行都沒跑（#407 實測）。所有可能回非零的賦值都要 || true。
-  tpath=$(strings build/subprojects/gst-plugins-good/tests/check/elements_gdkpixbufoverlay 2>/dev/null | grep -m1 '/tests/files' || true)
-  echo ">> 觀測：bake 進測試檔的圖片目錄=[$tpath]  ls=$(ls -l "$tpath/image.jpg" 2>&1 | tail -1)"
-  GST_DEBUG=3 GST_DEBUG_NO_COLOR=1 xvfb-run -s "-nolisten local" \
-    meson test -C build --no-rebuild --print-errorlogs elements_gdkpixbufoverlay 2>&1 | tail -60
-  echo ">> 觀測結束"
+  # ── elements_gdkpixbufoverlay 的真因（2026-10-09 #408 定案，取代上一輪的觀測塊）
+  # Arch 的 gdk-pixbuf 2.44 已把 jpg/png 等解碼全部交給 glycin——本機實物：
+  # /usr/lib/gdk-pixbuf-2.0/2.10.0/loaders/ 只剩 io-wmf.so（屬 libwmf）、loaders.cache 空。
+  # 而 glycin 的設計就是「一定要在 bwrap 沙箱裡跑解碼器」，#408 日誌裡那串
+  # `bwrap --unshare-all ... --seccomp 13 /usr/lib/glycin-loaders/2+/glycin-image-rs`
+  # 回 `Loader process exited early with status '1'` 就是沙箱起不來，不是載不到圖。
+  # 對照實測：同一張圖（上游 tests/files/image.jpg，3017 bytes）在本機
+  # `glycin-thumbnailer -i file://… -s 24` 解碼成功、產出 513 bytes PNG、rc=0。
+  # → 這條測試實際測的是「建置環境能不能起 bwrap」，所以修法是補環境前提
+  #   （checkdepends 已顯式列出 glycin + bubblewrap），不是跳測試。
+  # 下面這三行永久保留：以後這條再紅，先看它印什麼，就能立刻分清是環境又掉了
+  # 還是真的退回代碼問題，不必再燒一輪 50 分鐘的構建去猜。
+  echo ">> 沙箱前提：bwrap=$(command -v bwrap || echo '缺')  glycin-loader=$([ -x /usr/lib/glycin-loaders/2+/glycin-image-rs ] && echo 有 || echo 缺)"
+  # ⚠️ 探針的綁法必須照 glycin 實際那串來，否則會報假紅：本機實測
+  # `--ro-bind /usr /usr` 不加 `--symlink /usr/lib /lib64` 時，連 /usr/bin/true 都
+  # execvp 不成功（缺動態連結器），看起來像「沙箱壞了」其實是探針自己少綁東西。
+  # 下面這串就是 2026-10-09 本機驗過 rc=0 的版本。
+  bwrap --unshare-all --ro-bind /usr /usr --symlink /usr/lib /lib64 --dev /dev --proc /proc /usr/bin/true \
+    && echo ">> 沙箱前提：bwrap 可用 rc=0" \
+    || echo ">> 沙箱前提：bwrap 不可用 rc=$? —— 此輪 gdkpixbufoverlay 必紅，屬環境不是代碼"
 
   # Flaky due to timeouts
   local rc=0
