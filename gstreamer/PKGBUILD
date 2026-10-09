@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=9
+pkgrel=10
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -382,13 +382,36 @@ check() (
     echo ">> 判定：沙箱可用，維持預設（不設 GLYCIN_DISABLE_SANDBOX）"
   fi
 
+  # ── 分層對照（#415 加）：降級之後 gdkpixbufoverlay 仍然紅，而且測試自己**不吐任何
+  # gdk-pixbuf 錯誤**（只有 set_state 回 FAILURE），所以光看測試日誌無法分辨是
+  # 「gdk-pixbuf 在這容器裡根本解不了圖」還是「GStreamer 那顆元素壞」。
+  # 這裡拿測試自己用的那張圖，繞過 GStreamer、直接用 gdk-pixbuf 的工具解一次：
+  #   rc=0 → 載圖鏈是好的，問題在元素/測試本身
+  #   rc!=0 → 容器缺的是 gdk-pixbuf 的解碼前提，不該再動 GStreamer
+  # 本機實測：同一支 gdk-pixbuf-pixdata 在空環境（無 DBUS_SESSION_BUS_ADDRESS、無
+  # XDG_RUNTIME_DIR）下 rc=0，所以「沒有 session bus」不是失敗條件（已排除）。
+  local pixrc=0 pixjpg=""
+  for c in gstreamer/subprojects/gst-plugins-good/tests/check/media/*.jpg \
+           gstreamer/subprojects/gst-plugins-good/tests/check/*.jpg; do
+    [ -f "$c" ] && { pixjpg="$c"; break; }
+  done
+  echo ">> gdk-pixbuf 直測：圖=${pixjpg:-找不到}  loaders=$(gdk-pixbuf-query-loaders 2>/dev/null | grep -c '^"/')"
+  if [ -n "$pixjpg" ]; then
+    gdk-pixbuf-pixdata "$pixjpg" /tmp/gst-pixdata.out 2>/tmp/gst-pixdata.err || pixrc=$?
+    echo ">> gdk-pixbuf-pixdata rc=$pixrc 產物=$(stat -c %s /tmp/gst-pixdata.out 2>/dev/null || echo 0) bytes stderr=$(head -3 /tmp/gst-pixdata.err 2>/dev/null | tr '\n' '|')"
+  fi
+
   # Flaky due to timeouts
   local rc=0
   xvfb-run -s "-nolisten local" \
     meson test -C build --no-rebuild --print-errorlogs -t $CK_TIMEOUT_MULTIPLIER || rc=$?
 
-  # 主跑紅 → 把失敗的那幾條單獨重跑一次，重試結果就是最終結果（不做任何忽略）。
-  # flaky 會自己翻綠、必掛的仍然紅；這是取實物區分兩者，而不是用跳過換綠燈。
+  # 主跑紅 → 把失敗的那幾條**用單併發**重跑一次，重試結果就是最終結果（不做任何忽略）。
+  # ⚠️ 這裡刻意改 `--num-processes=1`，是一個單變量實驗：#415 實測
+  # complex_effect_bin_desc 在全速跑時 OK、在「主跑剛結束立刻重跑」時 FAIL（exit 238，
+  # 差一個 dur=1ns 的尾缓冲），症狀是時間_sensitive_而不是代碼壞。重跑降成一次一條，
+  # 就能把「資源搶佔」這個變數單獨摘掉：還紅 = 真缺陷，翻綠 = 併發造成的 flaky，
+  # 兩邊都是老實結果，不是跳過。
   if [ "$rc" -ne 0 ]; then
     local failed
     failed=$(python3 - <<'PY'
@@ -405,10 +428,10 @@ PY
     echo ">> 主跑失敗的測試：${failed:-（讀不到 testlog，改為整體重跑一次）}"
     if [ -n "$failed" ]; then
       xvfb-run -s "-nolisten local" \
-        meson test -C build --no-rebuild --print-errorlogs -t $CK_TIMEOUT_MULTIPLIER $failed || rc=$?
+        meson test -C build --no-rebuild --print-errorlogs --num-processes=1 -t $CK_TIMEOUT_MULTIPLIER $failed || rc=$?
     else
       xvfb-run -s "-nolisten local" \
-        meson test -C build --no-rebuild --print-errorlogs -t $CK_TIMEOUT_MULTIPLIER || rc=$?
+        meson test -C build --no-rebuild --print-errorlogs --num-processes=1 -t $CK_TIMEOUT_MULTIPLIER || rc=$?
     fi
   fi
   return $rc
