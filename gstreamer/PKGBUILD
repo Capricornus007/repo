@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=10
+pkgrel=11
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -382,23 +382,42 @@ check() (
     echo ">> 判定：沙箱可用，維持預設（不設 GLYCIN_DISABLE_SANDBOX）"
   fi
 
-  # ── 分層對照（#415 加）：降級之後 gdkpixbufoverlay 仍然紅，而且測試自己**不吐任何
-  # gdk-pixbuf 錯誤**（只有 set_state 回 FAILURE），所以光看測試日誌無法分辨是
+  # ── 分層對照（#415 加，#418 改寫）：降級之後 gdkpixbufoverlay 仍然紅，而且測試自己
+  # **不吐任何 gdk-pixbuf 錯誤**（只有 set_state 回 FAILURE），所以光看測試日誌無法分辨是
   # 「gdk-pixbuf 在這容器裡根本解不了圖」還是「GStreamer 那顆元素壞」。
-  # 這裡拿測試自己用的那張圖，繞過 GStreamer、直接用 gdk-pixbuf 的工具解一次：
-  #   rc=0 → 載圖鏈是好的，問題在元素/測試本身
-  #   rc!=0 → 容器缺的是 gdk-pixbuf 的解碼前提，不該再動 GStreamer
-  # 本機實測：同一支 gdk-pixbuf-pixdata 在空環境（無 DBUS_SESSION_BUS_ADDRESS、無
-  # XDG_RUNTIME_DIR）下 rc=0，所以「沒有 session bus」不是失敗條件（已排除）。
+  # ⚠️ #417 實測這一塊報了假消息：`圖=找不到`——我拿 glob 去猜路徑，上游那張圖其實在
+  # tests/check/ 更深一層。這次一律用 find 實找，找不到就明說，不再用猜的路徑當證據。
+  # 三層各測一次，誰先紅就是誰的問題：
+  #   1) gdk-pixbuf-pixdata（純 C API 路徑）
+  #   2) python-gi 直接 new_from_file 並印出 GLib 的**錯誤原文**（這才是我們要的那句話）
+  #   3) glycin-thumbnailer（繞過 gdk-pixbuf，直接問解碼器本身）
+  # 本機對照實測（2026-10-09）：同一支 new_from_file 在「設 GLYCIN_DISABLE_SANDBOX=1」
+  # 與「不設」兩種情況下都 rc=0 解出 32x32 PNG ⇒ 無沙箱路徑本身在本機是好的，
+  # 容器若還紅，缺的是容器特有的前提，要靠下面印出的錯誤原文定位，不是再猜。
   local pixrc=0 pixjpg=""
-  for c in gstreamer/subprojects/gst-plugins-good/tests/check/media/*.jpg \
-           gstreamer/subprojects/gst-plugins-good/tests/check/*.jpg; do
-    [ -f "$c" ] && { pixjpg="$c"; break; }
-  done
-  echo ">> gdk-pixbuf 直測：圖=${pixjpg:-找不到}  loaders=$(gdk-pixbuf-query-loaders 2>/dev/null | grep -c '^"/')"
+  pixjpg="$(find gstreamer/subprojects/gst-plugins-good/tests -type f \( -name '*.jpg' -o -name '*.jpeg' -o -name '*.png' \) 2>/dev/null | head -1)"
+  echo ">> gdk-pixbuf 直測：圖=${pixjpg:-找不到}  loaders=$(gdk-pixbuf-query-loaders 2>/dev/null | grep -c '^"/')  GLYCIN_DISABLE_SANDBOX=${GLYCIN_DISABLE_SANDBOX:-未設}"
   if [ -n "$pixjpg" ]; then
     gdk-pixbuf-pixdata "$pixjpg" /tmp/gst-pixdata.out 2>/tmp/gst-pixdata.err || pixrc=$?
-    echo ">> gdk-pixbuf-pixdata rc=$pixrc 產物=$(stat -c %s /tmp/gst-pixdata.out 2>/dev/null || echo 0) bytes stderr=$(head -3 /tmp/gst-pixdata.err 2>/dev/null | tr '\n' '|')"
+    echo ">> 1) gdk-pixbuf-pixdata rc=$pixrc 產物=$(stat -c %s /tmp/gst-pixdata.out 2>/dev/null || echo 0) bytes stderr=$(head -3 /tmp/gst-pixdata.err 2>/dev/null | tr '\n' '|')"
+
+    # 2) 這層最重要：把 GLib 的錯誤原文抓出來（元素那層只回 FAILURE，什麼都不說）。
+    local pyrc=0
+    if python3 -c 'import gi' >/dev/null 2>&1; then
+      python3 - "$pixjpg" > /tmp/gst-pyprobe.out 2>&1 || pyrc=$?
+      echo ">> 2) python-gi new_from_file rc=$pyrc 輸出=$(head -5 /tmp/gst-pyprobe.out | tr '\n' '|')"
+    else
+      echo ">> 2) python-gi 不在容器裡（跳過這層，不是失敗）"
+    fi
+
+    # 3) 繞過 gdk-pixbuf 直接問 glycin。本機實測這條解同一張圖 rc=0。
+    local glrc=0
+    if command -v glycin-thumbnailer >/dev/null 2>&1; then
+      glycin-thumbnailer -i "file://$PWD/$pixjpg" -s 24 -o /tmp/gst-glycin.png > /tmp/gst-glycin.err 2>&1 || glrc=$?
+      echo ">> 3) glycin-thumbnailer rc=$glrc 產物=$(stat -c %s /tmp/gst-glycin.png 2>/dev/null || echo 0) bytes 輸出=$(head -5 /tmp/gst-glycin.err | tr '\n' '|')"
+    else
+      echo ">> 3) 容器裡沒有 glycin-thumbnailer（跳過這層，不是失敗）"
+    fi
   fi
 
   # Flaky due to timeouts
