@@ -535,7 +535,11 @@ jobs:
               _mesa_base="https://raw.githubusercontent.com/chaotic-aur/packages/main/mesa-tkg-git"
               for _f in PKGBUILD customization.cfg llvm32.native LICENSE; do
                 curl -sfL "$_mesa_base/$_f" -o "pkg_dir/$_f"
-              done ;;
+              done
+              # 上游 mesa 已把 anti-lag 從 vulkan-layers 的允許值移除，tkg 那串的判定條件
+              # （有 commit 54fe5b04 就加 anti-lag）現在恆真 → meson 直接 ERROR（#406 實測）。
+              # 只關掉他們 cfg 裡的開關、不改他們的 PKGBUILD；chaotic 修好後這行等於沒做。
+              sed -i 's/^_antilag="true"/_antilag="false"/' pkg_dir/customization.cfg ;;
             wlroots-git|iwgtk-git)
               # 本倉 in-tree 維護的自建包：wlroots-git 是合併 fork
               # （Capricornus007/wlroots hidpi-hdr：HiDPI xprop + HDR metadata，

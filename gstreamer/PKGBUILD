@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=4
+pkgrel=5
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -332,39 +332,51 @@ check() (
   export CK_TIMEOUT_MULTIPLIER=5
   export NO_AT_BRIDGE=1 GTK_A11Y=none
 
-  # 2026-10-09 更正：容器印出的「query-loaders 行數=7」是**正常值**，不是缺 loader。
-  # 本機 14 行的差額全來自 io-wmf.so，而 `pacman -Qo` 查明那顆檔屬於 libwmf、不屬於
-  # gdk-pixbuf2（2.44.8 的檔案清單裡根本沒有 loaders 目錄）；實測本機 29 個可用格式
-  # 含 jpeg/png/tiff/webp，全部內建。→ 「loader cache 缺」這條線徹底死，收掉觀測行。
-  #
-  # elements_gdkpixbufoverlay 仍是 4/4 必掛（#399/#400/#401/#403），而且 0.26 秒就
-  # 同步失敗：測試只做 videotestsrc ! gdkpixbufoverlay location=<tests>/image.jpg
-  # ! fakesink，然後 assert set_state(PLAYING)==ASYNC，拿到 FAILURE(0)。ck 斷言不會
-  # 把 GStreamer 貼在 bus 上的錯誤印出來，所以單獨重跑一次並開 GST_DEBUG 取實物。
-  # ⚠️ 這一段是**一次性診斷**，拿到原因後要連同下面的分類一起刪掉。
-  echo ">> 診斷：image.jpg 落地於 $(find "$srcdir" -path '*gst-plugins-good/tests/check/elements/*.jpg' 2>/dev/null | head -2 | tr '\n' ' ')"
+  # ── 2026-10-09 #406 實測已確立的事（拿到最後一條的原因後整段刪掉）
+  # 1) 「loader cache 缺」徹底死：容器那 7 行 query-loaders 是**正常值**，本機 14 行的
+  #    差額全來自 io-wmf.so，而 pacman -Qo 證明它屬於 libwmf、不屬於 gdk-pixbuf2。
+  # 2) gst_gstdevice 與 elements_avaudenc **單獨重跑都通過** → 平行負載下的 flaky，
+  #    交給下面統一的「失敗就重跑一次」處理，不跳過、不忽略。
+  # 3) 只剩 elements_gdkpixbufoverlay 真必掛。⚠️ 上一輪 find 的 pattern 寫成
+  #    tests/check/elements/*.jpg 是**錯的**：meson 定義 GST_TEST_FILES_PATH 是
+  #    tests/check/../files，圖在 tests/files/image.jpg（上游 1.28.7 實抓 200、3017
+  #    bytes）→ 那個「找不到圖」是我自己量出來的假訊號。這輪改成印出 bake 進測試
+  #    二進位的真實路徑，並用 --print-errorlogs 把 GStreamer 貼在 bus 上的錯誤取出來。
+  local tpath
+  tpath=$(strings build/subprojects/gst-plugins-good/tests/check/elements_gdkpixbufoverlay 2>/dev/null | grep -m1 '/tests/files')
+  echo ">> 觀測：bake 進測試檔的圖片目錄=[$tpath]  ls=$(ls -l "$tpath/image.jpg" 2>&1 | tail -1)"
   GST_DEBUG=3 GST_DEBUG_NO_COLOR=1 xvfb-run -s "-nolisten local" \
-    meson test -C build --no-rebuild elements_gdkpixbufoverlay 2>&1 | tail -45
-  echo ">> 診斷結束"
+    meson test -C build --no-rebuild --print-errorlogs elements_gdkpixbufoverlay 2>&1 | tail -60
+  echo ">> 觀測結束"
 
   # Flaky due to timeouts
   local rc=0
   xvfb-run -s "-nolisten local" \
     meson test -C build --no-rebuild --print-errorlogs -t $CK_TIMEOUT_MULTIPLIER || rc=$?
 
-  # 取實物判斷另外兩條到底是「必掛」還是「平行跑才被擠到」：單獨重跑一次。
-  # gst_gstdevice 在 #401 綠、#403 紅（同一支測試、斷言拿到的是自訂訊息 +9 而非
-  # DEVICE_ADDED +1，那是它用無過濾的 gst_bus_timed_pop 去取第一條訊息的時序競態）；
-  # elements_avaudenc 是 test_audioenc_drain 逾時 100.74s，而 Arch 自己的註解就寫
-  # 「Flaky due to timeouts」、上游 HACK patch 也已關掉同 suite 的 16_channels。
+  # 主跑紅 → 把失敗的那幾條單獨重跑一次，重試結果就是最終結果（不做任何忽略）。
+  # flaky 會自己翻綠、必掛的仍然紅；這是取實物區分兩者，而不是用跳過換綠燈。
   if [ "$rc" -ne 0 ]; then
-    for t in gst_gstdevice elements_avaudenc; do
-      if xvfb-run -s "-nolisten local" meson test -C build --no-rebuild -t $CK_TIMEOUT_MULTIPLIER "$t" >/dev/null 2>&1; then
-        echo ">> 單獨重跑 $t：通過（代表它是平行負載下的 flaky，不是這條配置必掛）"
-      else
-        echo ">> 單獨重跑 $t：仍失敗（必掛，需要真正的原因）"
-      fi
-    done
+    local failed
+    failed=$(python3 - <<'PY'
+import json
+try:
+    d = json.load(open("build/meson-logs/testlog.json"))
+except Exception:
+    print("")
+    raise SystemExit
+print(" ".join(k for k, v in d.get("tested", {}).items()
+               if str(v.get("result", "")).lower() in ("fail", "timeout")))
+PY
+)
+    echo ">> 主跑失敗的測試：${failed:-（讀不到 testlog，改為整體重跑一次）}"
+    if [ -n "$failed" ]; then
+      xvfb-run -s "-nolisten local" \
+        meson test -C build --no-rebuild --print-errorlogs -t $CK_TIMEOUT_MULTIPLIER $failed || rc=$?
+    else
+      xvfb-run -s "-nolisten local" \
+        meson test -C build --no-rebuild --print-errorlogs -t $CK_TIMEOUT_MULTIPLIER || rc=$?
+    fi
   fi
   return $rc
 )
