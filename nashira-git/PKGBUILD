@@ -6,7 +6,7 @@
 # release 產物（nashira）；這裡是獨立從源碼出包、跟著 master 走。
 
 pkgname=nashira-git
-pkgver=0.1.112.r1.gfc6804a
+pkgver=0.1.112.r2.g0733a4e
 pkgrel=2
 pkgdesc="Nashira — Matrix messenger for Android and Linux (Kotlin/Compose Multiplatform, built from master)"
 arch=('x86_64')
