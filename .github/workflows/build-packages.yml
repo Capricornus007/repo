@@ -376,6 +376,16 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: 給 bwrap 补 CAP_NET_ADMIN（gstreamer 专用）
+        if: matrix.repo_name == 'gstreamer'
+        run: |
+          set -uo pipefail
+          pacman -S --noconfirm --needed bubblewrap libcap || true
+          for b in /usr/sbin/bwrap /usr/bin/bwrap; do
+            [ -x "$b" ] && setcap cap_net_admin,cap_sys_admin,cap_chown,cap_mknod,cap_setfcap+ep "$b" \
+              && echo ">> setcap ok: $b $(getcap "$b")" || echo ">> setcap FAILED on $b"
+          done
+
       - name: 拉取对应的套件仓库
         run: |
           set -euo pipefail
