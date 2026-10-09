@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=7
+pkgrel=8
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -352,10 +352,16 @@ check() (
   # ⚠️ 探針的綁法必須照 glycin 實際那串來，否則會報假紅：本機實測
   # `--ro-bind /usr /usr` 不加 `--symlink /usr/lib /lib64` 時，連 /usr/bin/true 都
   # execvp 不成功（缺動態連結器），看起來像「沙箱壞了」其實是探針自己少綁東西。
-  # 下面這串就是 2026-10-09 本機驗過 rc=0 的版本。
-  bwrap --unshare-all --ro-bind /usr /usr --symlink /usr/lib /lib64 --dev /dev --proc /proc /usr/bin/true \
-    && echo ">> 沙箱前提：bwrap 可用 rc=0" \
-    || echo ">> 沙箱前提：bwrap 不可用 rc=$? —— 此輪 gdkpixbufoverlay 必紅，屬環境不是代碼"
+  # #409 實測：套件齊（bubblewrap 0.13.0-1、glycin 2.2.2-1 都裝上了）、執行檔在
+  # （/usr/sbin/bwrap），但探針仍 rc=1 → 缺的不是套件，是容器起不了 namespace。
+  # 所以這裡把 bwrap 的 stderr 與三個內核能力一起印出來，一次定案是哪一層擋的。
+  # ⚠️ errexit：bwrap 這行一定要用 `&& x || y` 兜住，否則它回非零會讓整個 check()
+  # 在幾毫秒內中止、一行都不印（#407 實測過同一個坑）。用 `|| true` 則會把 $? 吃掉，
+  # 所以把返回碼先接進變數再印。
+  local brw=0
+  bwrap --unshare-all --ro-bind /usr /usr --symlink /usr/lib /lib64 --dev /dev --proc /proc /usr/bin/true 2>/tmp/gst-bwrap-err.txt || brw=$?
+  echo ">> 沙箱前提：bwrap rc=$brw  stderr=$(tail -3 /tmp/gst-bwrap-err.txt 2>/dev/null | tr '\n' '|')"
+  echo ">> 內核能力：max_user_ns=$(cat /proc/sys/user/max_user_namespaces 2>/dev/null || echo 查無)  unprivileged_userns_clone=$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo '此核心無此檔')  CapEff=$(awk '/CapEff/{print $2}' /proc/self/status 2>/dev/null)"
 
   # Flaky due to timeouts
   local rc=0
