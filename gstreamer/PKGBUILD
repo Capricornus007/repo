@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=11
+pkgrel=12
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -451,6 +451,31 @@ PY
     else
       xvfb-run -s "-nolisten local" \
         meson test -C build --no-rebuild --print-errorlogs --num-processes=1 -t $CK_TIMEOUT_MULTIPLIER || rc=$?
+    fi
+
+    # ── 元素自己的 GError（#419 加，只留證據、不改判定）
+    # 為什麼前面三層探針全綠還是定不了案：探針拿的是 `find` 找到的第一張圖，
+    # 而測試用的是 GST_TEST_FILES_PATH/image.jpg（編譯進二進位的絕對路徑），兩張不是同一張。
+    # 而且 gdkpixbufoverlay 載圖失敗走的是 GST_ELEMENT_ERROR 巨集 —— 它只 post 到 bus、
+    # 不寫 stderr，所以 meson 的 errorlog 永遠只剩那句 set_state 回 FAILURE。
+    # gst-launch 會把 bus 上的 error 原封不動印出來，這才是我們要的那句話。
+    local dg1=0 dg2=0 img1="" launch1="" obin=""
+    img1="$(find . -type f -path '*gst-plugins-good/tests/files/image.jpg' 2>/dev/null | head -1)"
+    launch1="$(find build -type f -name 'gst-launch-1.0' 2>/dev/null | head -1)"
+    obin="$(find build -type f -name 'elements_gdkpixbufoverlay' 2>/dev/null | head -1)"
+    echo ">> 診斷前提：image=${img1:-找不到}  launch=${launch1:-找不到}  testbin=${obin:-找不到}"
+    if [ -n "$img1" ] && [ -n "$launch1" ]; then
+      GST_REGISTRY=/tmp/gst-diag.registry GST_PLUGIN_PATH_1_0="$PWD/build" GST_PLUGIN_SYSTEM_PATH_1_0='' \
+        "$launch1" -e "videotestsrc num-buffers=3 ! gdkpixbufoverlay location=file://$PWD/$img1 ! fakesink" \
+        > /tmp/gst-diag.out 2>&1 || dg1=$?
+      echo ">> 診斷 1) gst-launch 重組同一條 pipeline rc=$dg1，輸出全文："
+      cat /tmp/gst-diag.out 2>/dev/null | head -25
+    fi
+    if [ -n "$obin" ]; then
+      GST_REGISTRY=/tmp/gst-diag2.registry GST_PLUGIN_PATH_1_0="$PWD/build" GST_PLUGIN_SYSTEM_PATH_1_0='' GST_DEBUG=2 \
+        "$obin" > /tmp/gst-diag2.out 2>&1 || dg2=$?
+      echo ">> 診斷 2) 直接跑測試二進位 rc=$dg2，其中的 error/could not/unable 行："
+      grep -aiE 'error|could not|unable|failed to|Loader|sandbox|glycin' /tmp/gst-diag2.out 2>/dev/null | head -20
     fi
   fi
   return $rc
