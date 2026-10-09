@@ -203,6 +203,23 @@ jobs:
           fi
 
           if [ "${{ matrix.repo_name }}" = 'gstreamer' ]; then
+            # gdkpixbufoverlay 的紅根因（#409/#410 實測定案）：Arch 的 gdk-pixbuf 2.44 把 jpg
+            # 解碼交給 glycin，glycin 的沙箱硬編碼 `bwrap --unshare-all`，建完 netns 要給 lo
+            # 配地址 → 需要 CAP_NET_ADMIN。#410 那輪印出 `bwrap: loopback: Failed RTM_NEWADDR:
+            # Operation not permitted`，且同一輪 `CapEff=0000000000000000`（makepkg 拒絕以 root
+            # 跑、降權到 build 使用者後一顆 capability 都沒有），而 max_user_ns=63838、
+            # unprivileged_userns_clone=1 都正常 → 不是內核禁用、不是缺件，是降權後拿不到 caps。
+            # 本機同一個 bwrap 也沒 setcap 卻 rc=0，因為本機普通使用者能成功建 userns、在裡面
+            # 就是 root。這台 self-hosted runner 的容器显然做不到，所以直接補 cap。
+            if command -v setcap >/dev/null 2>&1; then
+              for b in /usr/sbin/bwrap /usr/bin/bwrap; do
+                [ -x "$b" ] && { setcap cap_net_admin,cap_sys_admin,cap_chown,cap_mknod,cap_setfcap+ep "$b" 2>&1 \
+                  && echo ">> 已給 $b 補 capability：$(getcap "$b" 2>/dev/null)" \
+                  || echo ">> setcap $b 失敗（這輪 gdkpixbufoverlay 仍會紅）"; }
+              done
+            else
+              echo ">> 容器裡沒有 setcap（libcap 未裝）→ 這輪只能靠探針確認根因"
+            fi
             # 字體是真的缺（base-devel 鏡像有 fontconfig 卻一顆字體都沒有）。
             pacman -S --noconfirm --needed ttf-dejavu fontconfig gdk-pixbuf2 libjpeg-turbo libpng shared-mime-info
             # ⚠️ 這整段每一步都要 `|| true`：CI run #399 就是被我这行害紅的——當時寫成
