@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=5
+pkgrel=6
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -343,7 +343,9 @@ check() (
   #    bytes）→ 那個「找不到圖」是我自己量出來的假訊號。這輪改成印出 bake 進測試
   #    二進位的真實路徑，並用 --print-errorlogs 把 GStreamer 貼在 bus 上的錯誤取出來。
   local tpath
-  tpath=$(strings build/subprojects/gst-plugins-good/tests/check/elements_gdkpixbufoverlay 2>/dev/null | grep -m1 '/tests/files')
+  # ⚠️ makepkg 的 build 函式是 errexit 環境：grep 沒命中就回 1，整段 check() 會在
+  # 13 毫秒內中止、一行都沒跑（#407 實測）。所有可能回非零的賦值都要 || true。
+  tpath=$(strings build/subprojects/gst-plugins-good/tests/check/elements_gdkpixbufoverlay 2>/dev/null | grep -m1 '/tests/files' || true)
   echo ">> 觀測：bake 進測試檔的圖片目錄=[$tpath]  ls=$(ls -l "$tpath/image.jpg" 2>&1 | tail -1)"
   GST_DEBUG=3 GST_DEBUG_NO_COLOR=1 xvfb-run -s "-nolisten local" \
     meson test -C build --no-rebuild --print-errorlogs elements_gdkpixbufoverlay 2>&1 | tail -60
