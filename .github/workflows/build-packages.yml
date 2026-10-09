@@ -376,15 +376,23 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: 給 bwrap 补 CAP_NET_ADMIN（gstreamer 专用）
+      - name: 還原 bwrap 權限設定並留證據（gstreamer 专用）
         if: matrix.repo_name == 'gstreamer'
         run: |
           set -uo pipefail
-          pacman -S --noconfirm --needed bubblewrap libcap || true
+          # #413 實測：setcap 之後 bwrap 自己拒斥「Unexpected capabilities but not
+          # setuid」，反而比不弄更糟，所以這裡把 file caps 清掉、回到純未授權狀態，
+          # 並把「能不能靠權限救」的判斷依據一次印齊（cap 邊界集、掛載有没有 nosuid、
+          # 以及 root 與建置使用者兩種身分下的 bwrap 結果）。降級與否由 PKGBUILD
+          # 的探針決定，這裡只負責留證據。
+          pacman -S --noconfirm --needed bubblewrap libcap util-linux || true
           for b in /usr/sbin/bwrap /usr/bin/bwrap; do
-            [ -x "$b" ] && setcap cap_net_admin,cap_sys_admin,cap_chown,cap_mknod,cap_setfcap+ep "$b" \
-              && echo ">> setcap ok: $b $(getcap "$b")" || echo ">> setcap FAILED on $b"
+            [ -x "$b" ] && { setcap -r "$b" 2>/dev/null; echo ">> 已清 caps: $b [$(getcap "$b")]"; }
           done
+          echo ">> mount: $(findmnt -no OPTIONS / | tr -d ' ') | $(findmnt -no OPTIONS /usr 2>/dev/null | tr -d ' ')"
+          echo ">> root  CapBnd=$(awk '/CapBnd/{print $2}' /proc/self/status)  CapEff=$(awk '/CapEff/{print $2}' /proc/self/status)"
+          echo ">> bwrap(root) rc=0:"; bwrap --unshare-all --ro-bind /usr /usr --symlink /usr/lib /lib64 --dev /dev --proc /proc /usr/bin/true; echo "   -> rc=$?"
+          echo ">> bwrap(unshare-user only):"; bwrap --unshare-user --ro-bind / / /usr/bin/true; echo "   -> rc=$?"
 
       - name: 拉取对应的套件仓库
         run: |

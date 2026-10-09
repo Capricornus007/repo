@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=8
+pkgrel=9
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -362,6 +362,25 @@ check() (
   bwrap --unshare-all --ro-bind /usr /usr --symlink /usr/lib /lib64 --dev /dev --proc /proc /usr/bin/true 2>/tmp/gst-bwrap-err.txt || brw=$?
   echo ">> 沙箱前提：bwrap rc=$brw  stderr=$(tail -3 /tmp/gst-bwrap-err.txt 2>/dev/null | tr '\n' '|')"
   echo ">> 內核能力：max_user_ns=$(cat /proc/sys/user/max_user_namespaces 2>/dev/null || echo 查無)  unprivileged_userns_clone=$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo '此核心無此檔')  CapEff=$(awk '/CapEff/{print $2}' /proc/self/status 2>/dev/null)"
+
+  # ── 沙箱起不來時，本次 check 改走上游自己的「無沙箱」路徑（#413 定案）
+  # 實測：bwrap 0.13 在容器裡能建 namespace、但拿到的是沒有 CAP_NET_ADMIN 的 netns，
+  # 死在設定 loopback：`bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`。
+  # glycin 的可用性偵測只認這幾個字串：Creating new namespace failed／
+  # No permissions to create (a new) namespace／setting up uid map: Permission denied／
+  # SIGSYS／Blocked syscall used——RTM_NEWADDR 那串不在裡面，所以它以為沙箱能用，
+  # 直接去跑解碼器，測試就紅在「載不进圖」。
+  # 給 bwrap 上 file capabilities 也走不通（#413 實測 setcap 成功後 bwrap 自己拒斥：
+  # `Unexpected capabilities but not setuid, old file caps config?`），容器又不能
+  # 改 cap_add／掛載選項，所以這裡用 glycin 官方留的環境變數 GLYCIN_DISABLE_SANDBOX
+  # 明確降級，而且只在探針實際失敗時才設——本機 bwrap rc=0，一樣跑沙箱路徑。
+  # 這不影響產物：變數只在 check() 的 shell 裡，裝到使用者機器上照舊有沙箱。
+  if [ "$brw" -ne 0 ]; then
+    export GLYCIN_DISABLE_SANDBOX=1
+    echo ">> 判定：沙箱不可用（rc=$brw），本次 check 設 GLYCIN_DISABLE_SANDBOX=1 走上游無沙箱路徑"
+  else
+    echo ">> 判定：沙箱可用，維持預設（不設 GLYCIN_DISABLE_SANDBOX）"
+  fi
 
   # Flaky due to timeouts
   local rc=0
