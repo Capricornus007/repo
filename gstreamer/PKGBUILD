@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=14
+pkgrel=15
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -465,20 +465,29 @@ PY
     obin="$(find build -type f -name 'elements_gdkpixbufoverlay' 2>/dev/null | head -1)"
     echo ">> 診斷前提：image=${img1:-找不到}  launch=${launch1:-找不到}  testbin=${obin:-找不到}"
     if [ -n "$img1" ] && [ -n "$launch1" ]; then
-      # ⚠️ pipeline 一定要**逐詞當多個參數**傳：#419 實測我把整句用引號包成一個 token，
-      # gst-launch 就把它當成單一元素名，只回 `erroneous pipeline: syntax error`，
-      # 一行 GError 都拿不到（這個坑是我自己挖的，不是容器的问题）。
+      # ⚠️ 這兩段教訓註解必須放在赋值行**外面**，不能夾在 `\` 續行中間：
+      # `\` 後面接到的那行若以 `#` 開頭，bash 把它當成續行內容一起吃掉，
+      # 結果是「env 賦值自成一句、命令另外一句」，gst-launch 在沒有
+      # GST_PLUGIN_PATH_1_0 的狀態下執行 → 穩定得到 "no element videotestsrc"
+      # 這種假紅（#421/#422 實測，我上一筆 5e1584f 就是這樣自己弄壞的）。
+      # ⚠️ pipeline 一定要**逐詞當多個參數**傳：#419 實測我把整句用引號包成一個
+      # token，gst-launch 就把它當成單一元素名，只回 `erroneous pipeline: syntax error`。
+      # ⚠️ location 收的是**檔案系統路徑**：#420 實測餵 `file://…` 會被當成檔名，
+      # 報 `Failed to open file "file:///…": No such file or directory`。
       GST_REGISTRY=/tmp/gst-diag.registry GST_PLUGIN_PATH_1_0="$PWD/build" GST_PLUGIN_SYSTEM_PATH_1_0='' \
-        # ⚠️ location 收的是**檔案系統路徑**：#420 實測餵 `file://…` 會被當成檔名，
-        # 報 `Failed to open file "file:///…": No such file or directory`——那是探針自己
-        # 寫錯造成的假紅，不是包的缺陷。這裡給不加 URI 前綴的絕對路徑。
         "$launch1" -e videotestsrc num-buffers=3 ! gdkpixbufoverlay location="$PWD/$img1" ! fakesink \
         > /tmp/gst-diag.out 2>&1 || dg1=$?
       echo ">> 診斷 1) gst-launch 重組同一條 pipeline rc=$dg1，輸出全文："
       cat /tmp/gst-diag.out 2>/dev/null | head -25
     fi
     if [ -n "$obin" ]; then
-      GST_REGISTRY=/tmp/gst-diag2.registry GST_PLUGIN_PATH_1_0="$PWD/build" GST_PLUGIN_SYSTEM_PATH_1_0='' GST_DEBUG=2 \
+      # 繞開 meson 直接跑二進位時，一定要自己補 GST_PLUGIN_LOADING_WHITELIST，
+      # 否則gst-check 的 beacon 會先擋下來、只會得到
+      # 「Test environment not set up correctly! Expected ... GST_PLUGIN_LOADING_WHITELIST」
+      # 這句與缺陷無關的話（#422 實測踩過）。值照上游 tests/check/meson.build:205。
+      GST_REGISTRY=/tmp/gst-diag2.registry GST_PLUGIN_PATH_1_0="$PWD/build" GST_PLUGIN_SYSTEM_PATH_1_0='' \
+        GST_PLUGIN_LOADING_WHITELIST="gstreamer:gst-plugins-base:timecode:gst-plugins-good@$PWD/build/subprojects/gst-plugins-good" \
+        GST_DEBUG=2 \
         "$obin" > /tmp/gst-diag2.out 2>&1 || dg2=$?
       echo ">> 診斷 2) 直接跑測試二進位 rc=$dg2，從 Running suite 起的全文："
       sed -n '/Running suite/,$p' /tmp/gst-diag2.out 2>/dev/null | head -30 || true
@@ -505,6 +514,19 @@ PY
     else
       echo ">> 診斷 3) 找不到 gst-plugin-scanner 二進位（這本身就是一條答案）"
     fi
+
+    # ── 診斷 4：上面幾條都是「繞開 meson 自己湊環境」，而 meson 的 test env 除了
+    # GST_PLUGIN_PATH_1_0=build_root 之外還逐條注入了 pluginsdirs（各子專案目錄），
+    # 自己湊一定漏，漏了就又得到假紅。這條改用 meson test 重跑同一個測試，
+    # 環境完全交給 meson，只從製程環境額外帶一個 GST_DEBUG（它不在上游 env.set 清單內，
+    # 所以會老實繼承）—— 這才是 gdkpixbufoverlay 自己那句 GError 的可靠取法。
+    echo ">> 診斷 4) 交給 meson test 重跑並開 GST_DEBUG，看元素自己報的原因："
+    GLYCIN_DISABLE_SANDBOX=1 \
+      GST_DEBUG=gstgdkpixbufoverlay:7,gstutils:5,gstplugin:4 \
+      xvfb-run -s "-nolisten local" \
+      meson test -C build --no-rebuild --print-errorlogs --num-processes=1 -t 10 \
+      elements_gdkpixbufoverlay > /tmp/gst-diag4.out 2>&1 || true
+    tail -60 /tmp/gst-diag4.out 2>/dev/null || true
   fi
   return $rc
 )
