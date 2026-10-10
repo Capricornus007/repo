@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=13
+pkgrel=14
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -469,7 +469,10 @@ PY
       # gst-launch 就把它當成單一元素名，只回 `erroneous pipeline: syntax error`，
       # 一行 GError 都拿不到（這個坑是我自己挖的，不是容器的问题）。
       GST_REGISTRY=/tmp/gst-diag.registry GST_PLUGIN_PATH_1_0="$PWD/build" GST_PLUGIN_SYSTEM_PATH_1_0='' \
-        "$launch1" -e videotestsrc num-buffers=3 ! gdkpixbufoverlay location="file://$PWD/$img1" ! fakesink \
+        # ⚠️ location 收的是**檔案系統路徑**：#420 實測餵 `file://…` 會被當成檔名，
+        # 報 `Failed to open file "file:///…": No such file or directory`——那是探針自己
+        # 寫錯造成的假紅，不是包的缺陷。這裡給不加 URI 前綴的絕對路徑。
+        "$launch1" -e videotestsrc num-buffers=3 ! gdkpixbufoverlay location="$PWD/$img1" ! fakesink \
         > /tmp/gst-diag.out 2>&1 || dg1=$?
       echo ">> 診斷 1) gst-launch 重組同一條 pipeline rc=$dg1，輸出全文："
       cat /tmp/gst-diag.out 2>/dev/null | head -25
@@ -477,8 +480,12 @@ PY
     if [ -n "$obin" ]; then
       GST_REGISTRY=/tmp/gst-diag2.registry GST_PLUGIN_PATH_1_0="$PWD/build" GST_PLUGIN_SYSTEM_PATH_1_0='' GST_DEBUG=2 \
         "$obin" > /tmp/gst-diag2.out 2>&1 || dg2=$?
-      echo ">> 診斷 2) 直接跑測試二進位 rc=$dg2，其中的 error/could not/unable 行："
-      grep -aiE 'error|could not|unable|failed to|Loader|sandbox|glycin' /tmp/gst-diag2.out 2>/dev/null | head -20
+      echo ">> 診斷 2) 直接跑測試二進位 rc=$dg2，從 Running suite 起的全文："
+      sed -n '/Running suite/,$p' /tmp/gst-diag2.out 2>/dev/null | head -30 || true
+      # 測試自己那張圖的路徑是**編譯進二進位**的字串，跟 find 找到的不一定是同一個位置；
+      # 把它挖出來直接看檔案在不在，才是「測試拿不到圖」與「元素解不了圖」的分界線。
+      baked="$(strings "$obin" 2>/dev/null | grep -oE '[^ ]*image\.jpg' | head -1)"
+      echo ">> 診斷 2b) 二進位內嵌的圖=${baked:-查無}  存在=$([ -f "$baked" ] && echo 是 || echo 否)  size=$(stat -c %s "$baked" 2>/dev/null || echo 無)"
     fi
 
     # ── 診斷 3（#420 加）：#419 的 stderr 出現 `External plugin loader failed`
@@ -489,9 +496,12 @@ PY
     local scanrc=0 scanner=""
     scanner="$(find build -type f -name 'gst-plugin-scanner' 2>/dev/null | head -1)"
     if [ -n "$scanner" ]; then
-      "$scanner" > /tmp/gst-scan.out 2>&1 || scanrc=$?
+      # scanner 會從 stdin 讀要掃的清單，不餵 /dev/null 會吃掉 makepkg 的 stdin。
+      "$scanner" < /dev/null > /tmp/gst-scan.out 2>&1 || scanrc=$?
       echo ">> 診斷 3) gst-plugin-scanner=$scanner 直接執行 rc=$scanrc，輸出前 8 行："
-      head -8 /tmp/gst-scan.out 2>/dev/null
+      # ⚠️ 這行在 #420 回過非零，把整個 check() 直接炸掉、連自己的輸出都被吞
+      # （makepkg 的 errexit 只看最後一條命令），所以一律 `|| true` 兜住。
+      head -8 /tmp/gst-scan.out 2>/dev/null || true
     else
       echo ">> 診斷 3) 找不到 gst-plugin-scanner 二進位（這本身就是一條答案）"
     fi
