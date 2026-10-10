@@ -19,8 +19,13 @@ arch=('x86_64')
 url="https://codeberg.org/ravachol/kew"
 license=('GPL2')
 conflicts=('kew')
+# 依賴 kew 的包（以及 yay／pikaur 這類輔助工具）只看 provides 不看 conflicts，
+# 少了這行 kew-git 就永遠無法滿足 `kew`。版本要把 pkgver 開頭的 `v` 剋掉並帶 epoch：
+# vercmp 裡「字母開頭的段」小於「數字段」，直接寫 v4.3.6.r23… 會比穩定版 4.3.6 還舊，
+# 等於補了個滿足以後依賴仍然判不過。
+provides=("kew=${epoch}:${pkgver#v}")
 depends=('fftw' 'faad' 'git' 'chafa' 'taglib' 'libogg' 'gcc' 'make' 'glib2' 'opus' 'opusfile' 'libvorbis' 'curl')
-replaces=('cue-git')
+replaces=('cue-git' 'kew')
 sha256sums=('SKIP')
 
 source=("git+${url}")
