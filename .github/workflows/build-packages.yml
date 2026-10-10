@@ -598,6 +598,18 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
+            linux-firmware-nfp-git)
+              # 走 pkgbase（AUR 倉以 pkgbase 命名，nfp 只是分包）＋ 修授權行：
+              # 上游已把授權檔從頂層搬進 LICENSES/ 目錄，Arch 官方 PKGBUILD 也改成
+              # 讀 ${pkgbase}/LICENSES/LICEN[CS]E*，而 AUR 那份仍是
+              # `install -m644 LICEN*`，樣式會匹配到 LICENSES 目錄本身
+              # → `install: omitting directory 'LICENSES'` → package() 中止
+              # （2026-10-10 run #426 實測）。改成讀 LICENSES/，並保留 _pick 依賴的
+              # 扁平落點（install 只取 basename，_pick 路徑不變）。
+              git clone "https://aur.archlinux.org/${{ matrix.pkgbase }}.git" pkg_dir
+              sed -i 's| -m644 LICEN\*$| -m644 LICENSES/LICEN*|' pkg_dir/PKGBUILD
+              grep -q ' -m644 LICENSES/LICEN\*$' pkg_dir/PKGBUILD \
+                || { echo "::error::AUR PKGBUILD 的授權行樣式已變，本 sed 沒命中，請手動核對"; exit 1; } ;;
             *)
               # AUR 包或本仓库维护的 -git 包：
               # sway/wlroots/waybar/i3status 家族：-git 取 AUR、穩定版取 Arch
