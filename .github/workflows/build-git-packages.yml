@@ -39,6 +39,11 @@ jobs:
       # 這兩顆原本只從 chaotic-aur 拿，而 chaotic 那五台鏡像走 Cloudflare 的 IPv6 一律
       # TLS 8 秒被斷（實測釘 IPv4 才 0.46 秒回 303），鏡像一抖就「無法取得」。AUR 兩顆
       # 都在，所以 kind: aur 直接取 AUR 的 PKGBUILD 來編。
+      # 2026-10-10 更正：linux-firmware-nfp-git 不再取 AUR（AUR 那份在 CI 從沒建成功過，
+      # 用戶裁決改自己寫），PKGBUILD 維護在本倉 linux-firmware-nfp-git/ 目錄、由
+      # build-packages.yml 的 in-tree 分支攔截；矩陣仍留 kind:aur 只為借用 giant if 的
+      # `matrix.kind != 'aur'` 跳過回推校驗和（與 pnpm-git 同一手法，理由見
+      # docs/in-tree-packages.md）。
       # ⚠️ packages 是 `packages: |` 的**純 JSON 字面塊**，下游用 fromJSON(inputs.packages)
       # 解析——註解只能寫在這裡，寫進方括號裡面會讓整條矩陣（130+ job）一起解析失敗。
       packages: |
@@ -112,7 +117,7 @@ jobs:
           {"key": "i3lock-color-git", "repo_name": "i3lock-color-git", "variant": "none", "kind": "aur"},
           {"key": "glib2-git", "repo_name": "glib2-git", "variant": "none", "kind": "aur"},
           {"key": "lib32-glib2-git", "repo_name": "lib32-glib2-git", "variant": "none", "kind": "aur"},
-          {"key": "linux-firmware-nfp-git", "repo_name": "linux-firmware-nfp-git", "variant": "none", "kind": "aur", "pkgbase": "linux-firmware-git"},
+          {"key": "linux-firmware-nfp-git", "repo_name": "linux-firmware-nfp-git", "variant": "none", "kind": "aur"},
           {"key": "rofi-git", "repo_name": "rofi-git", "variant": "none", "kind": "aur"},
           {"key": "dunst-git", "repo_name": "dunst-git", "variant": "none", "kind": "aur"},
           {"key": "feh-git", "repo_name": "feh-git", "variant": "none", "kind": "aur"},

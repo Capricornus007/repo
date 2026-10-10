@@ -146,3 +146,49 @@ CI run #394 的兩記紅與修法（實測，不是推測）：
     构建環境帶 bus 所以不會遇到。修法：makedepends 加 `dbus`、check() 改成
     `dbus-run-session -- meson test ...`，給它一個真的 session bus；
     **不用 --nocheck、也不 --no-suite 跳過整個 gio**，那是放棄 391 支測試。
+
+---
+
+linux-firmware-nfp-git（用戶 2026-10-10 裁決：停止在壞掉的 AUR PKGBUILD 上疊 sed，
+自己寫一份 in-tree 由本倉維護）。必須在這裡攔掉，否則通用規則見 `-git$` 就去
+clone AUR 的 `linux-firmware-git` pkgbase。逐點理由：
+  · **AUR 那份在 CI 從沒建成功過**，而且一關過了露下一關：
+    (a) 授權行 `install -m644 LICEN*` 仍指頂層，上游早已把授權檔搬進 `LICENSES/`
+        → 樣式匹配到 LICENSES 目錄本身 → `install: omitting directory 'LICENSES'`
+        → package() 中止（run #426 實測）；
+    (b) 上一輪在 CI 用 sed 修掉 (a) 後露出第二關：`install: cannot stat
+        'linux-firmware-git/LICENSE.amd-ucode'` → package_amd-ucode_git() 中止。
+        該檔在頂層**確實存在**（kernel.org cgit 查過 a3e1417a 的檔案清單），
+        所以不是上游改名，是 AUR 那份對「來源目錄／工作檔」的假設壞了——它的
+        source 是裸 `linux-firmware-git::git+<url>.git`、不帶 `#tag=`／`#commit=`。
+        → 那兩條 sed 已隨本次改動一併移除（留著只會誤導日後的人）。
+  · **基準是 Arch 官方 core 倉那份**（實測 `linux-firmware` 與 `linux-firmware-nfp`
+    都在 core、20260916-1），依本倉判準「穩定版住官方倉 → in-tree 並以官方那份為底」。
+    官方 426 行拆 20 顆子包；本倉**只做 nfp 一顆**（選項 B 整組收被否）：
+    矩陣本來就只有 nfp 這條需求；整組收會把用戶機上全部 Wi-Fi/GPU/NVMe 固件一起
+    換成 git 尖端並顶掉 core 同名包，風險與收益不成比；官方那套「`make install-zst`
+    全壓 1.4GB 再 `_pick` 搬出去」對單顆來說是每三小時 CI 白燒 99%。
+  · **裝檔改成「過濾 WHENCE」**：上游 `copy-firmware.sh` 只讀兩樣東西——CWD 的
+    WHENCE（只認 File:/RawFile:/Link: 三種行，`Version:` 是註記它不管）與相對
+    CWD 的源檔。所以 package() 把 WHENCE 過濾成只剩 `Driver: nfp` 那一段，在臨時
+    stage 目錄放 `netronome -> 源/netronome` 符號鏈接，腳本只會處理 nfp 的 40 個
+    檔＋38 條鏈接，產出與官方同形（真檔 `*.zst` ＋同名 `*.zst` 鏈接，比對過用戶機
+    上 Garuda 那顆的 `/usr/lib/firmware/netronome` 佈局）。stage 不含 `.git` 是
+    故意的：`copy-firmware.sh` 只在 `.git/config` 存在時跑 `check_whence.py`，而
+    它驗的是「整棵樹都被 WHENCE 覆蓋」，過濾版必然不過。三道防呆（過濾結果非空、
+    `netronome/` 真的裝出檔、頂層只准有 netronome/）擋掉「綠燈出一顆只有授權檔的
+    空包」——第二道是必要的：`copy-firmware.sh` 的複製迴路是 `... | while read`，
+    迴路內失敗不會讓腳本非 0 退出，上游目錄一旦改名就可能「零產物卻回 0」。
+    makedepends 因此只要 `git`＋`rdfind`（官方的 parallel/python 用不到：不傳 -j、
+    不跑 check_whence.py；rdfind 要留是因为 dedup 是官方每顆子包都跑的）。
+  · **保留 `kind:"aur"` 但拿掉 `"pkgbase"` 欄位**：case 首命中即中，走的是本倉目錄、
+    不會去 clone AUR；留 kind 只為借用回推那步的 `matrix.kind != 'aur'`（與
+    pnpm-git／pi-coding-agent-git 同一手法）。上面 gstreamer 那段「不准用 kind:aur
+    混過」在這裡不適用——本包源是滾動 git、`sha256sums=('SKIP')` 本來就沒有校驗和
+    可放棄，`--skipchecksums --nocheck` 零成本（PKGBUILD 無 check()）。
+  · **`epoch=1` 與 `provides`／`conflicts` 是硬性欄位**（用戶機實測依據寫在
+    PKGBUILD 檔頭）：現裝的是 Garuda Builder 的 `linux-firmware-nfp-git
+    20261009.afabaf77-1`（epoch 0），本檔 pkgver() 錨在最新 tag（日期段
+    20260916 < 20261009），不加 epoch 就是「CI 出包、用戶 `pacman -Syu` 永不換裝」；
+    `mkinitcpio-firmware` 的 Depends 有 `linux-firmware-nfp`，靠本包 provides 滿足，
+    拿掉即整機依賴斷鏈。
