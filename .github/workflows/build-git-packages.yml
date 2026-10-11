@@ -46,6 +46,14 @@ jobs:
       # docs/in-tree-packages.md）。
       # ⚠️ packages 是 `packages: |` 的**純 JSON 字面塊**，下游用 fromJSON(inputs.packages)
       # 解析——註解只能寫在這裡，寫進方括號裡面會讓整條矩陣（130+ job）一起解析失敗。
+      # （2026-10-11 真的踩過：llvm-git 那條的說明寫進方括號內，run #436 就只剩 deploy
+      #  一顆 job、build 矩陣整個沒跑。改動前後都用 python 把這塊 json.loads() 驗過。）
+      # llvm 那批（用戶 2026-10-11 點名「六個全部搬去 -git 自動構建」）：一個目錄產七顆
+      # split（llvm-libs／llvm／llvm-lit／compiler-rt／lld／lldb／clang），收集與 repo-add
+      # 兩步都是 `pkg_dir/*.pkg.tar.zst` 的 glob，所以 split 不需要額外接點。kind:aur 只為
+      # 借用回推那步的 `matrix.kind != 'aur'`（pkgver 由上游 HEAD 現算，回推校驗和無意義）；
+      # case 首命中即中，走本倉 llvm-git/PKGBUILD，不會去 clone AUR。逐包理由見
+      # docs/in-tree-packages.md。
       packages: |
         [
           {"key": "dae-git", "repo_name": "dae-git", "variant": "none"},
@@ -58,13 +66,6 @@ jobs:
           {"key": "ffmpeg-full-git", "repo_name": "ffmpeg-full-git", "variant": "nonfree"},
           {"key": "astc-encoder-git", "repo_name": "astc-encoder-git", "variant": "none"},
           {"key": "kew-git", "repo_name": "kew-git", "variant": "none"},
-          # llvm 那批（用戶 2026-10-11 點名「六個全部搬去 -git 自動構建」）：
-          # 一個目錄產七顆 split 包（llvm／llvm-libs／llvm-lit／clang／lld／lldb／
-          # compiler-rt），收集與 repo-add 那兩步都是 `pkg_dir/*.pkg.tar.zst` 的 glob，
-          # 所以 split 不需要額外接點。kind:aur 只為借用回推那步的 `matrix.kind != 'aur'`
-          # （pkgver 由上游 HEAD 現算，回推校驗和對它無意義），case 首命中即中、
-          # 走的是本倉 llvm-git/PKGBUILD，不會去 clone AUR。逐包理由見
-          # docs/in-tree-packages.md。
           {"key": "llvm-git", "repo_name": "llvm-git", "variant": "none", "kind": "aur"},
           {"key": "mpv-git", "repo_name": "mpv-git", "variant": "none"},
           {"key": "oh-my-pi-git", "repo_name": "oh-my-pi-git", "variant": "none"},
