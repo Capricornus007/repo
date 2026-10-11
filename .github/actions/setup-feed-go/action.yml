@@ -86,13 +86,23 @@ runs:
             ;;
         esac
         # 顯式釘住 GOROOT 與 PATH：GitHub runner 預裝的 Go 也在 PATH 裡，誰先命中
-        # 取決於順序，不能靠「應該會蓋過去」這種假設。
+        # 取決於順序，不能靠「應該會蓋過去」這種假設。先 export 再問 go env，
+        # 免得下面這幾個查詢打到 runner 預裝那顆 go 上。
+        export PATH="/usr/lib/go/bin:$PATH"
         echo "GOROOT=/usr/lib/go" >> "$GITHUB_ENV"
         echo "/usr/lib/go/bin" >> "$GITHUB_PATH"
+        # GOPATH/bin 也要進 PATH、並把 GOBIN 顯式設好——這才是 actions/setup-go
+        # 悄悄幫我們做的事（實證：綠的那輪日誌印 `GOBIN='/home/runner/go/bin'`）。
+        # 少了它，任何「用絕對路徑叫 $GOPATH/bin/xxx、內部再用 LookPath 找另一個
+        # 工具」的腳本會紅：nb4a 的 libcore/build.sh:37 `export GOBIND=gobind-matsuri`
+        # 就是這樣死在「gomobile-matsuri: gobind was not found」（CI #736/Build #661）。
+        gobin="$(go env GOPATH)/bin"
+        mkdir -p "$gobin"
+        echo "GOBIN=$gobin" >> "$GITHUB_ENV"
+        echo "$gobin" >> "$GITHUB_PATH"
         # 不許 go 再去下載官方 toolchain 頂替（go.mod 的 go 指令低於 tip 時，預設
         # 行為可能拉一個發布版回來，那這輪驗的就不是尖端）。
         echo "GOTOOLCHAIN=local" >> "$GITHUB_ENV"
-        export PATH="/usr/lib/go/bin:$PATH"
         go version
         # 硬驗「真的是 tip」：feed 那顆萬一退化成發布版，這裡就要紅，
         # 而不是讓整輪 CI 安靜地用回 1.27.x。
