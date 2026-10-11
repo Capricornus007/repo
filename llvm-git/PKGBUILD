@@ -64,27 +64,51 @@ makedepends=(cmake ninja git python swig perl libedit libffi ncurses zlib zstd
 options=(staticlibs !emptydirs !lto)
 _stage="$srcdir/stage"
 _cmakeargs=(
+  # ⚠️ 必須顯式給 -G Ninja：本機 configure 實測漏它的時候，cmake 退回 Unix Makefiles
+  #   （build 目錄裡生出的是 Makefile、沒有 build.ninja），那樣 CI **不會紅**、只會
+  #   在連結階段 OOM —— 因為 -DLLVM_PARALLEL_LINK_JOBS 只有 Ninja 支援，用 Make 時
+  #   連結併發會退化成跟編譯一樣吃滿 nproc。這條是 Arch 那份有、我先前漏抄的。
+  -G Ninja
   -DCMAKE_BUILD_TYPE=Release
+  # ⚠️ 這組裡「Arch 有而我之前沒抄」的幾條都是必須的，不是點綴：
+  #   RTTI → lldb 編不過；CLANG_LINK_CLANG_DYLIB → 沒有它就根本不會產
+  #   libclang-cpp.so（而分割清單假設它在）；LLVM_INSTALL_UTILS → FileCheck 等
+  #   工具不會被建；CMAKE_SKIP_INSTALL_RPATH → 少了它裝到 /usr 的執行檔會留
+  #   指向 build 目錄的 RPATH；LLD_BUILD_SHARED → prepare 裡那條 sed 就是為它。
+  -DCMAKE_INSTALL_DOCDIR=share/doc
+  -DCMAKE_SKIP_INSTALL_RPATH=ON
   -DLLVM_ENABLE_ASSERTIONS=OFF
   -DLLVM_ENABLE_TERMINFO=OFF
   -DLLVM_ENABLE_ZLIB=ON
   -DLLVM_ENABLE_ZSTD=ON
+  -DLLVM_ENABLE_CURL=ON
+  -DLLVM_ENABLE_FFI=ON
+  -DLLVM_ENABLE_RTTI=ON
+  -DLLVM_ENABLE_BINDINGS=OFF
+  -DLLVM_BINUTILS_INCDIR=/usr/include
   -DLLVM_INCLUDE_TESTS=OFF
   -DLLVM_INCLUDE_BENCHMARKS=OFF
   -DLLVM_INCLUDE_EXAMPLES=OFF
   -DLLVM_INCLUDE_DOCS=OFF
+  -DLLVM_INSTALL_UTILS=ON
   -DLLVM_ENABLE_PROJECTS='clang;clang-tools-extra;lld;lldb'
   -DLLVM_ENABLE_RUNTIMES='compiler-rt'
   -DLLVM_TARGETS_TO_BUILD='X86;NVPTX;AMDGPU'
   -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
-  -DBUILD_SHARED_LIBS=ON
+  # ⚠️ 這裡**不能**給 -DBUILD_SHARED_LIBS=ON：run #437 實測 configure 直接被拒
+  #   「Cannot enable BUILD_SHARED_LIBS with LLVM_LINK_LLVM_DYLIB」（CMakeLists.txt:1005
+  #   的 message(FATAL_ERROR)），prepare() 就紅。Arch 也只給下面那兩條 dylib 開關。
   -DLLVM_BUILD_LLVM_DYLIB=ON
   -DLLVM_LINK_LLVM_DYLIB=ON
   -DLLVM_DYLIB_COMPONENTS=all
   -DLLVM_ENABLE_LLD=ON
   -DLLVM_PARALLEL_LINK_JOBS=2
   -DLLVM_VERSION_SUFFIX=git
+  -DCLANG_DEFAULT_PIE_ON_LINUX=ON
+  -DCLANG_LINK_CLANG_DYLIB=ON
   -DCLANG_DEFAULT_LINKER=lld
+  -DLLD_BUILD_SHARED=ON
+  -DENABLE_LINKER_BUILD_ID=ON
   -DLLDB_ENABLE_PYTHON=ON
   -DLLDB_INCLUDE_TESTS=OFF
 )
