@@ -2269,11 +2269,28 @@ jobs:
           # 先拔穩定版 go（--nodeps 避免連帶拔掉容器裡其他吃 go 的建置工具），
           # 再裝 go-git：它 provides go 與 go-pie，之後 makepkg -s 就不會再把穩定版拉回來。
           pacman -Rdd --noconfirm go go-pie >/dev/null 2>&1 || true
-          if pacman -S --noconfirm --needed go-git; then
+          got_go_git=false
+          for _t in 1 2 3; do
+            if pacman -S --noconfirm --needed go-git; then got_go_git=true; break; fi
+            echo "::warning::go-git 安裝失敗（第 ${_t} 次），重試"
+            sleep $((_t * 10))
+          done
+          if [ "$got_go_git" = true ]; then
             echo "::notice::Go 工具鏈已換成尖端：$(go version)"
-          else
-            echo "::warning::go-git 裝不上（源未發布或網路瞬斷），本輪退回穩定版 go"
+            # 硬驗真的是 tip：feed 那顆萬一退化成發布版，這裡就要紅。
+            go version | grep -q -- '-devel' \
+              || { echo "::error::裝到的不是 tip：$(go version)"; exit 1; }
+          elif [ "$(uname -m)" != x86_64 ]; then
+            # feed 的 go-git 只出 x86_64 一檔，其他架構本來就不在統一範圍內。
+            # 這不是「用回退換綠燈」，是把例外寫在明處：該架構這輪的產物用的是
+            # 穩定版 go，go runtime 字串不會是尖端。
+            echo "::warning::$(uname -m) 沒有對應的 go-git 資產，本包仍用穩定版 go 建置"
             pacman -S --noconfirm --needed go || true
+          else
+            # x86_64 上裝不到就紅。靜默退回穩定版會把「所有 Go 產物統一尖端」變成
+            # 一句假話，而 badge 還是綠的 —— 這正是用戶點名要禁的那類。
+            echo "::error::x86_64 上裝不到 go-git（源未發布或網路持續異常）——不退回去用穩定版"
+            exit 1
           fi
 
       - name: 云端编译 `.pkg.tar.zst`
