@@ -8,7 +8,11 @@ pkgver=3.6.1.r23.g7a3d146
 # 日誌原話「pkgver() 會改版本 → makepkg 必把 pkgrel 重置為 1」）。實測 10-07：
 # 抬 pkgrel=2 之後仍「跳过构建：pysolfc-git-3.6.1.r37.gc39976f-1 已在 release 里」，
 # feed 那顆停在 13:48 的純上游版（無語系／無主題補丁）。改完補丁或語系就 +1 epoch。
-epoch=2
+# （CI 的「產物是否已在 release 裡」比對用的 asset_prefix 確實帶 epoch——
+#  build-packages.yml 裡 `EPOCH_PART="${CUR_EPOCH}."`，所以抬 epoch 會繞過比對、
+#  真的觸發重建。10-11 加 Tk wrapper 時核過這段。）
+# epoch=3：本包內建 Tk/fcitx5 相容性 wrapper（見 package() 尾）。
+epoch=3
 pkgrel=1
 pkgdesc="PySol (Fan Club edition) is an exciting collection of more than 1000 solitaire games (git version)"
 arch=('any')
@@ -46,6 +50,9 @@ conflicts=('pysolfc')
 # help 那份不進 locale，是打包時拿来改寫 data/html 的。
 # follow-desktop-theme.patch + systemtheme.py：讓 Tk 元件跟隨桌面調色盤（見檔內說明）。
 # localized-help.patch：讓 DataLoader 優先取 html/<語系>/ 下的翻譯說明頁。
+# package() 尾沒有額外檔案：它把 setup.py 裝出來的 /usr/bin/pysol 改名成
+# /usr/bin/pysol-real，並在原位落一個 /bin/sh 的 Tk/fcitx5 相容性 wrapper（理由與
+# 代價寫在該處註解）。所以本目錄多一個檔案都不用，CI 那個目錄掃描抓取照舊。
 source=(
   "git+https://github.com/shlomif/PySolFC.git"
   'zh_TW_pysol.po'
@@ -174,4 +181,46 @@ package() {
     _lng=${_lng%.mo}
     python "$srcdir/localize-help.py" "$_html" "$_lng" "$_mo"
   done
+
+  # ---- Tk / fcitx5 相容性 wrapper -------------------------------------------
+  # 本包預設介面是 Tk（pysollib/winsystems/x11.py）。Tk 沒有 input-method module、
+  # 只認 XIM，而 fcitx5 的 XIM 對 Tk 客戶端**一個鍵都不回傳**：10-11 實測交叉表
+  # （有控制組）——帶 XMODIFIERS=@im=fcitx 時 Tk Entry 十鍵全吞、收到空字串，rime
+  # 活躍與非活躍都一樣；不設 XMODIFIERS 正常；@im=ibus 與 @im=xim（連不上而降級）
+  # 都正常；同環境 xterm 正常 ⇒ 壞的是 Tk 的 XIM 客戶端實作，不是 fcitx5 整體。
+  # fcitx5 端唯一相關的可調項 XIM/UseOnTheSpot 實測 True/False 兩態都全吞 ⇒ 設定層
+  # 無解，只能在客戶端繞。本機 10-11 用 /usr/local/bin/pysol 手寫同樣的繞法已驗證
+  # 可用（用戶親測能打字），這裡把它做進包，免得下次重建就掉。
+  #
+  # 代價（老實寫在包裡）：剝掉 XMODIFIERS 後 Tk 沒有别的輸入法管道，pysolfc 介面內
+  # 打不了中文——牌局名稱／自訂花色那几个輸入框只能打英文數字。三條候選（換 ibus／
+  # 上游補丁自架選字／用剪貼簿貼）尚未裁決，先這樣發。
+  #
+  # 只在 @im=fcitx 時剝：ibus／xim 的 Tk+XIM 本來就是好的，照單全剝會讓那些環境的
+  # 中文輸入一起消失。GTK_IM_MODULE／QT_IM_MODULE 原樣保留——`pysol --gtk`／
+  # `--kivy` 走的是 GTK/Qt 原生 immodule（fcitx5 有提供），與 XMODIFIERS 無關，
+  # 所以那兩條介面的中文輸入不受本 wrapper 影響。
+  _bin="$pkgdir/usr/bin/pysol"
+  if [ ! -f "$_bin" ]; then
+    # 上游若改回 setup.py 的 entry_points／改腳本名，這裡必須紅——靜默跳過等於發一個
+    # 「按鍵全吞」的包（10-07 語系檔沒下來、徽章全綠那件事的同一課）。
+    echo "ERROR: 找不到 /usr/bin/pysol——Tk wrapper 做不了，別發按鍵會全吞的包"
+    exit 1
+  fi
+  mv "$_bin" "$pkgdir/usr/bin/pysol-real"
+  # pysol 腳本本身（上游 pysol.py）是 #!/usr/...python 的 Python 檔，wrapper 用 /bin/sh。
+  cat > "$_bin" <<'PYSOL_WRAPPER_EOF'
+#!/bin/sh
+# PySolFC 啟動腳本（由 pysolfc-git 包產生；真正的程式是 /usr/bin/pysol-real）。
+# fcitx5 的 XIM 對 Tk 客戶端不回傳任何按鍵（Tk 只認 XIM，沒有 immodule），所以在
+# fcitx 環境下把 XMODIFIERS 剝掉，讓 Tk 走自己的按鍵處理。ibus／xim 不動。
+# 副作用：這樣 Tk 內無法輸入中文（要中文請改用 --gtk，或把文字先貼進來）。
+case "${XMODIFIERS:-}" in
+  *@im=fcitx*) exec env -u XMODIFIERS /usr/bin/pysol-real "$@" ;;
+esac
+exec /usr/bin/pysol-real "$@"
+PYSOL_WRAPPER_EOF
+  chmod 755 "$_bin"
+  # data/pysol.desktop 的 Exec=pysol 不用改：走的還是同一個名字，只是換成腳本。
+  [ -x "$pkgdir/usr/bin/pysol-real" ] || { echo "ERROR: pysol-real 不可執行"; exit 1; }
 }
