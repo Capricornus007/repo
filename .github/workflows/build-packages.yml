@@ -553,7 +553,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|npm-git|pnpm-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer|lib32-glib2|linux-firmware-nfp-git)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|npm-git|pnpm-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer|lib32-glib2|linux-firmware-nfp-git|librime-git)
               # 這批包為什麼走本倉目錄版（逐包理由）：見 docs/in-tree-packages.md。
               # 那個 step 的表達式有 21000 字元上限、註解也計入，加包只加清單、
               # 說明寫進該檔，別寫回這裡。
@@ -646,6 +646,14 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
+            nvidia-utils-beta|nvidia-beta-dkms)
+              # NVIDIA -beta：來源就是 AUR（Artix／Arch 全部啟用的倉都沒有 -beta 這條，
+              # 實測 archlinux.org API 404）。兩條各是一個 pkgbase；nvidia-utils-beta 一顆
+              # pkgbase 產三顆 split（nvidia-utils-beta／opencl-nvidia-beta／
+              # nvidia-settings-beta），所以這裡**只准按 pkgbase clone**——拿 split 的包名
+              # 來 clone 會 404。逐包理由與依賴／換代分析見 docs/in-tree-packages.md 的
+              # NVIDIA -beta 段（這個 step 的說明不寫在 workflow 裡）。
+              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
             *)
               # AUR 包或本仓库维护的 -git 包：
               # sway/wlroots/waybar/i3status 家族：-git 取 AUR、穩定版取 Arch
@@ -1007,6 +1015,50 @@ jobs:
             snd-pcsp-dkms)
               TARGET_PKGVER=$(curl -sfL "https://www.kernel.org/releases.json" | jq -r '.latest_stable.version')
               [ -n "$TARGET_PKGVER" ] || skip "拿不到 latest_stable 版本号"
+              ;;
+
+            nvidia-utils-beta|nvidia-beta-dkms)
+              # NVIDIA -beta 四顆（用戶 2026-10-11 點名，#170）。版號權威來源只有 AUR：
+              # Artix world／lib32 與 Arch extra／testing 都只有 stable 那條，查
+              # nvidia-beta* 全查無 → 不能拿 Arch 打包倉當地雷版來源（實測 API 404）。
+              #
+              # ⚠️ AUR RPC 的 .Version 是**含 pkgrel 的整串**（實測 615.78.08-1），必須
+              # 拆成兩段再賦值：pkgver 進 TARGET_PKGVER、pkgrel 進 TARGET_PKGREL
+              # （與上面 linux-cachyos-cjktty「tag 尾號即 pkgrel」同一手法）。把 `-1`
+              # 整串塞進 TARGET_PKGVER 會拼出
+              # `nvidia-utils-beta-615.78.08-1-1-x86_64.pkg.tar.zst` 這種資產名，
+              # 下方「已在 release 裡」永不命中 → 每天白下 530MB＋409MB 重編一次。
+              # 拆完兩段都要驗形，驗不過就 skip，別拿髒字串去拼資產名。
+              _nvaur=$(curl -sfL --connect-timeout 20 --retry 3 --retry-delay 10 \
+                        "https://aur.archlinux.org/rpc/?v=5&type=info&arg[]=$PKG" 2>/dev/null || true)
+              _nvver=$(printf '%s' "$_nvaur" | jq -r '.results[0].Version // empty')
+              case "$_nvver" in
+                *[0-9]*-[0-9]*) ;;
+                *) skip "拿不到 $PKG 的 AUR 版本（raw=$_nvver）" ;;
+              esac
+              TARGET_PKGVER="${_nvver%-*}"
+              TARGET_PKGREL="${_nvver##*-}"
+              case "$TARGET_PKGVER" in
+                ""|*[!0-9A-Za-z._+-]*) skip "$PKG 的 AUR pkgver 拆出不合法（=$TARGET_PKGVER，原串 $_nvver）" ;;
+              esac
+              case "$TARGET_PKGREL" in
+                ""|*[!0-9.]*) skip "$PKG 的 AUR pkgrel 拆出不合法（=$TARGET_PKGREL，原串 $_nvver）" ;;
+              esac
+              echo "AUR 目標版本: $TARGET_PKGVER-$TARGET_PKGREL（剛 clone 的 PKGBUILD 現為 $CUR_PKGVER-$CUR_PKGREL）"
+              # 這兩顆 PKGBUILD 都沒有 pkgver()（版號寫死），所以下方「pkgver() 會把
+              # pkgrel 重置為 1」那段對它們不生效 → 從 AUR 拆來的 pkgrel 會原樣帶進
+              # 資產名比對，AUR 只抬 pkgrel 時我們也照樣重建。
+              #
+              # 依賴就緒門檻：nvidia-beta-dkms 的 depends 有 `nvidia-utils-beta=${pkgver}`
+              # （**等號硬釘**）。那顆是同矩陣另一個 job 的產物、不在任何官方倉，冷啟動
+              # 或 utils 那輪失敗時 makepkg -s 會 `target not found` 直接判紅。本倉既有的
+              # 「-git 依賴門檻」只 grep `-git$`（plan 步通用分支），抓不到這條名字沒有
+              # -git 後綴的兄弟包 → 在這裡點名補上，讓它跟 KDE／Wayland 家族一樣
+              # 「本輪跳過等下輪」，靠排程按依賴 DAG 逐層收斂。
+              if [ "$PKG" = nvidia-beta-dkms ]; then
+                pacman -Si -- nvidia-utils-beta >/dev/null 2>&1 \
+                  || skip "nvidia-utils-beta 尚未發布到 junlin03-aur（本包 depends 硬釘它），本轮跳过等下轮"
+              fi
               ;;
 
             linux-cachyos-cjktty)
