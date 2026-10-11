@@ -426,6 +426,14 @@ jobs:
               mkdir pkg_dir
               curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/kew-git/PKGBUILD" \
                 -o pkg_dir/PKGBUILD ;;
+            llvm-git)
+              # 七顆 split 包出自同一份 PKGBUILD，所以只取這一個檔（無 install hook、無 patch）。
+              # ⚠️ 必須在這裡攔掉：通用規則是「名字以 -git 結尾 → clone AUR」，而 AUR 的
+              # llvm-git 停在 18.0.0_r484887（2024-04）、llvm-minimal-git 停在 21.0.0_r537041
+              # （2025-05）→ 照抄是「假尖端真降級」。逐包理由見 docs/in-tree-packages.md。
+              mkdir pkg_dir
+              curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/llvm-git/PKGBUILD" \
+                -o pkg_dir/PKGBUILD ;;
             oh-my-pi-git)
               # 只要 PKGBUILD 一个文件（无 install hook）；pkgver 仍由 PKGBUILD 的
               # pkgver() 在构建时从上游 HEAD 算出，CI 不回推本仓库这份
@@ -1539,8 +1547,13 @@ jobs:
                 #                              探測子殼本來就沒有 srcdir
                 # 一次克隆、把各種可能名字都軟鏈過去，並把 srcdir 補上。
                 export srcdir="$PWD/src"
+                # ⚠️ `_pkgbase` 這條是補的（2026-10-11，llvm-git）：monorepo 型包的源碼
+                # 目錄名既不是 ${pkgname%-git}（=llvm）也不是 $pkgbase（=llvm-git），
+                # 而是 PKGBUILD 自己的 `_pkgbase=llvm-project`。缺這條時 pkgver() 裡的
+                # `cd $_pkgbase` 會失敗 → plan 報「跑 pkgver() 失敗」→ 每輪跳過、永不出包
+                # （與上面 i3-git 那批「掛了卻永遠不出包」同形，只是變數名不同）。
                 for d in "${pkgname}" "${pkgname%-git}" "${_pkgname:-}" "${_gitname:-}" \
-                         "${_base:-}" "${_gitrepo:-}" "${pkgbase:-}"; do
+                         "${_base:-}" "${_gitrepo:-}" "${_pkgbase:-}" "${pkgbase:-}"; do
                   [ -n "$d" ] || continue
                   ln -sfn repo "src/$d"
                 done

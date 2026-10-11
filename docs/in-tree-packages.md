@@ -192,3 +192,55 @@ clone AUR 的 `linux-firmware-git` pkgbase。逐點理由：
     20260916 < 20261009），不加 epoch 就是「CI 出包、用戶 `pacman -Syu` 永不換裝」；
     `mkinitcpio-firmware` 的 Depends 有 `linux-firmware-nfp`，靠本包 provides 滿足，
     拿掉即整機依賴斷鏈。
+
+---
+
+llvm-git（用戶 2026-10-11 點名「那六個全部，搬去 -git 版本的自動構建」；一個目錄產七顆
+split：llvm-libs／llvm／llvm-lit／compiler-rt／lld／lldb／clang）：
+
+  · **為什麼非 in-tree 不可**：三個來源都不給。① Artix world-goblins 的 DB 列了
+    `lld-23.1.3-1`，實測 12 臺鏡像全部 404（該倉目錄裡只有 lldb、沒有 lld 檔）→ 本機
+    卡在「llvm/clang 23.1.3 ＋ lld 23.1.1」，而 lld 補不上會讓整條 `-Syu` 原子失敗；
+    ② AUR `llvm-git` 停在 18.0.0_r484887（2024-04）、`llvm-minimal-git` 停在
+    21.0.0_r537041（2025-05）→ 走 kind:aur 取它們是「假尖端真降級」；③ Arch 自己的
+    llvm 是 release tarball，跟不了 trunk。
+  · **分割方案是用戶裁的，不是省事的**：不猜 CMake 的 `install-*` target（名字上游會改，
+    而且 `install-llvm` 本身也含函式庫 → 必然重疊），改成 `build()` 一次性
+    `cmake --install` 到 `$srcdir/stage`，各 `package_*()` 按路徑清單搬。
+  · ⚠️ **搬必須是 `mv` 而不是 `cp`**：glob 表達不了「同目錄下誰不屬於我」
+    （`usr/bin/llvm-*` 罩住 `usr/bin/llvm-lit`、`usr/lib/*.a` 罩住 `libLLVM*.a`），
+    用 cp 時 `scripts/check-pkg-split-overlap.py` 實測報出 14 對交集。改 mv 後歸屬由
+    **pkgname 的先後順序**決定（先搶者赢），所以 broad 樣式一律排在被它罩住的 narrow
+    樣式之後；順序是 llvm-libs-git → llvm-lit-git → compiler-rt-git → lld-git →
+    lldb-git → clang-git → llvm-git。
+  · ⚠️ **不准「先 `_move` 再 `_drop`」**：mv 過的檔頭已離開 stage，`_drop` 等於刪除。
+    上一版就踩在這裡——clang-git 逐個 `_drop` 掉 `${_extra_tools[@]}`，而說好接手它們的
+    `package_clang-tools-extra-git()` **根本沒列進 pkgname**（makepkg 不會呼叫它），
+    結果 clangd／clang-tidy 等十幾支工具被 rm 掉後無人收＝從產物裡消失。實測 Artix 的
+    `clang-tools-extra` 也不是獨立包（`pacman -Qi` 解析到 clang、兩份 `-Ql` 完全相同），
+    所以正確做法是 clang-git 自己 provides 那兩個名字（系統 clang 23.1.3-1.1 的 Provides
+    就是 `clang-analyzer=23.1.3 clang-tools-extra=23.1.3`）。
+  · **`pkgver()` 的地雷**：上游最新 tag 不是語意版而是 `llvmorg-24-init`
+    （`git ls-remote --tags` 查實：23.1.3 之後直接跳到 24-init），describe 回
+    `llvmorg-24-init-<n>-g<sha>`。count 必須從 describe 字串本身拆；用
+    `rev-list --count llvmorg-24..HEAD` 會因該 tag 不存在而落進 `|| echo 0`，每輪都算出
+    r0、只剩 hash 段在變，而 hash 屬 alpha 段 ⇒ vercmp 不單調、repo-add 拒收
+    （kew-git 同一個坑，那包靠 epoch=2 才爬出來）。已在 /tmp 用 mini repo 實測三種
+    tag 形貌與單調性。
+  · **CI 探測的通用缺口（順帶修）**：plan 的 -git 版本探測會 `source PKGBUILD` 後**直接
+    呼叫包自己的 `pkgver()`**（比 kew 那顆「兩處要逐字相同」好），但它軟鏈進 `src/` 的
+    目錄名清單沒有 `_pkgbase` → llvm 的 `cd llvm-project` 找不到路徑，會報「跑 pkgver()
+    失敗」每輪跳過。已在清單補上 `"${_pkgbase:-}"`（同類包一起受益）。
+  · **timeout 是天花板不是開關**：GitHub Actions 的 `jobs.timeout-minutes` 上限就是 360
+    （feed 現值 360，`build-git-packages.yml:37`），調不上去。所以本包照 Arch 那份裁：
+    關 tests/docs/benchmarks/examples、後端只留 X86;NVPTX;AMDGPU、runtimes 只 compiler-rt
+    且 `COMPILER_RT_DEFAULT_TARGET_ONLY=ON`、polly/openmp/offload/libc++/libc++abi 全不進
+    （本機 `pacman -Qs` 查實沒裝），並用 lld 當連結器＋`LLVM_PARALLEL_LINK_JOBS=2`
+    （linking 是 RAM 瓶頸不是 CPU 瓶頸）。第一輪若仍撞 360，砍的順序是 lldb → 
+    clang-tools-extra 那批工具，**不是關功能換綠燈**。
+  · ⚠️ **上線前提（還沒做，別先發包）**：本機實測有 35 個已安裝的 `.so` 直接 NEEDED
+    `libLLVM.so.23.1`，其中含 GL 驅動；而 mesa-tkg-git 那顆 CI job 目前裝的是倉庫裡的
+    llvm-libs 23.1.3，產物就鏈著 `.23.1`。本包是用 trunk **取代**系統那套（裝進 /usr、
+    同路徑、provides/conflicts/replaces 頂替），所以必須先讓 mesa 那個 job「裝我們產出的
+    llvm-libs-git 再編」，否則這批一上線、裝下去 GL 直接黑。
+
