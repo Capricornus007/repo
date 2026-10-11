@@ -70,6 +70,33 @@ runs:
         go mod edit "-replace=golang.org/x/tools=golang.org/x/tools@${{ inputs.xtools }}"
         go build -mod=mod -o "$bin" github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 
+    # 第二個坑：go tip 的 `go list -export` 在 **32 位元目標**上會用主機的 word size
+    # 去算 math/big 的 `_W = bits.UintSize`，結果在跨到 386/arm/mips 時炸出
+    # 「cannot convert _M (untyped int constant 18446744073709551615) to type uint:
+    # overflows uint」（golangci-lint 內部就是靠 go list -export 取 export data）。
+    # 乾淨 build cache 下的實測交叉表（同一顆 tip、同一份源碼，只有 GOARCH 變）：
+    #   amd64 OK ／ arm64 OK ／ riscv64 OK ／ 386 FAIL ／ arm FAIL ／ mips FAIL
+    # 而 `GOARCH=386 go build math/big` 是好的——壞的只有 `go list -export` 那條路。
+    # 先把目標架構的 std 正式編進 build cache，`go list -export` 就能直接讀到正確
+    # 的 export data（實測：先 go build std 再 go list -export → 通過）。
+    # 這是補環境、不是跳過：lint 照跑全部規則、32 位元那幾條矩陣也照留。
+    - name: 先把目標架構的 std 編進 build cache
+      if: inputs.goarch != ''
+      shell: bash
+      env:
+        GOOS: ${{ inputs.goos }}
+        GOARCH: ${{ inputs.goarch }}
+      run: |
+        set -euo pipefail
+        echo ">> go build std（GOOS=${GOOS:-linux} GOARCH=${GOARCH}）"
+        go build std
+        go list -export -json math/big >/dev/null
+
+    # ⚠️ 順序是重點：暖 std 這步必須排在下面「驗依賴並上 PATH」之前。
+    #   那一步的探針會繼承矩陣 job 的 GOOS/GOARCH（lint.yml 設的），所以它在
+    #   386/arm 上跑的其實是 32 位元分析；std 沒先編進 cache 的話探針就會先炸，
+    #   整條矩陣紅在探針而不是紅在 lint（sing-box Lint run #67 實測：
+    #   linux/386 與 linux/arm 死在 math/big 的 _M overflows uint）。
     - name: 驗依賴並上 PATH
       shell: bash
       run: |
@@ -94,24 +121,3 @@ runs:
         echo ">> golangci-lint 可用（能讀 go tip 的 std export data）"
         echo "$RUNNER_TEMP/gcl-bin" >> "$GITHUB_PATH"
 
-    # 第二個坑：go tip 的 `go list -export` 在 **32 位元目標**上會用主機的 word size
-    # 去算 math/big 的 `_W = bits.UintSize`，結果在跨到 386/arm/mips 時炸出
-    # 「cannot convert _M (untyped int constant 18446744073709551615) to type uint:
-    # overflows uint」（golangci-lint 內部就是靠 go list -export 取 export data）。
-    # 乾淨 build cache 下的實測交叉表（同一顆 tip、同一份源碼，只有 GOARCH 變）：
-    #   amd64 OK ／ arm64 OK ／ riscv64 OK ／ 386 FAIL ／ arm FAIL ／ mips FAIL
-    # 而 `GOARCH=386 go build math/big` 是好的——壞的只有 `go list -export` 那條路。
-    # 先把目標架構的 std 正式編進 build cache，`go list -export` 就能直接讀到正確
-    # 的 export data（實測：先 go build std 再 go list -export → 通過）。
-    # 這是補環境、不是跳過：lint 照跑全部規則、32 位元那幾條矩陣也照留。
-    - name: 先把目標架構的 std 編進 build cache
-      if: inputs.goarch != ''
-      shell: bash
-      env:
-        GOOS: ${{ inputs.goos }}
-        GOARCH: ${{ inputs.goarch }}
-      run: |
-        set -euo pipefail
-        echo ">> go build std（GOOS=${GOOS:-linux} GOARCH=${GOARCH}）"
-        go build std
-        go list -export -json math/big >/dev/null
