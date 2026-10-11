@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=16
+pkgrel=17
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -376,8 +376,14 @@ check() (
   # 明確降級，而且只在探針實際失敗時才設——本機 bwrap rc=0，一樣跑沙箱路徑。
   # 這不影響產物：變數只在 check() 的 shell 裡，裝到使用者機器上照舊有沙箱。
   if [ "$brw" -ne 0 ]; then
-    export GLYCIN_DISABLE_SANDBOX=1
-    echo ">> 判定：沙箱不可用（rc=$brw），本次 check 設 GLYCIN_DISABLE_SANDBOX=1 走上游無沙箱路徑"
+    # ⚠️ 值必須是 i-know-the-risks，不是 1。glycin 的判定是字串比對：
+    #   glycin-core/src/util.rs:150  `env::var("GLYCIN_DISABLE_SANDBOX") == Ok("i-know-the-risks")`
+    #   設成 1 會被當成「沒設」，照樣去起 bwrap —— 之前三輪 CI 就是紅在這裡，
+    #   而且因為探針本身是假的（見下面 2) 那條），誰也沒發現。
+    # 這不是「關掉功能」：上游自己的 meson_options.txt:80 `test_disable_sandbox`
+    # 在 meson.build:76 設的就是同一個字串，測試仍實跑元素與解碼，只是不套沙箱殼。
+    export GLYCIN_DISABLE_SANDBOX=i-know-the-risks
+    echo ">> 判定：沙箱不可用（rc=$brw），本次 check 設 GLYCIN_DISABLE_SANDBOX=i-know-the-risks 走上游無沙箱路徑"
   else
     echo ">> 判定：沙箱可用，維持預設（不設 GLYCIN_DISABLE_SANDBOX）"
   fi
@@ -404,8 +410,26 @@ check() (
     # 2) 這層最重要：把 GLib 的錯誤原文抓出來（元素那層只回 FAILURE，什麼都不說）。
     local pyrc=0
     if python3 -c 'import gi' >/dev/null 2>&1; then
-      python3 - "$pixjpg" > /tmp/gst-pyprobe.out 2>&1 || pyrc=$?
+      # ⚠️ 這裡原本寫的是 `python3 - "$pixjpg"`：`-` 是「從 stdin 讀腳本」，而
+      #   makepkg 的 stdin 早就到 EOF → python 讀到空腳本、什麼都沒做就回 0。
+      #   那正是三輪日誌裡「2) python-gi new_from_file rc=0 輸出=」（後面全空）
+      #   的由來：這條探針**從來沒載過圖**，它報的綠是假綠，把真缺陷蓋住了。
+      #   現在老實餵一段會印 GError 的程式碼。
+      python3 - "$pixjpg" > /tmp/gst-pyprobe.out 2>&1 <<'PY' || pyrc=$?
+import sys
+import gi
+gi.require_version('GdkPixbuf', '2.0')
+from GdkPixbuf import Pixbuf
+try:
+    pb = Pixbuf.new_from_file(sys.argv[1])
+    print("OK %dx%d" % (pb.get_width(), pb.get_height()))
+except Exception as e:
+    print("GError: %s" % e)
+    raise SystemExit(1)
+PY
       echo ">> 2) python-gi new_from_file rc=$pyrc 輸出=$(head -5 /tmp/gst-pyprobe.out | tr '\n' '|')"
+      # 順帶把「到底有沒有走無沙箱路徑」變成可看的證據：glycin 生效時會印那行警告。
+      echo ">> 2b) 無沙箱警告=$(grep -c 'running without sandbox' /tmp/gst-pyprobe.out 2>/dev/null)  變數值=[${GLYCIN_DISABLE_SANDBOX:-未設}]"
     else
       echo ">> 2) python-gi 不在容器裡（跳過這層，不是失敗）"
     fi
@@ -527,7 +551,7 @@ PY
     # 環境完全交給 meson，只從製程環境額外帶一個 GST_DEBUG（它不在上游 env.set 清單內，
     # 所以會老實繼承）—— 這才是 gdkpixbufoverlay 自己那句 GError 的可靠取法。
     echo ">> 診斷 4) 交給 meson test 重跑並開 GST_DEBUG，看元素自己報的原因："
-    GLYCIN_DISABLE_SANDBOX=1 \
+    GLYCIN_DISABLE_SANDBOX=i-know-the-risks \
       GST_DEBUG=gstgdkpixbufoverlay:7,gstutils:5,gstplugin:4 \
       xvfb-run -s "-nolisten local" \
       meson test -C build --no-rebuild --print-errorlogs --num-processes=1 -t 10 \
