@@ -132,6 +132,34 @@ gstreamer／lib32-glib2（用戶 2026-10-08 點名：「lib32-glib2 跟 gst 那�
   · 兩顆都要在「更新校驗和並回推」的 giant if 裡排除（`repo_name` 兩條＋
     `matrix.kind != 'multilib'`），否則 updpkgsums 之後會往**不存在的獨立倉**
     `Capricornus007/gstreamer.git` push（實測該倉不存在也不需要存在）。
+  · **2026-10-11 `elements_gdkpixbufoverlay` 這條線（用戶紀律：容器缺環境就補環境，
+    不准跳測試）**。真因不在 gdk-pixbuf 解不了圖，而是 glycin 的 bwrap 沙箱在容器裡
+    起不來——builder 進程在 bwrap 設 loopback 那一刻 `CapEff=0000000000000000` →
+    `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`。容器其他前提實測
+    都在：`--privileged`、`unprivileged_userns_clone=1`、`max_user_namespaces=63838`、
+    `/` 無 nosuid、root 身分跑 `bwrap --unshare-all` rc=0，缺的就是那一顆 cap。
+    已否證兩條：給 bwrap 上 file capabilities（#413：bwrap 自己拒「Unexpected
+    capabilities but not setuid」）；用 `su` 帶 caps（/usr/bin/su 是 setuid 檔，
+    execve setuid/setgid 時內核清掉整個 ambient 集，capabilities(7)）。
+    → 落地：「云端编译」那步**只對 gstreamer** 把 `su builder -c` 換成
+      `setpriv --reuid=builder --regid=builder --clear-groups --inh-caps=+net_admin
+       --ambient-caps=+net_admin env -i … bash -c`（setpriv 不像 su 會重建環境，
+      所以要自己把 HOME/USER 換掉；跑之前先自檢一次，過不了就退回 su——這顆剛綠，
+      不能拿它試錯）。PKGBUILD 的探針判定邏輯不動：cap 補到了就 bwrap rc=0、
+      自動走真沙箱路徑；補不到才用上游自備的 `GLYCIN_DISABLE_SANDBOX=i-know-the-risks`
+      降級（值必須是這一串，設 `1` 等於沒設；這是上游 meson `test_disable_sandbox`
+      的同一條路，元素與解碼照跑，只是不套沙箱殼）。CapEff／CapBnd 現在印進 check()
+      日誌，cap 有沒有跟上肉眼可判。
+    · 順帶修掉一條**自己做出來的假診斷**：#419 那版把整條 pipeline 當單一 argv 餵給
+      gst-launch，只会得到 `erroneous pipeline: syntax error`；現在逐詞傳參
+      （`videotestsrc num-buffers=3 ! gdkpixbufoverlay location=… ! fakesink` 各佔一個
+      參數），`location` 也改餵檔案系統路徑（餵 `file://…` 會被當成檔名）。#418 那
+      三層探針的「全綠」是假綠：探針拿的是 `find` 到的第一張圖，不是測試編譯進二進位
+      的那張；而 gdkpixbufoverlay 載圖失敗走 `GST_ELEMENT_ERROR`，只 post 到 bus、
+      不寫 stderr，所以 meson 的 errorlog 永遠只剩 set_state 回 FAILURE。
+    · 診斷 3（直接執行 `gst-plugin-scanner`）留著：`External plugin loader failed`
+      （gstpluginloader.c:437）是**另一條**線索，指 GStreamer 的外部插件載入 helper
+      在容器裡起不來，與沙箱是兩件事，別混在一起。
 
 CI run #394 的兩記紅與修法（實測，不是推測）：
   · gstreamer 紅在 `install file (gstreamer.install) does not exist`：
@@ -243,4 +271,46 @@ split：llvm-libs／llvm／llvm-lit／compiler-rt／lld／lldb／clang）：
     llvm-libs 23.1.3，產物就鏈著 `.23.1`。本包是用 trunk **取代**系統那套（裝進 /usr、
     同路徑、provides/conflicts/replaces 頂替），所以必須先讓 mesa 那個 job「裝我們產出的
     llvm-libs-git 再編」，否則這批一上線、裝下去 GL 直接黑。
+  · **run #443 的紅與真因（2026-10-11，顶層 `$srcdir` 地雷）**：日誌是
+    `mv: cannot stat '/stage/usr/include/llvm'`，但報錯的那行不是 bug 本身——
+    頂層寫了 `_stage="$srcdir/stage"`，而 makepkg 是**先 source PKGBUILD、之後才算
+    srcdir**（本機 `/usr/bin/makepkg` 查實：`source_safe "$BUILDFILE"` 在 211 行、
+    `srcdir=` 在 1178/1181 行），於是 `$srcdir` 展開成空字串、`_stage` 變成 `/stage`，
+    `DESTDIR=/stage cmake --install` 全盤落空。接著 `nullglob` 只救得了**含元字元**的
+    樣式，`usr/include/llvm` 那種字面路徑 bash 根本不做檔名展開，原字串直送 mv
+    → 才是那句 cannot stat（訊息指向假路徑、真因在變數）。修法：
+    `_stage_init()` 在 build() 與每次 `_move` 裡現算；`_move` 另外會先確認暫存區存在，
+    否則硬紅；build() 尾端的 `[ -d "$_stage/usr/lib" ]` 讓「install 回 0
+    卻沒裝東西」無法蒙過。⚠️ 這是所有 PKGBUILD 的通用地雷：**函式以外不要取用
+    `$srcdir`／`$pkgdir`**。
+  · **第二次裁參數（用戶 2026-10-11 點名六包 ＋ 硬性要求）**：
+    `LLVM_ENABLE_PROJECTS=clang;lld;lldb`、`LLVM_TARGETS_TO_BUILD=X86;AMDGPU`、
+    `CMAKE_BUILD_TYPE=Release` ＋ `LLVM_ENABLE_ASSERTIONS=OFF`。代價寫清楚：
+    clangd／clang-tidy／scan-build 那批 extra 工具不再產出、`nvptx-arch` 沒了，
+    所以 clang-git 的 `provides` 也**拿掉** `clang-analyzer`／`clang-tools-extra`
+    兩個虛名（留著等於讓 pacman 誤判依賴已滿足）。本機實查沒有任何已裝包依賴這
+    兩個名字：依賴 `clang` 的是 doxygen、lldb、rust-bindgen-git、shiboken6-generator、
+    linux-cachyos-cjktty-headers 這五顆，全部走 `clang` 本體。
+    時效證據：run #443（job 114382764499）整包 2 時 31 分，沒撞 360；裁完只會更短。
+  · **六包之外為什麼還多一颗 compiler-rt（依賴關係，不是湊數）**：用戶點名的六顆是
+    llvm／llvm-libs／llvm-lit／clang／lld／lldb；`docs/upstream-pkgbuilds/clang.PKGBUILD:11`
+    寫的是 `depends=('llvm-libs' 'gcc' 'compiler-rt' 'libgcc' 'libxml2')`，本機
+    `pactree -r compiler-rt` 也顯示唯一的上游依賴就是 clang ⇒ **clang 不帶 compiler-rt
+    就不是系統 clang 的等值替換**，所以 clang-git 的 depends 補
+    `compiler-rt-git=$pkgver-$pkgrel`。方向必須是 clang→compiler-rt 單向：
+    Arch 的 compiler-rt 只把 clang 當 **makedepends**，兩邊互指就會是 pacman 裝不起來的
+    依賴環，故 compiler-rt-git 的 depends 改成 `glibc libgcc libstdc++`（照上游）。
+    polly／openmp／offload／libc++／libc++abi 仍未收（用戶不认得 polly、本機 `pacman -Qs`
+    查實沒裝）。
+  · **四接點現況**（少一個就會「建了但發不出去」或「矩陣裡沒有它」）：
+    ① `llvm-git/PKGBUILD` 一個目錄切 split（收集與 repo-add 都是 `pkg_dir/*.pkg.tar.zst`
+      的 glob，分割不需要額外接點）；② `build-git-packages.yml` 的 `packages: |` 有
+      `{"key": "llvm-git", …, "kind": "aur"}`；③ 版本偵測沒有 llvm 專屬 case，走 plan 步
+      的通用 `-git` 分支（老實跑包自己的 `pkgver()`），它軟鏈進 `src/` 的目錄名清單已補
+      `_pkgbase`（monorepo 的源碼目錄是 `llvm-project`，既不是 `${pkgname%-git}` 也不是
+      `$pkgbase`，缺這條就每輪「跑 pkgver() 失敗」跳過）；④ 拉取步驟有 `llvm-git)` 顯式
+      分支只 curl 本倉那一份 PKGBUILD（擋掉「名字以 -git 結尾 → clone AUR」的通用規則，
+      否則會撈到 AUR 那顆 18.0.0 的假尖端）。`kind: aur` 另外借兩件事：掛 junlin03-aur
+      源，以及讓「更新校驗和並回推」的 giant if（`matrix.kind != 'aur'`）不去 push
+      不存在的 `Capricornus007/llvm-git.git`。
 
