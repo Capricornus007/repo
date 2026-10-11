@@ -419,6 +419,31 @@ jobs:
           export GLYCIN_DISABLE_SANDBOX=probe
           echo ">> 父 shell env=[$GLYCIN_DISABLE_SANDBOX]  su builder 看到的=[$(su builder -c 'printf %s "${GLYCIN_DISABLE_SANDBOX:-未設}"')]"
           echo ">> 父 shell env 經 su 後為空 = su 會剝 env，PKGBUILD 內的 export 才是唯一可信的來源"
+          # ── 2026-10-11 #165 的「補環境」候測：ambient CAP_NET_ADMIN（任務指定試這條）
+          #   真因定位在：builder 進程在 bwrap 設 loopback 那一刻 CapEff=全 0，
+          #   所以 `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`。
+          #   file capabilities 已否證（#413：bwrap 自己拒「Unexpected capabilities but
+          #   not setuid」）；走 `su` 也帶不動 caps——/usr/bin/su 是 setuid 檔，
+          #   execve setuid/setgid 程式時內核會清掉整個 ambient 集（capabilities(7)）。
+          #   所以只能讓 setpriv 一次性做「加 caps ＋ 降 uid」。本機實測 setpriv 的
+          #   動作順序是對的（先加 cap 再改 uid 不會被 setuid 清掉）：
+          #     sudo setpriv --reuid=65534 --regid=65534 --clear-groups \
+          #       --inh-caps=+net_admin --ambient-caps=+net_admin grep CapEff /proc/self/status
+          #     → CapEff: 0000000000001000（而且再 exec 一層子進程仍然帶著）
+          #   這裡先把兩件事量出來當證據：(a) 加完 cap 後的邊界/有效集，(b) 用同一套
+          #   殼跑 bwrap 到底能不能起沙箱。「云端编译」那步只在 (b) 回 0 時才真的改用
+          #   setpriv（那邊還有自己的复检），不行就照舊 su，別把唯一綠過的一條包玩壞。
+          spinfo=0
+          setpriv --reuid=builder --regid=builder --clear-groups \
+            --inh-caps=+net_admin --ambient-caps=+net_admin \
+            env -i PATH="$PATH" HOME=/home/builder sh -c 'id -u; grep -E "^Cap(Eff|Bnd)" /proc/self/status' 2>&1 || spinfo=$?
+          echo ">> setpriv(builder) rc=$spinfo 上面兩行是它的 CapEff/CapBnd"
+          spb=0
+          setpriv --reuid=builder --regid=builder --clear-groups \
+            --inh-caps=+net_admin --ambient-caps=+net_admin \
+            env -i PATH="$PATH" HOME=/home/builder \
+            bwrap --unshare-all --ro-bind /usr /usr --symlink /usr/lib /lib64 --dev /dev --proc /proc /usr/bin/true 2>&1 || spb=$?
+          echo ">> setpriv + bwrap(builder, --unshare-all) rc=$spb   ← 0 就代表容器環境補上了，check() 的探針會自己走真沙箱路徑"
 
       - name: 拉取对应的套件仓库
         run: |
@@ -2346,8 +2371,34 @@ jobs:
           #      →整包稍后重来（2026-09-22 mesa-tkg-git 连续两轮栽在下载 502）。
           #      上游已加 git http.version=HTTP/1.1 挡掉大部分 stream-reset，这里兜残余。
           # tee 每次覆盖 /tmp/makepkg.log，故分类只看本次失败、不会误判上轮残留。
+          #
+          # 2026-10-11 #165「補環境不跳測試」：gstreamer 的 check() 要在容器裡起
+          # glycin 的 bwrap 沙箱，而 builder 進程在 bwrap 設 loopback 那一刻
+          # CapEff=全 0 → `bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted`。
+          # 已否證兩條：(1) 給 bwrap 上 file capabilities——#413 實測 bwrap 自己拒
+          # 「Unexpected capabilities but not setuid」；(2) 用 `su` 帶 caps——/usr/bin/su
+          # 是 setuid 檔，execve setuid/setgid 程式時內核清掉整個 ambient 集
+          # （capabilities(7)），所以 cap 會在途中漏光。可行寫法是讓 setpriv **一次**
+          # 做完「把 net_admin 放進 inheritable+ambient ＋ 降 uid/gid」（本地實測
+          # `setpriv --reuid=65534 --regid=65534 --clear-groups --inh-caps=+net_admin
+          #  --ambient-caps=+net_admin grep CapEff /proc/self/status` 回 0000000000001000，
+          # 且再 exec 一層子進程仍在）。setpriv 不重建環境，所以外面套 env -i 把
+          # HOME/USER 換成 builder 的，別讓 makepkg 帶著 root 的 HOME=/root 跑。
+          # ⚠️ 只動 gstreamer 這一顆，而且自檢不過就退回 su（這輪它剛綠，不能拿它試錯）；
+          #    能不能真的走上沙箱路由 PKGBUILD 裡的探針自己判，探針會把 CapEff 印進日誌。
+          # ⚠️ 這裡不能用 bash 陣列：本倉的 run 是 `sh -e {0}`（#414 實測過），
+          #    所以用不加引號的變數做詞切開。PATH 內不能有空白（runner 的沒有）。
+          _runas='su builder -c'
+          if [ "${{ matrix.repo_name }}" = "gstreamer" ] \
+             && setpriv --reuid=builder --regid=builder --clear-groups \
+                  --inh-caps=+net_admin --ambient-caps=+net_admin env -i true >/dev/null 2>&1; then
+            _runas="setpriv --reuid=builder --regid=builder --clear-groups --inh-caps=+net_admin --ambient-caps=+net_admin env -i PATH=$PATH HOME=/home/builder USER=builder LOGNAME=builder SHELL=/bin/bash bash -c"
+            echo ">> 本次 makepkg 以 setpriv(ambient CAP_NET_ADMIN) 起跑，不用 su"
+          else
+            echo ">> 本次 makepkg 以 su builder 起跑（非 gstreamer，或 setpriv 自檢未過）"
+          fi
           _mp=0
-          until su builder -c "makepkg $flags" 2>&1 | tee /tmp/makepkg.log; do
+          until $_runas "makepkg $flags" 2>&1 | tee /tmp/makepkg.log; do
             _mp=$((_mp + 1))
             bad=$(grep -oE '^:: File [^ ]+ is corrupted' /tmp/makepkg.log | awk '{print $3}' | sort -u || true)
             dl=$(grep -qE 'Failure while downloading|RPC failed|returned error: 50[0-9]|reset by server|HTTP/2 stream|curl: \([0-9]+\)|failed retrieving file|failed to commit transaction' /tmp/makepkg.log && echo yes)

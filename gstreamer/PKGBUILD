@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=17
+pkgrel=18
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -361,7 +361,12 @@ check() (
   local brw=0
   bwrap --unshare-all --ro-bind /usr /usr --symlink /usr/lib /lib64 --dev /dev --proc /proc /usr/bin/true 2>/tmp/gst-bwrap-err.txt || brw=$?
   echo ">> 沙箱前提：bwrap rc=$brw  stderr=$(tail -3 /tmp/gst-bwrap-err.txt 2>/dev/null | tr '\n' '|')"
-  echo ">> 內核能力：max_user_ns=$(cat /proc/sys/user/max_user_namespaces 2>/dev/null || echo 查無)  unprivileged_userns_clone=$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo '此核心無此檔')  CapEff=$(awk '/CapEff/{print $2}' /proc/self/status 2>/dev/null)"
+  echo ">> 內核能力：max_user_ns=$(cat /proc/sys/user/max_user_namespaces 2>/dev/null || echo 查無)  unprivileged_userns_clone=$(cat /proc/sys/kernel/unprivileged_userns_clone 2>/dev/null || echo '此核心無此檔')  uid=$(id -u)  CapEff=$(awk '/CapEff/{print $2}' /proc/self/status 2>/dev/null)  CapBnd=$(awk '/CapBnd/{print $2}' /proc/self/status 2>/dev/null)"
+  # ↑ CapBnd 是 2026-10-11 補的：CI 那側改用 `setpriv --inh-caps=+net_admin
+  #   --ambient-caps=+net_admin` 把 CAP_NET_ADMIN 放進 ambient 集再降成 builder
+  #   （見 build-packages.yml「云端编译」那步），能不能生效就看這裡的 CapEff——
+  #   0000000000001000 就是只有 NET_ADMIN（補到了）、全 0 就是老樣子（探針會照舊降級，
+  #   測試仍實跑）。邊界集 CapBnd 若不含 net_admin，setpriv 加不上去，一眼看得見。
 
   # ── 沙箱起不來時，本次 check 改走上游自己的「無沙箱」路徑（#413 定案）
   # 實測：bwrap 0.13 在容器裡能建 namespace、但拿到的是沒有 CAP_NET_ADMIN 的 netns，
