@@ -314,3 +314,121 @@ split：llvm-libs／llvm／llvm-lit／compiler-rt／lld／lldb／clang）：
       源，以及讓「更新校驗和並回推」的 giant if（`matrix.kind != 'aur'`）不去 push
       不存在的 `Capricornus007/llvm-git.git`。
 
+---
+
+## NVIDIA -beta 四顆（用戶 2026-10-11 點名全部進本倉，我方追蹤 #170）
+
+⚠️ 先講清楚：**這四顆不是 in-tree 包**，本倉沒有它們的同名目錄，PKGBUILD 一律現取
+AUR。列進本檔只因為「拉取对应的套件仓库」那步給它們開了**顯式分支**（按 pkgbase
+clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
+
+  · **為什麼要自己出**：Artix 的 world／lib32 與 Arch 的 extra／testing 只有 stable
+    那條 nvidia（615.78.08），`nvidia-beta*` 在 Arch 端 API 實測 404、在本機啟用的倉
+    裡 `pacman -Si` 也查無 → -beta 分支唯一的來源是 AUR，版號只能追 AUR。
+  · **四顆包＝兩個 pkgbase（重要）**：實查 `~/.cache/yay/nvidia-utils-beta/` 的
+    PKGBUILD 與 .SRCINFO，`pkgbase=nvidia-utils-beta`、
+    `pkgname=('nvidia-utils-beta' 'opencl-nvidia-beta' 'nvidia-settings-beta')`，
+    一次 makepkg 產三顆；`nvidia-beta-dkms` 是另一個 pkgbase、只產一顆。
+    AUR 的 git 倉**以 pkgbase 命名**，所以矩陣只能有 `nvidia-utils-beta` 與
+    `nvidia-beta-dkms` 兩條；拿 `opencl-nvidia-beta`／`nvidia-settings-beta` 去
+    clone 會 404（AUR RPC 實查這兩個名字的 `PackageBase` 都是 `nvidia-utils-beta`），
+    而且同 pkgbase 並行會打出兩份同版本產物在 repo-add 那裡互相打架。
+    收集與 repo-add 都是 `pkg_dir/*.pkg.tar.zst` 的 glob，split 不需要額外接點
+    （llvm-git／gstreamer 同形）。
+  · **「本機裝的叫 nvidia-settings」是誤讀**：`pacman -Qi nvidia-settings` 是靠那顆的
+    `provides = nvidia-settings=615.78.08` 解析過去的，實測 `%NAME%` 欄就是
+    `nvidia-settings-beta`（DB 目錄 `/var/lib/pacman/local/nvidia-settings-beta-615.78.08-1`）。
+    → 要收的就是 AUR 那顆 `nvidia-settings-beta`，它 `conflicts=('nvidia-settings')`、
+    `provides=('nvidia-settings=…')`，裝下去會平順頂掉 world 的 nvidia-settings，
+    **不需要**另收 Arch 官方那顆同名包。
+  · **版本偵測（pkgver／pkgrel 的切分）**：plan 步用
+    `curl 'https://aur.archlinux.org/rpc/?v=5&type=info&arg[]=<包名>'` 取
+    `.results[0].Version`，AUR 回的是**含 pkgrel 的整串**（實測 `615.78.08-1`）→
+    `TARGET_PKGVER="${_nvver%-*}"`、`TARGET_PKGREL="${_nvver##*-}"`，兩段分別驗形，
+    驗不過就 `skip`。手法與 linux-cachyos-cjktty「tag 尾號即 pkgrel」一致。
+    整串不拆會拼出 `nvidia-utils-beta-615.78.08-1-1-…` 的資產名，「已在 release 裡」
+    永不命中，等於每天白下 530MB＋409MB 重編。這兩顆 PKGBUILD 都**沒有** `pkgver()`，
+    所以 plan 尾部「makepkg 會把 pkgrel 重置為 1」那段不生效，AUR 只抬 pkgrel 時
+    照樣會重建（這是我們要的行為）。
+  · **kind 只能用 `aur`**：`kind: aur` 一次給齊四件事——(1)「拉取」步走 AUR（本輪另開了
+    顯式分支，兩邊一致）；(2)「初始化 Arch Linux 環境」把自有 `junlin03-aur` 掛成 pacman
+    源（那個條件是 `kind` ∈ kde／wayland／aur，或 repo_name = nashira-git）；(3) 建置帶
+    `--skipchecksums --nocheck`，AUR 輔助檔的 sha 過時時不會紅（run #225 實測過那類症狀）；
+    (4)「更新校驗和並回推 PKGBUILD」的 giant if 有 `matrix.kind != 'aur'` → 自動不去
+    push 不存在的 `Capricornus007/nvidia-utils-beta.git`（會被 push 就索要憑證、CI 無 TTY
+    → exit 128）。
+    反過來說 `kind: artix` 不能用：它**不在掛源的名單裡**（→ dkms 那顆的
+    `nvidia-utils-beta=615.78.08` 解不開）、拿不到 `--skipchecksums`，而且要讓它別回推就
+    必須把包名再點名塞進那條很長的 giant if（21000 字元上限的地雷區）。
+    註：「artix 容器不能裝 devtools」那條是另一回事——「初始化」的代碼是
+    `kind != artix` 才加 devtools（run #356 的教訓），與本組包選 aur 的理由無關。
+  · **依賴就緒門檻（本輪補的，不是既有機制）**：`nvidia-beta-dkms` 的 depends 有
+    `nvidia-utils-beta=${pkgver}`（**等號硬釘版號**）。本倉 plan 步既有的家族門檻只
+    `grep -- '-git$'`，抓不到這條沒有 -git 後綴的兄弟包 → 冷啟動時 `makepkg -s` 會
+    `target not found: nvidia-utils-beta` 直接判紅。已在 plan 的這條 case 點名補上
+    `pacman -Si nvidia-utils-beta` 沒過就 `skip`，與 KDE／Wayland 家族同一套
+    「本輪跳過、靠排程按依賴 DAG 逐層收斂」。
+  · **與本倉既有包的關係（實測，不是推測）**：
+      - `nvidia-utils-openrc`（本倉 low-freq 線，kind=artix）depends
+        `openrc nvidia-utils elogind`。我們這顆 `nvidia-utils-beta` 的
+        `provides` 有 `nvidia-utils=615.78.08` → 那條依賴照樣解得開，本機實測
+        `pacman -Qi nvidia-utils-beta` 的 Required By 已含 `nvidia-utils-openrc`。
+      - 本機 `lib32-nvidia-utils 615.78.08-1`（Artix lib32，packager ndowens）depends
+        `nvidia-utils=615.78.08`——**等號**，靠我們的 provides 滿足。
+      - `wlroots-git`（本倉 kind=wayland）depends `opengl-driver`，
+        `nvidia-utils-beta` 也 provides 它 → 多個提供者，合法，不破洞。
+      - `nvidia-settings-beta` depends `nvidia-utils-beta>=615.78.08`、
+        `opencl-nvidia-beta` 是 `nvidia-utils-beta` 的 optdepends
+        → 三顆同 pkgbase、同一次 build 產出，不會出現「發了半組」。
+  · ⚠️ **沒動、留給用戶拍板的三件事**（見交付報告）：
+      1. **等號釘依賴的換代窗口**：AUR beta 抬到 616.x 而 Artix 的 `lib32-nvidia-utils`
+         仍寫 `nvidia-utils=615.78.08` 時，那顆 32 位包會一時找不到提供者，直到 Artix
+         同步抬版。目前兩邊都是 615.78.08，所以是未來風險、不是現況。
+      2. **產物是在 Arch 容器裡建的**：`kind: aur` 的容器是 `archlinux:base-devel`
+         （不能換 artix 容器：見上條 kind 說明，而且 artix 容器 + kind≠artix 會去裝
+         devtools 而恆紅，run #356 實測）。這四顆都是「解包 NVIDIA 官方 .run 再 install」
+         、不編譯任何東西，`.PKGINFO` 的 depends 逐字取自 PKGBUILD（實測用戶本機那四顆
+         的 `%DEPENDS%` 與 AUR 宣告的內容完全一致、沒有任何 soname 自動探測條目，且
+         `nvidia-powerd`/`nvidia-persistenced`/`nvidia-settings` 的 NEEDED 裡沒有
+         `libsystemd.so.0`）→ 不會重演 fcitx5「裝完載不到 libsystemd」那種事故。
+         這個結論是用「本機 Artix 建出來的實物元數據」推的，CI 第一輪仍要用
+         `pacman -Qp` 對產物再核一次 depends 才算坐實。
+      3. **`--skipchecksums`**：`kind: aur` 的建置一併帶 `--skipchecksums --nocheck`
+         （既有慣例），530MB 的 .run 不在 CI 裡比 sha256。信任錨是 AUR 的 HTTPS git 倉。
+         要對這四顆破例（改 in-tree 自己留 PKGBUILD 才能驗 sums）是用戶的決定，沒動。
+
+## librime-git（2026-10-11）
+
+**動機不是「想要尖端」，是被動必須跟**：本機 capnproto-git 換代到 2.0（SONAME
+`libcapnp.so.2.0-dev`）之後，world 倉 `librime 1:1.17.0-5.1` 的
+`rime-plugins/librime-proto.so` 仍硬連結 `libcapnp.so.1.5.0`。實測全系統
+`grep -rl libcapnp.so.1.5.0 /usr/lib/` **只有這一個檔**，後果是 fcitx5 每次啟動都印
+`error loading plugin proto: ... 沒有此一檔案或目錄`。capnp 每次換代都要重來一次，
+所以放進 feed 讓它自動跟，而不是每次手動救。
+
+**四支補丁（逐支都有實測依據，見 `librime-git/PKGBUILD` 檔頭）**：
+
+1. `cxx20-for-capnp-2.patch` — 上游 `CMakeLists.txt:6` 釘 `CMAKE_CXX_STANDARD 17`，
+   而 capnp 2.0 的 `kj/common.h:67` 直接 `#error "This code requires C++20"`。
+   抬到 20 這一筆就把 **420 個 error 壓到 12 個**。
+2. `opencc-empty-conversion-chain.patch` — 上游 PR #1184（commit 96a55478）給
+   `GetConversionChain()` 加了空鏈防護，但 8c5094fa「extract rime::Opencc into
+   opencc.h/opencc.cc」把代碼搬走時**防護沒跟著搬**（實測
+   `git show HEAD:src/rime/gear/opencc.cc` 搜 `GetConversionChain` 得 3 處、
+   搜 `conversions.empty` 得 0 處）。因此**不能再用 cherry-pick**（實測直接衝突），
+   改自帶等價補丁，並順手擋掉 `conversions.front()` 在空清單時的未定義行為。
+3. `lua-u8string-cxx20.patch` — C++20 起 `path::u8string()` 回 `std::u8string`
+   （`char8_t`），與 librime-lua 自己那份 `Opencc(const string&)` 對不上，2 處改 `.string()`。
+4. `proto-capnp-2-text-reader.patch` — capnp 2.0 把 `Text::Reader` 換成
+   `kj::StringPtr`，不再從 `std::string` 隱式轉換：11 處 setter 加 `.c_str()`、
+   1 處讀取改 `cStr()`。
+
+**SOVERSION 已核**：上游 `set(rime_soversion 1)`，產物仍是 `librime.so.1.17.0` +
+`librime.so.1`；實測 `/usr/lib/fcitx5/librime.so` 的 `NEEDED` 正是 `librime.so.1`
+→ 換成 -git 版不會把 fcitx5-rime 弄斷鏈。哪天上游抬到 2，要連 fcitx5-rime 一起重建。
+
+**已知會紅在 check（不是本包引入）**：master 新增的 `test/simplifier_test.cc`
+（d4c324ca，2026-07-03，PR #1191，自註「regression safety net for future OpenCC
+upgrades」）有 5 個 `OpenccTest.ConvertWord_*` 失敗，130 通過。已用對照實驗證明
+**拿掉本包補丁也一樣失敗**（原版遍歷空清單回 false，行為一致），根因是本機
+opencc 1.3.2 而上游最新是 ver.1.4.2 → 解法是抬 opencc（待辦），**不是跳測試**。
