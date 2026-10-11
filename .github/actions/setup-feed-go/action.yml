@@ -16,7 +16,12 @@ description: >-
 # ⚠️ 裝不到就紅，**不退回去用發布版**：退回來這一輪驗的就不是用戶機上那顆
 #    toolchain，綠燈會變成假訊號。
 #
-# ⚠️ 只適用 **Linux x86_64**：feed 那顆包的硬體架構是 x86_64、只此一檔。
+# 硬體架構（2026-10-11）：
+#   x86_64  → 吃 feed 那顆 go-git（本倉 current-repo release 的唯一資產）。
+#   aarch64 → feed 那顆**沒有 arm64 檔**，而 arm64 的 Linux leg 還是要吃尖端，
+#             所以只能從源碼 bootstrap：拿 runner 預裝的發布版 Go 當 bootstrap
+#             跑 make.bash（Go 源碼自舉，不需要額外依賴）。
+#   其他架構 → 直接紅，不假裝成功。
 
 inputs:
   repo:
@@ -27,27 +32,49 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: 取並安裝 go-git
+    - name: 裝 golang/go master tip
       shell: bash
       run: |
         set -euo pipefail
-        if ! command -v jq >/dev/null 2>&1; then
-          # runner 上一般都有 jq；缺了就不要用一條 pipe 靜默產出空字串，
-          # 那會讓下面的 test -n 報「feed 裡沒有 go-git 資產」，把環境問題
-          # 誤報成 feed 問題。
-          echo "::error::容器裡沒有 jq，無法解析 feed 資產清單"
-          exit 1
-        fi
-        pkg=$(curl -fsSL \
-                "https://api.github.com/repos/${{ inputs.repo }}/releases/latest" \
-              | jq -r '.assets[] | select(.name | startswith("go-git-"))
-                       | .browser_download_url' | head -n1)
-        test -n "$pkg" || { echo "::error::feed 裡沒有 go-git 資產"; exit 1; }
-        echo ">> 取 $pkg"
-        curl -fsSL "$pkg" -o /tmp/go-git.pkg.tar.zst
-        # 包內容：/usr/lib/go/{bin/go,bin/gofmt,pkg/tool/...} ＋ /usr/bin/go 符號連結，
-        # GOROOT 實測為 /usr/lib/go。直接解到 / ，不經 pacman（runner 是 Ubuntu）。
-        sudo tar -x --zstd -f /tmp/go-git.pkg.tar.zst -C /
+        arch=$(uname -m)
+        case "$arch" in
+          x86_64)
+            if ! command -v jq >/dev/null 2>&1; then
+              # 缺 jq 就不要用一條 pipe 靜默產出空字串，那會讓下面的 test -n
+              # 報「feed 裡沒有 go-git 資產」，把環境問題誤報成 feed 問題。
+              echo "::error::容器裡沒有 jq，無法解析 feed 資產清單"
+              exit 1
+            fi
+            pkg=$(curl -fsSL \
+                    "https://api.github.com/repos/${{ inputs.repo }}/releases/latest" \
+                  | jq -r '.assets[] | select(.name | startswith("go-git-"))
+                           | .browser_download_url' | head -n1)
+            test -n "$pkg" || { echo "::error::feed 裡沒有 go-git 資產"; exit 1; }
+            echo ">> x86_64：取 $pkg"
+            curl -fsSL "$pkg" -o "$RUNNER_TEMP/go-git.pkg.tar.zst"
+            # 包內容：/usr/lib/go/{bin/go,bin/gofmt,pkg/tool/...} ＋ /usr/bin/go 符號連結，
+            # GOROOT 實測為 /usr/lib/go。直接解到 / ，不經 pacman（runner 是 Ubuntu）。
+            sudo tar -x --zstd -f "$RUNNER_TEMP/go-git.pkg.tar.zst" -C /
+            ;;
+          aarch64)
+            echo ">> aarch64：feed 的 go-git 只有 x86_64 檔，改從源碼 bootstrap"
+            bootstrap=$(command -v go)
+            test -n "$bootstrap" \
+              || { echo "::error::runner 上沒有可用來 bootstrap 的 go，建不了 tip"; exit 1; }
+            echo ">> bootstrap = $("$bootstrap" version)"
+            src="$RUNNER_TEMP/gosrc"
+            command rm -rf "$src"
+            git clone --depth 1 https://github.com/golang/go "$src"
+            ( cd "$src/src" && ./make.bash )
+            # GOROOT 釘成與 x86_64 那條同樣的路徑，下游 job 不用管自己是哪條來的。
+            sudo mkdir -p /usr/lib
+            sudo cp -a "$src" /usr/lib/go
+            ;;
+          *)
+            echo "::error::$arch 沒有尖端 Go 的來源（feed 僅 x86_64、源碼 bootstrap 僅 aarch64 可用）"
+            exit 1
+            ;;
+        esac
         # 顯式釘住 GOROOT 與 PATH：GitHub runner 預裝的 Go 也在 PATH 裡，誰先命中
         # 取決於順序，不能靠「應該會蓋過去」這種假設。
         echo "GOROOT=/usr/lib/go" >> "$GITHUB_ENV"
