@@ -61,10 +61,20 @@ runs:
             bootstrap=$(command -v go)
             test -n "$bootstrap" \
               || { echo "::error::runner 上沒有可用來 bootstrap 的 go，建不了 tip"; exit 1; }
-            echo ">> bootstrap = $("$bootstrap" version)"
+            echo ">> runner 預裝 = $("$bootstrap" version)"
             src="$RUNNER_TEMP/gosrc"
             command rm -rf "$src"
             git clone --depth 1 https://github.com/golang/go "$src"
+            # bootstrap 不能用 runner 預裝那顆：實測 arm64 runner 給的是 go1.24.13，
+            # 而 master 的 cmd/dist 要 Go ≥1.26，直接 make.bash 會死在
+            # 「found packages main (build.go) and building_Go_requires_Go_1_26_0_or_later」
+            # （utls run 38106995366 實測）。用 go 自帶的 toolchain 機制拉一個發布版
+            # 當 bootstrap，再把 GOTOOLCHAIN 關回 local 去跑 make.bash。
+            export GOTOOLCHAIN=go1.27.2
+            go version
+            GOROOT_BOOTSTRAP="$(go env GOROOT)"
+            export GOROOT_BOOTSTRAP GOTOOLCHAIN=local
+            echo ">> bootstrap = $("$GOROOT_BOOTSTRAP/bin/go" version)"
             ( cd "$src/src" && ./make.bash )
             # GOROOT 釘成與 x86_64 那條同樣的路徑，下游 job 不用管自己是哪條來的。
             sudo mkdir -p /usr/lib
