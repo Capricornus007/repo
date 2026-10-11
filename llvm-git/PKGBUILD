@@ -34,12 +34,24 @@
 # 產物就鏈著 .23.1。必須先讓 mesa 那個 job「裝我們產出的 llvm-libs-git 再編」，
 # 否則這批一上線、裝下去 GL 直接黑。
 #
-# ⏱ timeout：GitHub Actions 的 jobs.timeout-minutes 天花板是 360（feed 現值也是
+#    ⏱ timeout：GitHub Actions 的 jobs.timeout-minutes 天花板是 360（feed 現值也是
 #    360，build-git-packages.yml:37，**調不上去**），所以必須裁：關
-#    tests/docs/benchmarks/examples、後端只留 X86;NVPTX;AMDGPU、runtimes 只
-#    compiler-rt 且只 host triple、polly/openmp/offload/libc++/libc++abi 全不進
+#    tests/docs/benchmarks/examples、runtimes 只 compiler-rt 且只 host triple、
+#    polly/openmp/offload/libc++/libc++abi 全不進
 #    （本機 pacman -Qs 查實沒裝），並用 lld 當連結器＋限制併發連結數
 #    （linking 是 RAM 瓶頸不是 CPU 瓶頸）。
+#
+#    2026-10-11 第二次裁（用戶點名「六包」＋硬性要求 LLVM_ENABLE_PROJECTS=clang;lld;lldb、
+#    LLVM_TARGETS_TO_BUILD=X86;AMDGPU）：上一版多带了 clang-tools-extra 與 NVPTX。
+#    實測 run #443（job 114382764499）那一輪整包（clone＋configure＋編譯＋打包）
+#    2 時 31 分，沒撞 360，但 trunk 只會越長越久，照用戶點名的參數收。代價要寫明白：
+#      · clangd／clang-tidy／clang-format／clang-rename 等 extra 工具**不再產出**，
+#        本機 `pactree -r clang-tools-extra`／`-r clang-analyzer` 查實沒有任何已裝包
+#        依賴這兩個名字（依賴都寫在 `clang` 本體上：doxygen、lldb、rust-bindgen-git、
+#        shiboken6-generator、linux-cachyos-cjktty-headers），所以頂得住；
+#      · 因此 clang-git 的 provides 拿掉 clang-analyzer／clang-tools-extra 兩個虛名
+#        （產物裡沒有那些程式，留著就是讓 pacman 誤判依賴已滿足）；
+#      · NVPTX 移除後 `nvptx-arch` 也不會有了（mesa 用的 AMDGPU 與 llvmpipe 用的 X86 都留著）。
 #
 # ⚠️ 版本由 pkgver() 從上游 HEAD 現算 ⇒ 本檔要列進「回推校驗和」的排除清單。
 
@@ -62,7 +74,22 @@ license=('Apache-2.0 WITH LLVM-exception')
 makedepends=(cmake ninja git python swig perl libedit libffi ncurses zlib zstd
              libxml2 python-psutil lld libelf curl xz)
 options=(staticlibs !emptydirs !lto)
-_stage="$srcdir/stage"
+# ⚠️ `$_stage` 絕不能寫成頂層的 `_stage="$srcdir/stage"`（上一版就是這樣，紅在
+#   `mv: cannot stat '/stage/usr/include/llvm'`）：makepkg 是「先 source PKGBUILD、
+#   之後才算 srcdir」（本機 /usr/bin/makepkg 查實：source_safe "$BUILDFILE" 在 211 行、
+#   `srcdir=` 賦值在 1178/1181 行），頂層展開時 $srcdir 還是空字串 → `_stage` 變成
+#   `/stage`。之後 `rm -rf /stage` 與 `DESTDIR=/stage cmake --install` 全落在根目錄，
+#   各 package_*() 的 glob 因此一律不命中，而**沒有 glob 元字元的字面路徑**（如
+#   usr/include/llvm）不受 nullglob 約束、會原封不動送進 mv → 就是那句 cannot stat。
+#   所以改成函式內現算（_stage_init），且 _move 自己也會先確認。
+_stage=
+_stage_init() {
+  if [ -z "$srcdir" ]; then
+    echo "FATAL: srcdir 尚未由 makepkg 設定，$_stage 無從推得（不要在 PKGBUILD 頂層取用 \$srcdir）"
+    return 1
+  fi
+  _stage="$srcdir/stage"
+}
 _cmakeargs=(
   # ⚠️ 必須顯式給 -G Ninja：本機 configure 實測漏它的時候，cmake 退回 Unix Makefiles
   #   （build 目錄裡生出的是 Makefile、沒有 build.ninja），那樣 CI **不會紅**、只會
@@ -91,9 +118,10 @@ _cmakeargs=(
   -DLLVM_INCLUDE_EXAMPLES=OFF
   -DLLVM_INCLUDE_DOCS=OFF
   -DLLVM_INSTALL_UTILS=ON
-  -DLLVM_ENABLE_PROJECTS='clang;clang-tools-extra;lld;lldb'
+  # 2026-10-11 第二次裁：clang-tools-extra 與 NVPTX 拿掉（理由與代價見檔頭 ⏱ 段）。
+  -DLLVM_ENABLE_PROJECTS='clang;lld;lldb'
   -DLLVM_ENABLE_RUNTIMES='compiler-rt'
-  -DLLVM_TARGETS_TO_BUILD='X86;NVPTX;AMDGPU'
+  -DLLVM_TARGETS_TO_BUILD='X86;AMDGPU'
   -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
   # ⚠️ 這裡**不能**給 -DBUILD_SHARED_LIBS=ON：run #437 實測 configure 直接被拒
   #   「Cannot enable BUILD_SHARED_LIBS with LLVM_LINK_LLVM_DYLIB」（CMakeLists.txt:1005
@@ -150,25 +178,49 @@ prepare() {
 }
 
 build() {
+  _stage_init || return 1
   cmake --build build -j"$(nproc)"
   rm -rf "$_stage"
   DESTDIR="$_stage" cmake --install build
+  # 裝完一定要驗「暫存區真的有東西」： errexit 是 makepkg 在函式外套的
+  # （run_function_safe 的 shopt -o -s errexit errtrace），但它擋不住
+  # 「指令回 0 卻什麼都沒安裝」這種情況。上一版就是帶著一個空的 /stage 進
+  # package_*()，紅在搬檔那步、訊息還把真因（DESTDIR 跑掉）蓋掉。
+  [ -d "$_stage/usr/lib" ] || { echo "FATAL: cmake --install 沒有產出 $_stage/usr/lib"; return 1; }
+  echo ">> 暫存區就緒：$_stage（$(find "$_stage" -type f | wc -l) 個檔案）"
 }
 
-# 從暫存區**搬**進 $pkgdir（mv＝歸屬轉移，先搶者赢）。nullglob 讓沒命中的樣式
-# 安靜跳過：上游偶爾挪檔，不該把整個 job 判紅在搬檔這步（漏打包由收尾的殘留
-# 統計負責讓你看見）。
+# 從暫存區**搬**進 $pkgdir（mv＝歸屬轉移，先搶者赢）。nullglob 讓沒命中的
+# 「含元字元的樣式」安靜跳過；但 nullglob 罩不住**字面路徑**（bash 不對無元字元的
+# word 做檔名展開），那種一律照原樣送進 mv，檔不在就是 `cannot stat`——
+# 所以字面路徑要自己判斷存在與否，缺了就印一行清楚的話再跳過：上游挪檔、或我們
+# 主動裁掉某個 LLVM_ENABLE_PROJECTS（如 clang-tools-extra）時，那些程式本來就不會
+# 存在，不該把整輪判紅，但也不能像 `|| true` 那樣把「真的缺檔」一起蓋掉。
+# 每個 package_*() 最後印的搬入計數就是「這顆包到底有沒有東西」的證據。
 _move() {
-  local pat h rel
+  local pat h rel moved=0 skipped=0
+  _stage_init || return 1
+  [ -d "$_stage" ] || { echo "FATAL: 暫存區不存在：'$_stage'"; return 1; }
   shopt -s nullglob
   for pat in "$@"; do
+    case $pat in
+      *[*]*|*?*) ;;                     # 含 glob 元字元：交給 nullglob 處置
+      *)
+        if [ ! -e "$_stage/$pat" ]; then
+          echo ">> $pkgname: 跳過不存在的字面路徑 $pat"
+          skipped=$((skipped + 1))
+          continue
+        fi ;;
+    esac
     for h in "$_stage"/$pat; do
       rel=${h#"$_stage"/}
       mkdir -p "$pkgdir/$(dirname "$rel")"
       mv -f "$h" "$pkgdir/$rel"
+      moved=$((moved + 1))
     done
   done
   shopt -u nullglob
+  echo ">> $pkgname: _move 搬入 $moved 個路徑、跳過 $skipped 個"
 }
 
 # 每顆都自帶 LICENSE（$_stage 已被前面的包搬過，所以這裡直接從源碼取）
@@ -218,7 +270,12 @@ package_llvm-lit-git() {
 
 package_compiler-rt-git() {
   pkgdesc='Assorted runtime libraries for clang (sanitizers, profiling; trunk)'
-  depends=("clang-git=$pkgver-$pkgrel" gcc-libs)
+  # ⚠️ 這裡**不能**依賴 clang-git：上游那份 compiler-rt 的 depends 就只有
+  #   ('glibc' 'libgcc' 'libstdc++')，clang 對它是 **makedepends**；而 clang-git
+  #   反过来要依賴 compiler-rt-git（見 package_clang-git）。兩邊互指就是 pacman
+  #   裝不起來的依賴環（本機 `pactree -r compiler-rt` 查實系統裡只有 clang→compiler-rt
+  #   這一個方向）。
+  depends=(glibc libgcc libstdc++)
   provides=("compiler-rt=${pkgver%%_r*}")
   conflicts=(compiler-rt)
   replaces=(compiler-rt)
@@ -269,17 +326,24 @@ package_lldb-git() {
 
 package_clang-git() {
   pkgdesc='C language family frontend for LLVM (trunk)'
-  depends=("llvm-libs-git=$pkgver-$pkgrel" llvm-git gcc libffi ncurses zlib zstd
+  # compiler-rt-git 是**硬依賴**，不是選項：上游那份 clang 的 depends 就寫了
+  # ('llvm-libs' 'gcc' 'compiler-rt' 'libgcc' 'libxml2')（docs/upstream-pkgbuilds/
+  # clang.PKGBUILD:11），本機 `pacman -Qi clang` 23.1.3-1.1 亦同。少了它這顆就不是
+  # 系統 clang 的等值替換（-fsanitize=address 之类的直連不到 runtime）。
+  depends=("llvm-libs-git=$pkgver-$pkgrel" "compiler-rt-git=$pkgver-$pkgrel"
+           gcc glibc libgcc libstdc++ libffi ncurses zlib zstd
            python sh libxml2)
-  optdepends=('lld-git: faster linker'
-              'compiler-rt-git: sanitizer runtimes')
-  # clang-analyzer／clang-tools-extra 這兩個名字要跟系統 clang 一樣由本包提供
-  # （見檔頭查實），所以 extra 的 clangd／clang-tidy 等全部留在本包，
-  # **不再 _drop**（_drop 就是刪檔，見檔頭硬規則）。
-  provides=("clang=${pkgver%%_r*}" "clang-analyzer=${pkgver%%_r*}"
-            "clang-tools-extra=${pkgver%%_r*}")
-  conflicts=(clang clang-analyzer clang-tools-extra)
-  replaces=(clang clang-analyzer clang-tools-extra)
+  optdepends=('lld-git: faster linker')
+  # clang-analyzer／clang-tools-extra 這兩個名字**不再提供**（2026-10-11 第二次裁）：
+  # 系統 clang 確實靠 provides 頂著那兩個名字，但本輪 LLVM_ENABLE_PROJECTS 收了
+  # clang;lld;lldb，clangd／clang-tidy／scan-build 那批程式根本不會被建，
+  # 留著虛名只會讓 pacman 誤判依賴已滿足。查實本機沒有任何已裝包依賴那兩個名字
+  # （pactree -r clang-tools-extra／-r clang-analyzer 命中的五顆全部只依賴 `clang`）。
+  # 下面 extra 相關的路徑樣式刻意**不删**：字面路徑缺檔時 _move 會印一行再跳過，
+  # 哪天我們把 extra 加回來，那些行就是現成的清單、也會在日誌裡消失。
+  provides=("clang=${pkgver%%_r*}")
+  conflicts=(clang)
+  replaces=(clang)
   _move 'usr/bin/clang' 'usr/bin/clang++' 'usr/bin/clang-*' 'usr/bin/cc' \
         'usr/bin/c++' 'usr/bin/scan-*' 'usr/bin/run-clang*' 'usr/bin/gen-*' \
         'usr/bin/hmaptool' 'usr/bin/diagtool' 'usr/bin/pp-trace' \
