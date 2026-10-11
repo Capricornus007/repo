@@ -1004,7 +1004,7 @@ jobs:
               rm -rf /tmp/kew-src
               git clone "$KEW_URL" /tmp/kew-src || skip "clone kew 上游失败"
               TARGET_PKGVER=$(git -C /tmp/kew-src describe --tags --long --abbrev=7 \
-                | sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/[:\/]//g')
+                | sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/[:\/]//g;s/^v//g')
               [ -n "$TARGET_PKGVER" ] || skip "拿不到 kew 上游版本"
               if [ "$TARGET_PKGVER" != "$CUR_PKGVER" ]; then
                 TARGET_PKGREL=1

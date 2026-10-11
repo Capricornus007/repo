@@ -1,5 +1,8 @@
 pkgname=kew-git
-pkgver=v4.3.6.r23.g9181a7e
+# 靜態佔位要與 pkgver() 的輸出同形（不帶 v）。理由：provides 這類陣列有可能在
+# pkgver() 重算之前就以靜態值展開，若佔位還留著 v，做出來的就是
+# `kew=2:v4.3.6…`——比穩定版還舊的那種白補。
+pkgver=4.3.6.r23.g9181a7e
 pkgrel=2
 # 舊 pkgver() 用「最高版 tag + commit 短 hash」拼出 v4.3.6.<hash>，同一 tag 下換
 # commit 時 vercmp 會去比 hash 的數字段：DB 停在 892380a7（09-21），之後任何以較小
@@ -20,10 +23,9 @@ url="https://codeberg.org/ravachol/kew"
 license=('GPL2')
 conflicts=('kew')
 # 依賴 kew 的包（以及 yay／pikaur 這類輔助工具）只看 provides 不看 conflicts，
-# 少了這行 kew-git 就永遠無法滿足 `kew`。版本要把 pkgver 開頭的 `v` 剋掉並帶 epoch：
-# vercmp 裡「字母開頭的段」小於「數字段」，直接寫 v4.3.6.r23… 會比穩定版 4.3.6 還舊，
-# 等於補了個滿足以後依賴仍然判不過。
-provides=("kew=${epoch}:${pkgver#v}")
+# 少了這行 kew-git 就永遠無法滿足 `kew`。版本帶 epoch；這裡不必再剋 `v`，
+# 因為 pkgver() 已經把 tag 前綴去掉（與 mpv-git 等本倉其他 -git 包同一公式）。
+provides=("kew=${epoch}:${pkgver}")
 depends=('fftw' 'faad' 'git' 'chafa' 'taglib' 'libogg' 'gcc' 'make' 'glib2' 'opus' 'opusfile' 'libvorbis' 'curl')
 replaces=('cue-git' 'kew')
 sha256sums=('SKIP')
@@ -34,7 +36,11 @@ source=("git+${url}")
 # 否則 CI 探測到的版本 ≠ makepkg 實產的版本，「已在 release 裡」永遠比不中。
 pkgver() {
     cd "$srcdir/kew"
-    git describe --tags --long --abbrev=7 | sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/[:\/]//g'
+    # s/^v//g 是補上與本倉其他 -git 包（mpv-git 等）一致的一步：kew 的 tag 帶前綴 v，
+    # 不去掉會算出 v4.3.6.r23.…，而 vercmp 把「字母開頭的段」排在數字段之下
+    # （實測 vercmp v4.3.6 4.3.6 = -1）→ 任何用 $pkgver 拼出來的 provides/依賴
+    # 都會比穩定版還舊，等於白補。去掉 v 之後版本反而比現行的 2:v4.3.6… 更新。
+    git describe --tags --long --abbrev=7 | sed 's/\([^-]*-g\)/r\1/;s/-/./g;s/[:\/]//g;s/^v//g'
 }
 
 build() {
