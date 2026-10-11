@@ -192,14 +192,19 @@ package() {
   # 無解，只能在客戶端繞。本機 10-11 用 /usr/local/bin/pysol 手寫同樣的繞法已驗證
   # 可用（用戶親測能打字），這裡把它做進包，免得下次重建就掉。
   #
-  # 代價（老實寫在包裡）：剝掉 XMODIFIERS 後 Tk 沒有别的輸入法管道，pysolfc 介面內
-  # 打不了中文——牌局名稱／自訂花色那几个輸入框只能打英文數字。三條候選（換 ibus／
-  # 上游補丁自架選字／用剪貼簿貼）尚未裁決，先這樣發。
+  # 代價（老實寫在包裡）：剝掉 XMODIFIERS 後 Tk 沒有別的輸入法管道，pysolfc 介面內
+  # 打不了中文——玩家名稱／自訂花色那幾個輸入框只能打英文數字。三條候選（換 ibus／
+  # 加補丁自架選字／用剪貼簿貼）尚未裁決，先這樣發。
   #
   # 只在 @im=fcitx 時剝：ibus／xim 的 Tk+XIM 本來就是好的，照單全剝會讓那些環境的
-  # 中文輸入一起消失。GTK_IM_MODULE／QT_IM_MODULE 原樣保留——`pysol --gtk`／
-  # `--kivy` 走的是 GTK/Qt 原生 immodule（fcitx5 有提供），與 XMODIFIERS 無關，
-  # 所以那兩條介面的中文輸入不受本 wrapper 影響。
+  # 中文輸入一起消失。GTK_IM_MODULE／QT_IM_MODULE 原樣不動（本包只有 Tk 會讀
+  # XMODIFIERS，那兩個變數是 GTK/Qt 自己的管道，剝了只會無謂地弄壞別的介面）。
+  # ⚠️ 別指望「換個前端就救回來」：`--gtk` 不存在——TOOLKIT 是寫死在
+  # pysollib/settings.py（`TOOLKIT = 'tk'  # or 'gtk'`）的常數、沒有命令列開關，而
+  # pysollib/pysolgtk/* 吃的是 PyGTK（tkwrap.py 第 28 行 `import gtk`、
+  # `gtk.WINDOW_TOPLEVEL`），Python 3 早就沒有這個綁定 ⇒ GTK 前端是死碼。
+  # `pysol --kivy`（README.kivy）那條是真的，但 Kivy 自己畫輸入框、走 SDL 事件，不讀
+  # XMODIFIERS，所以有無中文輸入取決於 Kivy 本身的 IME 支援（本輪未實測）。
   _bin="$pkgdir/usr/bin/pysol"
   if [ ! -f "$_bin" ]; then
     # 上游若改回 setup.py 的 entry_points／改腳本名，這裡必須紅——靜默跳過等於發一個
@@ -214,7 +219,11 @@ package() {
 # PySolFC 啟動腳本（由 pysolfc-git 包產生；真正的程式是 /usr/bin/pysol-real）。
 # fcitx5 的 XIM 對 Tk 客戶端不回傳任何按鍵（Tk 只認 XIM，沒有 immodule），所以在
 # fcitx 環境下把 XMODIFIERS 剝掉，讓 Tk 走自己的按鍵處理。ibus／xim 不動。
-# 副作用：這樣 Tk 內無法輸入中文（要中文請改用 --gtk，或把文字先貼進來）。
+# 副作用：Tk 沒有別的輸入法管道，一剝掉之後 pysolfc 裡就打不了中文（英文／數字正常）。
+# 要中文目前只能從別處複製再按 Ctrl+V 貼進來（貼上走 CLIPBOARD，跟 XIM 無關）；
+# 換 ibus 還是在包裡自架選字，兩條都還沒裁決。注意 `--gtk` 不是出路：TOOLKIT 是
+# 寫死在 pysollib/settings.py 的常數，而 pysollib/pysolgtk 用的是 Python 3 早已
+# 沒有綁定的 PyGTK。
 case "${XMODIFIERS:-}" in
   *@im=fcitx*) exec env -u XMODIFIERS /usr/bin/pysol-real "$@" ;;
 esac
