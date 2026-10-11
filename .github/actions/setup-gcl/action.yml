@@ -1,0 +1,87 @@
+name: Install golangci-lint that can read Go tip export data
+description: >-
+  自己組裝 golangci-lint，並把 golang.org/x/tools 換成讀得懂 go tip 的版本。
+  取代 golangci/golangci-lint-action——它釘死的那顆 x/tools 讀不了 tip，Lint 會全紅。
+
+# 為什麼不能用 golangci/golangci-lint-action（2026-10-11 實測定案）：
+#   go tip（1.28-dev）把 std 的 export data 寫成**裸 iexport v3 流**：
+#   `go list -export -json sync/atomic` 產物的頭兩 bytes 是 `i\x03`，不再是 `!<arch>`。
+#   x/tools 的 gcimporter 要 v0.51.0 起才認這個格式。實測交叉表（同一個 export 檔）：
+#     x/tools v0.50.0 → NewReader err: not the start of an archive file
+#     x/tools v0.51.0 → Read err=<nil>
+#     x/tools v0.52.0 → Read err=<nil>
+#   而 golangci-lint v2.14.0（目前的 latest release）**連 main 都還釘 v0.50.0**
+#   （`go version -m <binary>` 看得到 `dep golang.org/x/tools v0.50.0`），
+#   `go install …@latest` 改不動它釘死的依賴。
+#   後果：sing-box Lint run #65 十個矩陣目標**全紅**、含 linux/amd64（所以不是平台問題），
+#   報文是 `could not import sync … could not load export data: not the start of an
+#   archive file`。
+#   → 屬「工具跟不上 toolchain」的環境前提，修法是換依賴重 build，
+#     **不是關 typecheck、不是跳 Lint、也不是把 Lint 降回發布版 Go**。
+#
+# 為什麼用「空模組 + go build 別的 module 的 main 套件」而不是 clone 整個倉：
+#   少一次 checkout，依賴由 go module 拉，replace 一行換掉 x/tools。
+#   `-mod=mod` 是必要的：`go get` 只寫 go.mod，go.sum 不全時 build 會被拒
+#   （實測 `missing go.sum entry for module providing package github.com/spf13/cobra`）。
+#
+# ⚠️ 只適用 Linux x86_64（同 setup-feed-go：Go 那顆是 x86_64 包）。
+
+inputs:
+  version:
+    description: golangci-lint 版本（tag 或 pseudo-version）
+    required: false
+    default: v2.14.0
+  xtools:
+    description: 換成的 golang.org/x/tools 版本（< v0.51.0 讀不了 go tip 的 export data）
+    required: false
+    default: v0.51.0
+
+runs:
+  using: composite
+  steps:
+    - name: 快取已編好的那顆
+      id: cache
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/gcl-bin
+        key: gcl-${{ inputs.version }}-${{ inputs.xtools }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: 沒命中就自己組裝
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        dir="$RUNNER_TEMP/gclmod"
+        bin="$RUNNER_TEMP/gcl-bin/golangci-lint"
+        mkdir -p "$dir" "$(dirname "$bin")"
+        printf 'module gclmod\n\ngo 1.28\n' > "$dir/go.mod"
+        cd "$dir"
+        export GOTOOLCHAIN=local
+        # 輸出不要接 pipeline：$? 會變成尾端指令的碼（本機已兩次把失敗報成 0）。
+        go get "github.com/golangci/golangci-lint/v2@${{ inputs.version }}"
+        go mod edit "-replace=golang.org/x/tools=golang.org/x/tools@${{ inputs.xtools }}"
+        go build -mod=mod -o "$bin" github.com/golangci/golangci-lint/v2/cmd/golangci-lint
+
+    - name: 驗依賴並上 PATH
+      shell: bash
+      run: |
+        set -euo pipefail
+        bin="$RUNNER_TEMP/gcl-bin/golangci-lint"
+        test -x "$bin" || { echo "::error::沒有 build 出來的 golangci-lint：$bin"; exit 1; }
+        "$bin" version
+        # 硬驗它真的吃到新的 x/tools：拿 go tip 的 std export data 實讀一次。
+        # 讀不動就紅在這裡，別讓整輪 Lint 帶著必壞的工具跑完。
+        go version -m "$bin" | grep -F "x/tools	${{ inputs.xtools }}" >/dev/null \
+          || { echo "::error::build 出來的 x/tools 不是 ${{ inputs.xtools }}"; go version -m "$bin" | grep x/tools; exit 1; }
+        probe=$(mktemp -d)
+        printf 'module probe\n\ngo 1.28\n' > "$probe/go.mod"
+        printf 'package main\n\nimport (\n\t"fmt"\n\t"sync"\n)\n\nfunc main() {\n\tvar m sync.Mutex\n\tm.Lock()\n\tfmt.Println("ok")\n}\n' > "$probe/main.go"
+        printf 'version: "2"\n' > "$probe/.golangci.yml"
+        cd "$probe"
+        if ! GOTOOLCHAIN=local "$bin" run ./... > "$probe/out" 2>&1; then
+          echo "::error::golangci-lint 讀不了 go tip 的 export data，Lint 會全紅："
+          sed 's/^/::error::  /' "$probe/out" | head -6
+          exit 1
+        fi
+        echo ">> golangci-lint 可用（能讀 go tip 的 std export data）"
+        echo "$RUNNER_TEMP/gcl-bin" >> "$GITHUB_PATH"
