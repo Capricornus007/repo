@@ -1,0 +1,245 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 本倉目錄版 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md，
+# **不要寫回 workflow** —— 那個 step 有 21000 字元表達式上限且註解也計入）。
+#
+# 動機：Artix world-goblins 的 DB 列了 lld-23.1.3-1，但實測 12 臺鏡像全部 404
+# （該倉目錄裡根本沒有 lld 檔，只有 lldb）→ 本機卡在「llvm/clang 23.1.3 ＋
+# lld 23.1.1」的不一致態，而且 lld 補不上會讓整條 -Syu 原子失敗。
+# 為啥不走 kind:aur：AUR llvm-git 停在 18.0.0_r484887（2024-04）、
+# llvm-minimal-git 停在 21.0.0_r537041（2025-05），照抄是「假尖端真降級」。
+#
+# 設計（用戶 2026-10-11 裁：以 trunk **取代**系統那套，mesa 一起重建）：
+#   · 裝進 /usr、與官方包同路徑，靠 provides/conflicts/replaces 頂替。
+#   · 分割不靠猜 CMake 的 install-* target（名字上游會改，而且 install-llvm
+#     本身也含函式庫 → 必然重疊）。改成 build() 裡一次性 cmake --install 到
+#     $srcdir/stage，各 package_*() 只按路徑搬。重疊與否於是變成「兩份清單
+#     有無交集」這種可以靜態看出來的事，不必等建置炸掉才知道。
+#
+# ⚠️ 上線順序（未做，見任務 #157）：實測本機有 35 個 .so 直接 NEEDED
+# libLLVM.so.23.1。mesa-tkg-git 的 CI job 目前裝的是倉庫 llvm-libs 23.1.3，
+# 產物就鏈著 .23.1。必須先讓 mesa 那個 job「裝我們產出的 llvm-libs-git 再編」，
+# 否則這批一上線、裝下去 GL 直接黑。
+
+_pkgbase=llvm-project
+pkgbase=llvm-git
+# 七個，不是八個：實測 Artix 的 clang-tools-extra 不是獨立包
+# （`pacman -Qi clang-tools-extra` 解析到 clang、兩份 `pacman -Ql` 清單完全相同），
+# 官方是把 extra 的工具折進 clang、再 provides 一個 clang-tools-extra 名字。
+# 自己發明一個 extra 分割包＝註定與 clang-git 搶同一批檔案。
+pkgname=(llvm-libs-git llvm-git llvm-lit-git clang-git lld-git lldb-git
+         compiler-rt-git)
+pkgver=24.0.0_r0.g00000000000
+pkgrel=1
+arch=(x86_64)
+url="https://llvm.org/"
+license=('Apache-2.0 WITH LLVM-exception')
+makedepends=(cmake ninja git python swig perl libedit libffi ncurses zlib zstd
+             libxml2 python-psutil lld)
+options=(staticlibs !emptydirs)
+_stage="$srcdir/stage"
+# clang-tools-extra 的執行檔名。clang-git 先 broadly 收、再照這張清單剔掉，
+# 所以兩包不可能重疊；上游新增 extra 工具時最壞是留在 clang-git 裡，
+# 不會變成「同一檔案被兩個包聲有」的硬錯誤。
+_extra_tools=(clangd clang-tidy clang-format clang-doc clang-include-cleaner
+              clang-rename clang-move clang-query clang-check clang-modernize
+              clang-apiname clang-slimlinter clang-install-api-notes
+              pp-trace clang-tblgen clang-parsetest)
+_cmakeargs=(
+  -DCMAKE_BUILD_TYPE=Release
+  -DLLVM_ENABLE_ASSERTIONS=OFF
+  -DLLVM_ENABLE_LIBEDIT=OFF
+  -DLLVM_ENABLE_LIBXML2=OFF
+  -DLLVM_ENABLE_TERMINFO=OFF
+  -DLLVM_ENABLE_ZLIB=ON
+  -DLLVM_ENABLE_ZSTD=ON
+  -DLLVM_INCLUDE_TESTS=OFF
+  -DLLVM_INCLUDE_BENCHMARKS=OFF
+  -DLLVM_INCLUDE_EXAMPLES=OFF
+  -DLLVM_INCLUDE_DOCS=OFF
+  -DLLVM_ENABLE_PROJECTS='clang;clang-tools-extra;lld;lldb'
+  -DLLVM_ENABLE_RUNTIMES='compiler-rt'
+  -DLLVM_TARGETS_TO_BUILD='X86;AMDGPU'
+  -DLLVM_HOST_TARGET=x86_64
+  -DBUILD_SHARED_LIBS=ON
+  -DLLVM_BUILD_LLVM_DYLIB=ON
+  -DLLVM_LINK_LLVM_DYLIB=ON
+  -DLLVM_DYLIB_COMPONENTS=all
+  -DLLVM_ENABLE_LLD=ON
+  -DLLVM_PARALLEL_LINK_JOBS=2
+  -DLLVM_VERSION_SUFFIX=git
+  -DCLANG_DEFAULT_LINKER=lld
+  -DLLDB_ENABLE_PYTHON=ON
+  -DLLDB_ENABLE_LIBEDIT=OFF
+  -DLLDB_INCLUDE_TESTS=OFF
+)
+
+source=("git+https://github.com/llvm/llvm-project.git#branch=main")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd $_pkgbase
+  # tag 形如 llvmorg-23.1.1 → describe 得 llvmorg-23.1.1-598000-g<sha>。
+  # 點號在 pkgver 裡本來就合法，不要「換成連字號再換回來」（會算出 23-1-1_r…，
+  # vercmp 直接亂套）。
+  local raw base count sha
+  raw=$(git describe --tags --match 'llvmorg-*' HEAD)
+  base=${raw#llvmorg-}
+  base=${base%%-*}
+  count=$(git rev-list --count "llvmorg-${base}..HEAD" 2>/dev/null || echo 0)
+  sha=$(git rev-parse --short=11 HEAD)
+  printf '%s_r%s.g%s\n' "$base" "$count" "$sha"
+}
+
+prepare() {
+  cmake -S $_pkgbase/llvm -B build "${_cmakeargs[@]}" \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_C_FLAGS_RELEASE='-O2 -DNDEBUG' \
+    -DCMAKE_CXX_FLAGS_RELEASE='-O2 -DNDEBUG'
+}
+
+build() {
+  cmake --build build -j"$(nproc)"
+  rm -rf "$_stage"
+  DESTDIR="$_stage" cmake --install build
+}
+
+# 從暫存區按 glob 搬進 $pkgdir。nullglob 讓沒命中的樣式安靜跳過：上游偶爾挪檔，
+# 不該把整個 job 判紅在搬檔這步（真正的訊號是 makepkg 自己的空目錄檢查）。
+_pick() {
+  local pat h rel
+  shopt -s nullglob
+  for pat in "$@"; do
+    for h in "$_stage"/$pat; do
+      rel=${h#"$_stage"/}
+      mkdir -p "$pkgdir/$(dirname "$rel")"
+      cp -a "$h" "$pkgdir/$rel"
+    done
+  done
+  shopt -u nullglob
+}
+
+_drop() {
+  local pat
+  shopt -s nullglob
+  for pat in "$@"; do
+    rm -rf "${pkgdir:?未設定}"/$pat
+  done
+  shopt -u nullglob
+}
+
+package_llvm-libs-git() {
+  pkgdesc='LLVM runtime libraries (trunk)'
+  depends=(gcc-libs zlib zstd libffi ncurses libxml2 sh)
+  provides=("llvm-libs=${pkgver%%_r*}")
+  conflicts=(llvm-libs)
+  replaces=(llvm-libs)
+  _pick 'usr/lib/libLLVM*' 'usr/lib/libclang-cpp*' 'usr/include/*' \
+        'usr/lib/cmake/llvm' 'usr/lib/baremetal' 'usr/lib/libFuzzer*'
+}
+
+package_llvm-git() {
+  pkgdesc='LLVM compiler toolchain (trunk)'
+  depends=("llvm-libs-git=$pkgver-$pkgrel" zlib zstd libffi ncurses perl python sh)
+  optdepends=('lld-git: faster linker'
+              'llvm-lit-git: LLVM testing tool'
+              'clang-git: C family front-end')
+  provides=("llvm=${pkgver%%_r*}")
+  conflicts=(llvm)
+  replaces=(llvm)
+  _pick 'usr/bin/llvm-*' 'usr/bin/llc' 'usr/bin/opt' 'usr/bin/bugpoint' \
+        'usr/bin/plitools' 'usr/bin/dsymutil' 'usr/bin/nmcm' \
+        'usr/lib/llvm*' 'usr/libexec/*' 'usr/lib/cmake/*' 'usr/lib/*.a' \
+        'usr/share/llvm*' 'usr/share/man/man1/llvm-*' 'usr/share/man/man1/opt.*' \
+        'usr/share/man/man1/llc.*' 'usr/share/man/man1/bugpoint.*' \
+        'usr/share/man/man1/dsymutil.*' 'usr/share/filecheck'
+  # cmake/* 裡只有 llvm 那一份歸 -libs，其餘是各子專案自己的
+  _drop 'usr/lib/clang' 'usr/lib/clang-tools-extra'
+}
+
+package_llvm-lit-git() {
+  pkgdesc='An LLVM testing tool (trunk)'
+  depends=("llvm-git=$pkgver-$pkgrel" python)
+  provides=(llvm-lit)
+  conflicts=(llvm-lit)
+  replaces=(llvm-lit)
+  _pick 'usr/bin/llvm-lit' 'usr/bin/split-file' 'usr/bin/FileCheck' \
+        'usr/bin/count' 'usr/bin/not' 'usr/bin/ycd'
+  local site
+  site=$(python -c 'import site;print(site.getpkgdir())' 2>/dev/null) \
+    || site=usr/lib/python3.13/site-packages
+  if [ -d "$_pkgbase/llvm/utils/lit/lit" ]; then
+    mkdir -p "$pkgdir/usr/${site#usr/}"
+    cp -a "$_pkgbase/llvm/utils/lit/lit" "$pkgdir/usr/${site#usr/}/"
+  fi
+}
+
+package_clang-git() {
+  pkgdesc='C family compiler and related tools (trunk)'
+  depends=("llvm-libs-git=$pkgver-$pkgrel" gcc libffi ncurses zlib zstd python sh)
+  optdepends=('lld-git: faster linker'
+              'compiler-rt-git: sanitizer runtimes'
+              'clang-tools-extra-git: clangd / clang-tidy')
+  provides=("clang=${pkgver%%_r*}")
+  conflicts=(clang)
+  replaces=(clang)
+  _pick 'usr/bin/clang' 'usr/bin/clang++' 'usr/bin/clang-*' 'usr/bin/cc' \
+        'usr/bin/c++' 'usr/bin/scan-*' 'usr/bin/run-clang*' 'usr/bin/gen-*' \
+        'usr/lib/libclang*' 'usr/lib/cmake/clang' 'usr/share/clang' \
+        'usr/lib/clang/*/include' 'usr/lib/clang/*/include-safe' \
+        'usr/libexec/clang*' 'usr/share/man/man1/clang.*' \
+        'usr/share/man/man1/scan-*' 'usr/share/scan-build' 'usr/share/scan-view'
+  # libclang-cpp 是 LLVM 那側的庫、歸 llvm-libs；extra 的工具另有其包
+  _drop 'usr/lib/libclang-cpp*' 'usr/share/clang/config'
+  local t
+  for t in "${_extra_tools[@]}"; do _drop "usr/bin/$t"; done
+}
+
+package_clang-tools-extra-git() {
+  pkgdesc='Extra tools for clang (clangd, clang-tidy, …; trunk)'
+  depends=("clang-git=$pkgver-$pkgrel" "llvm-libs-git=$pkgver-$pkgrel" python ncurses)
+  provides=("clang-tools-extra=${pkgver%%_r*}")
+  conflicts=(clang-tools-extra)
+  replaces=(clang-tools-extra)
+  local t
+  for t in "${_extra_tools[@]}"; do _pick "usr/bin/$t"; done
+  _pick 'usr/share/clang/config' 'usr/lib/clang-tools-extra' \
+        'usr/share/man/man1/clangd.*' 'usr/share/man/man1/clang-tidy.*' \
+        'usr/share/man/man1/clang-format.*' 'usr/share/clang-format' \
+        'usr/share/clang-tidy'
+}
+
+package_lld-git() {
+  pkgdesc='The LLVM Project linker (trunk)'
+  depends=("llvm-libs-git=$pkgver-$pkgrel" gcc-libs zlib zstd libstdc++)
+  provides=("lld=${pkgver%%_r*}")
+  conflicts=(lld)
+  replaces=(lld)
+  _pick 'usr/bin/lld' 'usr/bin/ld.lld' 'usr/bin/lld-link' 'usr/bin/lld-macho' \
+        'usr/bin/lld-foo' 'usr/bin/wasm-ld' 'usr/bin/ld64.lld' \
+        'usr/lib/cmake/lld' 'usr/share/man/man1/lld.*'
+}
+
+package_lldb-git() {
+  pkgdesc='Next generation, high-performance debugger (trunk)'
+  depends=("llvm-libs-git=$pkgver-$pkgrel" python libedit ncurses swig python-psutil)
+  provides=("lldb=${pkgver%%_r*}")
+  conflicts=(lldb)
+  replaces=(lldb)
+  _pick 'usr/bin/lldb' 'usr/bin/lldb-*' 'usr/lib/liblldb*' 'usr/share/lldb' \
+        'usr/lib/cmake/lldb' 'usr/lib/python3.*/site-packages/lldb' \
+        'usr/share/man/man1/lldb.*' 'usr/share/opt/lldb*'
+}
+
+package_compiler-rt-git() {
+  pkgdesc='Assorted runtime libraries for clang (sanitizers, profiling; trunk)'
+  depends=("clang-git=$pkgver-$pkgrel" gcc-libs)
+  provides=("compiler-rt=${pkgver%%_r*}")
+  conflicts=(compiler-rt)
+  replaces=(compiler-rt)
+  # clang-git 拿 clang/*/include（內建標頭），這裡只拿 clang/*/lib —— 同一棵樹
+  # 但清單必須互斥：連 include/x86 這種子目錄都不能寫進來，否則與 include/*
+  # 是父子路徑、makepkg 直接判「同一檔案被兩個包聲有」。
+  _pick 'usr/lib/clang/*/lib' 'usr/lib/clang/*/share' 'usr/lib/clang/*/profiles'
+}
+
+# vim:set ts=2 sw=2 et:
