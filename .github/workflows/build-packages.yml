@@ -404,6 +404,21 @@ jobs:
           buser=0
           bwrap --unshare-user --ro-bind / / /usr/bin/true 2>&1 || buser=$?
           echo ">> bwrap(root, 只 --unshare-user) rc=$buser"
+          # ⚠️ 下面這組是補的（2026-10-11，#431／#432／#435 三輪同紅後發現）：
+          # PKGBUILD 的 check() 是以 **builder 使用者**跑的，而這個步驟之前只印 root 的
+          # 結果（rc=0 兩條）→ 等於「探針判定的依據」與「實際跑測試的身分」根本不是同一個，
+          # 卻被當成同一個在用。先把 builder 身分的真實結果印出來，再談往哪修。
+          buil=0
+          su builder -c 'bwrap --unshare-all --ro-bind /usr /usr --symlink /usr/lib /lib64 --dev /dev --proc /proc /usr/bin/true' 2>&1 || buil=$?
+          echo ">> bwrap(builder, --unshare-all) rc=$buil   ← check() 用的就是這個身分"
+          buid=$(su builder -c 'id -u; cat /proc/self/status | awk "/CapBnd/{print \$2}"' 2>/dev/null | tr '\n' ' ')
+          echo ">> builder id/CapBnd: $buid"
+          # su 會不會把環境剝掉也要量：makepkg 本身就是用 `su builder -c` 起 build()/check()
+          # 的，而 PKGBUILD 裡的 export 只活在 check() 那個 subshell。兩件事要分開看，
+          # 不然又會像之前那樣把「變數沒生效」跟「su/xvfb-run 洗環境」混成一團。
+          export GLYCIN_DISABLE_SANDBOX=probe
+          echo ">> 父 shell env=[$GLYCIN_DISABLE_SANDBOX]  su builder 看到的=[$(su builder -c 'printf %s "${GLYCIN_DISABLE_SANDBOX:-未設}"')]"
+          echo ">> 父 shell env 經 su 後為空 = su 會剝 env，PKGBUILD 內的 export 才是唯一可信的來源"
 
       - name: 拉取对应的套件仓库
         run: |

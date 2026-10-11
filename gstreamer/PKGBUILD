@@ -52,7 +52,7 @@ pkgname=(
   gstreamer-docs
 )
 pkgver=1.28.7
-pkgrel=15
+pkgrel=16
 epoch=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -422,6 +422,12 @@ check() (
 
   # Flaky due to timeouts
   local rc=0
+  # ⚠️ 先把「跑測試的那個進程到底看不看得到降級變數」變成證據：#431／#432／#435 三輪
+  # 的矛盾點是「同 shell 的直測 rc=0（jpg 載得進來）」但 meson test 裡仍把 bwrap 拼出來。
+  # 在那之前必須先排除 env 可見性，否則改哪都是猜。
+  echo ">> check env: id=$(id -un)  GLYCIN_DISABLE_SANDBOX=${GLYCIN_DISABLE_SANDBOX:-未設}"
+  xvfb-run -s "-nolisten local" sh -c \
+    'echo ">> 經 xvfb-run 的測試進程內可見: GLYCIN_DISABLE_SANDBOX=${GLYCIN_DISABLE_SANDBOX:-未設}"' || true
   xvfb-run -s "-nolisten local" \
     meson test -C build --no-rebuild --print-errorlogs -t $CK_TIMEOUT_MULTIPLIER || rc=$?
 
