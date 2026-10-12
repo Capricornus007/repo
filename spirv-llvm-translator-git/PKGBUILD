@@ -37,6 +37,14 @@ checkdepends=(clang python)
 #   CI 產出的 mesa 依賴只有 `llvm-libs>=8.0.0`（無上限），llvm 換代時 pacman 認為
 #   依賴仍滿足、實物卻找不到 libLLVM.so.23.1，於是「badge 全綠但裝完黑屏」。
 depends=(glibc libstdc++ spirv-tools)
+# ⚠️ LLVM 的 ABI 虛擬名要**寫成頂層字面值**，不能用執行期變數去拼：makepkg 7.1 對
+#   分割包的 depends/provides 走 extract_function_variable（靜態抽字串再 eval），
+#   那個上下文裡 $pkgdir／local 變數都不存在，`depends+=("llvm-libs-abi=$abi")`
+#   會被抽成 `llvm-libs-abi=`（空版本）→ makepkg 起跑 4 秒就
+#   「pkgver in provides/depends 不可以空白」（run #462 的 llvm-git 實測過一次，
+#   這顆是同個坑）。LLVM 換大版時改這個字面量，且 package() 裡有一道「與容器實際
+#   soname 比對、不對就紅」的自證兜住，不會靜默錯。
+_llvm_abi=24.0git
 options=(!emptydirs)
 source=("git+https://github.com/KhronosGroup/SPIRV-LLVM-Translator#branch=main")
 b2sums=('SKIP')
@@ -127,12 +135,18 @@ package_spirv-llvm-translator-git() {
   #   （教訓來源：2026-10-12 那次「CI 全綠但裝完 GL 黑屏」）。
   local abi
   abi=$(_llvm_abi)
-  if [ -n "$abi" ]; then
-    depends+=("llvm-libs-git" "llvm-libs-abi=$abi")
-    echo ">> $pkgname: 鎖住 LLVM ABI → llvm-libs-abi=$abi"
-  else
-    depends+=("llvm-libs")
-    echo ">> $pkgname: ⚠️ 查不到容器 libLLVM.so 的 soname，本次不鎖 ABI（下游 mesa 的守門步會紅，不會靜默）" >&2
+  depends+=("llvm-libs-git" "llvm-libs-abi=$_llvm_abi")
+  echo ">> $pkgname: 鎖住 LLVM ABI → llvm-libs-abi=$_llvm_abi（容器實際 soname=[$abi]）"
+  # 自證：宣告的 ABI 必須就是建它時容器裡那顆 libLLVM 的實際 soname。查不到（空）
+  # 或與鎖定值不一致都直接紅——靜默放過就是 2026-10-12 那次「CI 全綠、裝完 GL 黑屏」的重演。
+  if [ -z "$abi" ]; then
+    echo "ERROR: 容器查不到 /usr/lib/libLLVM.so 的 soname——本包必須建在自有 llvm-*-git 之上" >&2
+    exit 1
+  fi
+  if [ "$abi" != "$_llvm_abi" ]; then
+    echo "ERROR: 容器 soname=[$abi] 與本包鎖定的 _llvm_abi=$_llvm_abi 不一致" >&2
+    echo "       （LLVM 換大版了：改 _llvm_abi 那行，別放過這條）" >&2
+    exit 1
   fi
   DESTDIR="$pkgdir" cmake --install build
   install -Dm644 LICENSE.TXT -t "$pkgdir/usr/share/licenses/$pkgname"

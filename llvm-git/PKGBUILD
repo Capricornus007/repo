@@ -123,6 +123,20 @@ pkgname=(llvm-libs-git llvm-lit-git compiler-rt-git lld-git lldb-git clang-git
          llvm-git)
 pkgver=24.0.0_r0.g00000000000
 pkgrel=1
+# ── libLLVM 的 SONAME 後綴（實測本倉產物是 libLLVM.so.24.0git）
+# ⚠️ 必須寫在**頂層**、而且只能用「同一檔裡靜態聲明的 pkgver」推導，絕對不要
+#   在 package_*() 裡用執行期變數（例如 readlink $pkgdir/...）拼 provides：
+#   makepkg 7.1 對分割包的 provides/depends 走 `extract_function_variable`
+#   ——**靜態抽字串再 eval**，那個上下文裡 $pkgdir／local 變數都不存在，
+#   `provides+=("llvm-libs-abi=$abi")` 會被抽成 `llvm-libs-abi=`（版本空），
+#   直接 `==> 錯誤： pkgver in provides 不可以空白`，而且是在 makepkg 起跑後
+#   4 秒就紅（run #462 的 llvm-git 實測）。頂層赋值沒這個問題：makepkg 在
+#   update_pkgver() 之後會**重新 source 一次 PKGBUILD**（/usr/bin/makepkg 189 行
+#   那條註解就是講這個），所以這裡拿到的永遠是真正的 pkgver。
+# trunk 的 LLVM_VERSION_SUFFIX 恆為 git（查實 cmake/Modules/LLVMVersion.cmake），
+# SOVERSION 形如 MAJOR.MINOR＋後綴 ⇒ 剝掉第三段再補 git。真到正式版這行會和實物
+# 不一致，但下游 mesa 的 soname 守門步是拿**容器實際 soname**比的，不會靜默放過。
+_llvm_soname="${pkgver%%_r*}"; _llvm_soname="${_llvm_soname%.*}git"
 arch=(x86_64)
 url="https://llvm.org/"
 license=('Apache-2.0 WITH LLVM-exception')
@@ -352,7 +366,7 @@ _alias() {
 package_llvm-libs-git() {
   pkgdesc='LLVM runtime libraries (trunk)'
   depends=(gcc-libs zlib zstd libffi ncurses libxml2 curl sh)
-  provides=("llvm-libs=${pkgver%%_r*}" 'libLLVM.so' 'libLTO.so' 'libRemarks.so')
+  provides=("llvm-libs=${pkgver%%_r*}" "llvm-libs-abi=$_llvm_soname" 'libLLVM.so' 'libLTO.so' 'libRemarks.so')
   conflicts=(llvm-libs)
   replaces=(llvm-libs)
   # 只拿共享庫（.so*）；靜態庫一律歸 llvm-git。
@@ -364,25 +378,20 @@ package_llvm-libs-git() {
         'usr/include/llvm' 'usr/include/llvm-c' 'usr/include/llvm-*' \
         'usr/lib/cmake/llvm' 'usr/lib/baremetal' 'usr/lib/libFuzzer.so*'
   _license llvm
-  # ── 發一顆 ABI 虛擬名 `llvm-libs-abi=<soname>`（本輪新增，下游靠它钉死自己）
-  # 動機是 2026-10-12 的 GL 黑屏：CI 產出的 mesa 依賴只有 `llvm-libs>=8.0.0`（無上限），
-  # llvm 換代時 pacman 認為依賴仍滿足、實物卻找不到 libLLVM.so.23.1，於是「badge 全綠
-  # 但裝完黑屏」。要钉 ABI 就不能用官方那形 `libLLVM.so=23.1-64`：**實測 makepkg 7.1
-  # 直接拒**（`==> 錯誤： pkgver in depends 不能有 ; 斜線、- 連字號或空白`），而把
-  # world.db 全倉 %DEPENDS% 拆開查實**沒有一筆**帶 `-64`（那形只出現在 %PROVIDES%）。
-  # 所以自己開一個不含連字號的虛擬名，provides／depends 兩邊都能用、也只在 soname
-  # 相同時成立。下游：mesa-tkg-git（build-packages.yml 的 LLVM 步驟 sed 進去）、
-  # spirv-llvm-translator-git（自己 package() 裡加）。
+  # ABI 虛擬名 `llvm-libs-abi=$_llvm_soname` 已直接寫進上面的 provides（頂層推導，
+  # 見 _llvm_soname 那段的實測說明）。這裡只留一條**實物自證**：建出來的 soname
+  # 必須真的等於我們宣告的那個，不等就紅——因為下游 mesa 的依賴是照這個名字鎖的，
+  # 名字對了、檔不對，裝下去還是黑屏。
   local abi
   abi=$(basename "$(readlink -f "$pkgdir/usr/lib/libLLVM.so" 2>/dev/null)" 2>/dev/null \
         | sed 's/^libLLVM\.so\.//')
-  case $abi in
-    ''|libLLVM.so)
-      echo ">> $pkgname: ⚠️ 查不到 usr/lib/libLLVM.so 的 soname，本次不發 llvm-libs-abi" >&2 ;;
-    *)
-      provides+=("llvm-libs-abi=$abi")
-      echo ">> $pkgname: provides llvm-libs-abi=$abi" ;;
-  esac
+  if [ "$abi" != "$_llvm_soname" ]; then
+    echo "ERROR: 產物 libLLVM 的 soname=[$abi] 與本包宣告的 llvm-libs-abi=$_llvm_soname 不一致" >&2
+    echo "       （上游改了 SOVERSION 規則？改 _llvm_soname 那行的推導，別放過這條）" >&2
+    exit 1
+  fi
+  echo ">> $pkgname: 實物 soname=$abi 與 llvm-libs-abi 一致"
+
 }
 
 package_llvm-lit-git() {

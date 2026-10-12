@@ -1732,8 +1732,8 @@ jobs:
             if [ -n "$_abi_want" ] && [ -n "$_abi_have" ]; then
               _dl_url() { gh_api "$_rel_api" | jq -r --arg n "$1" \
                           '.assets[]? | select(.name==$n) | .browser_download_url' | head -1; }
-              curl -sfL --retry 3 --connect-timeout 20 -o /tmp/llvmlibs-abi.pkg.tar.zst "$(_dl_url "$_a_now")" 2>/dev/null
-              curl -sfL --retry 3 --connect-timeout 20 -o /tmp/mesa-abi.pkg.tar.zst   "$(_dl_url "$_a_pub")" 2>/dev/null
+              curl -sfL --retry 3 --connect-timeout 20 -o /tmp/llvmlibs-abi.pkg.tar.zst "$(_dl_url "$_abi_want")" 2>/dev/null
+              curl -sfL --retry 3 --connect-timeout 20 -o /tmp/mesa-abi.pkg.tar.zst   "$(_dl_url "$_abi_have")" 2>/dev/null
               want_abi=$(bsdtar -xOf /tmp/llvmlibs-abi.pkg.tar.zst .PKGINFO 2>/dev/null \
                          | sed -n 's/^provides = llvm-libs-abi=//p' | head -1)
               have_abi=$(bsdtar -xOf /tmp/mesa-abi.pkg.tar.zst .PKGINFO 2>/dev/null \
