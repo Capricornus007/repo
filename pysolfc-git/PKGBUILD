@@ -65,8 +65,9 @@ source=(
   'localize-help.py'
   'follow-desktop-theme.patch'
   'localized-help.patch'
+  'fix-quit-while-busy.patch'
 )
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 pkgver() {
   cd PySolFC
@@ -129,6 +130,16 @@ prepare() {
   # 只這一處收口（help_html／mHelpRules／getGameRulesFilename 全走 findFile）。
   if ! patch -p1 -N -i "$srcdir/localized-help.patch"; then
     echo "ERROR: localized-help.patch 套用失敗——上游動過 pysollib/util.py 的 DataLoader"
+    exit 1
+  fi
+
+  # 遊戲忙時 Ctrl+Q／Ctrl+X／Alt+F4／視窗關閉按鈕／工具列 Quit 全部「按了沒反應」的修法：
+  # 不是綁定被拆掉、也跟 fcitx5 與 Tk 版本無關——實測綁定是好的（真實 XTEST 按鍵會進
+  # mQuit），是 actions 那邊 busy 旗標把離開流程吞了。上游至今沒修這條。
+  # ⚠️ 這與「Tk 在 fcitx5 XIM 下吞按鍵」是**兩件不同的事**，別混為一談：那條的
+  #    wrapper 方案已被否決（10-12 撤掉錯的 XMODIFIERS wrapper），本補丁只治「忙時不離開」。
+  if ! patch -p1 -N -i "$srcdir/fix-quit-while-busy.patch"; then
+    echo "ERROR: fix-quit-while-busy.patch 套用失敗——上游動過 pysollib/actions.py 或 pysollib/game/__init__.py"
     exit 1
   fi
 }
