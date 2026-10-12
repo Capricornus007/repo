@@ -204,7 +204,11 @@ _move() {
   shopt -s nullglob
   for pat in "$@"; do
     case $pat in
-      *[*]*|*?*) ;;                     # 含 glob 元字元：交給 nullglob 處置
+      # ⚠️ 這裡原本寫的是 `*[*]*|*?)`……實測那是錯的：case 裡的 `?` 是「任意單字元」，
+      # 所以 `*?*` 會匹配**所有**非空字串，導致每條路徑都被當成 glob、永遠跳過
+      # 存在檢查，後果是 CI 上 `mv: cannot stat 'usr/lib/baremetal'`（該目錄只在 clang
+      # 啟用 baremetal 工具鏈時才存在）。改成只把真正含 * ? [ 的樣式交給 nullglob。
+      *[*?]*|*[\[]*) ;;                # 含 glob 元字元（* ? [）：交給 nullglob 處置
       *)
         if [ ! -e "$_stage/$pat" ]; then
           echo ">> $pkgname: 跳過不存在的字面路徑 $pat"
