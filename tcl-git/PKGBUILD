@@ -78,7 +78,9 @@ package() {
   ln -sf libtcl${_tclver}.so "$pkgdir/usr/lib/libtcl.so"
   install -Dm0644 -t "$pkgdir/usr/share/licenses/$pkgname/" ../license.terms
   install -Dm644 tcl.m4 -t "$pkgdir/usr/share/aclocal"
-  chmod 644 "$pkgdir/usr/lib/libtclstub.a"
+  # Arch 那版寫死 libtclstub.a，實測 8.6 這條線裝出來的檔名帶版本：
+  # /tmp/build-tcl-git/pkg/tcl-git/usr/lib/libtclstub8.6.a（本輪 makepkg 就在這一步紅的）。
+  chmod 644 "$pkgdir"/usr/lib/libtclstub*.a
 
   # 移除 buildroot 殘跡：tclConfig.sh 裡會寫死 $srcdir/... 的路徑，
   # 下游（tk、itcl、任何 ./configure 讀 tclConfig.sh 的東西）照抄就找不到檔。

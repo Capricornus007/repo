@@ -95,7 +95,8 @@ package() {
       -i "$pkgdir/usr/lib/tkConfig.sh"
 
   # 不該有執行位的靜態檔（FS#75042）
-  chmod -x "$pkgdir/usr/lib/libtkstub.a" 2>/dev/null || true
+  # 同 tcl-git：8.6 這條線是 libtkstub8.6.a，寫死不帶版本的名會錯過去。
+  chmod -x "$pkgdir"/usr/lib/libtkstub*.a
 
   if grep -rlF "$srcdir" "$pkgdir/usr/lib/tkConfig.sh" 2>/dev/null | grep -q .; then
     echo '==> 錯誤：tkConfig.sh 還帶著 $srcdir 路徑'
