@@ -457,8 +457,9 @@ opencc 1.3.2 而上游最新是 ver.1.4.2 → 解法是抬 opencc（待辦），
 要做 9 那条就另建 `tcl9-git`/`tk9-git`，只裝帶版本號的檔、不碰不帶版本那顆
 （Fedora 的 tcl9 並存就是這個做法）。本輪先落 8.6 這條能直接換上去的。
 
-**依賴接線**：`tk-git` 的 depends 寫死 `tcl-git=$pkgver-$pkgrel`（不是裸 `tcl`），
-兩顆必須同代，否則會出現「tk 是尖端、tcl 是舊版」的混合棧。
+**依賴接線**：`tk-git` 依賴 `tcl-git`（不帶版本）。原本想钉成 `tcl-git=$pkgver-$pkgrel` 保證同代，
+實測做不到：tcl 與 tk 各自的 commit 流不同步，同一輪探出來的版本一個是 `8.6.18.r767.g476b1c6`、
+另一個是 `r1634`，钉版本會讓依賴永遠解析不到。soname 兩邊都是 8.6，差一天也不斷鏈。
 `provides=('tcl=<ver>')`／`conflicts=(tcl)` 的可行性已實測：
 `pacman -Qi sqlcipher` 與 `pysolfc-git` 的依賴字串都是**不帶版本**的 `tcl`／`tk`，
 所以換代不會斷解析。

@@ -8,9 +8,13 @@ pkgdesc='A windowing toolkit for use with tcl (git, 8.6 line)'
 arch=(x86_64)
 url='https://core.tcl-lang.org/tk/'
 license=(TCL)
-# 钉成「同一版 tcl-git」而不是裸 tcl：tcl/tk 是一對，錯開代就會出現
-# 「tk 是尖端、tcl 是舊版」的混合棧（configure 讀 tclConfig.sh 會撞到不存在的路徑）。
-depends=("tcl-git=$pkgver-$pkgrel"
+# 本來想钉成 tcl-git=$pkgver-$pkgrel（兩顆必須同代），實測行不通：
+# tcl 與 tk 是兩條不一樣的 commit 流，同一輪 pkgver() 各自量出來的數字不同
+# （本機實測 tcl-git=8.6.18.r767.g476b1c6、tk 那條是 r1634），
+# 拿 tk 的 pkgver 去要求 tcl 的版本，那個依賴永远解析不到、包根本裝不下去。
+# 退成不帶版本的 tcl-git：feed 每輪两颗一起重建，實務上同代；
+# 而 soname 都是 8.6，就算差一天也不會斷鏈。
+depends=(tcl-git
          libxss
          libxft)
 makedepends=(zip xorg-server-xvfb)
@@ -27,6 +31,13 @@ _BRANCH=core-8-6-branch
 source=("git+https://github.com/tcltk/tk#branch=${_BRANCH}")
 b2sums=('SKIP')
 _dirname=tk
+# Tk 8.6 的 `all` 目標依賴 doc/man.macros，而這條規則的來源寫的是
+#   $(INSTALL_DATA) $(TCLDIR)/doc/man.macros $(TOP_DIR)/doc/man.macros
+# ——那是「建 tcl 那台機器上的源碼樹路徑」，Tcl 套件本身**不會裝**這個檔
+# （實測 `pacman -Ql tcl-git | grep doc` 零筆）。所以從源頭把它抓下來放進源碼樹，
+# 該規則就沒有先決條件、直接略過，也不會再企圖寫 /usr/include。
+source+=("https://raw.githubusercontent.com/tcltk/tcl/${_BRANCH}/doc/man.macros")
+b2sums+=('SKIP')
 
 pkgver() {
   # 與 tcl-git 同一套防禦：目錄不在／探不到 HEAD 就沿用寫死的 pkgver，
@@ -43,6 +54,11 @@ pkgver() {
   v=$(git -C "$d" describe --tags --long --abbrev=7 --match 'core-8-6-*' HEAD 2>/dev/null |
       sed 's/^core-//;s/\([^-]*-g\)/r\1/;s/-/./g')
   printf '%s\n' "${v:-8.6.18.r0.g$(git -C "$d" rev-parse --short=7 HEAD)}"
+}
+
+prepare() {
+  cd "$_dirname"
+  install -Dm644 "$srcdir/man.macros" doc/man.macros
 }
 
 build() {
@@ -63,7 +79,9 @@ build() {
 # 細節與實數記在 feed 的 docs/in-tree-packages.md。
 check() {
   cd "$_dirname/unix"
-  xvfb-run -a -s '-screen 0 640x480x24' ./wish8.6 <<'TCL'
+  # 建置樹裡的執行檔叫 ./wish（裝檔時才改名 wish8.6），實測 ./wish8.6 不存在：
+  # /usr/sbin/xvfb-run: 列 180: ./wish8.6: 沒有此一檔案或目錄
+  LD_LIBRARY_PATH="$PWD:${LD_LIBRARY_PATH:-}" xvfb-run -a -s '-screen 0 640x480x24' ./wish <<'TCL'
 package require Tk
 if {![winfo exists .]} {puts stderr "no toplevel"; exit 1}
 wm geometry . 200x100+10+10
@@ -81,7 +99,8 @@ package() {
   local _tkver=8.6
   ln -sf wish${_tkver} "$pkgdir/usr/bin/wish"
   ln -sf libtk${_tkver}.so "$pkgdir/usr/lib/libtk.so"
-  install -Dm0644 -t "$pkgdir/usr/share/licenses/$pkgname/" license.terms
+  # 8.6 這條線的授權檔在樹頂、不在 unix/ 底下（實測在 unix/ 裡找不到 license.terms）
+  install -Dm644 ../license.terms "$pkgdir/usr/share/licenses/$pkgname/license.terms"
 
   # private headers（FS#14388／FS#47616）：少了這些，下游含 tk 的 C 扩展編不過。
   cd ..
