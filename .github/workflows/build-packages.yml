@@ -125,7 +125,10 @@ jobs:
           fi
 
           if [ "${{ matrix.kind }}" = 'kde' ] || [ "${{ matrix.kind }}" = 'wayland' ] || [ "${{ matrix.kind }}" = 'aur' ] \
-             || [ "${{ matrix.repo_name }}" = 'nashira-git' ]; then
+             || [ "${{ matrix.repo_name }}" = 'nashira-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'tk-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'mesa-tkg-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ]; then
             # 把自有 junlin03-aur 掛成匿名 pacman 源。矩陣 job 並行，靠它看見
             # 兄弟 job 已發布的 KDE 依賴產物（release 資產公開可取，實測
             # …/current-repo/junlin03-aur.db 與包檔均 HTTP 200）。冷啟動時
@@ -135,6 +138,15 @@ jobs:
             # `jbr21`，而 jbr21 是本倉自己出的包、不在任何官方倉。不掛源就
             # `package not found` → makepkg -s 紅。它不屬於 kde/wayland/aur 任何
             # 一類，所以只能按包名點名，別指望改 kind。
+            #
+            # 2026-10-12 再點名三顆，同一個理由（兄弟包只存在於本倉）：
+            #   · tk-git  depends=tcl-git → run #462 實測
+            #     `error: target not found: tcl-git` → Could not resolve all dependencies。
+            #   · spirv-llvm-translator-git 必須建在自有 llvm-*-git 之上（要拿到
+            #     trunk 的 llvm-config／頭檔），不掛源就會去配容器的穩定版 llvm，
+            #     產物 soname 與 mesa 對不上。
+            #   · mesa-tkg-git 同上，而且它還要多吃一顆自有 translator（實測
+            #     libRusticlOpenCL.so NEEDED libLLVMSPIRVLib.so.<llvm soname>）。
             {
               echo ''
               echo '[junlin03-aur]'
@@ -1718,40 +1730,26 @@ jobs:
                    | jq -r '.assets[].name' 2>/dev/null || true)
           # ── mesa-tkg：LLVM ABI 錯位就強制重建（用戶 2026-10-12 問「那就同輪就是了？」的正面回答）
           # 通用判據是「產物檔名已在 release 裡 ⇒ 跳過」，而 mesa 的 pkgver 只跟著 mesa
-          # 上游動：LLVM 換大版（24.0git → 25.0git）時 mesa 一個字都不變 → 永不重建
+          # 上游動：LLVM 換大版（24.0git→25.0git）時 mesa 一個字都不變 → 永不重建
           # → 那顆鎖著 `llvm-libs-abi=<舊 soname>` 的 mesa 會**永久**卡死整臺機的升级。
-          # 所以先比「release 裡那顆 mesa 的 depends」與「自有 llvm-libs-git 現在發的
-          # llvm-libs-abi」，不一致就繞過 skip 直接 build=true。
-          # ⚠️ 必須整包下載再解：pacman 包是 zip，**中央目錄在檔尾**，用 `curl -r 0-64K`
-          #    只抓頭部拿不到 .PKGINFO（bsdtar 會因為看不到 central directory 而失敗）。
-          #    代價是這一顆 job 每輪多抓 ~70MB＋~170MB，只跑 mesa 這一路，值。
+          # 問法用 alpm 自己的資料庫（本倉 junlin03-aur 源已在初始化步掛上並 -Sy），
+          # 不去抓包檔：實測想用 `curl -r 0-64K` 只讀包首的 .PKGINFO 是行不通的——
+          # pacman 包是 zip、**中央目錄在檔尾**，截斷的 zip bsdtar 根本解不開。
           if [ "$PKGBASE" = "mesa-tkg-git" ]; then
-            _rel_api="https://api.github.com/repos/${GH_REPO}/releases/tags/${REPO_RELEASE_TAG}"
-            _abi_want=$(printf '%s\n' "$assets" | grep '^llvm-libs-git-' | head -1)
-            _abi_have=$(printf '%s\n' "$assets" | grep '^mesa-tkg-git-' | head -1)
-            if [ -n "$_abi_want" ] && [ -n "$_abi_have" ]; then
-              _dl_url() { gh_api "$_rel_api" | jq -r --arg n "$1" \
-                          '.assets[]? | select(.name==$n) | .browser_download_url' | head -1; }
-              curl -sfL --retry 3 --connect-timeout 20 -o /tmp/llvmlibs-abi.pkg.tar.zst "$(_dl_url "$_abi_want")" 2>/dev/null
-              curl -sfL --retry 3 --connect-timeout 20 -o /tmp/mesa-abi.pkg.tar.zst   "$(_dl_url "$_abi_have")" 2>/dev/null
-              want_abi=$(bsdtar -xOf /tmp/llvmlibs-abi.pkg.tar.zst .PKGINFO 2>/dev/null \
-                         | sed -n 's/^provides = llvm-libs-abi=//p' | head -1)
-              have_abi=$(bsdtar -xOf /tmp/mesa-abi.pkg.tar.zst .PKGINFO 2>/dev/null \
-                         | sed -n 's/^depend = llvm-libs-abi=//p' | head -1)
-              rm -f /tmp/llvmlibs-abi.pkg.tar.zst /tmp/mesa-abi.pkg.tar.zst
-              echo "ABI 對照：自有 llvm-libs-git 發的=[$want_abi] ／ release 裡 mesa 吃的=[$have_abi]"
-              if [ -n "$want_abi" ] && [ "$want_abi" != "$have_abi" ]; then
-                echo ">> LLVM ABI 與已發布的 mesa 不一致，強制重建 mesa（繞過『已在 release 裡』）"
-                {
-                  echo "build=true"
-                  echo "pkgver=$TARGET_PKGVER"
-                  echo "pkgrel=$TARGET_PKGREL"
-                  echo "pkgbase=$PKGBASE"
-                } >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-            else
-              echo "::warning::release 裡缺 llvm-libs-git 或 mesa-tkg-git 資產（want=$_abi_want have=$_abi_have），ABI 對照跳過，交由通用判據決定"
+            want_abi=$(LC_ALL=C pacman -Si llvm-libs-git 2>/dev/null \
+                       | sed -n 's/.*llvm-libs-abi=//p' | head -1)
+            have_abi=$(LC_ALL=C pacman -Si mesa-tkg-git 2>/dev/null \
+                       | sed -n 's/.*llvm-libs-abi=//p' | head -1)
+            echo "ABI 對照：源裡 llvm-libs-git 發的=[$want_abi] ／ 已發布 mesa 吃的=[$have_abi]"
+            if [ -n "$want_abi" ] && [ "$want_abi" != "$have_abi" ]; then
+              echo ">> LLVM ABI 與已發布的 mesa 不一致，強制重建 mesa（繞過『已在 release 裡』）"
+              {
+                echo "build=true"
+                echo "pkgver=$TARGET_PKGVER"
+                echo "pkgrel=$TARGET_PKGREL"
+                echo "pkgbase=$PKGBASE"
+              } >> "$GITHUB_OUTPUT"
+              exit 0
             fi
           fi
           if printf '%s\n' "$assets" | grep -q "^${asset_prefix}${TARGET_PKGVER}-${TARGET_PKGREL}-"; then
@@ -2426,49 +2424,49 @@ jobs:
           #    （2026-10-12 本機就是这样炸的：alacritty "failed to find suitable GL
           #    configuration"）。
           # 所以這步做兩件事，缺一不可：
-          #  ① 把容器裡的 llvm/clang 換成我們自己發佈的 llvm-*-git（trunk 24），
-          #     讓 mesa 真的鏈到 .24.0git；
-          #  ② 把 PKGBUILD 的 `_llvm` 改寫成「soname 虛擬名＝實物 ABI」，
-          #     這樣 llvm 換代時 pacman 會**拒絕**升级而不是静默弄挂 GL。
-          #     對照：官方 llvm-libs 的 provides 實物就是 `libLLVM.so=23.1-64` 這種形，
-          #     自有 llvm-libs-git 的 provides 是 `libLLVM.so=24.0git-64`，兩邊都認。
-          # ⚠️ lib32 那半邊**不動**：Artix lib32-goblins 的 lib32-llvm-libs 實測
-          #    `Provides: None`（沒有 soname 虛擬名可用），而 32 位元 trunk LLVM 沒人產。
-          #    所以 lib32-mesa 繼續鏈 lib32-llvm-libs 23.1、依賴維持原樣；這是「各自
-          #    位元寬度各自對齊」，不是回退（64 位元照樣上 24）。
+          #  ① 把容器裡的 llvm/clang 換成我們自己發佈的 llvm-*-git（trunk），讓 mesa
+          #     真的鏈到 .24.0git；
+          #  ② 把 PKGBUILD 的 `_llvm` 改寫成鎖 ABI 的虛擬名 `llvm-libs-abi=<soname>`。
+          #     ⚠️ 不能用官方那形 `libLLVM.so=24.0git-64`：實測 makepkg 7.1 拒收帶
+          #     連字號的 depends 版本（「pkgver in depends 不能有 ; 斜線、- 連字號或
+          #     空白」），而 world.db 全倉 %DEPENDS% 查實沒一筆帶 -64（那形只在
+          #     %PROVIDES% 出現）。虛擬名由 llvm-libs-git 的 package_llvm-libs_git() 發。
+          # 裝法照上面「把 Go 建置工具鏈換成自有 go-git」那條的既有做法：本倉的包
+          # 走 junlin03-aur 源（這顆 job 已在初始化步掛上），不用自己抓 release 資產。
+          # ⚠️ lib32 那半邊**不動**：Artix lib32-llvm-libs 實測 `Provides: None`
+          #    （沒有 soname 虛擬名可鎖），32 位元 trunk LLVM 沒人產，所以 lib32-mesa
+          #    繼續鏈 lib32-llvm-libs 23.1、依賴維持原樣；各自位元寬度各自對齊。
           cd pkg_dir
           _pkgs='llvm-libs-git llvm-git clang-git compiler-rt-git lld-git llvm-lit-git lldb-git'
           if [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ]; then
             # mesa 的 RustiCL 直接 NEEDED libLLVMSPIRVLib（本機 objdump 實測），而穩定版
-            # 那顆是配 LLVM 23.1 編的 → 不把自有 translator-git 裝進容器，產物就會
-            # 同時拖著 .23.1 與 .24.0git 兩個 LLVM（混合版＝裝下去 OpenCL 靜默失效）。
-            # 本倉 translator 的 pkgbase 就是包名本身（不像 nvidia-utils-beta 那樣
-            # split 出別人名字），所以抓檔前綴直接用包名。
+            # 那顆是配 LLVM 23.1 編的 → 不把自有 translator-git 裝進容器，產物就會同時
+            # 拖著 .23.1 與 .24.0git 兩個 LLVM（混版＝裝下去 OpenCL 靜默失效）。
             _pkgs="$_pkgs spirv-llvm-translator-git"
           fi
-          mkdir -p /tmp/llvmgit
-          _got=0
+          _ok=0
           for _p in $_pkgs; do
-            # 只認「本倉目前發佈的那顆」：換代是零寬限刪資產，所以同名前綴只會有一檔
-            if gh release download current-repo --repo "$GITHUB_REPOSITORY" \
-                 --pattern "${_p}-*.pkg.tar.zst" -D /tmp/llvmgit >/dev/null 2>&1; then
-              _got=$((_got + 1))
-            else
-              echo "::warning::release 裡找不到 ${_p}-*（本輪 llvm 那條可能沒產出）"
-            fi
+            for _t in 1 2 3; do
+              # 先 --needed（本倉包與官方包是 replaces/conflicts 關係，裝得上就會頂替）
+              if pacman -S --noconfirm --needed "$_p"; then _ok=$((_ok + 1)); break; fi
+              echo "::warning::$_p 安裝失敗（第 ${_t} 次），重試"
+              sleep $((_t * 8))
+            done
           done
-          echo "抓到 $_got 顆自有 llvm 包"
-          if [ "$_got" -ge 4 ]; then
-            # llvm-libs-git／llvm-git／clang-git／compiler-rt-git 是「鏈得上 trunk」的最小集，
-            # 少了 lld/lldb/lit 也能編 mesa，所以門檻定 4 而不是 7。
-            pacman -U --noconfirm /tmp/llvmgit/*.pkg.tar.zst
-          else
+          echo "自有 llvm 家族裝上 $_ok / $(printf '%s\n' $_pkgs | wc -l) 顆"
+          if [ "$_ok" -lt 4 ]; then
             # ⚠️ 這裡**不准**退回「用容器裡的穩定版 llvm 編」。理由不是風格：目標機上
-            # 舊 mesa 的依賴是無上限的 `llvm-libs>=8.0.0`，只要 llvm-*-git 進/feed 裝得上，
+            # 舊 mesa 的依賴是無上限的 `llvm-libs>=8.0.0`，只要 llvm-*-git 進 feed 裝得上，
             # pacman 就認為依賴滿足 → 靜默黑屏（2026-10-12 實測）。紅是待辦，綠是假話。
-            echo "::error::自有 llvm-*-git 不足 4 顆（只抓到 $_got 顆）——不退回去用穩定版 llvm"
+            echo "::error::自有 llvm-*-git 只裝上 $_ok 顆（需 ≥4）——不退回去用穩定版 llvm"
             exit 1
           fi
+          # 硬驗：容器此刻的 llvm-config 必須真的來自我們那套（不是官方 23.1）。
+          # 這一步是防「裝了卻沒頂替」的靜默態——實測過 llvm-config 仍指向官方包的情況。
+          readlink -f /usr/lib/libLLVM.so
+          pacman -Qo /usr/lib/llvm-config 2>&1 || true
+          llvm-config --version | grep -qE '^2[4-9]' \
+            || { echo "::error::容器 llvm-config 不是 trunk：$(llvm-config --version)"; exit 1; }
           # ── ② 鎖 ABI：從「這臺容器此刻真正的 soname」反推依賴，不寫死任何版本字串
           _son=$(basename "$(readlink -f /usr/lib/libLLVM.so 2>/dev/null)" 2>/dev/null | sed 's/^libLLVM\.so\.//')
           if [ -z "$_son" ] || [ "$_son" = "libLLVM.so" ]; then
