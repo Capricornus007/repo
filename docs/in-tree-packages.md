@@ -432,3 +432,39 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
 upgrades」）有 5 個 `OpenccTest.ConvertWord_*` 失敗，130 通過。已用對照實驗證明
 **拿掉本包補丁也一樣失敗**（原版遍歷空清單回 false，行為一致），根因是本機
 opencc 1.3.2 而上游最新是 ver.1.4.2 → 解法是抬 opencc（待辦），**不是跳測試**。
+
+## tcl-git / tk-git（用戶 2026-10-12 點名「把 tk 也弄成 -git」）
+
+**為什麼走本倉目錄版**：Artix 的 world 目前停在 `tcl/tk 8.6.16-1`（實測
+`pacman -Si` 兩顆都回 8.6.16；`tk` 是 `8.6.16-1.2`），而上游 `core-8-6-branch`
+已經到 `core-8-6-18` tag 之後 1634 筆。差的那一段全是 X11 行為修正，
+本機拿不到：`db7ddf035`（2026-09-28 X11 `<KeyRelease>` broken）、
+`f05357988`（2026-10-04 deiconify 丟掉使用者挪過的位置）、
+`7bf995a5e`（2026-10-07 `-zoomed` 被誤還原）、`a7cbed281`（2026-10-09 raise command
+在近期 linux 失敗）、`06621cc07`（2026-10-03 grid 的 BadAlloc）。
+
+**分支選 `core-8-6-branch` 而不是 `master`（實測決定，不是猜）**：
+`master` 的 `generic/tk.h` 是 `TK_PATCH_LEVEL "8.7a4"`、`tcl/master` 是 `9.0a2`，
+裝出來的庫叫 `libtk8.7.so`／`libtcl9.a.so`；而本機
+`/usr/lib/python3.14/lib-dynload/_tkinter.cpython-314-x86_64-linux-gnu.so`
+的 `NEEDED` 實測是 `libtk8.6.so` + `libtcl8.6.so`。吃 master 那条尖端會把
+所有經 `_tkinter` 的程式（pysolfc 就是）打成 ImportError，除非連 python 重編。
+`core-8-6-branch` 的 soname 不變 → 是現行套件的**直替**，同時仍是那條線的尖端。
+
+**「8 跟 9 能不能合」**：不能 merge（同一專案的兩個大代，API/soname 不同），
+能**並存**：`libtk8.6.so` 與 `libtk8.7.so` 檔名不同、`/usr/lib/tk8.6` 與 `/usr/lib/tk8.7`
+目錄不同，會打的只有不帶版本號的 `/usr/bin/wish`、`tclConfig.sh`、`tk.h`、pkgconfig。
+要做 9 那条就另建 `tcl9-git`/`tk9-git`，只裝帶版本號的檔、不碰不帶版本那顆
+（Fedora 的 tcl9 並存就是這個做法）。本輪先落 8.6 這條能直接換上去的。
+
+**依賴接線**：`tk-git` 的 depends 寫死 `tcl-git=$pkgver-$pkgrel`（不是裸 `tcl`），
+兩顆必須同代，否則會出現「tk 是尖端、tcl 是舊版」的混合棧。
+`provides=('tcl=<ver>')`／`conflicts=(tcl)` 的可行性已實測：
+`pacman -Qi sqlcipher` 與 `pysolfc-git` 的依賴字串都是**不帶版本**的 `tcl`／`tk`，
+所以換代不會斷解析。
+
+**check() 的處理（不是抄 Arch 的註解）**：Tcl 的 `make -j1 test` 照 Arch 跑整組；
+Tk 的自帶測試要真的 display，Arch 的 PKGBUILD 是把它整行註解掉——
+本包不放過這一關，改用 `xvfb-run` 起虛擬屏，讓建出來的 `wish8.6` 真的
+`package require Tk`、開 toplevel、設 geometry、查 `TkDefaultFont` 的字型度量，
+任一項不對就紅。缺環境就補環境（`makedepends+=xorg-server-xvfb`），不是關掉這一關。

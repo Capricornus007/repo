@@ -68,6 +68,8 @@ jobs:
           {"key": "kew-git", "repo_name": "kew-git", "variant": "none"},
           {"key": "llvm-git", "repo_name": "llvm-git", "variant": "none", "kind": "aur"},
           {"key": "librime-git", "repo_name": "librime-git", "variant": "none"},
+          {"key": "tcl-git", "repo_name": "tcl-git", "variant": "none"},
+          {"key": "tk-git", "repo_name": "tk-git", "variant": "none"},
           {"key": "mpv-git", "repo_name": "mpv-git", "variant": "none"},
           {"key": "oh-my-pi-git", "repo_name": "oh-my-pi-git", "variant": "none"},
           {"key": "protonvpn-cli-community-git", "repo_name": "protonvpn-cli-community-git", "variant": "none"},
