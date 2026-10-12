@@ -1716,6 +1716,44 @@ jobs:
           if [ "$VARIANT" = "rc" ]; then asset_prefix="${PKGBASE}-rc-${EPOCH_PART}"; fi
           assets=$(gh_api "https://api.github.com/repos/${GH_REPO}/releases/tags/${REPO_RELEASE_TAG}" \
                    | jq -r '.assets[].name' 2>/dev/null || true)
+          # ── mesa-tkg：LLVM ABI 錯位就強制重建（用戶 2026-10-12 問「那就同輪就是了？」的正面回答）
+          # 通用判據是「產物檔名已在 release 裡 ⇒ 跳過」，而 mesa 的 pkgver 只跟著 mesa
+          # 上游動：LLVM 換大版（24.0git → 25.0git）時 mesa 一個字都不變 → 永不重建
+          # → 那顆鎖著 `llvm-libs-abi=<舊 soname>` 的 mesa 會**永久**卡死整臺機的升级。
+          # 所以先比「release 裡那顆 mesa 的 depends」與「自有 llvm-libs-git 現在發的
+          # llvm-libs-abi」，不一致就繞過 skip 直接 build=true。
+          # ⚠️ 必須整包下載再解：pacman 包是 zip，**中央目錄在檔尾**，用 `curl -r 0-64K`
+          #    只抓頭部拿不到 .PKGINFO（bsdtar 會因為看不到 central directory 而失敗）。
+          #    代價是這一顆 job 每輪多抓 ~70MB＋~170MB，只跑 mesa 這一路，值。
+          if [ "$PKGBASE" = "mesa-tkg-git" ]; then
+            _rel_api="https://api.github.com/repos/${GH_REPO}/releases/tags/${REPO_RELEASE_TAG}"
+            _abi_want=$(printf '%s\n' "$assets" | grep '^llvm-libs-git-' | head -1)
+            _abi_have=$(printf '%s\n' "$assets" | grep '^mesa-tkg-git-' | head -1)
+            if [ -n "$_abi_want" ] && [ -n "$_abi_have" ]; then
+              _dl_url() { gh_api "$_rel_api" | jq -r --arg n "$1" \
+                          '.assets[]? | select(.name==$n) | .browser_download_url' | head -1; }
+              curl -sfL --retry 3 --connect-timeout 20 -o /tmp/llvmlibs-abi.pkg.tar.zst "$(_dl_url "$_a_now")" 2>/dev/null
+              curl -sfL --retry 3 --connect-timeout 20 -o /tmp/mesa-abi.pkg.tar.zst   "$(_dl_url "$_a_pub")" 2>/dev/null
+              want_abi=$(bsdtar -xOf /tmp/llvmlibs-abi.pkg.tar.zst .PKGINFO 2>/dev/null \
+                         | sed -n 's/^provides = llvm-libs-abi=//p' | head -1)
+              have_abi=$(bsdtar -xOf /tmp/mesa-abi.pkg.tar.zst .PKGINFO 2>/dev/null \
+                         | sed -n 's/^depend = llvm-libs-abi=//p' | head -1)
+              rm -f /tmp/llvmlibs-abi.pkg.tar.zst /tmp/mesa-abi.pkg.tar.zst
+              echo "ABI 對照：自有 llvm-libs-git 發的=[$want_abi] ／ release 裡 mesa 吃的=[$have_abi]"
+              if [ -n "$want_abi" ] && [ "$want_abi" != "$have_abi" ]; then
+                echo ">> LLVM ABI 與已發布的 mesa 不一致，強制重建 mesa（繞過『已在 release 裡』）"
+                {
+                  echo "build=true"
+                  echo "pkgver=$TARGET_PKGVER"
+                  echo "pkgrel=$TARGET_PKGREL"
+                  echo "pkgbase=$PKGBASE"
+                } >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            else
+              echo "::warning::release 裡缺 llvm-libs-git 或 mesa-tkg-git 資產（want=$_abi_want have=$_abi_have），ABI 對照跳過，交由通用判據決定"
+            fi
+          fi
           if printf '%s\n' "$assets" | grep -q "^${asset_prefix}${TARGET_PKGVER}-${TARGET_PKGREL}-"; then
             skip "${asset_prefix}${TARGET_PKGVER}-${TARGET_PKGREL} 已在 release 里"
           fi
