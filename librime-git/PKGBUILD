@@ -61,21 +61,37 @@ source=("git+https://github.com/rime/librime.git"
 sha512sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 pkgver() {
-  cd $_pkgname
+  # ⚠️ 不能假設「$srcdir/$_pkgname 一定存在可以 cd」：CI 的「更新校验和并回推
+  #    PKGBUILD」那一步先跑 updpkgsums，而它把 BUILDDIR 換成 mktemp 的目錄、結束
+  #    時連目錄一起刪；緊接著同一步的 `makepkg --printsrcinfo` 仍會執行 pkgver()，
+  #    這時倉庫目錄沒了 → `cd` 落空 → 後面的 git 直接
+  #      fatal: not a git repository (or any parent up to mount point /)  exit 128
+  #    把整步搞紅（實測 2026-10-12 run #452 librime-git）。所以先探一個「真的是
+  #    git 倉庫」的位置，全找不到就沿用 PKGBUILD 寫死的 pkgver：.SRCINFO 裡那串
+  #    本來只是佔位，真正出包時 makepkg 會再算一次。
+  local d v n s
+  for d in "$_pkgname" "$SRCDEST/$_pkgname" "$srcdir/$_pkgname"; do
+    [[ -d $d ]] && git -C "$d" rev-parse -q --verify HEAD >/dev/null 2>&1 && break
+    d=
+  done
+  if [[ -z $d ]]; then
+    printf '%s\n' "$pkgver"
+    return 0
+  fi
   # ⚠️ 不能用 git describe：實測 describe 挑到的是 rime-1.3.1（它離 HEAD 的
   #    commit 距離比 rime-1.17.0 近），打出 1:1.3.1.r709 這種「假降級」版本號。
   #    版本基準改吃上游 CMakeLists.txt 的 set(rime_version ...)——那才是 Arch/Artix
   #    官方包用的同一個來源；r709 換成「距該 tag 的 commit 數」，tag 不在本血脈時
-  #    退回總 commit 數。
-  local v n s
-  v=$(sed -n 's/^set(rime_version \([0-9.][0-9.]*\)).*/\1/p' CMakeLists.txt | head -1)
+  #    退回總 commit 數。用 `git show HEAD:` 讀檔，裸倉庫（SRCDEST）也拿得到。
+  v=$(git -C "$d" show HEAD:CMakeLists.txt \
+      | sed -n 's/^set(rime_version \([0-9.][0-9.]*\)).*/\1/p' | head -1)
   [[ -z "$v" ]] && v=0.0.0
-  if git rev-parse -q --verify "refs/tags/rime-$v" >/dev/null; then
-    n=$(git rev-list --count "rime-$v..HEAD")
+  if git -C "$d" rev-parse -q --verify "refs/tags/rime-$v" >/dev/null 2>&1; then
+    n=$(git -C "$d" rev-list --count "rime-$v..HEAD")
   else
-    n=$(git rev-list --count HEAD)
+    n=$(git -C "$d" rev-list --count HEAD)
   fi
-  s=$(git rev-parse --short=10 HEAD)
+  s=$(git -C "$d" rev-parse --short=10 HEAD)
   printf '%s.r%s.g%s\n' "$v" "$n" "$s"
 }
 
