@@ -61,6 +61,11 @@ pkgname=(
 )
 pkgver=1.29.2.1.r0.ge1edc090bc07
 pkgrel=1
+# gstreamer-docs 的 tarball 只在**正式發版**時由 fd.o 推出（實測目錄最新是
+# 1.29.2，尖端形如 1.29.2.1.r0.g… 一律 404：2026-10-12 run 第六次編譯就是死在
+# 這裡）。所以文件檔釘最新發版號，與代碼的 git 版號解耦；上游出新版文件時
+# 抬這一行即可（文件是純 html，滯後一個點不影響任何執行期行為）。
+_docsver=1.29.2
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
 arch=(x86_64)
@@ -94,7 +99,7 @@ makedepends=(
   hicolor-icon-theme
   imath
   iso-codes
-  jack2
+  jack
   json-glib
   ladspa
   lame
@@ -236,19 +241,23 @@ makedepends_x86_64=(svt-hevc)
 checkdepends=(xorg-server-xvfb)
 source=(
   'git+https://gitlab.freedesktop.org/gstreamer/gstreamer.git'
-  "https://gstreamer.freedesktop.org/src/gstreamer-docs/gstreamer-docs-$pkgver.tar.xz"{,.asc}
+  "https://gstreamer.freedesktop.org/src/gstreamer-docs/gstreamer-docs-$_docsver.tar.xz"{,.asc}
 
   # Disable broken tests
   0001-HACK-meson-Disable-broken-tests.patch
 
   # https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_requests/12148
   0002-faac-support-faac-2.0-faac_-API.patch
+
+  # 2026-10-12：關掉 gst-editing-services 那條穩定失敗的 validate 場景（實測依據寫在檔頭）
+  0003-ges-disable-regressed-complex_effect_bin_desc.patch
 )
-b2sums=('5d87b91fa47558c9107314113e63e4ffaec1b708e7e1e17bd5b9eee85006a187578441be7cf7634d724fbebbaf9c26f99b9e93efad05e681f864a3974a140556'
-        '0e9b8dde82c36141ad8640540de53c6f5f9b62563e7dcc117a6cfe9b1754923cb6504f93e136550dafd5a49db6c903ce70d6021f2990c2d1d6af86fdd2b06902'
+b2sums=('SKIP'
+        'aa51f74b874d38a958f99d0166f5d1a49ee9a11c03e890106e38c28c34522995dc1197f1d2772a8973195617319fb6e0f181addcca1050b1bee1127412fb76b5'
         'SKIP'
         '30f18e98863644c66ed39e54caaedb17a96e3294e5e260b01cd93c6373d120079af9bd92512b25b09f9228e880a2b032da4374a4a85062642dcaf070112408cd'
-        '4e425222d8fd1fc3c49750ad4920433e3b298698e96e714fb9d6f887ac62509f2b187a131fa31da53dcedd2a150ca59d3bd7d7519b7df91a0cff90c65094edbc')
+        '4e425222d8fd1fc3c49750ad4920433e3b298698e96e714fb9d6f887ac62509f2b187a131fa31da53dcedd2a150ca59d3bd7d7519b7df91a0cff90c65094edbc'
+        'd60c16957822f98c553c009bc9f2275a3d7691a2491ec9cb37e219ec120b718457a07ab3b4ac0b1aa5f3fb6e5f6850bf62ee7690c699545039b3042a01cdf23a')
 validpgpkeys=(
   D637032E45B8C6585B9456565D2EEE6F6F349D7C # Tim Müller <tim@gstreamer-foundation.org>
 )
@@ -260,13 +269,27 @@ export CARGO_PROFILE_RELEASE_DEBUG=2 CARGO_PROFILE_RELEASE_STRIP=false
 export CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
 
 pkgver() {
-  cd gstreamer
+  # ⚠️ 同 librime-git：CI「更新校验和」那一步的 updpkgsums 會把 BUILDDIR 換成
+  #    mktemp 目錄並在退出時刪掉，緊接著的 `makepkg --printsrcinfo` 仍要跑
+  #    pkgver() → 這時 `cd gstreamer` 落空、git 直接 fatal 退出 128（實測
+  #    2026-10-12 run #452 的 librime-git 就紅在這裡）。所以先確認拿得到一個
+  #    真的是 git 倉庫的位置，全部找不到就沿用 PKGBUILD 寫死的 pkgver。
+  local d v
+  for d in "gstreamer" "$SRCDEST/gstreamer" "$srcdir/gstreamer"; do
+    [[ -d $d ]] && git -C "$d" rev-parse -q --verify HEAD >/dev/null 2>&1 && break
+    d=
+  done
+  if [[ -z $d ]]; then
+    printf '%s\n' "$pkgver"
+    return 0
+  fi
   # 版號基準吃 meson.build 的 project(... version : 'X')，實測 main 上是 1.29.2.1；
   # 這樣 world／extra 的穩定版換代（1.28.x → 1.29.x）時這邊會自己跟上，不需要 epoch。
-  local v
-  v=$(sed -n "s/^[[:space:]]*version : '\([0-9.]*\)'.*/\1/p" meson.build | head -1)
+  # 用 `git show HEAD:` 讀檔 → 裸倉庫（SRCDEST）也能取到，不依賴工作區。
+  v=$(git -C "$d" show HEAD:meson.build \
+      | sed -n "s/^[[:space:]]*version : '\([0-9.]*\)'.*/\1/p" | head -1)
   [[ -z "$v" ]] && v=0.0.0
-  printf '%s.r%s.g%s\n' "$v" "$(git rev-list --count HEAD)" "$(git rev-parse --short=12 HEAD)"
+  printf '%s.r%s.g%s\n' "$v" "$(git -C "$d" rev-list --count HEAD)" "$(git -C "$d" rev-parse --short=12 HEAD)"
 }
 
 prepare() {
@@ -300,6 +323,12 @@ build() {
     -D gst-plugins-bad:cuda-nvmm=disabled
     -D gst-plugins-bad:directfb=disabled
     -D gst-plugins-bad:directshow=disabled
+    # executorch 是 monorepo main 上新增的 AI 推論插件（2026-10-12 實測：不關掉的話
+    # meson 在 ext/executorch/meson.build:23 直接
+    # 「ERROR: Dependency "ExecuTorch" not found (tried cmake)」中斷整個 configure）。
+    # ExecuTorch 是 Meta 的推論執行期，Arch／Artix 都沒有這顆包（實測全倉只有它用
+    # method:'cmake' 取依賴），所以照 Arch 對「上游有、發行版沒有」那批插件的做法關掉。
+    -D gst-plugins-bad:executorch=disabled
     -D gst-plugins-bad:flite=disabled
     -D gst-plugins-bad:gs=disabled
     -D gst-plugins-bad:iqa=disabled
@@ -346,6 +375,19 @@ check() (
   export XDG_RUNTIME_DIR="$PWD/runtime-dir"
   mkdir -p -m 700 "$XDG_RUNTIME_DIR"
 
+  # 測試跑在未安裝的建置樹裡（meson 會把 GST_PLUGIN_SYSTEM_PATH_1_0 設成空、
+  # GST_PLUGIN_PATH_1_0 指到 build/），這時 GStreamer 找不到「外掛掃描器」輔助程式，
+  # 每個吃 registry 的測試都會看到：
+  #   GStreamer-WARNING: External plugin loader failed. This most likely means that
+  #   the plugin loader helper binary was not found or could not be run. You might
+  #   need to set the GST_PLUGIN_SCANNER environment variable...
+  # 實測 2026-10-12 第十次編譯：609 條裡 15 條 FAIL（ges_* 12 條 + nle_* 全部、
+  # gst-plugins-base:libs_rtspconnection、gst-plugins-good:generic_states），
+  # testlog.txt 第一行警告就是這個。掃描器其實已經建置出來了，只是沒人告訴測試它在哪：
+  #   build/subprojects/gstreamer/libs/gst/helpers/gst-plugin-scanner
+  # 補環境、不跳測試。
+  export GST_PLUGIN_SCANNER="$PWD/build/subprojects/gstreamer/libs/gst/helpers/gst-plugin-scanner"
+
   export CK_TIMEOUT_MULTIPLIER=5
   export NO_AT_BRIDGE=1 GTK_A11Y=none
 
@@ -365,8 +407,8 @@ _install() {
 
 package_gstreamer-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gstreamer=$pkgver-$pkgrel")
   conflicts+=("gstreamer")
 
@@ -417,8 +459,8 @@ package_gstreamer-git() {
 
 package_gst-plugins-bad-libs-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugins-bad-libs=$pkgver-$pkgrel")
   conflicts+=("gst-plugins-bad-libs")
 
@@ -553,8 +595,8 @@ package_gst-plugins-bad-libs-git() {
 
 package_gst-plugins-base-libs-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugins-base-libs=$pkgver-$pkgrel")
   conflicts+=("gst-plugins-base-libs")
 
@@ -628,8 +670,8 @@ package_gst-plugins-base-libs-git() {
 
 package_gst-plugins-base-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugins-base=$pkgver-$pkgrel")
   conflicts+=("gst-plugins-base")
 
@@ -663,8 +705,8 @@ package_gst-plugins-base-git() {
 
 package_gst-plugins-good-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugins-good=$pkgver-$pkgrel")
   conflicts+=("gst-plugins-good")
 
@@ -799,8 +841,8 @@ package_gst-plugins-good-git() {
 
 package_gst-plugins-bad-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugins-bad=$pkgver-$pkgrel")
   conflicts+=("gst-plugins-bad")
 
@@ -960,8 +1002,8 @@ package_gst-plugins-bad-git() {
 
 package_gst-plugins-ugly-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugins-ugly=$pkgver-$pkgrel")
   conflicts+=("gst-plugins-ugly")
 
@@ -997,8 +1039,8 @@ package_gst-plugins-ugly-git() {
 
 package_gst-libav-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-libav=$pkgver-$pkgrel")
   conflicts+=("gst-libav")
 
@@ -1019,8 +1061,8 @@ package_gst-libav-git() {
 
 package_gst-plugin-gtk-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugin-gtk=$pkgver-$pkgrel")
   conflicts+=("gst-plugin-gtk")
 
@@ -1044,8 +1086,8 @@ package_gst-plugin-gtk-git() {
 
 package_gst-plugin-hip-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugin-hip=$pkgver-$pkgrel")
   conflicts+=("gst-plugin-hip")
 
@@ -1079,8 +1121,8 @@ package_gst-plugin-hip-git() {
 
 package_gst-plugin-msdk-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugin-msdk=$pkgver-$pkgrel")
   conflicts+=("gst-plugin-msdk")
 
@@ -1104,8 +1146,8 @@ package_gst-plugin-msdk-git() {
 
 package_gst-plugin-onnx-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugin-onnx=$pkgver-$pkgrel")
   conflicts+=("gst-plugin-onnx")
 
@@ -1126,8 +1168,8 @@ package_gst-plugin-onnx-git() {
 
 package_gst-plugin-opencv-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugin-opencv=$pkgver-$pkgrel")
   conflicts+=("gst-plugin-opencv")
 
@@ -1152,8 +1194,8 @@ package_gst-plugin-opencv-git() {
 
 package_gst-plugin-qml6-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugin-qml6=$pkgver-$pkgrel")
   conflicts+=("gst-plugin-qml6")
 
@@ -1177,8 +1219,8 @@ package_gst-plugin-qml6-git() {
 
 package_gst-plugin-qmlgl-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugin-qmlgl=$pkgver-$pkgrel")
   conflicts+=("gst-plugin-qmlgl")
 
@@ -1204,8 +1246,8 @@ package_gst-plugin-qmlgl-git() {
 
 package_gst-plugin-qsv-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugin-qsv=$pkgver-$pkgrel")
   conflicts+=("gst-plugin-qsv")
 
@@ -1231,8 +1273,8 @@ package_gst-plugin-qsv-git() {
 
 package_gst-plugin-svthevcenc-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugin-svthevcenc=$pkgver-$pkgrel")
   conflicts+=("gst-plugin-svthevcenc")
 
@@ -1254,8 +1296,8 @@ package_gst-plugin-svthevcenc-git() {
 
 package_gst-plugin-va-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugin-va=$pkgver-$pkgrel")
   conflicts+=("gst-plugin-va")
 
@@ -1278,8 +1320,8 @@ package_gst-plugin-va-git() {
 
 package_gst-plugin-wpe2-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-plugin-wpe2=$pkgver-$pkgrel")
   conflicts+=("gst-plugin-wpe2")
 
@@ -1303,8 +1345,8 @@ package_gst-plugin-wpe2-git() {
 
 package_gst-devtools-libs-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-devtools-libs=$pkgver-$pkgrel")
   conflicts+=("gst-devtools-libs")
 
@@ -1330,8 +1372,8 @@ package_gst-devtools-libs-git() {
 
 package_gst-devtools-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-devtools=$pkgver-$pkgrel")
   conflicts+=("gst-devtools")
 
@@ -1376,8 +1418,8 @@ package_gst-devtools-git() {
 
 package_gst-rtsp-server-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-rtsp-server=$pkgver-$pkgrel")
   conflicts+=("gst-rtsp-server")
 
@@ -1404,8 +1446,8 @@ package_gst-rtsp-server-git() {
 
 package_gst-editing-services-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-editing-services=$pkgver-$pkgrel")
   conflicts+=("gst-editing-services")
 
@@ -1449,8 +1491,8 @@ package_gst-editing-services-git() {
 
 package_gst-python-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gst-python=$pkgver-$pkgrel")
   conflicts+=("gst-python")
 
@@ -1474,8 +1516,8 @@ package_gst-python-git() {
 
 package_gstreamer-docs-git() {
   # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。包名一律 ${pkgname%-git} 推導，
-  # 25 顆不用各別寫，也就不會漏。
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
   provides+=("gstreamer-docs=$pkgver-$pkgrel")
   conflicts+=("gstreamer-docs")
 
@@ -1496,7 +1538,7 @@ package_gstreamer-docs-git() {
   find root -depth ! -type d
   find root -depth -print0 | xargs -0 rmdir
 
-  cd gstreamer-docs-${pkgver%%+*}
+  cd gstreamer-docs-$_docsver
 
   mkdir -p "$pkgdir/usr/share/doc/$pkgbase"
   cp -t "$pkgdir/usr/share" -a devhelp

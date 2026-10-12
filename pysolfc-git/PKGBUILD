@@ -217,16 +217,19 @@ package() {
   cat > "$_bin" <<'PYSOL_WRAPPER_EOF'
 #!/bin/sh
 # PySolFC 啟動腳本（由 pysolfc-git 包產生；真正的程式是 /usr/bin/pysol-real）。
-# fcitx5 的 XIM 對 Tk 客戶端不回傳任何按鍵（Tk 只認 XIM，沒有 immodule），所以在
-# fcitx 環境下把 XMODIFIERS 剝掉，讓 Tk 走自己的按鍵處理。ibus／xim 不動。
-# 副作用：Tk 沒有別的輸入法管道，一剝掉之後 pysolfc 裡就打不了中文（英文／數字正常）。
-# 要中文目前只能從別處複製再按 Ctrl+V 貼進來（貼上走 CLIPBOARD，跟 XIM 無關）；
-# 換 ibus 還是在包裡自架選字，兩條都還沒裁決。注意 `--gtk` 不是出路：TOOLKIT 是
-# 寫死在 pysollib/settings.py 的常數，而 pysollib/pysolgtk 用的是 Python 3 早已
-# 沒有綁定的 PyGTK。
-case "${XMODIFIERS:-}" in
-  *@im=fcitx*) exec env -u XMODIFIERS /usr/bin/pysol-real "$@" ;;
-esac
+#
+# ⚠️ 這裡曾經有第二條 case：偵測到 XMODIFIERS=@im=fcitx 就 `env -u XMODIFIERS` 起程式，
+#    理由是「fcitx5 的 XIM 對 Tk 客戶端不回傳按鍵、會吞鍵」。**那個診斷是錯的，
+#    而這個繞法正是「pysolfc 打不了中文」的原因**（把 Tk 唯一的輸入法管道關掉了）。
+#    2026-10-12 讀源碼＋受控重測推翻前提：同版本 fcitx5（5.1.23.r5）+ rime + Tk 8.6.16
+#    在 Xvfb 下，wish／python3-tkinter／pysol 三者都出現完整的
+#    XIM_CREATE_IC → XIM_SET_IC_FOCUS → XIM_FORWARD_EVENT，中文正常入框；
+#    真正會吞字母的是 **LC_CTYPE 不是 UTF-8**（實測 LANG=C 時 Entry 只剩一個數字）。
+#    本機會話是 zh_TW.UTF-8、/etc/environment 也設了 XMODIFIERS=@im=fcitx，
+#    所以 Tk 走 XIM 是正常路徑，不該再剝。
+#    （Tk 側確實有兩處比 xterm 落後：unix/tkUnixEvent.c:399 的 XFilterEvent 用
+#     Tk 認定的焦點窗而非事件自己的視窗、以及 CreateXIC 回 NULL 時仍無條件過濾；
+#     但那是「加固」不是根因，要動 Tk 得另開 tk 自建包，不在這裡繞。）
 exec /usr/bin/pysol-real "$@"
 PYSOL_WRAPPER_EOF
   chmod 755 "$_bin"
