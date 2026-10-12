@@ -1,0 +1,141 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 本倉目錄版 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md，
+# **不要寫回 workflow** —— 那個 step 有 21000 字元表達式上限且註解也計入）。
+#
+# 為什麼會有這顆（用戶 2026-10-12 裁定「？那你倒是讓它使用 24 版本編去啊？」）：
+#   · 目標機 `mesa/libRusticlOpenCL.so.1.0.0` 的 NEEDED 實測有兩條 LLVM 系：
+#       libLLVM.so.23.1  與  libLLVMSPIRVLib.so.23.1
+#     （`objdump -p` 直接看出來，不是推測）。所以「mesa 改吃 LLVM 24」必然把這顆
+#     一起拖上 24 —— 只換 LLVM 不換 translator，產物會同時鏈兩個 LLVM soname，
+#     裝下去是 OpenCL 靜默失效或直接崩。
+#   · ⚠️ **抬版無解，不是偷懶**：上游 `KhronosGroup/SPIRV-LLVM-Translator` 的
+#     tag 與「已發布的最大 LLVM」配對（`git ls-remote --tags` 實測最新是
+#     **v23.1.2**），分支也只到 `llvm_release_230`（`git ls-remote --heads` 查實，
+#     根本沒有 `llvm_release_240`）。LLVM 24 還沒正式版，所以「跟最新版本」這條
+#     路不存在，只能吃 `main`（那條才是配 LLVM tip 開發的分支）。
+#   · 本機另一個實測事實：`/usr/lib/libLLVMSPIRVLib.so.23.1` 目前是**孤檔**
+#     （`pacman -Qo` 回「沒有軟體包擁有它」，`pacman -Qs spirv` 查實只裝了
+#     spirv-tools、沒裝 translator）——也就是這臺的 RustiCL OpenCL 一直靠一顆
+#     沒主人管的历史残留库在跑。這顆包上了 feed 之後，該檔由包擁有，換代才不會
+#     再出現「舊 .so 留著、新 .so 沒人給」的那種靜默態。
+#
+# 版本與校驗和都由 pkgver() 從上游 HEAD 現算 ⇒ 本檔要列進「回推校驗和」的排除清單。
+
+_pkgbase=SPIRV-LLVM-Translator
+pkgbase=spirv-llvm-translator-git
+pkgname=(spirv-llvm-translator-git)
+pkgver=0.r0.g00000000000
+pkgrel=1
+pkgdesc='LLVM <-> SPIR-V converter for compilers targeting SPIR-V (git, 配 LLVM trunk)'
+arch=(x86_64)
+url='https://www.khronos.org/spirv/'
+license=('NCSA')
+makedepends=(cmake git ninja spirv-headers llvm clang python)
+checkdepends=(clang python)
+# ⚠️ 依賴**不在這裡寫死**：LLVM 的 ABI 由 package() 從「建它時容器裡那顆 libLLVM」
+#   反推（見下方 _llvm_abi）。這是 2026-10-12 那次 GL 黑屏的直接教訓——
+#   CI 產出的 mesa 依賴只有 `llvm-libs>=8.0.0`（無上限），llvm 換代時 pacman 認為
+#   依賴仍滿足、實物卻找不到 libLLVM.so.23.1，於是「badge 全綠但裝完黑屏」。
+depends=(glibc libstdc++ spirv-tools)
+options=(!emptydirs)
+source=("git+https://github.com/KhronosGroup/SPIRV-LLVM-Translator#branch=main")
+b2sums=('SKIP')
+
+pkgver() {
+  cd $_pkgbase
+  # 上游 tag 長成 v23.1.2（與 LLVM 主次修配對），但 **main 上最近可達的 tag 是
+  # v7.0.1**（實測 `git describe --tags --match 'v*' HEAD` 回 `v7.0.1-454-g663ef71b`，
+  # 而 `--tags` 全列表末三筆是 v23.1.0/v23.1.1/v23.1.2 —— 那些 tag 只打在
+  # llvm_release_230 那條release 線上，main 走不到）。所以 describe 的基號代表
+  # 「這條線最後一次 cut 的版本」，是實話，不要拿它去充 LLVM 版本。
+  # ⚠️ 剝段要處理「HEAD 正好落在 tag 上」：那時 describe 只回 `v7.0.1`，由右往左剝
+  #   兩段會把 tag 名本身當 count，算出 `7.0.1.rv7.0.1.g…` 那種垃圾（而且不只难看，
+  #   repo-add 會因為不單調直接拒收——llvm-git／kew-git 都踩過同一類）。
+  #   查無 tag 可達時退回 `0.r<總數>.g<sha>`，同样全域單調。
+  local raw base count
+  raw=$(git describe --tags --match 'v*' HEAD 2>/dev/null)
+  if [ -n "$raw" ]; then
+    count=${raw##*-}
+    if [ "$count" = "$raw" ]; then
+      count=0; base=$raw
+    else
+      raw=${raw%-*}
+      count=${raw##*-}
+      base=${raw%-*}
+    fi
+    base=${base#v}
+  else
+    base=0; count=$(git rev-list --count HEAD)
+  fi
+  printf '%s.r%s.g%s\n' "$base" "$count" "$(git rev-parse --short=11 HEAD)"
+}
+
+_llvm_abi() {
+  # 回傳「本機容器此刻真正的 libLLVM SONAME」，例如 libLLVM.so.24.0git → 24.0git。
+  # 查不到就回空字串，由呼叫端決定要不要退回不鎖（但會印出來，不會靜默）。
+  local so
+  so=$(basename "$(readlink -f /usr/lib/libLLVM.so 2>/dev/null)" 2>/dev/null | sed 's/^libLLVM\.so\.//')
+  case $so in
+    ''|libLLVM.so) printf '' ;;
+    *) printf '%s' "$so" ;;
+  esac
+}
+
+build() {
+  cd $_pkgbase
+  # ARCH 容器與本機都吃 clang 預設的 `-Werror=return-type` 等，`-W no-author` 照抄
+  # Arch 官方那份（實查 gitlab archlinux/spirv-llvm-translator 現檔），避免 cmake 把
+  # 打包作者欄位寫進产物導致每輪換代都改到檔。
+  cmake -S . -B build -G Ninja \
+    -D BUILD_SHARED_LIBS=ON \
+    -D CMAKE_BUILD_TYPE=Release \
+    -D CMAKE_INSTALL_PREFIX=/usr \
+    -D CMAKE_INSTALL_SYSCONFDIR=/etc \
+    -D CMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -D CMAKE_SKIP_RPATH=ON \
+    -D LLVM_CONFIG=llvm-config \
+    -D LLVM_EXTERNAL_LIT=/usr/bin/lit \
+    -D LLVM_EXTERNAL_SPIRV_HEADERS_SOURCE_DIR=/usr/include/spirv \
+    -D LLVM_LIBDIR_SUFFIX= \
+    -D LLVM_SPIRV_ENABLE_LIBSPIRV_DIS=ON \
+    -D LLVM_SPIRV_INCLUDE_TESTS=ON \
+    -W no-author
+  cmake --build build
+}
+
+check() {
+  cd $_pkgbase
+  # 上游不用 ctest 佈局，照官方那個 `--target test`（跑 lit + 內建 round-trip 測試）。
+  # ⚠️ 用戶裁定「這是我們容器缺環境，補環境，不跳測試」——這裡**不准**加 --nocheck
+  #   绕过去；真紅就當待辦修或如實上報。
+  cmake --build build --target test
+}
+
+package_spirv-llvm-translator-git() {
+  pkgdesc='LLVM <-> SPIR-V converter for compilers targeting SPIR-V (git)'
+  provides=('spirv-llvm-translator' 'libLLVMSPIRVLib.so')
+  conflicts=('spirv-llvm-translator')
+  replaces=('spirv-llvm-translator')
+  depends=(glibc libstdc++ spirv-tools llvm-libs)
+  # ── 把 LLVM ABI 鎖進依賴（這包存在的意義一半在這裡）
+  # 用的虛擬名是本倉 llvm-libs-git 發的 `llvm-libs-abi=<soname>`。
+  # ⚠️ 不能直接用官方那形 `libLLVM.so=23.1-64` 來钉：實測 makepkg 7.1 **拒收**
+  #   `==> 錯誤： pkgver in depends 不能有 ; 斜線、- 連字號或空白`（本輪踩到），
+  #   而把 world.db 全倉 %DEPENDS% 拆開查實沒有一筆帶 `-64` —— 那形只在 %PROVIDES% 出現。
+  #   所以自製一個不含連字號的虛擬名，provides／depends 兩邊都合法，且只在 soname
+  #   相同時成立 → LLVM 換代時 pacman 會**拒絕升級**而不是靜默弄挂 OpenCL
+  #   （教訓來源：2026-10-12 那次「CI 全綠但裝完 GL 黑屏」）。
+  local abi
+  abi=$(_llvm_abi)
+  if [ -n "$abi" ]; then
+    depends+=("llvm-libs-git" "llvm-libs-abi=$abi")
+    echo ">> $pkgname: 鎖住 LLVM ABI → llvm-libs-abi=$abi"
+  else
+    depends+=("llvm-libs")
+    echo ">> $pkgname: ⚠️ 查不到容器 libLLVM.so 的 soname，本次不鎖 ABI（下游 mesa 的守門步會紅，不會靜默）" >&2
+  fi
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 LICENSE.TXT -t "$pkgdir/usr/share/licenses/$pkgname"
+}
+
+# vim:set sw=2 sts=-1 et:

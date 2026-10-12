@@ -553,7 +553,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|npm-git|pnpm-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|npm-git|pnpm-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git)
               # 這批包為什麼走本倉目錄版（逐包理由）：見 docs/in-tree-packages.md。
               # 那個 step 的表達式有 21000 字元上限、註解也計入，加包只加清單、
               # 說明寫進該檔，別寫回這裡。
@@ -2125,7 +2125,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'jbr21' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'jbr21' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -2370,6 +2370,94 @@ jobs:
             exit 1
           fi
 
+      - name: 把容器 LLVM 換成自有 llvm-*-git 尖端（mesa 與 SPIRV translator 共用）
+        if: (matrix.repo_name == 'mesa-tkg-git' || matrix.repo_name == 'spirv-llvm-translator-git') && steps.plan.outputs.build == 'true'
+        run: |
+          set -uo pipefail
+          # ── 用戶 2026-10-12 裁定：「？那你倒是讓它使用 24 版本編去啊？」
+          # 背景（全部實測，不是推測）：
+          #  · 本倉 llvm-*-git 吃的是 trunk，產物 SONAME 是 `libLLVM.so.24.0git`
+          #    （拆開發佈的 llvm-libs-git 實物看到的檔名），上游權威檔
+          #    `cmake/Modules/LLVMVersion.cmake` 給的是 MAJOR=24 MINOR=0 PATCH=0 SUFFIX=git。
+          #  · 本機實扫：真正 NEEDED `libLLVM.so.23.1` 的只有 **mesa-tkg-git 與
+          #    lib32-mesa-tkg-git** 兩顆（其餘命中都是 llvm 自己的檔）。
+          #  · 致命點在依賴宣告：CI 產出的 mesa 包 .PKGINFO 實查只有
+          #    `depend = llvm-libs>=8.0.0`（無上限），而 makepkg 7.1 **不會**替 mesa
+          #    自動抽 soname 依賴。所以只要裝上 llvm-libs-git 24，pacman 認為依賴
+          #    仍 satisfied，實物卻找不到 libLLVM.so.23.1 → GLX 直接黑
+          #    （2026-10-12 本機就是这样炸的：alacritty "failed to find suitable GL
+          #    configuration"）。
+          # 所以這步做兩件事，缺一不可：
+          #  ① 把容器裡的 llvm/clang 換成我們自己發佈的 llvm-*-git（trunk 24），
+          #     讓 mesa 真的鏈到 .24.0git；
+          #  ② 把 PKGBUILD 的 `_llvm` 改寫成「soname 虛擬名＝實物 ABI」，
+          #     這樣 llvm 換代時 pacman 會**拒絕**升级而不是静默弄挂 GL。
+          #     對照：官方 llvm-libs 的 provides 實物就是 `libLLVM.so=23.1-64` 這種形，
+          #     自有 llvm-libs-git 的 provides 是 `libLLVM.so=24.0git-64`，兩邊都認。
+          # ⚠️ lib32 那半邊**不動**：Artix lib32-goblins 的 lib32-llvm-libs 實測
+          #    `Provides: None`（沒有 soname 虛擬名可用），而 32 位元 trunk LLVM 沒人產。
+          #    所以 lib32-mesa 繼續鏈 lib32-llvm-libs 23.1、依賴維持原樣；這是「各自
+          #    位元寬度各自對齊」，不是回退（64 位元照樣上 24）。
+          cd pkg_dir
+          _pkgs='llvm-libs-git llvm-git clang-git compiler-rt-git lld-git llvm-lit-git lldb-git'
+          if [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ]; then
+            # mesa 的 RustiCL 直接 NEEDED libLLVMSPIRVLib（本機 objdump 實測），而穩定版
+            # 那顆是配 LLVM 23.1 編的 → 不把自有 translator-git 裝進容器，產物就會
+            # 同時拖著 .23.1 與 .24.0git 兩個 LLVM（混合版＝裝下去 OpenCL 靜默失效）。
+            # 本倉 translator 的 pkgbase 就是包名本身（不像 nvidia-utils-beta 那樣
+            # split 出別人名字），所以抓檔前綴直接用包名。
+            _pkgs="$_pkgs spirv-llvm-translator-git"
+          fi
+          mkdir -p /tmp/llvmgit
+          _got=0
+          for _p in $_pkgs; do
+            # 只認「本倉目前發佈的那顆」：換代是零寬限刪資產，所以同名前綴只會有一檔
+            if gh release download current-repo --repo "$GITHUB_REPOSITORY" \
+                 --pattern "${_p}-*.pkg.tar.zst" -D /tmp/llvmgit >/dev/null 2>&1; then
+              _got=$((_got + 1))
+            else
+              echo "::warning::release 裡找不到 ${_p}-*（本輪 llvm 那條可能沒產出）"
+            fi
+          done
+          echo "抓到 $_got 顆自有 llvm 包"
+          if [ "$_got" -ge 4 ]; then
+            # llvm-libs-git／llvm-git／clang-git／compiler-rt-git 是「鏈得上 trunk」的最小集，
+            # 少了 lld/lldb/lit 也能編 mesa，所以門檻定 4 而不是 7。
+            pacman -U --noconfirm /tmp/llvmgit/*.pkg.tar.zst
+          else
+            # ⚠️ 這裡**不准**退回「用容器裡的穩定版 llvm 編」。理由不是風格：目標機上
+            # 舊 mesa 的依賴是無上限的 `llvm-libs>=8.0.0`，只要 llvm-*-git 進/feed 裝得上，
+            # pacman 就認為依賴滿足 → 靜默黑屏（2026-10-12 實測）。紅是待辦，綠是假話。
+            echo "::error::自有 llvm-*-git 不足 4 顆（只抓到 $_got 顆）——不退回去用穩定版 llvm"
+            exit 1
+          fi
+          # ── ② 鎖 ABI：從「這臺容器此刻真正的 soname」反推依賴，不寫死任何版本字串
+          _son=$(basename "$(readlink -f /usr/lib/libLLVM.so 2>/dev/null)" 2>/dev/null | sed 's/^libLLVM\.so\.//')
+          if [ -z "$_son" ] || [ "$_son" = "libLLVM.so" ]; then
+            echo "::error::查不到容器 /usr/lib/libLLVM.so 的 soname（readlink 落空）——不鎖 ABI 就等於把靜默黑屏留給目標機"
+            exit 1
+          fi
+          echo "容器 libLLVM soname=$_son  llvm-config=$(llvm-config --version 2>/dev/null)"
+          if [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ]; then
+            # 上游 case 4 那行原文是 `    _llvm='llvm-libs>=8.0.0'`（實查 chaotic-aur 現檔）。
+            # 鎖法用本倉 llvm-libs-git 發的 `llvm-libs-abi=<soname>` 虛擬名，**不是**官方那形
+            # `libLLVM.so=23.1-64`：實測 makepkg 7.1 拒收帶連字號的 depends 版本
+            # （`pkgver in depends 不能有 ; 斜線、- 連字號或空白`），而 world.db 全倉
+            # %DEPENDS% 查實沒一筆帶 -64（那形只出現在 %PROVIDES%）。
+            # 只動 64 位元那半邊：Artix lib32-llvm-libs 實測 `Provides: None`（沒有
+            # soname 虛擬名可鎖），32 位元 trunk LLVM 也沒人產，所以 lib32 維持原樣、
+            # 繼續配 lib32-goblins 的 23.1（各自位元寬度各自對齊，不是回退）。
+            sed -i "s|_llvm='llvm-libs>=8.0.0'|_llvm=\"llvm-libs-git llvm-libs-abi=${_son}\"|" PKGBUILD
+            # 「配置寫了不等於有套上」——規則 71 的教訓（moregramX 的簽名块被上游整檔蓋掉、
+            # CI 照綠一個月）。所以這裡 grep 回來證明改動真的在檔裡，改不到就紅。
+            grep -q "llvm-libs-abi=${_son}" PKGBUILD || {
+              echo "::error::PKGBUILD 的 LLVM 依賴改寫沒落地（上游把 case 4 的字串改了）——這輪不能放過"
+              exit 1
+            }
+            grep -n "_llvm=" PKGBUILD
+          fi
+          pacman -Qo /usr/lib/llvm-config 2>/dev/null || true
+
       - name: 云端编译 `.pkg.tar.zst`
         if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'
         env:
@@ -2484,20 +2572,57 @@ jobs:
             rm -fv xlibre-xserver-bootstrap-git-*.pkg.tar.zst
           fi
           if [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ]; then
-            # ── LLVM soname 守门（防止本修复被静默回退）
-            # mesa 在链接期把 libLLVM.so.X 写死，产物必须与容器（= 目标机 Artix
-            # goblins 的 llvm）一致；否则装到机器上 dlopen 失败 → GLX 崩
-            # （2026-09-17 实证）。只信实测：解包产物、objdump 读 NEEDED 硬核对。
-            want="$(basename "$(readlink -f /usr/lib/libLLVM.so 2>/dev/null)" 2>/dev/null)"
-            chk="$PWD/.llvm-check"; rm -rf "$chk"; mkdir -p "$chk"
-            for f in ./*.pkg.tar.zst; do [ -e "$f" ] || continue; bsdtar -xf "$f" -C "$chk" 2>/dev/null; done
-            got="$(find "$chk" -name '*.so*' -type f -print0 | xargs -0 -r objdump -p 2>/dev/null | grep -o 'libLLVM\.so\.[0-9][0-9.]*' | sort -u | tr '\n' ' ')"
+            # ── LLVM soname 守門（防止上面的「鎖 ABI」改動被靜默回退）
+            # mesa 在連結期把 libLLVM.so.X 寫死，產物必須與容器（＝目標機）一致，
+            # 否則裝到機器上 dlopen 失敗 → GLX 崩（2026-09-17 與 2026-10-12 各實證一次）。
+            # ⚠️ 兩處舊 bug 一起修掉：
+            #  · 正則 `libLLVM\.so\.[0-9][0-9.]*` 抓 **libLLVM.so.24.0git** 會截到
+            #    `libLLVM.so.24.0` 就停（g 不在字元類裡），而 want 是整串 `…24.0git`
+            #    → 換代上 trunk 之後這道門必然**假紅**。改成允許尾綴字母。
+            #  · 舊版把 64 位元與 32 位元產物倒進同一個目錄混在一起看，lib32 那半邊
+            #    本來就該是另一個 soname（本輪 64 位元走自有 24、32 位元仍是 goblins
+            #    的 23.1，兩者不同是設計不是異常），所以現在**按包分流**逐顆比。
+            want64="$(basename "$(readlink -f /usr/lib/libLLVM.so 2>/dev/null)" 2>/dev/null)"
+            want32="$(basename "$(readlink -f /usr/lib32/libLLVM.so 2>/dev/null)" 2>/dev/null)"
+            echo "容器 soname：64=$want64  32=$want32"
+            [ -n "$want64" ] || { echo "::error::容器查不到 /usr/lib/libLLVM.so"; exit 1; }
+            _bad=0
+            for f in ./*.pkg.tar.zst; do
+              [ -e "$f" ] || continue
+              case "$f" in lib32-*) want="$want32" ;; *) want="$want64" ;; esac
+              [ -n "$want" ] || { echo "::error::$f 需要 $want 但容器查不到對應 soname"; _bad=1; continue; }
+              chk="$PWD/.llvm-check-$$"; rm -rf "$chk"; mkdir -p "$chk"
+              bsdtar -xf "$f" -C "$chk" 2>/dev/null
+              got="$(find "$chk" -name '*.so*' \( -type f -o -type l \) -print0 \
+                    | xargs -0 -r objdump -p 2>/dev/null \
+                    | grep -oE 'libLLVM\.so\.[0-9][0-9A-Za-z.]*' | sort -u | tr '\n' ' ')"
+              rm -rf "$chk"
+              if [ -z "$got" ]; then
+                echo "  OK  $f 沒鏈 libLLVM（本來就不該鏈，跳過比對）"
+              else
+                matched=0; other=''
+                for s in $got; do
+                  if [ "$s" = "$want" ]; then matched=1; else other="$other $s"; fi
+                done
+                if [ "$matched" = 0 ]; then
+                  echo "::error::$f 鏈的是 [$got] 而容器是 $want —— 裝到目標機 GLX 會崩"; _bad=1
+                elif [ -n "$other" ]; then
+                  echo "::error::$f 混版：同時鏈了 $want 與$other"; _bad=1
+                else
+                  echo "  OK  $f → $got"
+                fi
+              fi
+            done
+            [ "$_bad" = 0 ] || exit 1
+            # 依賴宣告也要實物核對：上面鎖的 ABI 虛擬名必須真的出現在產物 depends 裡
+            chk="$PWD/.llvm-check-dep-$$"; rm -rf "$chk"; mkdir -p "$chk"
+            bsdtar -xf mesa-tkg-git-*.pkg.tar.zst -C "$chk" .PKGINFO 2>/dev/null
+            dep="$(grep -oE 'llvm-libs-abi=[0-9][0-9A-Za-z.]*' "$chk/.PKGINFO" 2>/dev/null | head -1)"
             rm -rf "$chk"
-            echo "容器 llvm soname=[$want]  产物 NEEDED=[$got]"
-            case "$got" in
-              *"$want"*) echo "✓ mesa 产物 LLVM soname 与容器一致" ;;
-              *) echo "::error::mesa 产物链接的 libLLVM 与容器不一致（产物：$got ／ 容器：$want）——装到目标机会 GLX 崩"; exit 1 ;;
-            esac
+            want_vers="llvm-libs-abi=${want64#libLLVM.so.}"
+            echo "產物 depends 裡的 ABI 虛擬名=[$dep]  期望=[$want_vers]"
+            [ "$dep" = "$want_vers" ] || {
+              echo "::error::mesa 產物沒鎖住 LLVM ABI（depend 缺 $want_vers）——這才是 2026-10-12 黑屏的真正成因"; exit 1; }
           fi
           if [ "${{ matrix.repo_name }}" = "qt6ct-git" ]; then
             # ── 釘選落地驗收（只認產物實物，不認 makepkg 綠燈）

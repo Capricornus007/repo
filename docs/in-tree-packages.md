@@ -314,6 +314,79 @@ split：llvm-libs／llvm／llvm-lit／compiler-rt／lld／lldb／clang）：
       源，以及讓「更新校驗和並回推」的 giant if（`matrix.kind != 'aur'`）不去 push
       不存在的 `Capricornus007/llvm-git.git`。
 
+  · **2026-10-12 覆核（任務 #157）：七顆已經在 feed 裡，但產物有兩個「CI 全綠的壞包」**
+    run #454（job 114714371131）七顆全綠並發布，`gh api releases/tags/current-repo` 查實
+    `clang-git/compiler-rt-git/lld-git/lldb-git/llvm-git/llvm-libs-git/llvm-lit-git`
+    都在 `24_r13699.g7159ce54c436-1`。**把產物下載回來拆**才看見日誌看不出的洞：
+
+      ① **別名符號連結整批不見／发到錯的包**。`tar -tf lld-git-24_r13699…` 的 /usr/bin
+         只有 `lld` 一個（官方 `pacman -Ql lld` 是 `lld ld.lld ld64.lld lld-link wasm-ld`
+         五個）；`tar -tf clang-git-24_r13699…` 有 clang／clang-24／clang-cl／clang-cpp，
+         **就是沒有 clang++ 與 amdgpu-arch**。根因不是 glob，而是 `_move` 的存在性檢查
+         用 `[ -e ]`：上游那些別名是 CMake `install(CODE … create_symlink …)` 造的
+         **相對符號連結**，`cmake --install` 對它們一行 `-- Installing:` 都不印（日誌查實，
+         只印本體），而本體在 pattern 清單裡**排在前面、先被 `mv` 走**，於是別名在 `$_stage`
+         裡當場變 dangling，`[ -e ]` 對 dangling symlink 一律回假 → 被當成「不存在」跳過。
+         跳過≠消失：留在 stage 的它们又被最後一包 `llvm-git` 的 `usr/bin/*` 兜底掃走，
+         所以「檔案有發出去」，只是**發到錯的包**——而 `clang-git` 不依賴 `llvm-git`，
+         只裝 clang-git 的人徹底沒有 `clang++`；`-fuse-ld=lld` 是靠 exec `ld.lld` 找它的，
+         少了那條連結等於 lld 不能用。修法：`_move` 的存在性判定改「`-e` 或 `-L`」、
+         新增 `_alias()` 兜底補相對連結（本體在、別名不在才補，不覆寫），並給 lld／clang
+         各加一道「入口沒齊就紅」的收口（與 compiler-rt 的 asan 檢查同一手法）。
+         教訓：**`mv` 型分割不能只驗「檔案有沒有」，要驗「連結指不指得到」**，
+         而 glob 與 `-e` 對 dangling symlink 的行為不同（glob 會命中、`-e` 不會）。
+      ② **llvm-lit 的 python 套件裝進寫死的舊版本目錄**。`site.getpkgdir()` 在 Arch/Artix
+         的 python 上**不存在**（本機 python 3.14.8 實測 `AttributeError`，那是 Debian 系
+         補丁）→ 一定落到 `|| site=lib/python3.13/site-packages` 那個寫死的備援，
+         `tar -tf llvm-lit-git-…` 查實整個 lit 被裝進 `/usr/lib/python3.13/…`，而系統
+         python 是 3.14（`sysconfig.get_path("purelib")` 回 `/usr/lib/python3.14/site-packages`），
+         本機 `python -c 'import lit'` 實測 ModuleNotFoundError（連 Artix 自己的 llvm-lit
+         23.1.3 在本機也是同一個壞法）。改成向 sysconfig 要 purelib、要不到就硬紅，
+         並補上官方同款 `/usr/bin/lit`（內容照抄系統那支 console script），最後用
+         `PYTHONPATH=$pkgdir/… python -c 'import lit, lit.main'` 自我驗一次才放行。
+      ③ 清掉我憑空發明的檔案名：`lld-rc／lld-elf／lld-macho／lld-macho-new／invoked／
+         nvptx-arch`（`pacman -Ql lld` 查實官方只有五個入口；NVPTX 第二次裁參數時已拿掉）。
+
+    驗證方式（全量llvm 交給 CI，本地只驗分割邏輯）：`/tmp/llvm-out/move-sim.sh` 造一個
+    「本體＋相對符號連結」形貌的假 stage，`set -eu -o errtrace`（與 makepkg 同環境）
+    逐顆呼叫 `package_*()`，25 條斷言全 ok——包含「ld.lld／lld-link／wasm-ld／ld64.lld／
+    clang++／amdgpu-arch 必須在自己的包裡且 `-e` 指得到」與「llvm-git 不得再收到 ld.lld／
+    clang++」。另外 `python scripts/check-pkg-split-overlap.py llvm-git/PKGBUILD` →
+    `OK: 未發現跨包重疊樣式`；迷你 repo 實測 `pkgver()` 對 `llvmorg-24-init-<n>-g<sha>`／
+    `llvmorg-23.1.3-<n>-g<sha>`／`llvmorg-24.0.0-rc1-<n>-g<sha>` 三種形貌分別算出
+    `24_r<n>`／`23.1.3_r<n>`／`24.0.0_r<n>`，`vercmp` 三組單調性為
+    `24_r13700 > 24_r13699`、`24_r13699 > 23.1.3`、`24.0.0_r5 > 24_r13699`（tag 往前進
+    才換 base，不會倒掛）。**`makepkg --printsrcinfo` 不會跑 `pkgver()`**（實測印的是
+    檔內靜態 `24.0.0_r0.g00000000000`），所以它不是版本探針，別拿它當證據。
+
+  · **「六顆」的實測邊界**（expac 本機沒裝，改用 `LC_ALL=C pacman -Si` + 解 `.db`）：
+    world-goblins 的 llvm 系九個名字 `llvm llvm-libs llvm-lit clang compiler-rt lld lldb
+    openmp polly`（`tar -xf /var/lib/pacman/sync/world-goblins.db` 數出來的，另有 rocm-llvm*
+    那批 10.0 與本線無關）；本機 `pacman -Qs` 只有前七顆、openmp／polly 沒裝且
+    `pactree -r` 查無依賴者 → 不收。`pacman -Si mlir` 只命中 andontie-aur（Artix world 系
+    根本沒這顆）、`pacman -Si polygeist` 任何啟用庫都查無 → 用戶提的 mlir／polygeist
+    不屬於「取代 world-goblins 的 llvm 系」，不收。鏡像側 2026-10-12 重測
+    （`curl -sI …/world-goblins/os/x86_64/<檔>`）：`lld-23.1.3-1` 與 `openmp-23.1.3-1`
+    仍是 **404**，其餘七顆 200 → 当初開這題的「lld 補不上、-Syu 原子失敗」到現在還在。
+
+  · ⚠️ **裝機順序仍欠（本檔唯一的未做完項）**：本機 **98 個已安裝檔**帶
+    `libLLVM.so.23.1`／`libclang-cpp.so.23.1`／`libLLVMSPIRVLib.so.23.1` 的 NEEDED
+    （`grep -rlF` 掃 /usr/{lib,bin,libexec}＋/opt，再 `pacman -Qo` 歸戶）。歸戶拆開看
+    才是重點：**llvm 45／clang 28／lld 10／lldb 7／llvm-libs 3 共 93 個本來就在被取代的
+    七顆裡**（換代一起消失，不是風險）；真正的損壞面只有兩個——
+    **mesa-tkg-git 4 個**（`libgallium-26.3.0-devel.so`、`libvulkan_radeon.so`、
+    `libvulkan_lvp.so`、`libRusticlOpenCL.so.1.0.0`＝GL/Vulkan 全黑）與
+    **doxygen 1 個**（`/usr/bin/doxygen` 要 `libclang-cpp.so.23.1`，trunk 的 SONAME 是
+    `.24.0git`）。另發現既有孤檔：`pacman -Qo /usr/lib/libLLVMSPIRVLib.so.23.1` 回
+    「沒有軟體包擁有」，而 `libRusticlOpenCL.so` 照樣 NEEDED 它（不是這次造成的）。
+    `-Syu` 目前**不會**自動換裝（包名不同、pacman 只按同名升級），但誰裝了 llvm-git 那批，
+    GL 就黑——因為 `build-packages.yml:261` 的 mesa-tkg-git job 還是 `pacman -S llvm llvm-libs
+    clang`（裝 stable 產物照鏈 `.23.1`）。發包前要做的是把那個 job 改成「先裝我們的
+    llvm-libs-git 再編」，並讓它排在 llvm-git 之後（同 job 的 `.llvm-check` 探針本來就在
+    比對「容器 llvm soname vs 產物 NEEDED」，改完會自己驗）。doxygen 不在本 feed，
+    要嘛也自建、要嘛接受它不能用——**這條要用戶裁**。
+
+
 ---
 
 ## NVIDIA -beta 四顆（用戶 2026-10-11 點名全部進本倉，我方追蹤 #170）
@@ -487,3 +560,166 @@ mgx 的原生編譯直接死在
 **收口**：`package()` 最後直接跑一次 `$pkgdir/usr/bin/ccache --version`，
 跑不起來就讓建置紅——「套件裝得上但二進位載不起來」不許再活到下一次編譯。
 上游現況：最新 release `v4.14.1`（2026-09-27），master 最後一筆 2026-10-10。
+
+---
+
+## lib32-gstreamer-git（用戶 2026-10-12 裁定「務必」換 -git；本輪新增）
+
+用戶機上現況（實測 `/var/lib/pacman/local/`）：`lib32-gstreamer 1.28.1-3`、
+`lib32-gst-plugins-base-libs 1.28.1-3`，兩顆同屬 `[lib32]` 的 `pkgbase=lib32-gstreamer`
+（packager ndowens@artixlinux.org），而 64 位元那 25 顆早已是本倉 `gstreamer-git`
+（尖端 1.29.2.1）。留 32 位元在 1.28.1 就是「一半尖端一半舊版」，Wine／Steam 那類
+真的載這批 .so 的軟體吃的正是這一層。
+
+四接點全部已接（缺任何一個就是「裝得上但 feed 不會重建」）：
+  1. `build-git-packages.yml` 矩陣：`{"key": "lib32-gstreamer-git", …, "kind": "multilib"}`，
+     緊排在 `gstreamer-git` 之後、`lib32-glib2` 之前。註解一律寫在方括號外面
+     （寫進 JSON 塊會讓整條矩陣解析失敗，run #436 踩過）。
+  2. `build-packages.yml`「拉取对应的套件仓库」的 in-tree `case` 清單：加在這裡，
+     不是加在 `逐包修正 AUR 的 PKGBUILD` 那步（那步的 `*)` 是 no-op）。
+     不攔就會被通用規則「名字以 -git 結尾 → clone AUR」搶走，而 AUR 沒有這顆、
+     `Capricornus007/lib32-gstreamer-git.git` 這個倉也不存在也不需要存在。
+     通用 in-tree 分支是用 GitHub contents API 把目錄**全部**檔案抓下來，
+     所以同目錄放的 `lib32-gstreamer-git.install` 會自動進建置（本目錄只有
+     PKGBUILD 與這一個輔助檔，刻意不帶 0001-HACK 補丁，見下）。
+  3. 「更新校驗和並回推 PKGBUILD」的 giant if：**不必**再加包名——該條已有
+     `matrix.kind != 'multilib'` 子句（lib32-glib2 那輪加的），我們這顆 kind 就是
+     multilib，直接命中排除。實測測得那條 `if:` 表達式現在是 2334 字元，
+     離 21000 上限還有 18666。純 git 源跑 updpkgsums 會撕檔（mesa-tkg 的教訓），
+     所以這一步對本包必須是跳過。
+  4. 本檔（逐包理由寫這裡，不寫回 workflow）。
+
+配方來源：逐字沿用 Arch multilib 打包倉 `lib32-gstreamer` 那份 PKGBUILD
+（gitlab.archlinux.org/archlinux/packaging/packages/lib32-gstreamer，407 行、4 顆 split），
+只 -git 化。為什麼要 32 位元單獨一份而不是重用 64 位元那顆：lib32 走
+`--cross-file lib32` ＋ `--libexecdir lib32`、把 `introspection/doc/devtools/bad/ugly/
+ges/libav/python/qt/rtsp/rs/sharp` 全關掉，是**另一套 configure 造型**，
+兩側不能共用一個 build 目錄。
+
+本輪只收用戶裝的那兩顆 split（core＋base-libs），上游另兩顆
+`lib32-gst-plugins-base`／`lib32-gst-plugins-good` 不收。這帶來一個必須處理乾淨的問題：
+`meson install` 的 destdir 裡一定有那兩顆的內容，沒包認領就會「靜默消失在產物外」。
+做法是把它們的 78 條外掛 .so（實測 base 7 ＋ good 71，且**只有**外掛 .so，
+沒有 lib/pc/bin/include）寫成 `drop=()` 逐檔清單，由 `_drop_siblings()` 記帳後丟掉。
+一度想用「凡沒人認領的 `libgst*.so` 就丟」的模式規則，**已否掉**：那會讓
+「尖端新增一顆外掛、該歸 base-libs 還是不發的那兩顆」這種事靜默通過。
+收口守衛是「root 必須清空否則紅」，與 gstreamer-git 同一條原則
+（靜默漏檔是最壞的失敗）。
+
+守衛本身踩到一個**會靜默失效**的坑，記下來：gstreamer-git 的守衛寫在
+`package_gstreamer-docs-git()`，那顆沒有 `cd root`，所以用相對路徑 `find root` 沒事；
+本包的守衛寫在最後一顆 split 裡，而那個函式已經 `cd root` 了 → 照抄相對路徑會去找
+`root/root`，`find` 報「沒有此一檔案或目錄」、`wc -l` 得 0，於是守衛**永遠自稱通過**。
+已改成一律用 `$srcdir/root` 絕對路徑，離線測試（見下）也證實紅/綠方向正確。
+
+**不帶 Arch multilib 那份的 0001-HACK-meson-Disable-broken-tests.patch（本輪實測後的決定）**。
+理由不是偷懶，是量出來的：拿今天的 `main` 做 sparse 克隆後逐 hunk dry-run，11 個檔案裡
+有 **2 处對不上**——`subprojects/gst-plugins-bad/tests/validate/meson.build`（tip 新增了
+`{'path': 'h265parse/dsc_sei'}`）與 `subprojects/gst-plugins-base/tests/validate/meson.build`
+（tip 新增了 `'videoconvert/to_rgba_f16le'`／`to_rgba_f16be'`），兩處都把 hunk 的尾部上下文
+頂掉，直接套用 RC=1。也就是說本倉 gstreamer-git 那份 0001 現在是靠 `git apply -3`
+的三方合併在撐，而撐不撐得住取決於克隆裡有沒有那些前置 blob。本包不需要把這個風險
+再複製一次：(1) 那顆 patch 只關測試，而本包的 `check()` 不拿測試當門檻，它在這一側
+沒有把關價值；(2) patch 觸及的 11 檔裡，gst-editing-services／gst-libav／gst-plugins-bad／
+gst-python 那几个在本包造型根本沒建（`-D ges/libav/bad/python=disabled`）。
+⚠️ 順帶記下**給 gstreamer-git 那條線的信號**（不属於本輪改動，但這是實測）：那 2 處
+上下文漂移同樣會命中 `gstreamer-git/0001-HACK-…patch`，一旦哪天 `-3` 也撐不住，
+25 顆包會全紅在 prepare()。要修的是**重繪那顆 patch 對齊今天尖端**，不是關掉測試。
+
+版號與 epoch：不加 epoch。gstreamer-git 那輪的死教訓是「加了 epoch，所有精確等號依賴
+就必須連 epoch 一起寫」——`depends` 寫 `gstreamer=$pkgver-$pkgrel`（不含 epoch）而包
+自己版本是 `1:…` 時，pacman 精確等號永遠匹配不上、split 互相鎖死。這顆吃尖端 1.29.x
+本來就比 [lib32] 的 1.28.1 新，不需要 epoch，也就不製造那個坑。對 64 位元
+counterpart（`gstreamer`／`gst-plugins-base-libs`）刻意寫**不帶版本號**的包名：用戶機上
+現在是 `-git` 頂掉穩定版、靠 provides 解析；寫不帶版本才同時解得開「已換 -git」與
+「還在穩定版」兩種狀態，寫等號就是把其中一邊釘死。
+
+`pkgver()` 是防禦式的（同 librime-git／gstreamer-git）：目錄可能不存在——CI 那步的
+updpkgsums 會把 BUILDDIR 換成 mktemp 並在退出時刪掉，接著 `makepkg --printsrcinfo`
+仍要跑 `pkgver()`，硬 `cd` 會 fatal 退出 128。
+另有一個**只有這顆會踩**的探測坑：plan 步探尖端版號時是 blobless clone 後把一堆
+「可能的源碼目錄名」軟鏈到 clone 出來的 repo 再跑 `pkgver()`，那個清單裡有
+`${pkgname%-git}`——64 位元那顆展開正好是 `gstreamer`（對得上），本包展開是
+`lib32-gstreamer`（對不上）→ `pkgver()` 找不到目錄會退回 PKGBUILD 寫死的佔位 pkgver，
+「已在 release 裡」永不命中，等於每 3 小時白編一次。已在 PKGBUILD 用
+`_gitrepo=gstreamer` 補上（plan 的軟鏈清單含 `${_gitrepo}` 這一項）。
+
+check() 目前**照上游 multilib 的 `|| :`**（32 位元交叉建置的測試要跑 32 位元二進位，
+容器缺的是整套 32 位元執行期，不是某支測試壞了）。這與「不准用跳測試換綠燈」有衝突，
+已列入 needs-decision，沒有自行拍成硬失敗；妥協是測試照跑、失敗清單全部印成
+`::warning::`，不靜默。
+gstreamer-git 那顆專用的「還原 bwrap 權限」步驟（`if: matrix.repo_name == 'gstreamer-git'`）
+本包**沒有**跟：它是為了讓 64 位元那邊的 gdk-pixbuf/glycin 沙箱測試能跑，本包的 check
+不依賴它。
+
+## spirv-llvm-translator-git（2026-10-12；用戶裁定「那你倒是讓它使用 24 版本編去啊」拉出來的必需包）
+
+### 為什麼會出現這顆
+用戶要 mesa 用 LLVM trunk（24）編。本機 `objdump -p` 實測兩條硬證據：
+
+    /usr/lib/libgallium-26.3.0-devel.so   NEEDED libLLVM.so.23.1
+    /usr/lib/libRusticlOpenCL.so.1.0.0    NEEDED libLLVM.so.23.1
+                                        + NEEDED libLLVMSPIRVLib.so.23.1
+
+第二行就是關鍵：RustiCL（mesa 的 OpenCL 實作）**直接**依賴 SPIRV-LLVM-Translator，
+而这顆庫本身是配 LLVM 23.1 編的。換 LLVM 不換它，產物會同時拖 `libLLVM.so.24.0git`
+與 `libLLVM.so.23.1` 兩個 soname —— 裝下去是 OpenCL 靜默失效或直接崩。用戶規則禁止
+「關掉 RustiCL 換綠燈」，所以唯一出路是把 translator 一起抬到 trunk。
+
+### 為什麼是 -git 而不是抬版（查證過程，不是推測）
+    git ls-remote --tags --refs https://github.com/KhronosGroup/SPIRV-LLVM-Translator
+      → 最新只有 v23.1.2（v22.1.x 一串在前，sort -V 後末三筆是 v23.1.0/v23.1.1/v23.1.2）
+    git ls-remote --heads 同一倉
+      → 分支只到 llvm_release_230，**沒有 llvm_release_240**；HEAD 的 symref 是 main
+
+也就是上游的 tag／release 分支恆與「**已發布的最大 LLVM**」配對，而 LLVM 24 目前只有
+trunk（`cmake/Modules/LLVMVersion.cmake` 實查 MAJOR=24 MINOR=0 PATCH=0 SUFFIX=git，
+本倉 llvm-*-git 產物的 SONAME 是 `libLLVM.so.24.0git`）。所以「跟最新版本」這條路
+不存在，只能吃 `main`（那條才是配 LLVM tip 開發的分支）。
+
+### 目標機的另一個既存問題（這顆包順手治掉）
+`pacman -Qo /usr/lib/libLLVMSPIRVLib.so.23.1` 回「沒有軟體包擁有它」，
+而 `pacman -Qs spirv` 查實這臺只裝了 spirv-tools、**根本沒裝 spirv-llvm-translator**。
+=> 這臺的 RustiCL OpenCL 一直靠一顆沒主人管的歷史残留库在跑：換代時不會被移除、
+   也不會被更新，正是「CI 全綠但產物是壞的」那一類。本包進 feed 後該路徑由包擁有。
+
+### ABI 鎖（這顆包存在的另一半意義）
+`package()` 裡不寫死版本，而是從「建它時容器裡那顆 `/usr/lib/libLLVM.so` 的 SONAME」
+反推依賴：`depends+=("llvm-libs-git" "llvm-libs-abi=<soname>")`，那顆虛擬名由本倉
+`llvm-libs-git` 的 `package_llvm-libs-git()` 现场发放（`llvm-libs-abi=24.0git`）。
+
+⚠️ 為什麼不用官方那形 `libLLVM.so=23.1-64` 來钉：本輪實測 **makepkg 7.1 直接拒**——
+      `==> 錯誤： pkgver in depends 不能有 ; 斜線、- 連字號或空白`；而把 world.db 全倉
+      `%DEPENDS%` 拆開查實**沒有一筆**帶 `-64`（`bsdtar -xf world.db` 後 grep 統計 = 0），
+      那種形只出現在 `%PROVIDES%`。所以自製一個不含連字號的虛擬名，provides／depends
+      兩邊都合法，而且只在 soname 相同時成立。教訓來源是 2026-10-12 那次 GL 黑屏：
+CI 產出的 mesa 依賴只有 `llvm-libs>=8.0.0`（無上限）、而 makepkg 7.1 **不會**替 Mesa
+自動抽 soname 依賴（拆產物 .PKGINFO 查實），於是 llvm 換代後 pacman 認為依賴仍滿足、
+實物找不到 `libLLVM.so.23.1`，直接 `libGL error: failed to find suitable GL configuration`。
+
+### 四接點
+  1. `build-git-packages.yml` 矩陣：`{"key": "spirv-llvm-translator-git", …}`，排在
+     `tk-git` 之後。不帶 `kind`（帶 kind=aur 會被 `--nocheck --skipchecksums` 命中，
+     而用戶裁定「補環境、不跳測試」）。
+  2. `build-packages.yml`「拉取对应的套件仓库」的通用 in-tree `case` 清單（那串
+     `|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git)`）。不加就會被
+     通用規則「名字以 -git 結尾 → clone AUR」搶走，AUR 那顆是配穩定 LLVM 的舊配方。
+  3. 「更新校验和并回推 PKGBUILD」的 giant if：加了 `matrix.repo_name != 'spirv-llvm-translator-git'`
+     （本包無 kind 可擋，必須点名；純 git 源跑 updpkgsums 會撕檔）。
+  4. 本檔。
+
+### 與 mesa job 的順序關係（跨 workflow，不能用 needs: 串）
+`build-packages.yml` 新增一步「把容器 LLVM 換成自有 llvm-*-git 尖端（mesa 與 SPIRV
+translator 共用）」：先從 release `current-repo` 抓自有 llvm 七顆（mesa 那邊再加抓
+自有 translator），`pacman -U` 頂替 goblins 的穩定版，然後才 makepkg。兩邊都靠「抓
+上一輪已發布的產物」銜接，所以**translator 落地的第一輪 mesa 仍可能紅**——紅是正確的
+（mesa 的 soname 守門步會點名混版），下一輪兩邊就對齊了。守門步本輪同時修掉兩個既存
+bug：① 舊正則 `libLLVM\.so\.[0-9][0-9.]*` 抓 `libLLVM.so.24.0git` 會截到 `24.0` 就停
+（`g` 不在字元類裡），換代上 trunk 之後必然**假紅**；② 舊版把 64 與 32 位元產物倒進
+同一目錄混著比，現在按包名分流各比各的 soname。
+
+### lib32 那半邊不動的理由（不是回退，是各自對齊）
+Artix `lib32-llvm-libs` 實測 `Provides: None`（沒有 soname 虛擬名可以鎖），而 32 位元
+trunk LLVM 全網路沒有人產（Arch multilib 只有穩定版）。所以 lib32-mesa 繼續配
+lib32-goblins 的 23.1、依賴維持原樣；64 位元照樣上 24。這是「各自位元寬度各自對齊」，
+不是把 64 位元拉回去。

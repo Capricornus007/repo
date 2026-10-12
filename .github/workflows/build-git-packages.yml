@@ -71,6 +71,7 @@ jobs:
           {"key": "ccache-git", "repo_name": "ccache-git", "variant": "none"},
           {"key": "tcl-git", "repo_name": "tcl-git", "variant": "none"},
           {"key": "tk-git", "repo_name": "tk-git", "variant": "none"},
+          {"key": "spirv-llvm-translator-git", "repo_name": "spirv-llvm-translator-git", "variant": "none"},
           {"key": "mpv-git", "repo_name": "mpv-git", "variant": "none"},
           {"key": "oh-my-pi-git", "repo_name": "oh-my-pi-git", "variant": "none"},
           {"key": "protonvpn-cli-community-git", "repo_name": "protonvpn-cli-community-git", "variant": "none"},
@@ -214,5 +215,6 @@ jobs:
           {"key": "warp-plus-git", "repo_name": "warp-plus-git", "variant": "none"},
           {"key": "nwg-look-git", "repo_name": "nwg-look-git", "variant": "none"},
           {"key": "gstreamer-git", "repo_name": "gstreamer-git", "variant": "none"},
+          {"key": "lib32-gstreamer-git", "repo_name": "lib32-gstreamer-git", "variant": "none", "kind": "multilib"},
           {"key": "lib32-glib2", "repo_name": "lib32-glib2", "variant": "none", "kind": "multilib"}
         ]
