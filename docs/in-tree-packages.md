@@ -469,3 +469,21 @@ Tk 的自帶測試要真的 display，Arch 的 PKGBUILD 是把它整行註解掉
 本包不放過這一關，改用 `xvfb-run` 起虛擬屏，讓建出來的 `wish8.6` 真的
 `package require Tk`、開 toplevel、設 geometry、查 `TkDefaultFont` 的字型度量，
 任一項不對就紅。缺環境就補環境（`makedepends+=xorg-server-xvfb`），不是關掉這一關。
+
+## ccache-git（用戶 2026-10-12 問「那就也換去 -git？」，答：該換）
+
+**為什麼非進 feed 不可（這次是實災，不是偏好）**：world 那顆 `ccache 4.14.1-1`
+（建置日 2026-10-05）的 `DT_NEEDED` 釘死 `libhiredis.so.1.3.0`，而系統上的 hiredis
+已是 `1.4.1`（實物 `/usr/lib/libhiredis.so.1.4.0`）。實測 `ldd /usr/bin/ccache`
+→ `libhiredis.so.1.3.0 => not found`，也就是**從 10-06 起整台機器的 ccache 都是壞的**，
+mgx 的原生編譯直接死在
+`ccache: error while loading shared libraries: libhiredis.so.1.3.0`。
+倉庫端沒有人在 hiredis 換代時重建 ccache ⇒ 這類「依賴換代→二進位靜默失效」只有讓它
+每輪跟著 feed 重建才會自動補上，這正是放進本倉的意義。
+
+**版本基線**：讀該 HEAD 自己的 `CMakeLists.txt` 裡 `project(ccache VERSION x.y.z)`，
+不是只認 tag（上游常先抬版號再打 tag，只認 tag 會報舊版）。
+
+**收口**：`package()` 最後直接跑一次 `$pkgdir/usr/bin/ccache --version`，
+跑不起來就讓建置紅——「套件裝得上但二進位載不起來」不許再活到下一次編譯。
+上游現況：最新 release `v4.14.1`（2026-09-27），master 最後一筆 2026-10-10。
