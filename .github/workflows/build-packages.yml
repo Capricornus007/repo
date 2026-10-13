@@ -2643,7 +2643,7 @@ jobs:
             # 標頭也走源碼直出（用戶 2026-10-13「那讓這個也走源碼直出不就也行了？」）：
             # 不從 junlin03-aur 裝我們那顆的話，makepkg -s 會去裝 extra 的 spirv-headers
             # （釘在 tag 上），下游就又回到「translator 吃 main、標頭吃 tag」的錯位。
-            _pkgs="$_pkgs spirv-headers-git"
+            _pkgs="$_pkgs spirv-headers-git spirv-tools-git"
           fi
           _ok=0
           for _p in $_pkgs; do
