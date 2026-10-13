@@ -19,7 +19,7 @@
 # 优化版——官方安装脚本在 CPU 支持 sse4_2/popcnt/avx/avx2/bmi1/bmi2/fma 时选的
 # 也是它（见其 BUN_OPTIMIZED_X64_REQUIRED_CPU_FLAGS）。
 pkgname=qoder-cli
-pkgver=1.1.69
+pkgver=1.1.70
 pkgrel=1
 pkgdesc="Qoder Agentic CLI - agentic AI coding tool from Alibaba (international build)"
 url="https://qoder.com/cli"
@@ -58,8 +58,8 @@ source_aarch64=("qodercli-${pkgver}-linux-arm64.tar.gz::https://qoder-ide.oss-ac
 
 # 以下两行校验和取自官方 manifest.json 对应 arch 的 sha256 字段；
 # CI 的「改写 PKGBUILD」步骤升版时会同步更新（源 URL 是 ${pkgver} 模板，自动跟随）。
-sha256sums_x86_64=('5261a5c3a544251de49b6ae7d024ffc9ed4143fefdee050327e1d80a49043667')
-sha256sums_aarch64=('67e29b9117f9c1b97a98600575e94300aa80068603209c5f39a818f26a2ef919')
+sha256sums_x86_64=('0ec933b6ebaf9248be6d96fe5cef3f4ad0fa5cb06c3e001432e7c2906559541b')
+sha256sums_aarch64=('f3f792a619c4c6c98453b6a8d7d596676cc863c1748dd331c8d7b012c57377d2')
 
 package() {
   # tarball 里除主程序外只有 sites-build.json / sites-verification.json 两个
