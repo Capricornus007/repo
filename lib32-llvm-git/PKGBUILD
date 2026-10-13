@@ -136,6 +136,12 @@ prepare() {
   #   （try_compile）會拿 64 位元的連結結果判斷，後面才炸。官方那兩份是
   #   `export CFLAGS+=" -m32"` 同款做法，PKG_CONFIG 也要換成 i686 那支，
   #   否則探測會讀到 64 位元的 .pc 而把 lib32 依賴誤判成已滿足。
+  # ⚠️ `-g1`（只留最小除錯資訊）照抄官方 lib32-llvm.PKGBUILD:70-72。理由不是體積，
+  #   是**位址空間**：32 位元的編譯器自己只有 4GiB 可尋址，而 LLVM 那種動輒幾十萬行
+  #   的 C++ 翻譯單元開完整 DWARF 會把 cc1plus 撐爆（官方那行註解寫 "reduce size"，
+  #   但對 32 位元來講它同時是防 OOM 的必要條件）。
+  export CFLAGS="${CFLAGS/-g /-g1 }"
+  export CXXFLAGS="${CXXFLAGS/-g /-g1 }"
   export CFLAGS="$CFLAGS -m32"
   export CXXFLAGS="$CXXFLAGS -m32"
   export LDFLAGS="$LDFLAGS -m32"
