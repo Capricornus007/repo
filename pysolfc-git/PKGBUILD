@@ -12,7 +12,16 @@ pkgver=3.6.1.r23.g7a3d146
 #  build-packages.yml 裡 `EPOCH_PART="${CUR_EPOCH}."`，所以抬 epoch 會繞過比對、
 #  真的觸發重建。10-11 加 Tk wrapper 時核過這段。）
 # epoch=3：本包內建 Tk/fcitx5 相容性 wrapper（見 package() 尾）。
-epoch=3
+# epoch=4：那個 wrapper 的**內容**翻案了，而版本字串沒動 ⇒ 不抬 epoch 就永遠不會重建。
+# 出貨的那版在 `XMODIFIERS=@im=fcitx` 時 `env -u XMODIFIERS` 起程式，理由是「Tk 只認 XIM，
+# 而 fcitx5 的 XIM 對 Tk 一個鍵都不回傳」——**那個前提是錯的**（2026-10-12 讀源碼＋受控重測：
+# 同版本 fcitx5 5.1.23.r5 ＋ rime ＋ Tk 8.6.16 在 Xvfb 下，wish／python3-tkinter／pysol 三者
+# 都有完整 XIM_CREATE_IC → XIM_SET_IC_FOCUS → XIM_FORWARD_EVENT，中文正常入框；真會吞字母的是
+# LC_CTYPE 不是 UTF-8，實測 LANG=C 時 Entry 只剩一個數字）。剝掉 XMODIFIERS 正是
+# 「pysolfc 打不了中文」的成因，所以现在這顆包是用包體把用戶弄壞的那一個。
+# ⚠️ 本包 pkgver() 會自己算版本，makepkg 因此把 pkgrel 重置為 1 ⇒ 抬 pkgrel 無效，
+#    只有 epoch 是這顆的換代開關（CI 的 asset_prefix 帶 epoch，會繞過「已在 release 里」比對）。
+epoch=4
 pkgrel=1
 pkgdesc="PySol (Fan Club edition) is an exciting collection of more than 1000 solitaire games (git version)"
 arch=('any')
