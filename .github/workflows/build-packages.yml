@@ -555,44 +555,6 @@ jobs:
                 curl -sfL "$base/$f" -o "pkg_dir/$f"
               done
               chmod +x pkg_dir/find-deps.py ;;
-            crave)
-              # 連字號陷阱見 plan 的 crave) 段：sed 的是原料 _pkgver，不是公式 pkgver。
-              # NEW_CRAVE_TAG 空＝上游沒出新版（同版重建路徑，例如上一輪回推失敗但
-              # release 缺檔），這時一個字都不能改：硬 sed 會寫出 `_pkgver=`（空）。
-              if [ -n "${NEW_CRAVE_TAG:-}" ]; then
-                case "$NEW_CRAVE_TAG" in
-                  ""|*[!0-9A-Za-z._-]*) echo "::error::$PKG 收到不合法的原始 tag（=$NEW_CRAVE_TAG）"; exit 1 ;;
-                esac
-                sed -i "s/^_pkgver=.*/_pkgver=$NEW_CRAVE_TAG/" PKGBUILD
-                # 升版卻拿不到新校驗和＝裝機即 integrity 紅，當場判死（這裡沒有「拿不到」
-                # 的正當理由：sha 是我們自己下載算的，不是端點偶爾缺欄位）
-                printf '%s' "${NEW_SHA_X86:-}" | grep -Eq '^[0-9a-fA-F]{64}$' \
-                  || { echo "::error::$PKG 要升版但 plan 沒給 x86_64 sha256（=$NEW_SHA_X86）"; exit 1; }
-                sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('$NEW_SHA_X86')/" PKGBUILD
-                if printf '%s' "${NEW_SHA_ARM:-}" | grep -Eq '^[0-9a-fA-F]{64}$'; then
-                  sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('$NEW_SHA_ARM')/" PKGBUILD
-                else
-                  echo "::warning::$PKG 沒有 aarch64 校驗和，維持原值（舊 tag 的 sha 配新 tag 的檔，aarch64 使用者會 integrity 紅，需人工補）"
-                fi
-              else
-                echo "上游 tag 未變（同版重建），不動 _pkgver 與校驗和"
-              fi
-              echo "==== $PKG 改寫結果 ===="
-              grep -nE '^(_pkgver|pkgver|pkgrel|sha256sums_x86_64|sha256sums_aarch64)=' PKGBUILD
-              # 自證三件事全中才算改對地方（照 jbr21／jbr25 的寫法）
-              _cpv=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "${pkgver:-}"')
-              _ctv=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "${_pkgver:-}"')
-              [ "$_cpv" = "$NEW_PKGVER" ] \
-                || { echo "::error::$PKG 改寫後 pkgver=$_cpv 與 plan 目標 $NEW_PKGVER 不符"; exit 1; }
-              [ "$(printf '%s' "$_ctv" | sed 's/-/./')" = "$NEW_PKGVER" ] \
-                || { echo "::error::$PKG 的 pkgver($_cpv) 不是 _pkgver($_ctv) 的點號版"; exit 1; }
-              _csrc=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "${source_x86_64[0]:-}"' | sed -E 's/^[^:]*:://')
-              case "$_csrc" in
-                *"https://github.com/accupara/crave/releases/download/$_ctv/crave-$_ctv-linux-amd64.bin")
-                  echo "source URL 一致：$_csrc" ;;
-                *) echo "::error::$PKG 的 source URL 沒跟著換：$_csrc"; exit 1 ;;
-              esac
-              ;;
             codex-desktop-git)
               # 打包文件维护在本仓库 codex-desktop-git/ 目录，不再取 AUR：
               # AUR 上游是 zadkiel 的仓，makedepends 没有 npm，而上游
@@ -2270,6 +2232,44 @@ jobs:
               case "${source[0]:-}" in
                 *"${NEW_JBR_VER}-linux-x64-${NEW_JBR_BUILD}.tar.gz") echo "source URL 一致：${source[0]}" ;;
                 *) echo "::error::$PKG 的 source URL 沒跟著換：${source[0]:-（空）}"; exit 1 ;;
+              esac
+              ;;
+            crave)
+              # 連字號陷阱見 plan 的 crave) 段：sed 的是原料 _pkgver，不是公式 pkgver。
+              # NEW_CRAVE_TAG 空＝上游沒出新版（同版重建路徑，例如上一輪回推失敗但
+              # release 缺檔），這時一個字都不能改：硬 sed 會寫出 `_pkgver=`（空）。
+              if [ -n "${NEW_CRAVE_TAG:-}" ]; then
+                case "$NEW_CRAVE_TAG" in
+                  ""|*[!0-9A-Za-z._-]*) echo "::error::$PKG 收到不合法的原始 tag（=$NEW_CRAVE_TAG）"; exit 1 ;;
+                esac
+                sed -i "s/^_pkgver=.*/_pkgver=$NEW_CRAVE_TAG/" PKGBUILD
+                # 升版卻拿不到新校驗和＝裝機即 integrity 紅，當場判死（這裡沒有「拿不到」
+                # 的正當理由：sha 是我們自己下載算的，不是端點偶爾缺欄位）
+                printf '%s' "${NEW_SHA_X86:-}" | grep -Eq '^[0-9a-fA-F]{64}$' \
+                  || { echo "::error::$PKG 要升版但 plan 沒給 x86_64 sha256（=$NEW_SHA_X86）"; exit 1; }
+                sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('$NEW_SHA_X86')/" PKGBUILD
+                if printf '%s' "${NEW_SHA_ARM:-}" | grep -Eq '^[0-9a-fA-F]{64}$'; then
+                  sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('$NEW_SHA_ARM')/" PKGBUILD
+                else
+                  echo "::warning::$PKG 沒有 aarch64 校驗和，維持原值（舊 tag 的 sha 配新 tag 的檔，aarch64 使用者會 integrity 紅，需人工補）"
+                fi
+              else
+                echo "上游 tag 未變（同版重建），不動 _pkgver 與校驗和"
+              fi
+              echo "==== $PKG 改寫結果 ===="
+              grep -nE '^(_pkgver|pkgver|pkgrel|sha256sums_x86_64|sha256sums_aarch64)=' PKGBUILD
+              # 自證三件事全中才算改對地方（照 jbr21／jbr25 的寫法）
+              _cpv=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "${pkgver:-}"')
+              _ctv=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "${_pkgver:-}"')
+              [ "$_cpv" = "$NEW_PKGVER" ] \
+                || { echo "::error::$PKG 改寫後 pkgver=$_cpv 與 plan 目標 $NEW_PKGVER 不符"; exit 1; }
+              [ "$(printf '%s' "$_ctv" | sed 's/-/./')" = "$NEW_PKGVER" ] \
+                || { echo "::error::$PKG 的 pkgver($_cpv) 不是 _pkgver($_ctv) 的點號版"; exit 1; }
+              _csrc=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "${source_x86_64[0]:-}"' | sed -E 's/^[^:]*:://')
+              case "$_csrc" in
+                *"https://github.com/accupara/crave/releases/download/$_ctv/crave-$_ctv-linux-amd64.bin")
+                  echo "source URL 一致：$_csrc" ;;
+                *) echo "::error::$PKG 的 source URL 沒跟著換：$_csrc"; exit 1 ;;
               esac
               ;;
             codex-desktop-git)
