@@ -187,10 +187,8 @@ jobs:
 
           if [ "${{ matrix.kind }}" = 'multilib' ] \
              || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ]; then
-            # spirv-llvm-translator-git 也要 [multilib]：它現在多切一顆
-            # lib32-spirv-llvm-translator-git，makedepends 點名 lib32-spirv-tools／
-            # lib32-gcc-libs，而容器的 [multilib] 預設是註解掉的
-            # （run #471 實測 `error: target not found: lib32-spirv-tools`）。
+            # spirv-llvm-translator-git 現在多切一顆 lib32-spirv-llvm-translator-git，
+            # 而容器預設不啟用 [multilib]（run #471 實測 target not found: lib32-spirv-tools）。
             # lib32-* 需要 [multilib] 倉：容器預設只有 core/extra 且 [multilib] 是註解掉的。
             # 與 kind:tkg 那段同一手法（mesa-tkg 早就在吃 lib32-* 依賴），但這裡不跟
             # tkg 共用分支：tkg 還要做 LLVM 對齊與 customization.cfg，混在一起會把
@@ -248,6 +246,21 @@ jobs:
             fi
           fi
 
+      - name: 初始化容器源與建置環境（tkg／artix／makepkg，接上一歩）
+        run: |
+          set -euo pipefail
+          # ⚠️ 這一段是從「初始化 Arch Linux 環境」拆出來的，不是新功能。理由：GitHub 對
+          #   **含 `${{ }}` 表達式的 step** 有 **21000 位元組**的硬上限（中文 1 字＝3 bytes、
+          #   shell 註解也計入），踩過就整個 workflow 解析失敗、**一個 job 都不起**——實測
+          #   f5aa969 那輪三條 workflow 全 0 秒紅，而 PyYAML 與 actionlint **都查不出來**，
+          #   只有 GitHub 會講：`gh workflow run` 回
+          #   `Exceeded max expression length 21000 (Line: 49, Col: 14)`。
+          #   不含表達式的 step 不受這條限制（同一 job 裡「检测目标版本」那步 52249 bytes
+          #   照跑），所以拆步是正解、不是繞路。本地量測：
+          #   python3 -c 見 scripts/workflow-step-budget.py（改動前後必跑）。
+          #   跨 step 只共享**檔案系統**（/etc/pacman.conf、/etc/makepkg.conf、builder 使用者、
+          #   git 全域設定都留得住），**不共享 shell 變數**——切割點兩側已逐個核對：前半段的
+          #   _init_pkgs／_pi／cache_file 不出後半段，後半段的 _r／synced／_try 都在自己裡面。
           if [ "${{ matrix.kind }}" = 'tkg' ]; then
             # mesa-tkg 的 customization.cfg 是 _lib32=true，需要 multilib 的 lib32-* 依賴。
             # 容器只有 core/extra、預設 [multilib] 是註解掉的，補一段未註解的進去再同步。

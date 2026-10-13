@@ -2,7 +2,7 @@
 
 CI 的通用規則是「名字以 `-git` 結尾 → clone AUR，否則 clone `github.com/<owner>/<repo_name>.git`」。
 本倉的目錄版（in-tree）包會被那條規則搶走，所以**必須**在那個 step 的 `case` 名稱清單裡先攔掉。
-逐包理由原本寫在 workflow 內，但那個 step 有 21000 字元的表達式上限（**註解也計入**），故搬到這裡。
+逐包理由原本寫在 workflow 內，但含 `${{ }}` 的 step 有 **21000 位元組**的上限（shell 註解也計入，中文 1 字算 3 bytes），故搬到這裡。精確語意與踩雷實錄見文末「21000 上限的精確語意」，本地守門＝`scripts/workflow-step-budget.py`。
 加新 in-tree 包時：清單加一行、說明寫進本檔，不要寫回 workflow。
 
 ---
@@ -888,3 +888,45 @@ doxygen 是 `use_libclang=ON` 建的（Arch 同款），執行期載入 libclang
 3. 掛 `junlin03-aur` 源的清單加 `doxygen-git`，並把它加進「把容器 LLVM 換成自有 llvm-*-git」
    那步的 `if`——**這顆必須建在自有 clang 上**，否則又發出一顆鏈 23.1 的 doxygen。
 4. 本檔。
+
+---
+
+## 21000 上限的**精確語意**（2026-10-13 用 GitHub 的錯誤訊息反推出來，不再是猜）
+
+本檔開頭與 build-kernels.yml:67 都寫過「那個 step 有 21000 字元的表達式上限、註解也
+計入」，但**語意一直不準**，結果今天照舊踩雷。實測定義是：
+
+* 單位是 **位元組不是字元**：繁中 1 字＝3 bytes，所以中文註解吃額度是英文的三倍。
+* 適用對象是**任何含 `${{ }}` 的字串值**（`run:` 區塊、`if:`、`container.image` 都算），
+  不限某一條 giant if。
+* **不含表達式的字串不受這條限制**——同一 job 裡「检测目标版本并决定是否需要
+  构建」那步 52249 bytes 照跑，因為它一個 `${{ }}` 都沒有。
+* 踩過的後果**不是該 job 紅，是整個 workflow 解析失敗、一個 job 都不起**，而且
+  REST 查不到任何線索：run 的 `name` 直接顯示成檔案路徑、`jobs=0`、annotations 404、
+  logs 404。今天（f5aa969）與 2026-10-09（e24262b）兩次都是這樣，當時都誤判成
+  「heredoc 縮排炸掉」與「不明 transient」——**PyYAML 與 actionlint 全綠也不代表
+  GitHub 收得到**。
+* 唯一直接把話說清楚的管道是讓 GitHub 自己 parse：
+  `gh workflow run <檔名> --ref <branch>` 無效時回
+  `HTTP 422: failed to parse workflow: ... (Line: 49, Col: 14): Exceeded max
+  expression length 21000`。這招**不消耗建置額度**（解析階段就擋掉），所以改
+  workflow 後拿它當驗收入口最省。
+
+守門工具：`scripts/workflow-step-budget.py`（本檔同輪新增）。它把三個語意都實作
+進去了，改任何 workflow 前後各跑一次即可；對 f5aa969 那個壞版實測會印
+`RED ... 模板字串 21147 bytes（上限 21000）`、對修好版回 exit 0。
+
+修法不是「把註解刪一刪」——那樣只是把同一顆雷往後挪。今天是把「初始化 Arch Linux
+环境」那步（21147 bytes）**從 tkg 區塊前拆成兩步**：拆後 11373／10796，兩邊都留
+一倍以上餘裕。拆步安全的兩個前提已逐個核對：跨 step 只共享**檔案系統**
+（/etc/pacman.conf、/etc/makepkg.conf、builder 使用者、git 全域設定都留得住），
+**不共享 shell 變數**——前半段的 `_init_pkgs`／`_pi`／`cache_file` 不出現在後半段，
+後半段的 `_r`／`synced`／`_try` 都在自己裡面定義。
+
+## spirv-llvm-translator-git 也要 [multilib]（從 workflow 搬進本檔）
+
+它現在多切一顆 `lib32-spirv-llvm-translator-git`，makedepends 點名
+`lib32-spirv-tools`／`lib32-gcc-libs`，而 Artix/Arch 容器的 `[multilib]` 預設是
+**註解掉的**，所以 build-packages.yml 那條 `if` 除了 `matrix.kind = multilib` 之外，
+還得把包名點名進去（run #471 實測 `error: target not found: lib32-spirv-tools`）。
+不跟 `kind:tkg` 共用分支的理由與 lib32 那半邊不動的取捨，見上面「lib32-llvm-git」那節。
