@@ -1,0 +1,134 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 本倉目錄版 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md，
+# **不要寫回 workflow** —— 那個 step 有 21000 字元表達式上限且註解也計入）。
+#
+# 為什麼存在（用戶 2026-10-14 裁定：第 1 條走 A「補環境、不跳測試」）：
+#   spirv-llvm-translator-git 的 check() 有 4 條 lit 紅（DebugInfo-GV-with-DIE、
+#   DebugInfo-GV-with-SMD-and-DIE、NonSemantic/Shader200/DebugTypeDef、
+#   NonSemantic/Shader200/FortranComplex）。查實根因**不在 translator**：
+#     · translator 尖端 877ae7ab（PR #4081，2026-10-13）才在這些測試的 RUN 裡加了
+#       `spirv-val` 這一步；我方 pin 已在尖端。四條的前段 llvm-as／llvm-spirv／
+#       FileCheck 全過，只死在 spirv-val。
+#     · 三個 validator 誤報（DebugGlobalVariable 的 Variable 型別）與一個
+#       spirv-val 自身 std::out_of_range abort，都是 SPIRV-Tools 的 bug，上游已修：
+#       PR #6946 = 2a7f2309a662a70dcd46a3e30ec013b300e7fab8、PR #6943 =
+#       47ed79f592149b435bac64df71da37a5d9c4e31a（皆 2026-10-11）。
+#     · 我方吃的 distro 那顆是 `1:1.4.363.0`＝tag vulkan-sdk-1.4.363.0(ef96ed76，
+#       2026-09-10)，落後 main 54 筆，**兩個修復不在任何已發布 tag 裡**。上游 CI
+#       不紅是因為它每天從 main 自建 SPIRV-Tools。
+#   ⇒ 正解是把這顆檢查工具也換成源碼直出，而不是把 4 條測試排掉。
+#
+# ⚠️ 換代風險（裝機前必查，別讓它在 yay -Syu 裡靜默發生）：本包提供
+#   `spirv-tools`，而 glslang → libplacebo → ffmpeg/mpv/librewolf/opencv 那條鏈
+#   依賴它。執行期鏈的是 **soname**（libSPIRV-Tools*.so，無版本後綴），所以
+#   trunk 只要不改 soname 就不會斷鏈；真正會變的是 **行為**（validator 變嚴／變鬆），
+#   而那只影響建置期。裝之前先 `ldd` 點名 glslang 那批，裝完跑一次 vulkaninfo／
+#   一個 mpv 片段當 smoke test。
+#
+# ⚠️ 版本：官方是 `1:1.4.363.0-1`（**epoch 1**），本檔必須同樣帶 epoch=1，否則
+#   vercmp 判我們比較舊 → 這顆永遠裝不上去（同 spirv-headers-git 的教訓）。
+#   pkgver 形如 `1.4.363.0.r<N>.g<sha>`：基號取 HEAD 可達的最新 `vulkan-sdk-*` tag。
+
+_pkgbase=spirv-tools
+pkgbase=spirv-tools-git
+pkgname=(spirv-tools-git)
+pkgver=1.4.363.0.r0.g00000000000
+pkgrel=1
+epoch=1
+pkgdesc='API and commands for processing SPIR-V modules (git)'
+arch=('x86_64')
+url='https://github.com/KhronosGroup/SPIRV-Tools'
+license=('Apache-2.0')
+depends=('glibc' 'gcc-libs' 'spirv-headers' 'python')
+makedepends=('cmake' 'git' 'python')
+checkdepends=('python' 'spirv-headers')
+groups=('vulkan-devel')
+provides=("spirv-tools=${pkgver%%.r*}" 'spirv-tools-libs')
+conflicts=('spirv-tools' 'spirv-tools-libs')
+replaces=('spirv-tools' 'spirv-tools-libs')
+# ⚠️ 前綴必須寫成 `spirv-tools::`（＝${pkgname%-git}）：CI 的通用版號探測把源克隆成
+#   那個小寫目錄名再跑 pkgver()，前綴留 `SPIRV-Tools` 會 cd 不到、探測 skip → 恆紅
+#   （adguardhome-git 就是踩這個才加了專屬 case；xorg-xwayland-git 用同一招省掉專屬 case）。
+source=("spirv-tools::git+https://github.com/KhronosGroup/SPIRV-Tools#branch=main")
+b2sums=('SKIP')
+
+pkgver() {
+  cd $_pkgbase
+  local raw base count
+  raw=$(git describe --tags --match 'vulkan-sdk-*' HEAD 2>/dev/null)
+  if [ -n "$raw" ]; then
+    count=${raw##*-}
+    if [ "$count" = "$raw" ]; then
+      count=0; base=$raw
+    else
+      raw=${raw%-*}; count=${raw##*-}; base=${raw%-*}
+    fi
+    base=${base#vulkan-sdk-}
+  else
+    base=0; count=$(git rev-list --count HEAD)
+  fi
+  printf '%s.r%s.g%s\n' "$base" "$count" "$(git rev-parse --short=11 HEAD)"
+}
+
+build() {
+  cd $_pkgbase
+  # 與官方同組參數。⚠️ `--install-py-spirv` 不能開：它會把 python 綁定裝進
+  # /usr/lib/python*/site-packages，那是 distro `python-spirv-tools` 的地盤，
+  # 兩包互指會撞檔（本倉「同一檔案被兩個包聲有」直接判紅，見 gstreamer 同款教訓）。
+  cmake -S . -B build -G Ninja \
+    -D CMAKE_BUILD_TYPE=Release \
+    -D CMAKE_INSTALL_PREFIX=/usr \
+    -D SPIRV-Headers_SOURCE_DIR=/usr \
+    -D SPIRV_TOOLS_BUILD_STATIC=OFF \
+    -D SPIRV_TOOLS_INSTALL_SDK=ON \
+    -D SPIRV_TOOLS_BUILD_EXECUTABLES=ON \
+    -D Python_SITELIB=/dev/null
+  cmake --build build
+}
+
+check() {
+  cd $_pkgbase
+  # 上游的測試是 gtest（`test_*` 目標）＋ spirv-val 的自我測試。跑完整 ctest：
+  # 這顆正是 translator 那 4 條紅的「檢查工具」本身，測試紅就等于我們發出去一個
+  # 會誤報的 validator，必須擋住，不准 --nocheck 繞（用戶裁定）。
+  local rc=0
+  ctest --test-dir build --output-on-failure -j2 || rc=$?
+  # 自證：spirv-val 要真的存在且能跑，否則 translator 那條鏈會靜默退回「找不到
+  # spirv-val 就把 RUN 變成空操作」的 lit.cfg 分支（實查 test/lit.cfg.py：偵測不到
+  # 就 ToolSubst('spirv-val', ':')），那種綠是假綠。
+  if [ ! -x build/tools/spirv-val/spirv-val ]; then
+    echo "ERROR: 產物裡沒有可執行的 spirv-val（translator 的 4 條 lit 會靜默不驗）" >&2
+    return 1
+  fi
+  ./build/tools/spirv-val/spirv-val --version >&2 || {
+    echo "ERROR: spirv-val 跑不起來" >&2; return 1; }
+  return $rc
+}
+
+package_spirv-tools-git() {
+  cd $_pkgbase
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+  # 「該進產物的必須進產物」：glslang／mesa 吃的就是這批 lib 與 spirv-val／spirv-opt，
+  # 少任何一個都會讓依賴方在**執行期**才炸，所以這裡逐檔點名、缺檔直接紅。
+  local _f
+  for _f in usr/bin/spirv-val usr/bin/spirv-opt usr/bin/spirv-dis usr/bin/spirv-link \
+            usr/bin/spirv-lint usr/bin/spirv-reduce usr/bin/spirv-diff \
+            usr/lib/libSPIRV-Tools.so usr/lib/libSPIRV-Tools-shared.so \
+            usr/lib/libSPIRV-Tools-opt.so usr/lib/libSPIRV-Tools-link.so \
+            usr/lib/libSPIRV-Tools-reduce.so usr/lib/libSPIRV-Tools-lint.so \
+            usr/lib/libSPIRV-Tools-diff.so \
+            usr/include/spirv-tools/libspirv.h usr/include/spirv-tools/optimizer.hpp; do
+    [ -e "$pkgdir/$_f" ] || { echo "ERROR: $pkgname 少了 /$_f（依賴方會執行期才炸）" >&2; exit 1; }
+  done
+  # 不能把 python 綁定或建置路徑帶出去
+  if grep -rl "$startdir" "$pkgdir/usr" >/dev/null 2>&1; then
+    echo "ERROR: 產物裡出現建置路徑 \$startdir" >&2; exit 1
+  fi
+  if [ -d "$pkgdir/usr/lib/python" ]; then
+    echo "ERROR: 不該裝 python 綁定（會撞 python-spirv-tools）" >&2; exit 1
+  fi
+  echo ">> $pkgname: 工具與函式庫齊備（$(find "$pkgdir/usr/bin" -type f | wc -l) 支 bin／$(find "$pkgdir/usr/lib" -maxdepth 1 -name 'libSPIRV*' | wc -l) 顆 lib）"
+}
+
+# vim:set ts=2 sw=2 et:

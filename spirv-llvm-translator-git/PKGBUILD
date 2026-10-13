@@ -202,7 +202,11 @@ package_spirv-llvm-translator-git() {
   provides=('spirv-llvm-translator' 'libLLVMSPIRVLib.so')
   conflicts=('spirv-llvm-translator')
   replaces=('spirv-llvm-translator')
-  depends=(glibc libstdc++ spirv-tools llvm-libs)
+  # ⚠️ 這裡點名 `spirv-tools-git`（不寫 `spirv-tools`）：check() 那 4 條 lit 紅的根因就是
+  #   distro 那顆 validator 停在 1.4.363.0(2026-09-10)，而修復只在 main（SPIRV-Tools
+  #   2a7f2309 #6946／47ed79f5 #6943）。寫死我方那顆才是「補環境、不跳測試」的落地；
+  #   寫 `spirv-tools` 會被 distro 的同名包 satisfy，測試就永遠還在那 4 條紅。
+  depends=(glibc libstdc++ spirv-tools-git llvm-libs)
   # ── 把 LLVM ABI 鎖進依賴（這包存在的意義一半在這裡）
   # 用的虛擬名是本倉 llvm-libs-git 發的 `llvm-libs-abi=<soname>`。
   # ⚠️ 不能直接用官方那形 `libLLVM.so=23.1-64` 來钉：實測 makepkg 7.1 **拒收**

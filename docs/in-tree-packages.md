@@ -1027,3 +1027,21 @@ pyte 亂玩 24 seed（`m/M/n/N/空白/方向鍵`）與加「移牌中途改尺�
 
 保留 AUR 那份的結構（`_name`、`pkgver()` 的 `cut -c2-48`、`epoch=1`、`conflicts/replaces`），
 只加 `prepare()`，且**套不上就紅**（上游若自己修掉這兩處，要人來核對、不靜默退化）。
+
+## spirv-tools-git（2026-10-14；用戶裁定第 1 條走 A「補環境、不跳測試」）
+`spirv-llvm-translator-git` 的 check() 有 4 條 lit 紅，根因不在 translator：上游 877ae7ab
+（PR #4081，10-13）才在這些測試的 RUN 裡加了 `spirv-val`，而 distro 那顆 SPIRV-Tools 停在
+tag `vulkan-sdk-1.4.363.0`(ef96ed76，09-10)；三個 validator 誤報與一個 spirv-val 自身
+`std::out_of_range` abort 都已在上游 main 修掉（PR #6946=`2a7f2309`、PR #6943=`47ed79f5`，
+10-11），**但沒有任何已發布 tag 含這些修復**。上游 CI 綠是因為它每天從 main 自建 SPIRV-Tools。
+⇒ 正解＝這顆也走源碼直出，並讓 translator 的 depends 點名 `spirv-tools-git`（寫 `spirv-tools`
+會被 distro 同名包 satisfy，等於沒補環境）。
+- 接點：矩陣 `{"key":"spirv-tools-git","variant":"none"}`；`build-packages.yml` 的 in-tree
+  攔截分支；回推校驗和 giant if 加 `!= 'spirv-tools-git'`。
+- **不需要專屬 TARGET_PKGVER case**：`source` 前綴寫成 `spirv-tools::`（＝`${pkgname%-git}`），
+  通用探測克隆的目錄名與 `pkgver()` 的 `cd` 目標一致（xorg-xwayland-git 同款做法）。
+- epoch=1 與官方同基號；`provides=('spirv-tools' 'spirv-tools-libs')`＋conflicts/replaces 同名。
+- ⚠️ 裝機影響：`pactree -r spirv-tools` 實測依賴鏈是 glslang → libplacebo →
+  ffmpeg-full-git → mpv／librewolf／opencv／gst-libav-git。執行期鏈的是**無版本後綴**的
+  `libSPIRV-Tools*.so`，trunk 不改 soname 就不斷鏈；換代改變的是 validator 行為（影響建置期）。
+  裝完的 smoke test：`vulkaninfo` 之類＋跑一段 mpv。
