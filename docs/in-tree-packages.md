@@ -1001,3 +1001,29 @@ f5aa969 那份印 `RED ... 模板字串 21147 bytes（上限 21000）`、`${{ }}
 上游自測 **20/20 通過**（`JiebaPluginIntegrationTest` 依官方同款排除——它斷言的是上游自帶
 詞典的輸出，我們改用系統 `cppjieba` 詞典）、144 個檔 11 MB、
 `provides=(opencc=1.4.2, libopencc.so)`、`conflicts/replaces=(opencc)`。
+
+## tty-solitaire-git（2026-10-13；用戶回報「同一張牌留在兩個位置」）
+
+原本這顆是 `kind: aur`（AUR 上 fredbezies 維護的 `tty-solitaire-git`）。轉 in-tree 的唯一理由是
+**AUR-kind 沒辦法帶我方補丁**，而用戶看到的現象（左上角 stock 那格壓著一張正面 2♣，
+同一張 2♣ 同時是第 4 欄那條 `K♥ Q♠ J♦ 10♣ 9♥ 8♣ 7♥ 6♣ 5♦ 4♠ 3♦ 2♣` 合法遞減串的底牌）
+需要動到繪圖路徑才能修。
+
+補丁 `ghost-card-repaint.patch`（43 行、2 檔）內容：
+1. `gui.c:125` 的 `erase_card()` 少包 `COLOR_PAIR()`：`wbkgd(win, WHITE_ON_GREEN)` 而
+   `gui.h:14` 的 `WHITE_ON_GREEN` 只是數字 6 → 背景被設成 pair 0（終端預設色）而不是綠桌布。
+   獨立小程序實測兩種寫法發出的終端序列：`wbkgd(w,6)` → `ESC[39;49m`；
+   `wbkgd(w,COLOR_PAIR(6))` → `ESC[37m ESC[42m`。
+2. `keyboard.c` 的「自動送上基座」迴圈把 `destination` 當迴圈變數**無條件覆寫**：四格基座
+   都不接受時它仍停在 `foundation[3]`，而後面只重畫 `*origin` 與 `*destination` →
+   **真正動過的格子沒人重畫**，這才是殘影最可能的來源。改成只用區域變數，且只在真的
+   有牌進去時才重畫那一疊。
+
+⚠️ **尚未重現用戶現象**，所以這是「修掉兩處可證明的缺陷」，不是「已驗證治好」：
+pyte 亂玩 24 seed（`m/M/n/N/空白/方向鍵`）與加「移牌中途改尺寸」8 seed 都是零觸發；
+而第 1 點的 A/B（抽乾牌堆 30 次後數上排格子的背景）兩版**輸出相同**（green=0/default=5），
+理由是那條路上 `erase_stack` 緊接著就有 `draw_stack`，錯色在同一次 refresh 內被蓋掉——
+也就是說第 1 點是**潛在**缺陷、不是可見成因。第 2 點仍是用戶症狀最合理的解釋。
+
+保留 AUR 那份的結構（`_name`、`pkgver()` 的 `cut -c2-48`、`epoch=1`、`conflicts/replaces`），
+只加 `prepare()`，且**套不上就紅**（上游若自己修掉這兩處，要人來核對、不靜默退化）。

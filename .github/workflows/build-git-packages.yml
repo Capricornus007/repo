@@ -181,7 +181,7 @@ jobs:
           {"key": "starship-git", "repo_name": "starship-git", "variant": "none", "kind": "aur"},
           {"key": "sutils-git", "repo_name": "sutils-git", "variant": "none", "kind": "aur"},
           {"key": "svt-jpeg-xs-git", "repo_name": "svt-jpeg-xs-git", "variant": "none", "kind": "aur"},
-          {"key": "tty-solitaire-git", "repo_name": "tty-solitaire-git", "variant": "none", "kind": "aur"},
+          {"key": "tty-solitaire-git", "repo_name": "tty-solitaire-git", "variant": "none"},
           {"key": "uchardet-git", "repo_name": "uchardet-git", "variant": "none", "kind": "aur"},
           {"key": "warp-plus", "repo_name": "warp-plus", "variant": "none", "kind": "aur"},
           {"key": "xdg-desktop-portal-gtk-git", "repo_name": "xdg-desktop-portal-gtk-git", "variant": "none", "kind": "aur"},
