@@ -250,8 +250,8 @@ jobs:
         run: |
           set -euo pipefail
           # ⚠️ 這一段是從「初始化 Arch Linux 環境」拆出來的，不是新功能。理由：GitHub 對
-          #   **含 `${{ }}` 表達式的 step** 有 **21000 位元組**的硬上限（中文 1 字＝3 bytes、
-          #   shell 註解也計入），踩過就整個 workflow 解析失敗、**一個 job 都不起**——實測
+          #   **字串值帶 GitHub 表達式（dollar-brace 記法）的 step** 有 **21000 位元組**
+          #   的硬上限（中文 1 字＝3 bytes、shell 註解也計入），踩過就整個 workflow
           #   f5aa969 那輪三條 workflow 全 0 秒紅，而 PyYAML 與 actionlint **都查不出來**，
           #   只有 GitHub 會講：`gh workflow run` 回
           #   `Exceeded max expression length 21000 (Line: 49, Col: 14)`。

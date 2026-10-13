@@ -17,6 +17,7 @@
     照跑），所以只對模板字串設閘，別亂報。
 """
 import os
+import re
 import subprocess
 import sys
 
@@ -51,6 +52,23 @@ def workflow_texts(path):
 def check(path):
     bad = []
     for s in workflow_texts(path):
+        # 先驗表達式本體：`${{ }}` 這種空表達式在 **shell 註解裡一樣會被 GitHub 解析**
+        # （2026-10-13 實測：我在拆步那段註解寫了「含 `${{ }}` 表達式的 step」，
+        #  結果 dispatch 回 `(Line: 250, Col: 14): An expression was expected`，
+        #  三條 workflow 又一次一個 job 都不起。PyYAML／actionlint 全綠。）
+        for m in re.finditer(r'\$\{\{(.*?)\}\}', s, re.S):
+            if not m.group(1).strip():
+                print(f'RED {path}  有空表達式 ${{{{}}}}（註解裡也算）：…{s[max(0, m.start()-40):m.start()+20]!r}…')
+                bad.append((0, 'RED ', 'empty-expression'))
+        # 未閉合：以「每個 `${{` 往後都找得到一個 `}}`」為準。不能直接比對
+        # `${{` 與 `}}` 的總數——shell／awk 裡本來就有一堆單獨的 `}}`（實測這樣會誤報）。
+        opens = [m.start() for m in re.finditer(r'\$\{\{', s)]
+        close_re = re.compile(r'\}\}')
+        for pos in opens:
+            if not close_re.search(s, pos):
+                print(f'RED {path}  表達式沒閉合（offset {pos}）：…{s[pos:pos+40]!r}…')
+                bad.append((0, 'RED ', 'unbalanced'))
+                break
         if '${{' not in s:
             continue
         n = len(s.encode('utf-8'))
@@ -59,6 +77,8 @@ def check(path):
         elif n >= WARN:
             bad.append((n, 'WARN', s[:70].replace('\n', '\\n')))
     for n, level, head in sorted(bad, reverse=True):
+        if level == 'RED ' and n == 0:
+            continue          # 空／未閉合已在上面印過
         print(f'{level} {path}  模板字串 {n} bytes（上限 {LIMIT}）  開頭: {head}')
     return any(level == 'RED ' for _, level, _ in bad)
 

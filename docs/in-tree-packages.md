@@ -901,6 +901,10 @@ doxygen 是 `use_libclang=ON` 建的（Arch 同款），執行期載入 libclang
   不限某一條 giant if。
 * **不含表達式的字串不受這條限制**——同一 job 裡「检测目标版本并决定是否需要
   构建」那步 52249 bytes 照跑，因為它一個 `${{ }}` 都沒有。
+* 反過來也成立：**shell 註解裡出現 `${{ }}` 這種空表達式，GitHub 照樣解析並判整條
+  workflow 无效**（實測就在本輪：拆步那段註解寫了「含 \`\${{ }}\` 表達式的 step」，
+  dispatch 回 `(Line: 250, Col: 14): An expression was expected`）。要引用這個記法就寫
+  「dollar-brace」四個字，別把記法本身放進 run 區塊。
 * 踩過的後果**不是該 job 紅，是整個 workflow 解析失敗、一個 job 都不起**，而且
   REST 查不到任何線索：run 的 `name` 直接顯示成檔案路徑、`jobs=0`、annotations 404、
   logs 404。今天（f5aa969）與 2026-10-09（e24262b）兩次都是這樣，當時都誤判成
@@ -912,9 +916,13 @@ doxygen 是 `use_libclang=ON` 建的（Arch 同款），執行期載入 libclang
   expression length 21000`。這招**不消耗建置額度**（解析階段就擋掉），所以改
   workflow 後拿它當驗收入口最省。
 
-守門工具：`scripts/workflow-step-budget.py`（本檔同輪新增）。它把三個語意都實作
-進去了，改任何 workflow 前後各跑一次即可；對 f5aa969 那個壞版實測會印
-`RED ... 模板字串 21147 bytes（上限 21000）`、對修好版回 exit 0。
+守門工具：`scripts/workflow-step-budget.py`（本檔同輪新增）。改任何 workflow 前後各跑
+一次：`python3 scripts/workflow-step-budget.py`。它管四件事——模板字串 ≥21000 bytes 紅、
+≥19000 黃標（先知道快撞牆）、空表達式紅、表達式沒閉合紅。自我驗證做過兩個壞樣本：
+f5aa969 那份印 `RED ... 模板字串 21147 bytes（上限 21000）`、`${{ }}` 註解樣本印
+`RED ... 有空表達式`，兩者都 exit 0 之外的 1；修好版 exit 0。
+（「沒閉合」不能靠比對 `${{` 與 `}}` 的總數——shell／awk 裡本來就有一堆單獨的 `}}`，
+腳本第一版這樣寫，直接把 build-packages.yml 誤報兩條紅，已改成逐個 `${{` 往後找。）
 
 修法不是「把註解刪一刪」——那樣只是把同一顆雷往後挪。今天是把「初始化 Arch Linux
 环境」那步（21147 bytes）**從 tkg 區塊前拆成兩步**：拆後 11373／10796，兩邊都留
