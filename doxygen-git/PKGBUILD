@@ -34,6 +34,17 @@ license=('GPL-2.0-or-later')
 #   文件那半邊不是「該進產物」，所以 build() 用 `-Dbuild_doc=OFF` 明確關掉，
 #   而不是假裝建了、其實產物裡沒有。
 makedepends=(clang cmake flex fmt git libxslt python qt6-base qt6-svg sqlite spdlog)
+# ⚠️ `012_cite` 那條測試會真的跑 **latex → bibtex → latex** 整條引用鏈。本機逐層查證：
+#   ① 完全沒有 TeX 時 → `error: Problems running bibtex … Exit code: 2`；
+#   ② 只補 texlive-bin（有 bibtex、沒 latex）時 → 測試仍紅，而且換一種紅法：
+#      `\cite command to 'knuth79' does not have an associated number` ＋產出的 XML
+#      與 expected 不符（.bbl 根本沒生成，所以引用全部沒編號）。
+#   ③ 再補 texlive-basic＋texlive-latex → 實測 `1/1 Test #12: 012_cite Passed`。
+# 這是**缺環境**，不是上游缺陷，也不是可以過濾掉的測試：三顆都列進 checkdepends，
+# check() 照舊全跑、不准 `-E` 排掉。體積實查（下載）：texlive-bin 12.5 MiB／
+# texlive-basic 6.7 MiB／texlive-latex 1.4 MiB，裝完約 100 MiB，不是整套 texlive。
+# Arch 那邊 doxygen 的 makedepends 也帶 texlive-*，同一件事。
+checkdepends=(texlive-bin texlive-basic texlive-latex)
 depends=(clang fmt libfmt.so glibc libgcc libstdc++ llvm-libs spdlog libspdlog.so sqlite
          libsqlite3.so)
 optdepends=('graphviz: for caller/callee graph generation'
