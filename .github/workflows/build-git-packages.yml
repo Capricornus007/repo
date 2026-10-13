@@ -74,6 +74,7 @@ jobs:
           {"key": "kew-git", "repo_name": "kew-git", "variant": "none"},
           {"key": "llvm-git", "repo_name": "llvm-git", "variant": "none", "kind": "aur"},
           {"key": "librime-git", "repo_name": "librime-git", "variant": "none"},
+          {"key": "opencc-git", "repo_name": "opencc-git", "variant": "none"},
           {"key": "ccache-git", "repo_name": "ccache-git", "variant": "none"},
           {"key": "tcl-git", "repo_name": "tcl-git", "variant": "none"},
           {"key": "tk-git", "repo_name": "tk-git", "variant": "none"},

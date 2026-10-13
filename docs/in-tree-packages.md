@@ -241,6 +241,18 @@ split：llvm-libs／llvm／llvm-lit／compiler-rt／lld／lldb／clang）：
     **pkgname 的先後順序**決定（先搶者赢），所以 broad 樣式一律排在被它罩住的 narrow
     樣式之後；順序是 llvm-libs-git → llvm-lit-git → compiler-rt-git → lld-git →
     lldb-git → clang-git → llvm-git。
+  · **2026-10-13：標頭與 cmake 設定檔搬回 `llvm-git`（改回 Arch 的邊界）**。實查
+    `gitlab.archlinux.org/archlinux/packaging/packages/llvm/-/raw/main/PKGBUILD` 的
+    `package_llvm()`(458) 與 `package_llvm-libs()`(482)：Arch 的 `llvm-libs` 只還原
+    `lib{LLVM,LTO,Remarks}*.so*` ＋ `LLVMgold.so` ＋ `usr/lib/bfd-plugins/LLVMgold.so`
+    符號鏈接（bug #28479），**`/usr/include/llvm*` 與 `/usr/lib/cmake/llvm` 留在 `llvm`**。
+    我們先前把這兩樣收在 llvm-libs-git，邊界跟 Arch 不一致。因為 `package_llvm-git()`
+    本來就有 `usr/include/*` 與 `usr/lib/cmake/*` 的 broad 兜底，這裡只要「不搬」就自然
+    落回去（`check-pkg-split-overlap.py` 復核：無重疊）。附帶把 Arch 那條
+    `bfd-plugins/LLVMgold.so` 符號鏈接補進 llvm-libs-git。
+    ⚠️ 改邊界的代價＝全家族重編一輪（用戶裁定：「重編就重新編就是了，弄好不就好了」）。
+    下游只要 `makedepends=(llvm)` 就能拿到標頭，跟 Arch 的習慣一致；執行期仍然只需要
+    llvm-libs-git（mesa 那條鏈的 `llvm-libs-abi=<soname>` 鎖不變）。
   · ⚠️ **不准「先 `_move` 再 `_drop`」**：mv 過的檔頭已離開 stage，`_drop` 等於刪除。
     上一版就踩在這裡——clang-git 逐個 `_drop` 掉 `${_extra_tools[@]}`，而說好接手它們的
     `package_clang-tools-extra-git()` **根本沒列進 pkgname**（makepkg 不會呼叫它），
@@ -944,3 +956,40 @@ f5aa969 那份印 `RED ... 模板字串 21147 bytes（上限 21000）`、`${{ }}
 **註解掉的**，所以 build-packages.yml 那條 `if` 除了 `matrix.kind = multilib` 之外，
 還得把包名點名進去（run #471 實測 `error: target not found: lib32-spirv-tools`）。
 不跟 `kind:tkg` 共用分支的理由與 lib32 那半邊不動的取捨，見上面「lib32-llvm-git」那節。
+
+## opencc-git（任務 #181，2026-10-13）
+
+**為什麼存在**：本機 opencc 是 Artix world 的 `1.3.2-1`，上游最新發布 `ver.1.4.2`
+（2026-08-22）、master 尖端更晚。librime master 那 5 個 OpenccTest 失敗吃的就是這個版本差，
+而 world 那顆永遠不會自己動。用戶的常規指令是「全部轉源碼直出、追最新尖端」，所以自建 -git。
+
+**四接點**：
+1. 目錄 `opencc-git/PKGBUILD`（源只有 `git+…/BYVoid/OpenCC#branch=master` 一條，
+   版號與校驗和都由 `pkgver()` 現算）。
+2. `build-git-packages.yml` 矩陣：排在 `librime-git` 之後（同一個輸入法家族，先讀好懂）。
+   ⚠️ 沒帶 `kind`，所以它會跑 `check()`（用戶裁定「補環境、不跳測試」）。
+3. `build-packages.yml`「拉取对应的套件仓库」的 in-tree `case`：加了 `|opencc-git`。
+   不加會被通用規則「名字以 `-git` 結尾 → clone AUR」搶走。
+4. 「更新校验和并回推 PKGBUILD」那條 giant `if`：加了 `matrix.repo_name != 'opencc-git'`。
+   純 git 源的包不該讓 updpkgsums 去撕檔（mesa-tkg 的教訓），而且它也不該被推去
+   `Capricornus007/opencc-git.git` 那個不存在的倉。
+
+**⚠️ 換代是跨 soname 的，裝機必須與 librime-git 同一筆交易**：實測本機
+`/usr/lib/libopencc.so → .so.1.3 → .so.1.3.2`，而上游 `CMakeLists.txt` 是
+`set(OPENCC_ABI_VERSION 1.4)`；本地建出來的產物實測為 `libopencc.so.1.4`／`.so.1.4.2`。
+全系統掃「NEEDED libopencc.so.1.3」命中 8 個檔，其中 jieba 插件、CLI、python 綁定都出自本包
+（重建即一致），**外部只剩 `librime.so.1.17.0` 與 `rime-plugins/librime-lua.so`** →
+它們由本倉 `librime-git` 提供。所以順序是：opencc-git 先進 feed → 下一輪把 librime-git 的
+`epoch` 抬一檔讓它重編 → 兩顆一起裝。只換一邊會讓輸入法直接起不來。
+
+**本地實建抓到的兩個真錯（這就是「先照 CI 定義本地跑一遍」的價值，CI 上紅一次要等兩小時）**：
+1. `prepare()` 裡的 `rm -r deps/!(darts-clone-0.32h)` 需要 `shopt -s extglob` 在**檔案頂層**；
+   放在函式內部太慢——makepkg 是先 source 整份 PKGBUILD，函式定義時就要能解析那個 glob，
+   實測 `rc=6：未預期的字組「(」附近有語法錯誤`。
+2. `_license` 不是全域函式，是 `llvm-git/PKGBUILD` 自己檔內定義的小工具（第 336 行），
+   別的包照抄會 `command not found`。opencc 這裡改成直接 `install -Dm644 LICENSE`。
+
+**產物驗收**（本地 `makepkg -s` 實測）：`opencc-git 1.4.2.r18.g8cf737a4e19-1`、
+上游自測 **20/20 通過**（`JiebaPluginIntegrationTest` 依官方同款排除——它斷言的是上游自帶
+詞典的輸出，我們改用系統 `cppjieba` 詞典）、144 個檔 11 MB、
+`provides=(opencc=1.4.2, libopencc.so)`、`conflicts/replaces=(opencc)`。

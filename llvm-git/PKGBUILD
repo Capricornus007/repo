@@ -378,13 +378,20 @@ package_llvm-libs-git() {
   conflicts=(llvm-libs)
   replaces=(llvm-libs)
   # 只拿共享庫（.so*）；靜態庫一律歸 llvm-git。
-  # include/ 在這裡只拿 llvm 自己的幾棵，clang／lldb 的頭交給各自的包——
-  # 「先 broad 收 usr/include/*」會把後面兩個包的頭搶走（那就是上一版的 14 對之一）。
+  # ⚠️ 2026-10-13 改回 Arch 那個切法：實查 gitlab.archlinux.org/.../llvm/-/raw/main/PKGBUILD
+  #   的 package_llvm()(458) 與 package_llvm-libs()(482)——llvm-libs 只從 $srcdir 還原
+  #   lib{LLVM,LTO,Remarks}*.so* ＋ LLVMgold.so ＋ bfd-plugins 符號鏈接，**標頭與
+  #   /usr/lib/cmake/llvm 留在 llvm**。我們先前把這兩樣收進 llvm-libs-git，等於跟 Arch
+  #   的邊界不一致（用戶裁定：「重編就重新編就是了，弄好不就好了」）。本檔的
+  #   package_llvm-git() 本來就有 'usr/include/*' 與 'usr/lib/cmake/*' 的 broad 兜底，
+  #   所以這裡只要**不搬**，它們就自然落回 llvm-git。
   # libFuzzer* 是 .a＋.so 混合，其中共享部分留這邊、靜態部分由 *.a 落 llvm-git。
   _move 'usr/lib/libLLVM.so*' 'usr/lib/libLLVM-*.so' 'usr/lib/libLTO.so*' \
         'usr/lib/libRemarks.so*' 'usr/lib/libclang-cpp.so*' 'usr/lib/LLVMgold.so' \
-        'usr/include/llvm' 'usr/include/llvm-c' 'usr/include/llvm-*' \
-        'usr/lib/cmake/llvm' 'usr/lib/baremetal' 'usr/lib/libFuzzer.so*'
+        'usr/lib/baremetal' 'usr/lib/libFuzzer.so*'
+  # Arch 同款：gold 外掛要用 bfd-plugins 那條鏈才找得到（https://bugs.archlinux.org/task/28479）。
+  install -d "$pkgdir/usr/lib/bfd-plugins"
+  ln -s ../LLVMgold.so "$pkgdir/usr/lib/bfd-plugins/LLVMgold.so"
   _license llvm
   # ABI 虛擬名 `llvm-libs-abi=$_llvm_soname` 已直接寫進上面的 provides（頂層推導，
   # 見 _llvm_soname 那段的實測說明）。這裡只留一條**實物自證**：建出來的 soname
@@ -637,7 +644,7 @@ package_llvm-git() {
   # （spirv-llvm-translator-git 的 CI job 與本機建置都是這樣紅的，而 llvm 那輪 badge 全綠）。
   # 這比「stage 殘留統計」更準：殘留統計只是印出來給人在幾千行日誌裡找，這條是直接擋住。
   local _exports p rel missing hit
-  _exports="$startdir/pkg/llvm-libs-git/usr/lib/cmake/llvm/LLVMExports-release.cmake"
+  _exports="$startdir/pkg/llvm-git/usr/lib/cmake/llvm/LLVMExports-release.cmake"
   if [ -f "$_exports" ]; then
     missing=0
     for rel in $(grep -oE '\$\{_IMPORT_PREFIX\}/lib/[^"]+' "$_exports" \
