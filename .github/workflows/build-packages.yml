@@ -202,6 +202,22 @@ jobs:
             pacman -S --noconfirm --needed \
               lib32-gcc-libs lib32-glibc lib32-libffi lib32-pcre2 lib32-util-linux \
               lib32-zlib lib32-dbus lib32-libelf
+            # ⚠️ Arch 官方 [multilib] 現在只有 182 顆、而且**一顆 gstreamer 相關都沒有**
+            # （2026-10-13 把 mirror.rackspace.com 的 multilib.db 解開逐檔數過；
+            #  lib32-aalib／cdparanoia／libavc1394／libcaca／libcap／libdv／
+            #  libiec61883／libraw1394／libshout／libsoup3／libtheora／libvpx／
+            #  mpg123／orc／sdl2／speex／taglib／twolame／v4l-utils／wavpack
+            #  二十顆全數查無 → run #476 的 lib32-gstreamer-git 就紅在這裡）。
+            # 目標機是 Artix，而 Artix 的 [lib32] 有 234 顆、上面那二十顆**全都有**
+            # （同一手法解 lib32.db 逐條核對，用戶機上那兩顆舊的 lib32-gstreamer
+            #  1.28.1-3 正是這個倉的產物）。→ 補當依賴來源，不砍任何插件。
+            # 放在 [multilib] **之後**：同名.package 由 pacman 取先出現的倉，
+            # 所以 Arch 較新的那批照舊吃 Arch，Artix 只補 Arch 缺的那個洞。
+            printf '\n[lib32]\nSigLevel = Never\nServer = https://artix.wheaton.edu/repos/lib32/os/$arch\n' >> /etc/pacman.conf
+            pacman -Sy --noconfirm || {
+              echo "Artix lib32 同步失敗（wheaton 推送窗口），重試"
+              sleep 20; pacman -Sy --noconfirm
+            }
           fi
 
           if [ "${{ matrix.kind }}" = 'multilib' ] || [ "${{ matrix.repo_name }}" = 'gstreamer-git' ]; then
