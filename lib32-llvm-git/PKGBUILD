@@ -287,23 +287,38 @@ package_lib32-llvm-git() {
     echo "FATAL: $pkgname 沒有 /usr/bin/llvm-config32（mesa 的 llvm32.native 寫死這個路徑）" >&2
     exit 1
   fi
-  # 自證 llvm-config32 報出來的确实是 32 位元：它回 `--libdir` 應該是 /usr/lib32、
-  # `--host-target` 是 x86_64、`--target-target` 是 i686。這三支值一錯，
-  # 下游 meson 會拿錯的絕對路徑去找 .so（而且錯得很有说服力，因為它真的能跑）。
-  local _libdir _tt
+  # 自證 llvm-config32 報出來的確實是 32 位元那一套。⚠️ 2026-10-13 我在此處寫错过選項名：
+  # 上一版拿 `--target-target` 比 i686，但 **llvm-config 根本沒有這個選項**（本機實測
+  # `/usr/bin/llvm-config --help` 的 target 類只有 `--host-target` 與 `--targets-built`，
+  # 傳錯選項時它印 usage、exit≠0 → 變數恆空 → 這道檢查把**好的產物判成 FATAL**，
+  # 本地 /tmp/l32 那一輪 makepkg RC=1 就是這樣來的，不是交叉參數沒生效）。
+  # 實測這棵樹的真實值：`--host-target`＝**i686-pc-linux-gnu**、`--libdir` 尾段＝/usr/lib32、
+  # `--targets-built`＝`X86 AMDGPU`。
+  # 位元寬度另加一道**不依賴 PATH** 的實物證明：直接讀 ELF 檔頭第 5 個位元組 EI_CLASS
+  # （1＝ELF32、2＝ELF64）。這比 `file`／`readelf` 可靠——那兩支在本機是 /usr/sbin/ 底下，
+  # makepkg 的 builder 環境 PATH 不一定有 /usr/sbin，實測 `readelf -h` 會靜默回空字串，
+  # 拿空字串比對「等於 Intel 80386」就成了永遠紅、或永遠綠的假檢查。
+  local _libdir _ht _elf
   _libdir=$("$pkgdir/usr/bin/llvm-config32" --libdir 2>/dev/null) || _libdir=
-  _tt=$("$pkgdir/usr/bin/llvm-config32" --target-target 2>/dev/null) || _tt=
-  echo ">> $pkgname: llvm-config32 --libdir=[$_libdir] --target-target=[$_tt]"
+  _ht=$("$pkgdir/usr/bin/llvm-config32" --host-target 2>/dev/null) || _ht=
+  echo ">> $pkgname: llvm-config32 --libdir=[$_libdir] --host-target=[$_ht]"
   case $_libdir in
     */lib32) ;;
     *) echo "FATAL: llvm-config32 的 --libdir 不是 /usr/lib32（LIBDIR_SUFFIX=32 沒傳進 configure？）" >&2
        exit 1 ;;
   esac
-  case $_tt in
+  case $_ht in
     i686-*) ;;
-    *) echo "FATAL: llvm-config32 的 --target-target=[$_tt] 不是 i686-*（交叉參數沒生效）" >&2
+    *) echo "FATAL: llvm-config32 的 --host-target=[$_ht] 不是 i686-*（交叉 triple 沒生效）" >&2
        exit 1 ;;
   esac
+  _elf=$(od -An -tu1 -j4 -N1 "$pkgdir/usr/bin/llvm-config32" 2>/dev/null | tr -d '[:space:]')
+  if [ "$_elf" != "1" ]; then
+    echo "FATAL: $pkgname 的 llvm-config32 ELF EI_CLASS=[$_elf]（1 才是 ELF32）——這顆是 64 位元程式，" >&2
+    echo "       下游 meson/llvm32.native 拿它問到的旗標會是 x86_64 那套，32 位元 mesa 編出來就是錯的。" >&2
+    exit 1
+  fi
+  echo ">> $pkgname: llvm-config32 實物 EI_CLASS=1（ELF32）確認"
 
   # ── 與官方收錄範圍對帳：32 位元**不收** include／share/doc／share/man／其他 bin
   #   （官方 lib32-llvm.PKGBUILD:126-127 就是 rm include、刪 llvm-config 以外全部 bin，

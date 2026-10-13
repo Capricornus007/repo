@@ -768,8 +768,14 @@ makedepends 補 `lib32-gcc-libs`（Arch 在 llvm.PKGBUILD:17-18 同一件事，�
   兩邊官方歸屬本來就不同，照抄別自己統一）。
 - `lib32-llvm-git`：`/usr/lib32/cmake/{llvm,clang}` ＋ `llvm-config32`。
   `llvm-config` 是**改名**來的（官方同款 `mv llvm-config{,32}`），因為 64 位元那支
-  已佔 `/usr/bin/llvm-config`。並自證 `llvm-config32 --libdir` 真的是 `/usr/lib32`、
-  `--target-target` 真的是 `i686-*`，兩個不對就紅。
+  已佔 `/usr/bin/llvm-config`。自證用三個**實測存在**的值：`--libdir` 尾段 `/usr/lib32`、
+  `--host-target` = `i686-pc-linux-gnu`、以及直接讀 ELF 檔頭第 5 元組 `EI_CLASS=1`（ELF32）。
+  ⚠️ 記一笔教訓：這裡原先寫的是比 `--target-target`，**那個選項不存在**（llvm-config 的
+  target 類只有 `--host-target`／`--targets-built`），傳錯選項它印 usage 並回非 0，
+  變數恆空 → 把好的產物判成 FATAL（本機 /tmp/l32 那輪 `makepkg RC=1` 就是這樣來的，
+  交叉參數其實是生效的）。位元寬度之所以改用 `od` 讀檔頭而不是 `file`／`readelf`：
+  那兩支在本機位於 `/usr/sbin/`，builder 的 PATH 不一定含 `/usr/sbin`，拿空字串比對
+  等於做一道永遠紅或永遠綠的假檢查。
 
 ### ABI 虛擬名為什麼必須是另一個名字
 32 位元發的是 `lib32-llvm-libs-abi=<soname>`，**不共用** 64 位元的 `llvm-libs-abi`。
