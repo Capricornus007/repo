@@ -1135,6 +1135,17 @@ jobs:
                 pacman -Si -- nvidia-utils-beta >/dev/null 2>&1 \
                   || skip "nvidia-utils-beta 尚未發布到 junlin03-aur（本包 depends 硬釘它），本轮跳过等下轮"
               fi
+              #
+              # 同一種門檻，給 librime-git：它 link 的是 libopencc.so 的 **soname**。
+              # opencc 從 1.3 換到 1.4 之後（本倉 opencc-git 提供 libopencc.so.1.4），
+              # 若這一輪 opencc-git 還沒進 junlin03-aur，makepkg -s 就會去解到 [world]
+              # 那顆穩定版 opencc（1.3、libopencc.so.1.3），產出來的 librime 裝機後
+              # fcitx5 起不來——正是用戶那 5 個 OpenccTest 失敗之外的另一半。
+              # 所以這裡等 opencc-git 就緒，本輪沒就緒就跳過，靠排程下一輪收斂。
+              if [ "$PKG" = librime-git ]; then
+                pacman -Si -- opencc-git >/dev/null 2>&1 \
+                  || skip "opencc-git 尚未發布到 junlin03-aur（librime 必須對着 libopencc.so.1.4 編），本輪跳過等下輪"
+              fi
               ;;
 
             linux-cachyos-cjktty)
