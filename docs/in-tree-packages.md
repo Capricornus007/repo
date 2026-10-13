@@ -718,8 +718,116 @@ bug：① 舊正則 `libLLVM\.so\.[0-9][0-9.]*` 抓 `libLLVM.so.24.0git` 會截�
 （`g` 不在字元類裡），換代上 trunk 之後必然**假紅**；② 舊版把 64 與 32 位元產物倒進
 同一目錄混著比，現在按包名分流各比各的 soname。
 
-### lib32 那半邊不動的理由（不是回退，是各自對齊）
-Artix `lib32-llvm-libs` 實測 `Provides: None`（沒有 soname 虛擬名可以鎖），而 32 位元
-trunk LLVM 全網路沒有人產（Arch multilib 只有穩定版）。所以 lib32-mesa 繼續配
-lib32-goblins 的 23.1、依賴維持原樣；64 位元照樣上 24。這是「各自位元寬度各自對齊」，
-不是把 64 位元拉回去。
+### ~~lib32 那半邊不動的理由~~（2026-10-13 作廢，見下面「lib32-llvm-git」）
+本節原文寫「32 位元 trunk LLVM 全網路沒有人產，所以 lib32-mesa 繼續配 23.1」。
+**這句話被用戶 2026-10-13 直接否決**：「llvm 並不止這些吧？clang 啊 rt 啥的呢？」＋
+「你倒是也去建 32 位的啊？」——「沒人產」不是「我們不產」的理由，本倉就是那個人。
+保留原文只為了留痕：真正的做法改看下一節。
+
+## lib32-llvm-git（2026-10-13；用戶點名補上的 32 位元整條鏈）
+
+### 「32 位元到底該有幾顆」是查出來的，不是印象
+解開兩個 32 位元倉的 DB 逐條點名（`/var/lib/pacman/sync/{multilib,lib32}.files`）：
+
+    lib32-clang  lib32-llvm  lib32-llvm-libs  lib32-spirv-llvm-translator  lib32-spirv-tools
+
+只有這四顆 LLVM 系的（spirv-tools 不鏈 LLVM，另論）。**沒有** `lib32-lld`、
+**沒有** `lib32-lldb`、**沒有** `lib32-compiler-rt`——lld／lldb 是宿主工具，32 位元
+連結是 64 位元 lld 加 `-m32` 做的，所以那兩顆不該憑空發明。
+而「rt 呢？」的答案不在 32 位元倉，在**同一顆 compiler-rt 裡**：查實
+`extra` 與 `world-goblins` 的 compiler-rt 都帶 `libclang_rt.asan-i386.a`／
+`clang_rt.crtbegin-i386.o`，而本機實裝的自有 `compiler-rt-git`
+`pacman -Ql | grep -c i386` 回 **0** —— 因為我開了
+`-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON`（只建預設 target）。本輪拿掉它、
+makedepends 補 `lib32-gcc-libs`（Arch 在 llvm.PKGBUILD:17-18 同一件事，註解寫
+“Build 32-bit compiler-rt libraries on x86_64 (FS#41911)”），並在
+`package_compiler-rt-git()` 加第二道「找不到 `*i386*` 就紅」。
+
+### 參數照官方兩份，不是自己發明的交叉編譯
+存進 `docs/upstream-pkgbuilds/lib32-llvm.PKGBUILD` 與 `lib32-clang.PKGBUILD`
+（gitlab.archlinux.org/archlinux/packaging/packages/{lib32-llvm,lib32-clang}）。
+關鍵三條：`-m32` 進 CFLAGS/CXXFLAGS/LDFLAGS、`-DLLVM_LIBDIR_SUFFIX=32`（裝到
+/usr/lib32）、`-DLLVM_TARGET_ARCH=i686 -DLLVM_DEFAULT_TARGET_TRIPLE=i686-pc-linux-gnu
+-DLLVM_HOST_TRIPLE=x86_64-pc-linux-gnu`。
+
+### 與官方的一處結構性差異（故意的）
+官方把 llvm 與 clang 拆成兩個 package base，因為 lib32-clang 的 cmake 要吃
+`llvm-config32`，而那支程式是 lib32-llvm 的產物（先有雞先有蛋，只能靠倉庫分兩輪）。
+本倉一次 configure 就開 `LLVM_ENABLE_PROJECTS=clang`（與 64 位元那顆同一手法），
+同一棵 build 樹裡 clang 直接吃 tree 裡的 llvm → 32 位元一輪出三顆。
+代價：多建了官方用 `LLVM_DISTRIBUTION_COMPONENTS` 裁掉的靜態庫與工具，
+所以 `package_lib32-llvm-git()` 結尾照官方範圍（lib32-llvm.PKGBUILD:126-127）
+丟掉 include／share／其他 bin，**並把丟棄數量印出來**，不留靜默 rm。
+
+### 三顆各自收什麼（實物清單為準）
+- `lib32-llvm-libs-git`：`/usr/lib32/libLLVM.so*`、`libLTO`、`libRemarks`、
+  `LLVMgold.so`，另**自己建** `usr/lib32/bfd-plugins/LLVMgold.so` 那條相對符號連結
+  （官方也是自己 `ln -s ../LLVMgold.so`）。缺任何一個就紅。
+- `lib32-clang-git`：`libclang.so*` ＋ `libclang-cpp.so*` ＋ `clang/*/include`
+  （⚠️ `libclang-cpp.so*` 在 32 位元歸**這顆**，64 位元那邊歸 llvm-libs-git——
+  兩邊官方歸屬本來就不同，照抄別自己統一）。
+- `lib32-llvm-git`：`/usr/lib32/cmake/{llvm,clang}` ＋ `llvm-config32`。
+  `llvm-config` 是**改名**來的（官方同款 `mv llvm-config{,32}`），因為 64 位元那支
+  已佔 `/usr/bin/llvm-config`。並自證 `llvm-config32 --libdir` 真的是 `/usr/lib32`、
+  `--target-target` 真的是 `i686-*`，兩個不對就紅。
+
+### ABI 虛擬名為什麼必須是另一個名字
+32 位元發的是 `lib32-llvm-libs-abi=<soname>`，**不共用** 64 位元的 `llvm-libs-abi`。
+理由：pacman 判依賴只看名字，共用同一個虛擬名的話，64 位元 mesa 的依賴會被 32 位元
+那顆 satisfy 掉，實物卻找不到 `/usr/lib/libLLVM.so.24.0git` → 又黑屏一次。
+
+### 誰吃它
+- `spirv-llvm-translator-git` 本輪多切一顆 `lib32-spirv-llvm-translator-git`
+  （`provides=lib32-spirv-llvm-translator`，mesa 的 lib32 makedepends 點名的就是這個名字），
+  第二棵 `build32` 用 `-m32 + LLVM_CONFIG=llvm-config32 + LLVM_LIBDIR_SUFFIX=32`，
+  結尾用 `objdump -p` 驗它的 NEEDED 真是 `libLLVM.so.<abi>`、且與依賴鎖一致。
+- `mesa-tkg-git` 的 CI 步：自有 lib32 四顆齊 → 改寫 `_lib32_llvm` 成 ABI 鎖並建兩半邊；
+  不齊 → **本輪不建 32 位元**（`_lib32=false`）並印 `::warning::` 點名缺哪幾顆。
+  刻意不允許「缺就退回用穩定版 lib32 繼續建」：那會發出 64 位元鎖 24、32 位元鏈 23.1
+  而兩邊依賴都「滿足」的包。
+- 產物端也驗：mesa 的 soname 守門步現在除了 64 位元的 `llvm-libs-abi=`，
+  若這輪真有 `lib32-mesa-tkg-git-*.pkg.tar.zst`，也要求它的 `.PKGINFO` 帶
+  `lib32-llvm-libs-abi=<容器 soname>`，否則紅。
+
+### 四接點
+1. `build-git-packages.yml` 矩陣：`{"key": "lib32-llvm-git", ..., "kind": "multilib"}`
+   （`kind: multilib` 才會開 [multilib] 並預裝 lib32 底層鏈）。
+2. `build-packages.yml` 的 in-tree case 清單：加 `lib32-llvm-git`。
+3. 「更新校验和并回推 PKGBUILD」的 giant if：加 `matrix.repo_name != 'lib32-llvm-git'`
+   （純 git 源，updpkgsums 會撕檔）。
+4. 本檔。
+
+## spirv-headers-git（2026-10-13；用戶裁定「那讓這個也走源碼直出不就也行了？」）
+
+### 為什麼有意義（查實，不是「看起來比較新」）
+`git ls-remote` 實測 `refs/heads/main = 86f980c731e6…` 而最新 tag
+`refs/tags/vulkan-sdk-1.4.363.0 = 496543121ce6…` —— **不同 sha**，也就是最新 tag 之後
+main 上還有未發佈提交（本機 makepkg 算出 `1.4.363.0.r6.g86f980c731e` ⇒ 6 筆）。
+translator 那條鏈吃的是 LLVM trunk＋translator main，新 SPIR-V 能力通常先落 headers main，
+標頭釘在 tag 就會出現「translator 有實作、標頭沒這個 enum」的錯位。
+
+### 風險面先量過才動手
+`pacman -Sii spirv-headers` 實測 `Required By: None`：這顆是 header-only（`arch=(any)`），
+只有 spirv-tools／translator／mesa 在**建置期**吃標頭，執行期不鏈 → 換 -git 不會把
+32/64 位元的執行期鏈拉進風險區。官方 `extra` 那顆是 `1:1.4.363.0-1`（**epoch 1**），
+所以本檔也必須 `epoch=1`，否則 vercmp 判我們比較舊、這顆永遠裝不上去。
+
+### 本地實跑過（不是只有 lint）
+`makepkg -sf` 於 2026-10-13 12:58 產出
+`spirv-headers-git-1:1.4.363.0.r6.g86f980c731e-1-any.pkg.tar.zst`。
+過程中翻掉兩個我自己寫錯的地方，都留成檔裡的硬檢查：
+① 我憑印象把 `usr/include/spirv/include.json` 列進「必含」，被自己的檢查擋紅——
+   實物是 `usr/include/spirv/{1.0,1.1,1.2,unified1}` ＋ `spir-v.xml`（88 個檔），
+   registry JSON 不屬於這個倉；
+② 官方 `check()` 那條 `ctest --test-dir build` 在我們容器裡回
+   `No tests were found!!!`（上游根本沒產生 `build/CTestTestfile.cmake`）——
+   真正的檢查是 build 階段那三支柱 `spirv_headers_simple_test{,_c,_cpp11}`
+   （拿標頭實際編 C／C++98／C++11）。所以 `check()` 改成「三支柱必須在、並各跑一次」，
+   而不是留一條跑空卻看起來像驗過的 ctest。
+
+### 四接點
+1. `build-git-packages.yml` 矩陣：`{"key": "spirv-headers-git", "variant": "none"}`（無 kind）。
+2. `build-packages.yml` in-tree case 清單 ＋ updpkgsums giant if 各加一顆。
+3. `spirv-llvm-translator-git` 的 makedepends 從 `spirv-headers` 改成 `spirv-headers-git`，
+   且 CI 那步「查不到這顆就紅」——不退回去吃 extra 的 tag 版。
+4. 本檔。

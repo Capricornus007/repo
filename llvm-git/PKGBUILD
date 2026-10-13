@@ -141,7 +141,7 @@ arch=(x86_64)
 url="https://llvm.org/"
 license=('Apache-2.0 WITH LLVM-exception')
 makedepends=(cmake ninja git python swig perl libedit libffi ncurses zlib zstd
-             libxml2 python-psutil lld libelf curl xz)
+             libxml2 python-psutil lld libelf curl xz lib32-gcc-libs)
 options=(staticlibs !emptydirs !lto)
 # ⚠️ `$_stage` 絕不能寫成頂層的 `_stage="$srcdir/stage"`（上一版就是這樣，紅在
 #   `mv: cannot stat '/stage/usr/include/llvm'`）：makepkg 是「先 source PKGBUILD、
@@ -191,7 +191,15 @@ _cmakeargs=(
   -DLLVM_ENABLE_PROJECTS='clang;lld;lldb'
   -DLLVM_ENABLE_RUNTIMES='compiler-rt'
   -DLLVM_TARGETS_TO_BUILD='X86;AMDGPU'
-  -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON
+  # ⚠️ **不能**開 COMPILER_RT_DEFAULT_TARGET_ONLY：實測本機已裝的 compiler-rt-git
+  #   `pacman -Ql | grep -c i386` 回 **0**，而官方 extra 與 world-goblins 的
+  #   compiler-rt 都有 `libclang_rt.asan-i386.a`／`clang_rt.crtbegin-i386.o`
+  #   （解 /var/lib/pacman/sync/{extra,world-goblins}.files 點名查實）。那個旗標就是
+  #   「只建預設 target」，等於把 32 位元 sanitizer runtime 整條砍掉 → 用 clang
+  #   編 `-m32 -fsanitize=address` 直接找不到 runtime。Arch 那邊還特別為這件事
+  #   掛了 makedepends_x86_64=('lib32-gcc-libs')（llvm.PKGBUILD:17-18 的註解寫
+  #   “Build 32-bit compiler-rt libraries on x86_64 (FS#41911)”），照做。
+  #   （用戶 2026-10-13 點名的「rt 啥的呢？」就是這條。）
   # ⚠️ 這裡**不能**給 -DBUILD_SHARED_LIBS=ON：run #437 實測 configure 直接被拒
   #   「Cannot enable BUILD_SHARED_LIBS with LLVM_LINK_LLVM_DYLIB」（CMakeLists.txt:1005
   #   的 message(FATAL_ERROR)），prepare() 就紅。Arch 也只給下面那兩條 dylib 開關。
@@ -374,7 +382,7 @@ package_llvm-libs-git() {
   # 「先 broad 收 usr/include/*」會把後面兩個包的頭搶走（那就是上一版的 14 對之一）。
   # libFuzzer* 是 .a＋.so 混合，其中共享部分留這邊、靜態部分由 *.a 落 llvm-git。
   _move 'usr/lib/libLLVM.so*' 'usr/lib/libLLVM-*.so' 'usr/lib/libLTO.so*' \
-        'usr/lib/libRemarks.so*' 'usr/lib/libclang-cpp.so*' \
+        'usr/lib/libRemarks.so*' 'usr/lib/libclang-cpp.so*' 'usr/lib/LLVMgold.so' \
         'usr/include/llvm' 'usr/include/llvm-c' 'usr/include/llvm-*' \
         'usr/lib/cmake/llvm' 'usr/lib/baremetal' 'usr/lib/libFuzzer.so*'
   _license llvm
@@ -474,6 +482,18 @@ package_compiler-rt-git() {
   # 「缺檔就紅」：用戶點名要 sanitizer，不能靜默出一顆沒有 asan 的 compiler-rt
   find "$pkgdir/usr/lib/clang" -name 'libclang_rt.asan*' 2>/dev/null | grep -q . || {
     echo 'FATAL: compiler-rt 裡沒有任何 libclang_rt.asan*（sanitizer 沒建出來）'
+    return 1
+  }
+  # ⚠️ 第二道：**i386 的 runtime 也必須在**。上一版帶著
+  #   -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON 上線，實測裝機的 compiler-rt-git
+  #   `pacman -Ql | grep -c i386` 回 0，而官方 extra／world-goblins 的 compiler-rt
+  #   都有 `libclang_rt.asan-i386.a`／`clang_rt.crtbegin-i386.o`（解 .files 查實）
+  #   ——那就是「CI 全綠、包裡有東西、但 32 位元 sanitizer 整條是空的」。
+  #   這裡刻意只按「檔名含 i386」判，不寫死目錄：多 target 時 compiler-rt 會把
+  #   落點從 `lib/linux/` 換成 `lib/<triple>/`，寫死路徑會把正常產物誤判成壞的。
+  find "$pkgdir/usr/lib/clang" -type f -name '*i386*' 2>/dev/null | grep -q . || {
+    echo 'FATAL: compiler-rt 裡沒有任何 *i386* runtime（32 位元 sanitizer 缺席；'
+    echo '       查 COMPILER_RT_DEFAULT_TARGET_ONLY 是不是被加回來了、或容器缺 lib32-gcc-libs）'
     return 1
   }
   _license compiler-rt
@@ -606,6 +626,38 @@ package_llvm-git() {
   echo '=== stage 殘留 top-30（除刻意不打包者，其餘都是漏了）==='
   find "$_stage" -type f 2>/dev/null | sed "s|^$_stage/||" \
     | cut -d/ -f1-3 | sort | uniq -c | sort -rn | head -30
+
+  # ── 硬檢查：CMake 導出的 imported target 引用的每個 lib，都必須真的被某一包帶走
+  # 動機是 2026-10-13 的實測紅：trunk 仍然建置 gold 插件（`llvm/tools/CMakeLists.txt`
+  # 第 32 行 `add_llvm_tool_subdirectory(gold)`），而我們的 `_move` 沒認領
+  # `usr/lib/LLVMgold.so`，於是裝出去的 llvm-libs-git 帶著一個引用了不存在檔案的
+  # LLVMExports-release.cmake；下游只要 `find_package(LLVM)` 就死在
+  #   The imported target "LLVMgold" references the file "/usr/lib/LLVMgold.so"
+  #   but this file does not exist. … The installation package was faulty
+  # （spirv-llvm-translator-git 的 CI job 與本機建置都是這樣紅的，而 llvm 那輪 badge 全綠）。
+  # 這比「stage 殘留統計」更準：殘留統計只是印出來給人在幾千行日誌裡找，這條是直接擋住。
+  local _exports p rel missing hit
+  _exports="$startdir/pkg/llvm-libs-git/usr/lib/cmake/llvm/LLVMExports-release.cmake"
+  if [ -f "$_exports" ]; then
+    missing=0
+    for rel in $(grep -oE '\$\{_IMPORT_PREFIX\}/lib/[^"]+' "$_exports" \
+                   | sed 's|\$\{_IMPORT_PREFIX\}/||' | sort -u); do
+      hit=0
+      for p in "$startdir"/pkg/*/; do
+        [ -e "$p/usr/$rel" ] && { hit=1; break; }
+      done
+      if [ "$hit" = 0 ]; then
+        echo "  ✗ 沒有任何一包帶走 /usr/$rel（LLVMExports 引用了它）"
+        missing=$((missing + 1))
+      fi
+    done
+    if [ "$missing" != 0 ]; then
+      echo "ERROR: LLVMExports 引用的 lib 有 $missing 個沒進任何一包 → 下游 find_package(LLVM) 必紅。" >&2
+      echo "       把它加進對應 package_*() 的 _move 清單（官方 llvm-libs 是有帶的）。" >&2
+      exit 1
+    fi
+    echo '>> LLVMExports 引用的 lib 全部都有包帶走'
+  fi
 }
 
 # vim:set ts=2 sw=2 et:

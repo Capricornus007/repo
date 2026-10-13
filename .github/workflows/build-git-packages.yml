@@ -72,6 +72,8 @@ jobs:
           {"key": "tcl-git", "repo_name": "tcl-git", "variant": "none"},
           {"key": "tk-git", "repo_name": "tk-git", "variant": "none"},
           {"key": "spirv-llvm-translator-git", "repo_name": "spirv-llvm-translator-git", "variant": "none"},
+          {"key": "spirv-headers-git", "repo_name": "spirv-headers-git", "variant": "none"},
+          {"key": "lib32-llvm-git", "repo_name": "lib32-llvm-git", "variant": "none", "kind": "multilib"},
           {"key": "mpv-git", "repo_name": "mpv-git", "variant": "none"},
           {"key": "oh-my-pi-git", "repo_name": "oh-my-pi-git", "variant": "none"},
           {"key": "protonvpn-cli-community-git", "repo_name": "protonvpn-cli-community-git", "variant": "none"},
