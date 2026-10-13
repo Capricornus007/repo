@@ -289,10 +289,22 @@ jobs:
               sleep $(( attempt * 20 ))
             done
             [ "$synced" = true ] || { echo "::error::Artix goblins 源连续 5 次同步失败"; exit 1; }
-            pacman -S --noconfirm --needed llvm llvm-libs clang compiler-rt lib32-llvm lib32-llvm-libs lib32-clang
-            # 显式打印版本，便于日志核对（llvm-config 来自 Artix 的 llvm 包）
-            llvm-config --version
-            readlink -f /usr/lib/libLLVM.so
+            # ⚠️ 2026-10-13：**這裡不再裝穩定版 llvm/clang**。這行是 2026-09-18「讓容器 LLVM
+            #   對齊目標機的 23.1」那套設計留下的，主軸已經換成用戶裁定的「吃自有 llvm-*-git
+            #   24 trunk ＋把依賴鎖到 llvm-libs-abi=<soname>」，對齊工作整批移到下面
+            #   「把容器 LLVM 換成自有 llvm-*-git 尖端」那一步（它帶 --ask=20 與硬驗）。
+            #   留著不是「多一层保险」，是**會自己製造裝不上的場面**：本行先裝進 Artix 的
+            #   `llvm`（23.1.1），而 `llvm` 擁有 /usr/include/llvm/** 與 /usr/lib/cmake/llvm/**，
+            #   接著 llvm-libs-git 也要放同一批檔 → pacman 直接
+            #   「exists in filesystem (owned by llvm) … Errors occurred, no packages were
+            #   upgraded」。實測 run 38352877256 的 mesa-tkg-git 就是这样紅的
+            #   （「自有 llvm 家族裝上 1 / 12 顆」，同一輪 doxygen 7/7 綠——因為 base-devel
+            #   容器本身只有 clang、**沒有** llvm，是這行把 llvm 拉進來的）。
+            #   源本身（world-goblins／lib32-goblins）先留著不動：lib32 那半邊在自有
+            #   lib32-*-git 發佈後仍要能解析得到舊依賴，而且移除源會動到上面那段重試邏輯，
+            #   不是本輪的必要改動。
+            llvm-config --version || true      # 此刻還是容器原本的穩定版，下一步才換成自有
+            readlink -f /usr/lib/libLLVM.so || true
           fi
 
           if [ "${{ matrix.kind }}" = 'artix' ]; then
