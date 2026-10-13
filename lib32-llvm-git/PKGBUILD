@@ -50,8 +50,13 @@ _llvm_soname="${pkgver%%_r*}"; _llvm_soname="${_llvm_soname%.*}git"
 arch=(x86_64)
 url="https://llvm.org/"
 license=('Apache-2.0 WITH LLVM-exception')
+# ⚠️ **沒有 `lib32-libedit` 這顆包**（實查 `pacman -Si lib32-libedit` 查無，
+#   官方 lib32-llvm.PKGBUILD 的 makedepends 也沒有它）：寫進去 makepkg -s 會直接
+#   `target not found` 紅掉，而且是在抓完 1.5G 原始碼之後。libedit 在 32 位元
+#   下面用下面的 `-DLLVM_ENABLE_LIBEDIT=OFF` 關掉——不關的話 cmake 的 find_library
+#   會去摸到 64 位元那顆，連結階段才炸，那樣更難查。
 makedepends=(cmake ninja git python pkgconf lib32-gcc-libs lib32-zlib lib32-zstd
-             lib32-libffi lib32-ncurses lib32-libxml2 lib32-libedit lld)
+             lib32-libffi lib32-ncurses lib32-libxml2 lld)
 options=(staticlibs !emptydirs !lto)
 _stage=
 _stage_init() {
@@ -72,6 +77,9 @@ _cmakeargs=(
   -DLLVM_ENABLE_ZSTD=ON
   -DLLVM_ENABLE_FFI=ON
   -DLLVM_ENABLE_RTTI=ON
+  # 32 位元沒有 lib32-libedit（實查查無此包），所以明確關掉，別讓 find_library 去摸
+  # 64 位元那顆、到連結階段才炸（那種錯看起來像工具鏈壞掉，不像缺一個開關）。
+  -DLLVM_ENABLE_LIBEDIT=OFF
   -DLLVM_ENABLE_BINDINGS=OFF
   -DLLVM_BINUTILS_INCDIR=/usr/include
   -DLLVM_INCLUDE_TESTS=OFF
@@ -231,7 +239,7 @@ package_lib32-clang-git() {
   # 宿主 clang 加 `-m32`，但 libclang.so／libclang-cpp.so 必須是 32 位元版本，
   # 因為它們會被 32 位元的程式（例如 rust-bindgen 跑 i686 target）載入。
   depends=("lib32-llvm-libs-git=$pkgver-$pkgrel" clang lib32-gcc-libs lib32-glibc
-           lib32-zlib lib32-zstd lib32-libxml2 lib32-libedit ncurses)
+           lib32-zlib lib32-zstd lib32-libxml2)
   provides=("lib32-clang=${pkgver%%_r*}" 'libclang.so')
   conflicts=(lib32-clang)
   replaces=(lib32-clang)

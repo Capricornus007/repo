@@ -851,3 +851,40 @@ CI 上 translator 的 1156 條 lit 有兩條紅：`DebugInfo/Generic/debug-info-
 - 落地方式：`llvm24-pre-ra-sched-verifier-flags.patch`（放本目錄、進 `source=()` 並帶 b2sums），
   `prepare()` 先 `--dry-run` 再套，**套不上就紅**並印「上游改了 RUN 行？去更新補丁，
   不要刪補丁了事」。
+
+## doxygen-git（2026-10-13；用戶「你加就是了？」＋「順帶記得給我裝上」）
+
+### 為什麼必須有這顆（不是「也想 -git」，是穩定版已經壞了）
+本倉 `llvm-*-git` 換到 trunk 之後，機上那顆 `doxygen 1.18.0-2` 實測起不來：
+
+    ldd /usr/bin/doxygen
+      libclang.so.23.1 => not found
+      libclang-cpp.so.23.1 => not found
+
+doxygen 是 `use_libclang=ON` 建的（Arch 同款），執行期載入 libclang；它 NEEDED 的是
+**寫死帶版本**的 `.so.23.1`，而我們的 `clang-git` 發的是 `clang=24.0.0` 與無版本的
+`libclang.so`／`libclang-cpp.so` 虛擬名，satisfy 不到那條 NEEDED。
+→ 唯一正解是「用 24 重建 doxygen」，不是再塞一顆 23.1 橋接檔（那正是 10-12 GL 黑屏的
+同款做法與同款下場：裝得上、一換代就靜默炸）。
+
+### 收錄範圍是先查過的，沒有連坐
+- `pactree -r doxygen` 實測只有它自己（沒有任何已裝包依賴它）。
+- `pacman -Q doxygen-docs` 未裝 → **不做 docs 分割**，`build()` 用 `-Dbuild_doc=OFF`
+  明確關掉。理由寫進 PKGBUILD：官方那條 `--target docs` 需要先有一支 doxygen 才能生成
+  自己的文件（自我依賴循環），把它列進 makedepends 會繞成死結；既然本機沒有這半邊需求，
+  就老實關掉，而不是「假裝建了、產物裡沒有」。
+- `provides=('doxygen=<基號>')` ＋ `conflicts/replaces=(doxygen)`：頂替的是**安裝用的名字**
+  `doxygen`（不是 `doxygen-git`），這條是 sway-git 那次學到的（`conflicts` 要寫包名）。
+
+### 產物端自證（不認 build 綠、只認實物）
+`package_doxygen-git()` 會 `objdump -p` 問 `/usr/bin/doxygen` 的 NEEDED，要求裡面真的有
+`libclang-cpp.so.<容器此刻的 LLVM soname>`；查不到 soname、或 NEEDED 不是那一版，直接紅。
+動機就是本輪這句話：**「CI 全綠、包也裝上了，但 NEEDED 指向一個不存在的 soname」**。
+
+### 四接點
+1. `build-git-packages.yml` 矩陣：`{"key": "doxygen-git", "variant": "none"}`（無 kind）。
+2. `build-packages.yml` in-tree case 清單加 `doxygen-git`；updpkgsums 的 giant if 也點名排除
+   （純 git 源，跑 updpkgsums 會撕檔）。
+3. 掛 `junlin03-aur` 源的清單加 `doxygen-git`，並把它加進「把容器 LLVM 換成自有 llvm-*-git」
+   那步的 `if`——**這顆必須建在自有 clang 上**，否則又發出一顆鏈 23.1 的 doxygen。
+4. 本檔。
