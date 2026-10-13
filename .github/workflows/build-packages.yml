@@ -185,7 +185,12 @@ jobs:
             pacman -S --noconfirm --needed shiboken6 shiboken6-generator pyside6 python-build python-setuptools
           fi
 
-          if [ "${{ matrix.kind }}" = 'multilib' ]; then
+          if [ "${{ matrix.kind }}" = 'multilib' ] \
+             || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ]; then
+            # spirv-llvm-translator-git 也要 [multilib]：它現在多切一顆
+            # lib32-spirv-llvm-translator-git，makedepends 點名 lib32-spirv-tools／
+            # lib32-gcc-libs，而容器的 [multilib] 預設是註解掉的
+            # （run #471 實測 `error: target not found: lib32-spirv-tools`）。
             # lib32-* 需要 [multilib] 倉：容器預設只有 core/extra 且 [multilib] 是註解掉的。
             # 與 kind:tkg 那段同一手法（mesa-tkg 早就在吃 lib32-* 依賴），但這裡不跟
             # tkg 共用分支：tkg 還要做 LLVM 對齊與 customization.cfg，混在一起會把
@@ -2579,7 +2584,13 @@ jobs:
           for _p in $_pkgs; do
             for _t in 1 2 3; do
               # 先 --needed（本倉包與官方包是 replaces/conflicts 關係，裝得上就會頂替）
-              if pacman -S --noconfirm --needed "$_p"; then _ok=$((_ok + 1)); break; fi
+              # ⚠️ **必須帶 `--ask=20`**：這批包與官方 llvm-libs／clang 是 conflicts 關係，
+              #   pacman 會問「Remove llvm-libs? [y/N]」，而 `--noconfirm` 對這題**預設 N**
+              #   → 整批一顆都裝不上（run #471 實測：「自有 llvm 家族裝上 0 / 12 顆」，
+              #   訊息是 `error: unresolvable package conflicts detected`）。
+              #   這條是本倉既有教訓（非互動換包只認 --ask=20），我上一筆改成走
+              #   junlin03-aur 源時把它弄丟了，mesa／doxygen／translator 三顆跟著一起紅。
+              if pacman -S --ask=20 --noconfirm --needed "$_p"; then _ok=$((_ok + 1)); break; fi
               echo "::warning::$_p 安裝失敗（第 ${_t} 次），重試"
               sleep $((_t * 8))
             done
