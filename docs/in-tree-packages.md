@@ -866,9 +866,17 @@ CI 上 translator 的 1156 條 lit 有兩條紅：`DebugInfo/Generic/debug-info-
   帶旗標 → **FileCheck 通過**。所以這**不是跳測試**：測試真正要驗的東西
   （`bb.2.for.body` 裡那個變數的 `DBG_VALUE` 位置、EIS-option 的 debug value）照樣跑，
   關掉的只是「在这个阶段本来就不该跑」的那個 verifier。
-- 落地方式：`llvm24-pre-ra-sched-verifier-flags.patch`（放本目錄、進 `source=()` 並帶 b2sums），
-  `prepare()` 先 `--dry-run` 再套，**套不上就紅**並印「上游改了 RUN 行？去更新補丁，
-  不要刪補丁了事」。
+- 落地方式（**2026-10-13 已改**）：原本是本目錄帶一顆
+  `llvm24-pre-ra-sched-verifier-flags.patch` 進 `source=()`＋b2sums，`prepare()` 先
+  `--dry-run` 再套、套不上就紅。**現在補丁已刪**，因為上游收了同一個修法：
+  issue `KhronosGroup/SPIRV-LLVM-Translator#4082`（我方 2026-10-13 提）於 09:37Z 以
+  COMPLETED 關閉，對應 commit `fc137e9fb`「Disable MI verification in 2 tests after
+  llvm changes」(#4083)，改的正是 `test/DebugInfo/Generic/{linear-dbg-value,debug-info-eis-option}.ll`
+  那兩條 RUN 行、旗標一致。→ 這是規則 61「跟隨上游＝連上游自己的 Remove/Delete 一起跟」的
+  實際案例：上游把它變成來源的一部分，我方補丁就該消失，不是留著當保險。
+  但**沒有刪了事**：`prepare()` 換成正向斷言，逐檔數 `-verify-machineinstrs=0`，
+  命中總數 < 2 就紅並指示去查 `fc137e9fb` 之後的變動。實測對上游 main 現況：
+  兩檔各命中 1 處、n=2，斷言通過。
 
 ## doxygen-git（2026-10-13；用戶「你加就是了？」＋「順帶記得給我裝上」）
 

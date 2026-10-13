@@ -63,10 +63,8 @@ _llvm_abi=24.0git
 # 實物卻找不到 /usr/lib/libLLVM.so.<abi> → 又黑屏一次。值與 64 位元相同（同一棵 trunk）。
 _lib32_llvm_abi=24.0git
 options=(!emptydirs)
-source=("git+https://github.com/KhronosGroup/SPIRV-LLVM-Translator#branch=main"
-        "llvm24-pre-ra-sched-verifier-flags.patch")
-b2sums=('SKIP'
-        '7bcea08b026e060da077c10f9e7d4c396164034d3418bb3c5d6888efc7ef532e763533605463bbcfc8ada6bf6574c8b042a70f81d1d65a348611e44ad8d56cb0')
+source=("git+https://github.com/KhronosGroup/SPIRV-LLVM-Translator#branch=main")
+b2sums=('SKIP')
 
 pkgver() {
   cd $_pkgbase
@@ -99,24 +97,23 @@ pkgver() {
 
 prepare() {
   cd $_pkgbase
-  # 兩條 lit 測試的 RUN 行要跟上游 LLVM 那份一樣、帶 `-verify-machineinstrs=0
-  # -disable-mir-output-verify`。理由與實測都在補丁檔頭的說明裡，重點是：
-  # **這不是跳測試**——那兩個旗標是上游為「在 finalize-isel 之前停下來」這個切點
-  # 自己掛的（上游檔案頂部就寫著 `FIXME: … PR39452`），X86 在這裡還沒把 flag 的
-  # def/use 收尾，machine verifier 本來就會抱怨；補丁只把 verifier 關掉，
-  # 測試真正要驗的東西（bb.2.for.body 裡那個變數的 DBG_VALUE 位置）照樣跑 FileCheck。
-  # 本機對照實測：不帶旗標 → `*** Bad machine code: Using an undefined physical
-  # register ***` ＋ `LLVM ERROR: Found 1 machine code errors.`；帶旗標 → FileCheck 通過。
-  # ⚠️ 套不上就紅（不靜默跳過）：這代表上游改動了這兩個檔案，要人來看，
-  #   不能讓它悄悄退化成「又變兩條紅」或「補丁存在但根本沒套」。
-  if ! patch -Np1 --dry-run -i "$srcdir/llvm24-pre-ra-sched-verifier-flags.patch" >/dev/null 2>&1; then
-    echo "ERROR: lit 測試補丁套不上（上游改了 test/DebugInfo/Generic/{linear-dbg-value,debug-info-eis-option}.ll 的 RUN 行？）" >&2
-    echo "       去看上游那份現在怎麼寫，更新補丁，不要刪補丁了事。" >&2
+  # 那兩條 lit 測試的 RUN 行需要 `-verify-machineinstrs=0 -disable-mir-output-verify`。
+  # 2026-10-13 起**上游自己已經帶了**：commit fc137e9fb「Disable MI verification in 2
+  # tests after llvm changes」(#4083)，改的正是 test/DebugInfo/Generic/{linear-dbg-value,
+  # debug-info-eis-option}.ll 那兩行，旗標順序與內容跟我方原本那顆補丁一致。
+  # 出處：這是我 2026-10-13 提的 issue KhronosGroup/SPIRV-LLVM-Translator#4082，
+  # 上游於 09:37Z 以 COMPLETED 關閉（#4083 落 main）。
+  # → 本地補丁已刪，改成**正向斷言**：不是「刪了事」，而是留一道檢查，哪天上游把
+  #   這兩個旗標拿掉或改寫，這裡立刻紅，不會悄悄退化成「又變兩條紅」。
+  n=$(grep -c -- "-verify-machineinstrs=0" \
+        test/DebugInfo/Generic/linear-dbg-value.ll \
+        test/DebugInfo/Generic/debug-info-eis-option.ll | awk -F: '{s+=$2} END{print s+0}')
+  if [ "$n" -lt 2 ]; then
+    echo "ERROR: 上游這兩條 lit 測試少了 -verify-machineinstrs=0（實測命中 $n 處，需 ≥2）" >&2
+    echo "       代表上游又改寫了 RUN 行；去查 fc137e9fb 之後的變動，把旗標補回來源或重打補丁。" >&2
     return 1
   fi
-  patch -Np1 -i "$srcdir/llvm24-pre-ra-sched-verifier-flags.patch"
-  grep -c -- "-verify-machineinstrs=0 -disable-mir-output-verify" \
-    test/DebugInfo/Generic/linear-dbg-value.ll test/DebugInfo/Generic/debug-info-eis-option.ll
+  echo "上游已內建 verifier 繞法：命中 $n 處（#4083 / issue #4082）"
 }
 
 _llvm_abi() {
