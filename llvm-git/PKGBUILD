@@ -496,10 +496,16 @@ package_compiler-rt-git() {
   #   `pacman -Ql | grep -c i386` 回 0，而官方 extra／world-goblins 的 compiler-rt
   #   都有 `libclang_rt.asan-i386.a`／`clang_rt.crtbegin-i386.o`（解 .files 查實）
   #   ——那就是「CI 全綠、包裡有東西、但 32 位元 sanitizer 整條是空的」。
-  #   這裡刻意只按「檔名含 i386」判，不寫死目錄：多 target 時 compiler-rt 會把
-  #   落點從 `lib/linux/` 換成 `lib/<triple>/`，寫死路徑會把正常產物誤判成壞的。
-  find "$pkgdir/usr/lib/clang" -type f -name '*i386*' 2>/dev/null | grep -q . || {
-    echo 'FATAL: compiler-rt 裡沒有任何 *i386* runtime（32 位元 sanitizer 缺席；'
+  #   ⚠️ 判據要打在**整條路徑**上，不能只打檔名：run #476（2026-10-13）實測
+  #   trunk 已把落點從 `lib/linux/libclang_rt.asan-i386.a` 換成
+  #   `lib/i386-unknown-linux-gnu/libclang_rt.asan.a`（建置日誌 16478 行起一整排
+  #   `-- Installing: …/lib/i386-unknown-linux-gnu/libclang_rt.*.a`，i386 的確建出來了），
+  #   而上一版寫 `find -name '*i386*'` 只看檔名 → 把正常產物誤殺成 FATAL。
+  #   `-path '*i386*' -name 'libclang_rt.asan*'` 這一條同時罩住新舊兩種佈局
+  #   （舊版的 i386 在檔名裡，也是 `-path` 的子字串），且仍要求「32 位元 asan 這顆
+  #   具體存在」，不會被目錄裡隨便一個 i386 檔案（如 ELFRelocs/i386.def）蒙過。
+  find "$pkgdir/usr/lib/clang" -path '*i386*' -name 'libclang_rt.asan*' 2>/dev/null | grep -q . || {
+    echo 'FATAL: compiler-rt 裡沒有 i386 的 libclang_rt.asan*（32 位元 sanitizer 缺席；'
     echo '       查 COMPILER_RT_DEFAULT_TARGET_ONLY 是不是被加回來了、或容器缺 lib32-gcc-libs）'
     return 1
   }
