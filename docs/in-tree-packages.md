@@ -831,3 +831,23 @@ translator 那條鏈吃的是 LLVM trunk＋translator main，新 SPIR-V 能力�
 3. `spirv-llvm-translator-git` 的 makedepends 從 `spirv-headers` 改成 `spirv-headers-git`，
    且 CI 那步「查不到這顆就紅」——不退回去吃 extra 的 tag 版。
 4. 本檔。
+
+### 那兩條 lit 紅是自己查、自己修的（用戶 2026-10-13「你自己修不好？確定自己修不好？」）
+CI 上 translator 的 1156 條 lit 有兩條紅：`DebugInfo/Generic/debug-info-eis-option.ll`
+與 `linear-dbg-value.ll`，報 `*** Bad machine code: Using an undefined physical register ***`
+（`JCC_1 %bb.2, 5, implicit $eflags`）→ `LLVM ERROR: Found 1 machine code errors.`。
+本機用已裝的 trunk 端到端重現（`llvm-as → llvm-spirv → llvm-spirv -r → llvm-dis → llc`），
+查到的不是「LLVM 的排程器 bug 等上游修」，而是**我們測試檔少帶了上游自己的規避旗標**：
+
+- 這兩個檔案是 LLVM 自己 `DebugInfo` 測試的副本，而**上游那份頂部寫著**
+  `; FIXME: Fix machine verifier issues and remove -verify-machineinstrs=0 and`
+  `; -disable-mir-output-verify. PR39452.`——也就是「在 `-stop-before=finalize-isel`
+  這個切點停下來時，X86 還沒把 flag 的 def/use 收尾，machine verifier 本來就會抱怨」，
+  上游對這個檔**自己就把 verifier 關了**。translator 的副本在 fork 時把那兩個旗標弄丟了。
+- 對照實測（同一支 `llc`、同一份 round-trip 出来的 IR）：不帶旗標 → abort；
+  帶旗標 → **FileCheck 通過**。所以這**不是跳測試**：測試真正要驗的東西
+  （`bb.2.for.body` 裡那個變數的 `DBG_VALUE` 位置、EIS-option 的 debug value）照樣跑，
+  關掉的只是「在这个阶段本来就不该跑」的那個 verifier。
+- 落地方式：`llvm24-pre-ra-sched-verifier-flags.patch`（放本目錄、進 `source=()` 並帶 b2sums），
+  `prepare()` 先 `--dry-run` 再套，**套不上就紅**並印「上游改了 RUN 行？去更新補丁，
+  不要刪補丁了事」。
