@@ -32,6 +32,12 @@ pkgbase=spirv-llvm-translator-git
 pkgname=(spirv-llvm-translator-git lib32-spirv-llvm-translator-git)
 pkgver=0.r0.g00000000000
 pkgrel=1
+# epoch=2：AUR 那顆 `spirv-llvm-translator-git` 是 epoch=1／pkgver=r2012.0838497，
+# 而且已經 908 天沒更新（2026-10-13 實測 yay 列表與 AUR PKGBUILD）。我方是 epoch 0，
+# 版本比較先比 epoch ⇒ 只要 feed 這一顆沒發佈（例如建置紅），yay 就會拿那顆兩年半前的
+# AUR 版「升級」回去，把本機 7.0.1.r454.g663ef71b7e3 換掉。給 2 才壓得住；
+# 一位數是用戶 2026-10-13 明確定的（不准再用四位數那種 epoch）。
+epoch=2
 pkgdesc='LLVM <-> SPIR-V converter for compilers targeting SPIR-V (git, 配 LLVM trunk)'
 arch=(x86_64)
 url='https://www.khronos.org/spirv/'
