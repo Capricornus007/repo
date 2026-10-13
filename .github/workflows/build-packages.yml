@@ -2562,45 +2562,52 @@ jobs:
             #   `read -rp` 等人在鍵盤前答 y，CI 沒 tty → 補丁靜默不套、下一輪又死同一個地方。
             mkdir -p mesa-userpatches
             cat > mesa-userpatches/llvm24-ac-llvm-util-h.mymesapatch <<'MYPATCH'
-ac/llvm, radeonsi, radv: include llvm-c/Target.h explicitly (LLVM 24 dropped the transitive include)
-
-LLVM 24 trunk removed `#include "llvm-c/Target.h"` from llvm-c/TargetMachine.h
-(verified on this box: llvm19 TargetMachine.h line 23 has it, 24.0git does not;
-only llvm-c/ExecutionEngine.h still pulls it). The three AMD users below only include
-TargetMachine.h, so the LLVMInitializeAMDGPU* C-API declarations vanish while the
-symbols remain exported by libLLVM.so.24.0git (nm -D: 7 hits), and mesa builds with
--Werror=implicit-function-declaration. Generated with `git diff` against mesa main
-76b9372c4e5 (committer date 2026-10-12), which does not have these includes yet.
---- a/src/amd/llvm/ac_llvm_util.h
-+++ b/src/amd/llvm/ac_llvm_util.h
-@@ -9,6 +9,7 @@
- 
- #include "amd_family.h"
- #include "util/macros.h"
-+#include <llvm-c/Target.h>
- #include <llvm-c/TargetMachine.h>
- #include <llvm/Config/llvm-config.h>
- 
---- a/src/amd/vulkan/radv_physical_device.c
-+++ b/src/amd/vulkan/radv_physical_device.c
-@@ -44,6 +44,7 @@ typedef void *drmDevicePtr;
- #include "git_sha1.h"
- 
- #if AMD_LLVM_AVAILABLE
-+#include <llvm-c/Target.h>
- #include <llvm-c/TargetMachine.h>
- #endif
- 
---- a/src/gallium/drivers/radeonsi/gfx/si_gfx_screen.c
-+++ b/src/gallium/drivers/radeonsi/gfx/si_gfx_screen.c
-@@ -17,6 +17,7 @@
- #include <sys/utsname.h>
- 
- #if AMD_LLVM_AVAILABLE
-+#include <llvm-c/Target.h>
- #include <llvm-c/TargetMachine.h>
- #endif
-MYPATCH
+          ac/llvm, radeonsi, radv: include llvm-c/Target.h explicitly (LLVM 24 dropped the transitive include)
+          
+          LLVM 24 trunk removed `#include "llvm-c/Target.h"` from llvm-c/TargetMachine.h
+          (verified on this box: llvm19 TargetMachine.h line 23 has it, 24.0git does not;
+          only llvm-c/ExecutionEngine.h still pulls it). The three AMD users below only include
+          TargetMachine.h, so the LLVMInitializeAMDGPU* C-API declarations vanish while the
+          symbols remain exported by libLLVM.so.24.0git (nm -D: 7 hits), and mesa builds with
+          -Werror=implicit-function-declaration. Generated with `git diff` against mesa main
+          76b9372c4e5 (committer date 2026-10-12), which does not have these includes yet.
+          diff --git a/src/amd/llvm/ac_llvm_util.h b/src/amd/llvm/ac_llvm_util.h
+          index 20634736fdd..1f3468f6348 100644
+          --- a/src/amd/llvm/ac_llvm_util.h
+          +++ b/src/amd/llvm/ac_llvm_util.h
+          @@ -9,6 +9,7 @@
+           
+           #include "amd_family.h"
+           #include "util/macros.h"
+          +#include <llvm-c/Target.h>
+           #include <llvm-c/TargetMachine.h>
+           #include <llvm/Config/llvm-config.h>
+           
+          diff --git a/src/amd/vulkan/radv_physical_device.c b/src/amd/vulkan/radv_physical_device.c
+          index fe738085ada..5f88c5e2575 100644
+          --- a/src/amd/vulkan/radv_physical_device.c
+          +++ b/src/amd/vulkan/radv_physical_device.c
+          @@ -44,6 +44,7 @@ typedef void *drmDevicePtr;
+           #include "git_sha1.h"
+           
+           #if AMD_LLVM_AVAILABLE
+          +#include <llvm-c/Target.h>
+           #include <llvm-c/TargetMachine.h>
+           #endif
+           
+          diff --git a/src/gallium/drivers/radeonsi/gfx/si_gfx_screen.c b/src/gallium/drivers/radeonsi/gfx/si_gfx_screen.c
+          index 5c55f31494b..b1103f8230f 100644
+          --- a/src/gallium/drivers/radeonsi/gfx/si_gfx_screen.c
+          +++ b/src/gallium/drivers/radeonsi/gfx/si_gfx_screen.c
+          @@ -17,6 +17,7 @@
+           #include <sys/utsname.h>
+           
+           #if AMD_LLVM_AVAILABLE
+          +#include <llvm-c/Target.h>
+           #include <llvm-c/TargetMachine.h>
+           #endif
+           
+          MYPATCH
             sed -i 's/^_user_patches_no_confirm="false"/_user_patches_no_confirm="true"/' customization.cfg
             grep -q '^_user_patches_no_confirm="true"' customization.cfg || {
               echo "::error::補丁要靠 userpatches 套，但 _user_patches_no_confirm 沒被打開（CI 沒 tty 會靜默不套）"; exit 1; }
