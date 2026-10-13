@@ -54,6 +54,12 @@ jobs:
       # 借用回推那步的 `matrix.kind != 'aur'`（pkgver 由上游 HEAD 現算，回推校驗和無意義）；
       # case 首命中即中，走本倉 llvm-git/PKGBUILD，不會去 clone AUR。逐包理由見
       # docs/in-tree-packages.md。
+      # crave（2026-10-13）：不是 -git 包，但跟 u1s1-bin／jbr21／qoder-* 同一類「in-tree 維護＋
+      # 版號由外部端點驅動」，所以掛在本 workflow（3 小時節拍）。plan 只在「上游 tag ≠ PKGBUILD
+      # 的 _pkgver」時才下載算 sha（上游二進位 30MB×2、只發 md5 無簽名），平时无腦一個 API call。
+      # 它的 pkgver 是 ${_pkgver/-/.} 算出來的（連字號→點號，pacman 不準 pkgver 含 -），
+      # 而 source URL 裡是連字號版，所以 build-packages.yml 需要三個特例：plan 的 crave) case、
+      # 改寫步 sed _pkgver=、以及走 in-tree 回推而非 updpkgsums。
       packages: |
         [
           {"key": "dae-git", "repo_name": "dae-git", "variant": "none"},
@@ -92,6 +98,7 @@ jobs:
           {"key": "qoder-cli-cn", "repo_name": "qoder-cli-cn", "variant": "none"},
           {"key": "qoder-gui-bin", "repo_name": "qoder-gui-bin", "variant": "none"},
           {"key": "qoder-gui-cn", "repo_name": "qoder-gui-cn", "variant": "none"},
+          {"key": "crave", "repo_name": "crave", "variant": "none"},
           {"key": "unicode-emoji", "repo_name": "unicode-emoji", "variant": "none"},
           {"key": "free-claude-code-git", "repo_name": "free-claude-code-git", "variant": "none"},
           {"key": "bash-git", "repo_name": "bash-git", "variant": "none"},
