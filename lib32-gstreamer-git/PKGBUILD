@@ -48,7 +48,7 @@ pkgname=(
   lib32-gst-plugins-base-libs-git
 )
 pkgver=1.29.2.1.r0.ge1edc090bc07
-pkgrel=1
+pkgrel=2
 pkgdesc="Multimedia graph framework (32-bit)"
 url="https://gstreamer.freedesktop.org/"
 arch=(x86_64)
@@ -344,6 +344,7 @@ package_lib32-gst-plugins-base-libs-git() {
     lib32-gcc-libs
     lib32-glib2
     lib32-glibc
+    lib32-gtk3
     lib32-libdrm
     lib32-libglvnd
     lib32-libgudev
@@ -395,6 +396,13 @@ package_lib32-gst-plugins-base-libs-git() {
     usr/lib32/gstreamer-1.0/libgstvolume.so
     usr/lib32/gstreamer-1.0/libgstximagesink.so
     usr/lib32/gstreamer-1.0/libgstxvimagesink.so
+    # 上游把 gtk 插件從 base/good 拆成獨立 gst-plugin-gtk（64 位元那側另有
+    # package_gst_plugin_gtk()，而且多一顆 libgstgtkwayland.so）。lib32 這側只發
+    # base-libs 一顆，所以這個檔必須認領在同一個包裡，否則自己的
+    # 「root 裡有檔沒被任何包認領」守門會紅——實測 run #482 的日誌尾端就只點名
+    # usr/lib32/gstreamer-1.0/libgstgtk.so 一顆（wayland 那顆 32 位元沒建出來，
+    # 不要照 64 位元清單多寫，多寫的檔名會進 claim-missing.log）。
+    usr/lib32/gstreamer-1.0/libgstgtk.so
 
     usr/bin/gst-{device-monitor,discoverer,play}-1.0-32
   ); _install
