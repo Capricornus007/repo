@@ -25,8 +25,14 @@
 #   而那只影響建置期。裝之前先 `ldd` 點名 glslang 那批，裝完跑一次 vulkaninfo／
 #   一個 mpv 片段當 smoke test。
 #
-# ⚠️ 版本：官方是 `1:1.4.363.0-1`（**epoch 1**），本檔必須同樣帶 epoch=1，否則
-#   vercmp 判我們比較舊 → 這顆永遠裝不上去（同 spirv-headers-git 的教訓）。
+# ⚠️ 版本：官方是 `1:1.4.363.0-1`（**epoch 1**）。但不能只跟官方對齊——**AUR 的
+#   spirv-tools-git 是 epoch=3**（`pkgver="2024.1".3932.fe7bae090`，2026-10-15 實抓
+#   https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=spirv-tools-git 查實），
+#   而 yay/topgrade 是拿「已安裝 vs AUR」比版本 → 我方 epoch 1 會被判比較舊，用戶端
+#   就永遠掛著「AUR 有新版本」、反覆去拉那顆 930 天前的舊包（用戶 2026-10-15 的實物
+#   輸出：`aur/spirv-tools-git -> 3:2024.1.3932.fe7bae090-1 [930d19h]`，而且它會以
+#   「make dependency of spirv-llvm-translator-git」的身分被 install）。
+#   所以 epoch 取 **4**：同一次壓過 AUR(3) 與官方(1)，本倉這顆才是唯一權威版本。
 #   pkgver 形如 `1.4.363.0.r<N>.g<sha>`：基號取 HEAD 可達的最新 `vulkan-sdk-*` tag。
 
 _pkgbase=spirv-tools
@@ -34,14 +40,19 @@ pkgbase=spirv-tools-git
 pkgname=(spirv-tools-git)
 pkgver=1.4.363.0.r0.g00000000000
 pkgrel=1
-epoch=1
+epoch=4
 pkgdesc='API and commands for processing SPIR-V modules (git)'
 arch=('x86_64')
 url='https://github.com/KhronosGroup/SPIRV-Tools'
 license=('Apache-2.0')
-depends=('glibc' 'gcc-libs' 'spirv-headers' 'python')
+# ⚠️ `spirv-headers-git`（不是裸名 `spirv-headers`）：[extra] 有一顆真叫 spirv-headers
+#   的包（釘在 tag vulkan-sdk-1.4.363.0），裸名永遠解到它，而本倉這條 SPIR-V 鏈整條
+#   走源碼直出（translator 那份 PKGBUILD 已有同款裁定註解）。實物依據：本機這顆箱子裡
+#   只裝 spirv-headers-git，`-D SPIRV-Headers_SOURCE_DIR=/usr` 照樣找得到標頭、
+#   ctest 11/11 全過（2026-10-15 完整跑過 build()+check()+package()）。
+depends=('glibc' 'gcc-libs' 'spirv-headers-git' 'python')
 makedepends=('cmake' 'git' 'ninja' 'python')
-checkdepends=('python' 'spirv-headers')
+checkdepends=('python' 'spirv-headers-git')
 groups=('vulkan-devel')
 provides=("spirv-tools=${pkgver%%.r*}" 'spirv-tools-libs')
 conflicts=('spirv-tools' 'spirv-tools-libs')
@@ -75,11 +86,26 @@ build() {
   # 與官方同組參數。⚠️ `--install-py-spirv` 不能開：它會把 python 綁定裝進
   # /usr/lib/python*/site-packages，那是 distro `python-spirv-tools` 的地盤，
   # 兩包互指會撞檔（本倉「同一檔案被兩個包聲有」直接判紅，見 gstreamer 同款教訓）。
+  # ⚠️ 2026-10-14 本地跑完整 build()+package() 查實：原本只寫
+  #   `-D SPIRV_TOOLS_BUILD_STATIC=OFF` 是**不夠的**——上游 source/CMakeLists.txt
+  #   在 STATIC=OFF 分支用 `SPIRV_TOOLS_LIBRARY_TYPE` 決定 SPIRV-Tools 那顆的型別，
+  #   而它的預設值是「BUILD_SHARED_LIBS 為真才 SHARED」；沒開 BUILD_SHARED_LIBS 就
+  #   落到 STATIC，實測產物只有 `libSPIRV-Tools.a` + `libSPIRV-Tools-shared.so`，
+  #   **沒有** `libSPIRV-Tools.so`／`libSPIRV-Tools-{opt,link,reduce,lint,diff}.so`。
+  #   那不是「少幾個檔案」而是**斷鏈**：實測 /usr/lib/libglslang.so 的 NEEDED 正是
+  #   libSPIRV-Tools.so 與 libSPIRV-Tools-opt.so（`ldd` 查實），glslang →
+  #   libplacebo → ffmpeg/mpv/librewolf/opencv 那條鏈裝下去立刻找不到库。
+  #   官方spirv-tools 1:1.4.363.0-1 的檔單（`pacman -Ql spirv-tools`）也只有那批
+  #   .so、零 .a，所以照官方旗標補齊：BUILD_SHARED_LIBS=ON + STATIC=OFF。
+  #   SPIRV_WERROR=OFF 同官方：trunk 的 -Wodr／新警告不該把 -Werror 帶進來紅。
   cmake -S . -B build -G Ninja \
+    -D BUILD_SHARED_LIBS=ON \
     -D CMAKE_BUILD_TYPE=Release \
     -D CMAKE_INSTALL_PREFIX=/usr \
+    -D CMAKE_SKIP_INSTALL_RPATH=ON \
     -D SPIRV-Headers_SOURCE_DIR=/usr \
     -D SPIRV_TOOLS_BUILD_STATIC=OFF \
+    -D SPIRV_WERROR=OFF \
     -D SPIRV_TOOLS_INSTALL_SDK=ON \
     -D SPIRV_TOOLS_BUILD_EXECUTABLES=ON \
     -D Python_SITELIB=/dev/null
@@ -96,11 +122,16 @@ check() {
   # 自證：spirv-val 要真的存在且能跑，否則 translator 那條鏈會靜默退回「找不到
   # spirv-val 就把 RUN 變成空操作」的 lit.cfg 分支（實查 test/lit.cfg.py：偵測不到
   # 就 ToolSubst('spirv-val', ':')），那種綠是假綠。
-  if [ ! -x build/tools/spirv-val/spirv-val ]; then
+  # ⚠️ 路徑是扁平的 `build/tools/spirv-val`：上游 tools/CMakeLists.txt 用
+  #   add_spvtools_tool 直接把執行檔產在 tools/ 底下，**沒有** spirv-val/ 子目錄
+  #   （CI run 38511938671 實測 `[375/384] Linking CXX executable tools/spirv-val`，
+  #   同輪 ctest 已 100% 過）。原本寫的 build/tools/spirv-val/spirv-val 查無此檔，
+  #   會把一顆好包判紅 —— 假紅，2026-10-14 查實。
+  if [ ! -x build/tools/spirv-val ]; then
     echo "ERROR: 產物裡沒有可執行的 spirv-val（translator 的 4 條 lit 會靜默不驗）" >&2
     return 1
   fi
-  ./build/tools/spirv-val/spirv-val --version >&2 || {
+  ./build/tools/spirv-val --version >&2 || {
     echo "ERROR: spirv-val 跑不起來" >&2; return 1; }
   return $rc
 }

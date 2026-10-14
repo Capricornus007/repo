@@ -129,7 +129,10 @@ jobs:
              || [ "${{ matrix.repo_name }}" = 'tk-git' ] \
              || [ "${{ matrix.repo_name }}" = 'mesa-tkg-git' ] \
              || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ] \
-             || [ "${{ matrix.repo_name }}" = 'doxygen-git' ]; then
+             || [ "${{ matrix.repo_name }}" = 'doxygen-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'librime-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'spirv-tools-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'spirv-headers-git' ]; then
             # 把自有 junlin03-aur 掛成匿名 pacman 源。矩陣 job 並行，靠它看見
             # 兄弟 job 已發布的 KDE 依賴產物（release 資產公開可取，實測
             # …/current-repo/junlin03-aur.db 與包檔均 HTTP 200）。冷啟動時
@@ -148,6 +151,13 @@ jobs:
             #     產物 soname 與 mesa 對不上。
             #   · mesa-tkg-git 同上，而且它還要多吃一顆自有 translator（實測
             #     libRusticlOpenCL.so NEEDED libLLVMSPIRVLib.so.<llvm soname>）。
+            #
+            # 2026-10-15 再點名三顆，同一種「裸名會被 [extra] 的同名實包搶走」的病灶：
+            #   · librime-git  depends 已翻成 opencc-git（1.3→1.4 是跨 soname 換代）：
+            #     不掛源就是 `target not found: opencc-git`。
+            #   · spirv-tools-git  depends=spirv-headers-git，而 headers-git 只在
+            #     本倉（這條 SPIR-V 鏈整條源碼直出，理由見 translator 那份 PKGBUILD）。
+            #   · spirv-headers-git：它也要吃自家兄弟（本倉建、本倉發）。
             {
               echo ''
               echo '[junlin03-aur]'
@@ -1135,17 +1145,6 @@ jobs:
                 pacman -Si -- nvidia-utils-beta >/dev/null 2>&1 \
                   || skip "nvidia-utils-beta 尚未發布到 junlin03-aur（本包 depends 硬釘它），本轮跳过等下轮"
               fi
-              #
-              # 同一種門檻，給 librime-git：它 link 的是 libopencc.so 的 **soname**。
-              # opencc 從 1.3 換到 1.4 之後（本倉 opencc-git 提供 libopencc.so.1.4），
-              # 若這一輪 opencc-git 還沒進 junlin03-aur，makepkg -s 就會去解到 [world]
-              # 那顆穩定版 opencc（1.3、libopencc.so.1.3），產出來的 librime 裝機後
-              # fcitx5 起不來——正是用戶那 5 個 OpenccTest 失敗之外的另一半。
-              # 所以這裡等 opencc-git 就緒，本輪沒就緒就跳過，靠排程下一輪收斂。
-              if [ "$PKG" = librime-git ]; then
-                pacman -Si -- opencc-git >/dev/null 2>&1 \
-                  || skip "opencc-git 尚未發布到 junlin03-aur（librime 必須對着 libopencc.so.1.4 編），本輪跳過等下輪"
-              fi
               ;;
 
             linux-cachyos-cjktty)
@@ -1752,6 +1751,28 @@ jobs:
               #      沒有 pkgver()，PKGBUILD 裡寫的 pkgver 就是目標版本，AUR 一改版自然不同。
               # 以前這裡無條件跑 pkgver()，(b) 會因查不到該函式被 skip，於是「一行
               # kind: aur」對非 -git 包永遠綠燈卻永遠不產出（2026-09-23 查明）。
+              #
+              # ── 依賴就緒門檻（in-tree 這批走通用分支，沒有 KDE／Wayland 那兩條家族
+              #    閘門）。只用於「裸名會被 [extra] 的同名實包搶走、或跨 soname」的兄弟
+              #    包：這些依賴不在任何官方倉，冷啟動或上游插隊時 makepkg -s 會
+              #    `target not found` 直接判紅，所以在這裡等它就緒、本輪跳過讓 job 綠，
+              #    靠排程按依賴 DAG 逐層收斂（本倉既有設計）。
+              #    ⚠️ librime 這條原本被寫在 `nvidia-utils-beta|nvidia-beta-dkms)` 分支
+              #    裡（`if [ "$PKG" = librime-git ]`）——那個分支對 librime-git **永遠不會
+              #    執行**，等於死碼：run 38511938671 的 librime job 因此照樣建置，容器裡
+              #    裝的是 extra/opencc 1.3.2-1（日誌實物 `-- Found opencc:
+              #    /usr/lib/libopencc.so`），對著 libopencc.so.1.3 編 → rime_test 紅。
+              #    2026-10-15 查實後移到這裡，與 $PKG 的實際分支一致。
+              case "$PKG" in
+                librime-git)               _extra_gate_deps="opencc-git" ;;
+                spirv-llvm-translator-git) _extra_gate_deps="spirv-tools-git spirv-headers-git" ;;
+                mesa-tkg-git)              _extra_gate_deps="spirv-llvm-translator-git" ;;
+                *)                         _extra_gate_deps="" ;;
+              esac
+              for _d in $_extra_gate_deps; do
+                pacman -Si -- "$_d" >/dev/null 2>&1 \
+                  || skip "依賴 $_d 尚未發布到 junlin03-aur（本倉兄弟包，裸名會被官方同名包搶走），本輪跳過等下輪"
+              done
               rm -rf /tmp/generic-ver; mkdir -p /tmp/generic-ver; cp PKGBUILD /tmp/generic-ver/
               has_pkgver=$(bash -c '
                 cd /tmp/generic-ver || exit 1
@@ -2675,6 +2696,45 @@ jobs:
             echo "::error::spirv-headers-git 尚未發佈到 junlin03-aur（等 lib32-llvm-git／spirv-headers-git 那一輪）"
             exit 1
           fi
+          # ── Rust 工具鏈：rustup + nightly（用戶 2026-10-15 兩道裁定：「編譯相關一律
+          #    去弄尖端」、「去弄 24.0.0 而不是 23.x，其他以此類推」）───────────────
+          # 為什麼不裝 distro `rust`：Arch 的 rust 把 LLVM 家族寫成**等號硬釘**——查實
+          # world/extra 的 `rust-1:1.99.0-1` %DEPENDS% = `compiler-rt=23.1.1 lld=23.1.1
+          # llvm-libs=23.1.1`，是整個同步庫**唯一**一筆帶等號硬釘的包；而本步驟剛把家族
+          # 換成 24.0git ⇒ 那個釘子無法滿足，pacman 於是去拉 distro compiler-rt 23.1.1，
+          # 與已安裝的 compiler-rt-git 互斥；`--noconfirm` 對「Remove compiler-rt-git?
+          # [y/N]」預設 N ⇒
+          #   `:: compiler-rt-23.1.1-1 and compiler-rt-git-… are in conflict`
+          #   `error: unresolvable package conflicts detected`
+          # 然後 makepkg 在「Checking buildtime dependencies」就死（run 38511938671
+          # 的 mesa job 實物日誌 04:37:45，Missing dependencies 裡就有 rust／rust-bindgen）。
+          # 也不能硬裝 distro rust 再無視那個釘子：Arch 的 rust 是**動態鏈系統 LLVM**
+          # （PKGBUILD 的 `_llvmver=23.1.3` + `depends llvm-libs`；產物 librustc_driver
+          # NEEDED `libLLVM.so.23.1`），而本步驟之後 /usr/lib/libLLVM.so 已指向 24.0git
+          # ⇒ rustc 連啟動都會失敗。硬裝只會把紅點從「依賴衝突」挪到「meson 找不到
+          # rustc」，不是修好。
+          # rustup 兩邊都避開：extra 的 rustup `provides=rust`＋`conflicts=rust`
+          # （.PKGINFO 實查），工具鏈**自帶 LLVM**、完全不吃系統 libLLVM，而且 nightly
+          # 就是尖端。它以 provider 身分滿足 makepkg 的裸名 `rust`，跟
+          # opencc→opencc-git、spirv-tools→spirv-tools-git 是同一招。
+          if [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ]; then
+            pacman -S --ask=20 --noconfirm --needed rustup
+            export RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
+            rustup toolchain install nightly --profile minimal --no-self-update
+            rustup default nightly
+            rustup show active-toolchain
+            chown -R builder:builder /opt/rustup /opt/cargo
+            # 自證：**builder 身分**下 rustc 真的要能跑。makepkg 是 `su builder -c` 起的、
+            # 環境會被剝（本倉 gstreamer 那步的實測結論），所以驗證要在同一個環境模型下
+            # 做，否則紅會晚在 meson 那步才爆、訊息離真因很遠。上面 export 的兩個變數
+            # 進不到 makepkg 那層，靠「云端编译」那步把它們寫進命令字串（見那裡的 _mp_env）。
+            su builder -c 'RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo rustc --version' \
+              || { echo "::error::rustup nightly 在 builder 身分下跑不起來（mesa 的 RustiCL 會編不出來）"; exit 1; }
+            # 另一顆建置期依賴也走尖端／自有：`rust-bindgen-git` 提供裸名 `rust-bindgen`
+            # （conflicts 同名實包），否則 makepkg 會去裝 distro 那顆（它 depends clang，
+            # 而 clang 已被 clang-git 頂替，版本對不上同一套 LLVM）。
+            pacman -S --ask=20 --noconfirm --needed rust-bindgen-git
+          fi
           # 硬驗：容器此刻的 llvm-config 必須真的來自我們那套（不是官方 23.1）。
           # 這一步是防「裝了卻沒頂替」的靜默態——實測過 llvm-config 仍指向官方包的情況。
           readlink -f /usr/lib/libLLVM.so
@@ -2888,7 +2948,13 @@ jobs:
             echo ">> 本次 makepkg 以 su builder 起跑（非 gstreamer-git，或 setpriv 自檢未過）"
           fi
           _mp=0
-          until $_runas "makepkg $flags" 2>&1 | tee /tmp/makepkg.log; do
+          # mesa-tkg-git 的 RustiCL 要用「把容器 LLVM 換成自有」那步裝的 rustup nightly：
+          # RUSTUP_HOME／CARGO_HOME 必須進到 makepkg 那一層，而 `su` **會剝環境**
+          # （本倉 gstreamer 那步的實測結論），所以寫進命令字串本身，不靠 export。
+          _mp_env=""
+          [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ] \
+            && _mp_env="RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo "
+          until $_runas "${_mp_env}makepkg $flags" 2>&1 | tee /tmp/makepkg.log; do
             _mp=$((_mp + 1))
             bad=$(grep -oE '^:: File [^ ]+ is corrupted' /tmp/makepkg.log | awk '{print $3}' | sort -u || true)
             dl=$(grep -qE 'Failure while downloading|RPC failed|returned error: 50[0-9]|reset by server|HTTP/2 stream|curl: \([0-9]+\)|failed retrieving file|failed to commit transaction' /tmp/makepkg.log && echo yes)

@@ -55,7 +55,12 @@ checkdepends=(clang python)
 #   反推（見下方 _llvm_abi）。這是 2026-10-12 那次 GL 黑屏的直接教訓——
 #   CI 產出的 mesa 依賴只有 `llvm-libs>=8.0.0`（無上限），llvm 換代時 pacman 認為
 #   依賴仍滿足、實物卻找不到 libLLVM.so.23.1，於是「badge 全綠但裝完黑屏」。
-depends=(glibc libstdc++ spirv-tools)
+# ⚠️ `spirv-tools-git`（不是裸名 `spirv-tools`）：同 opencc／librime 那一課——[extra]
+#   有一顆真叫 spirv-tools 的包（實查 `1:1.4.363.0-1`，tag 版），裸名永遠解到它；而本包
+#   是拿 **trunk 的 validator 行為**驗的（那 4 條 lit 紅的根因就是 distro 的 validator
+#   太舊、少了上游 2026-10-11 的兩筆修正，見 docs/in-tree-packages.md）。
+#   發布順序也靠它：spirv-tools-git 先進 feed，plan 步的依賴閘門才放行本包。
+depends=(glibc libstdc++ spirv-tools-git)
 # ⚠️ LLVM 的 ABI 虛擬名要**寫成頂層字面值**，不能用執行期變數去拼：makepkg 7.1 對
 #   分割包的 depends/provides 走 extract_function_variable（靜態抽字串再 eval），
 #   那個上下文裡 $pkgdir／local 變數都不存在，`depends+=("llvm-libs-abi=$abi")`

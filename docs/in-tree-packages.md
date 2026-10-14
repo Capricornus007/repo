@@ -1040,8 +1040,68 @@ tag `vulkan-sdk-1.4.363.0`(ef96ed76，09-10)；三個 validator 誤報與一個 
   攔截分支；回推校驗和 giant if 加 `!= 'spirv-tools-git'`。
 - **不需要專屬 TARGET_PKGVER case**：`source` 前綴寫成 `spirv-tools::`（＝`${pkgname%-git}`），
   通用探測克隆的目錄名與 `pkgver()` 的 `cd` 目標一致（xorg-xwayland-git 同款做法）。
-- epoch=1 與官方同基號；`provides=('spirv-tools' 'spirv-tools-libs')`＋conflicts/replaces 同名。
+- epoch：**4**（不是跟官方對齊的 1）。AUR 那顆 `spirv-tools-git` 是 `epoch=3`／`pkgver="2024.1".3932.fe7bae090`，
+  且 930 天沒動；yay/topgrade 是拿「已安裝 vs AUR」比版本 ⇒ epoch 1 會被判比較舊，用戶端永遠掛著
+  「AUR 有新版本」並以 `make dependency of spirv-llvm-translator-git` 的身分把舊包裝回去
+  （2026-10-15 實物輸出與 AUR PKGBUILD 都查過）。取 4 一次壓過 AUR(3) 與官方(1)。
+  `provides=('spirv-tools=<基號>' 'spirv-tools-libs')`＋conflicts/replaces 同名。
 - ⚠️ 裝機影響：`pactree -r spirv-tools` 實測依賴鏈是 glslang → libplacebo →
   ffmpeg-full-git → mpv／librewolf／opencv／gst-libav-git。執行期鏈的是**無版本後綴**的
   `libSPIRV-Tools*.so`，trunk 不改 soname 就不斷鏈；換代改變的是 validator 行為（影響建置期）。
   裝完的 smoke test：`vulkaninfo` 之類＋跑一段 mpv。
+
+## 2026-10-15：四顆紅的根因與修法（同一種病：裸名／死碼／硬釘）
+
+run `38511938671`（164 成功 / 4 紅）逐顆查實後，四個紅其實是三種同源病灶。
+
+### 病灶一：**裸名依賴會被 [extra] 的同名實包搶走**（成立於 pacman 的解析語義）
+pacman 對「倉庫裡真有一顆叫這名字的包」優先於 provider，即使在裝的是本倉的 provider 也一樣。
+- `librime-git`：`depends=('opencc')` → 解到 `[extra]/opencc 1.3.2-1`（日誌實物
+  `-- Found opencc: /usr/lib/libopencc.so`），而 librime link 的是 **soname**（1.3 與 1.4 跨代）。
+  同一份原始碼在本機把 opencc-git 1.4.2 裝好後重跑 `makepkg -dc` → **100% tests passed out of 2**、
+  正常出包（不必改測試、不必 `--nocheck`）。⇒ depends 翻成 `opencc-git`。
+- `spirv-llvm-translator-git`：`depends=(… spirv-tools)` → 解到 `[extra]/spirv-tools 1:1.4.363.0-1`，
+  而那正是「validator 太舊」那 4 條 lit 紅的來源。⇒ 翻成 `spirv-tools-git`。
+- `spirv-tools-git`：`depends=('spirv-headers')` → 解到 tag 版。⇒ 翻成 `spirv-headers-git`
+  （本機實測 `-D SPIRV-Headers_SOURCE_DIR=/usr` 配 headers-git 照樣找得到、ctest 11/11 全過）。
+
+### 病灶二：**依賴就緒閘門寫在永不執行的分支＝死碼**
+`plan` 步的 `case "$PKG" in … esac` 是按包名分派，而 librime 那條閘門被寫進
+`nvidia-utils-beta|nvidia-beta-dkms)` 分支內（`if [ "$PKG" = librime-git ]`）——那個分支對
+librime-git **永遠不會執行**。實證：該 job 的 pacman 從頭到尾沒同步過 `junlin03-aur`
+（日誌裡 0 筆 `junlin03-aur downloading`），照樣建置、照樣用 1.3 編、照樣紅。
+⇒ 閘門搬到**通用分支**，改成按 `$PKG` 查表的 `_extra_gate_deps`：
+`librime-git → opencc-git`、`spirv-llvm-translator-git → spirv-tools-git spirv-headers-git`、
+`mesa-tkg-git → spirv-llvm-translator-git`（未就緒就 skip 等下輪，符合本倉 DAG 收斂設計）。
+同時把 `librime-git`／`spirv-tools-git`／`spirv-headers-git` 加進 init 步的
+「該 job 要掛 junlin03-aur」名單，否則閘門與 `makepkg -s` 都看不到本倉的包
+（mesa 之所以看得到，就是它在名單裡：日誌有 ` junlin03-aur downloading...`）。
+
+### 病灶三：**distro rust 對 LLVM 家族是等號硬釘，與自有 24.0git 家族互斥**
+`mesa-tkg-git` 的 makedepends 有 `rust`／`rust-bindgen`（RustiCL 要用）。查實 `world/extra`
+的 `rust-1:1.99.0-1` %DEPENDS% = `compiler-rt=23.1.1 lld=23.1.1 llvm-libs=23.1.1`
+（**全同步庫唯一一筆等號硬釘**）⇒ 家族換成 24.0git 之後那個釘子不可能滿足，pacman 去拉
+distro `compiler-rt 23.1.1` 撞 `compiler-rt-git`，`--noconfirm` 對「Remove compiler-rt-git?」
+預設 N ⇒ `unresolvable package conflicts detected`，makepkg 死在「Checking buildtime dependencies」。
+硬裝 distro rust 也不行：Arch 的 rust **動態鏈系統 LLVM**（`_llvmver=23.1.3` + `depends llvm-libs`，
+產物 NEEDED `libLLVM.so.23.1`），換成 24.0git 後 rustc 連啟動都不行。
+⇒ 改走 **rustup + nightly**（用戶 2026-10-15 裁定「編譯相關一律尖端」「去弄 24.0.0 而不是 23.x」）：
+`extra/rustup` 的 `.PKGINFO` 實查 `provides=rust`＋`conflicts=rust`，工具鏈自帶 LLVM、不吃系統
+libLLVM ⇒ 以 provider 身分满足 makepkg 的裸名 `rust`（與 opencc/spirv-tools 同一招）。
+`RUSTUP_HOME=/opt/rustup`、`CARGO_HOME=/opt/cargo` 由「把容器 LLVM 換成自有」那步 export，
+但 `su` 會剝環境（本倉 gstreamer 那步的實測結論）⇒ 真正生效要靠「云端编译」那步把兩個變數
+**寫進 makepkg 命令字串**（`_mp_env`）。另把 `rust-bindgen-git` 預裝進去（同樣以 provider 頂替）。
+
+### 附：spirv-tools-git 本體（同輪修掉、非 CI 可見）
+1. `check()` 的自我舉證路徑原本寫 `build/tools/spirv-val/spirv-val`，上游從來不產那個子目錄
+   （`tools/CMakeLists.txt` 的 `add_spvtools_tool` 直接出在 `tools/`）⇒ 好包被判紅。
+2. `build()` 只寫 `-D SPIRV_TOOLS_BUILD_STATIC=OFF` 不夠：上游 `SPIRV_TOOLS_LIBRARY_TYPE`
+   預設「BUILD_SHARED_LIBS 為真才 SHARED」，缺 `-D BUILD_SHARED_LIBS=ON` 會落到 STATIC ⇒
+   產物只有 `libSPIRV-Tools.a` + `-shared.so`，**沒有** `libSPIRV-Tools.so`／
+   `libSPIRV-Tools-{opt,link,reduce,lint,diff}.so`。那不是少幾個檔而是**斷鏈**：
+   實測 `/usr/lib/libglslang.so` NEEDED 正是 `libSPIRV-Tools.so` 與 `libSPIRV-Tools-opt.so`
+   ⇒ 裝下去 glslang → libplacebo → ffmpeg/mpv/librewolf/opencv 立刻找不到库。
+   照官方旗標補齊（`BUILD_SHARED_LIBS=ON` + `SPIRV_TOOLS_BUILD_STATIC=OFF` + `SPIRV_WERROR=OFF`）。
+3. 驗收：本機完整跑 `makepkg -dc`（build+check+package）**EXIT=0** 出包；包內
+   `usr/lib/*.so` 七顆與 `pacman -Ql spirv-tools` 的檔案清單**逐檔一致**（零 `.a`），
+   SONAME 與 NEEDED 也與 distro 那批一致。
