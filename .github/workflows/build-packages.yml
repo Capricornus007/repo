@@ -773,6 +773,34 @@ jobs:
           # 21000」的解析上限（run #231 整個 workflow 因此無效、一個 job 都沒起）。
           # 現在 clone 留在上一步的通用分支，這裡只做 PKGBUILD 手術。
           case "${{ matrix.repo_name }}" in
+            helium-browser-bin)
+              # 用戶 2026-10-19 點名：要把 ttf-liberation 從這臺機器上卸掉，而它是被
+              # helium-browser-bin 的依賴釘住的。AUR 那顆把 'ttf-liberation' 寫死在
+              # depends（實查 PKGBUILD:19-20，第二行是 **tab 縮進的續行**），但對 Helium
+              # 而言這只是「總得有個 sans/mono 字體」的佔位依賴：本機 fontconfig 已把
+              # monospace→JetBrainsMapleMono、sans-serif→TsukuBRdGothicStd、
+              # serif→LXGWWenKaiTC 全指定死，用戶本地實測拿掉這條照樣能編能裝能用。
+              #
+              # 同時抬 pkgrel：產物版號必須**嚴格高於** AUR 那顆，否則目標機上
+              # 0.19.4.1-1 → 0.19.4.1-1 是同版號，pacman 視為已滿足、不重裝，
+              # 「摘掉依賴」這件事永遠落不到機器上（本倉契約：只比版號決定重建，
+              # 所以同版號換內容在這條鏈路上等於沒做）。AUR 下次抬版從 pkgrel=1
+              # 起算，我們再抬一次，比對仍走通用分支的靜態版號邏輯。
+              #
+              # 摘完要驗：AUR 若改成雙引號或換行寫法，sed 會靜默不中、包照發，
+              # 那就白費一轮 —— 所以查不到 liberation 才算過。
+              sed -i "s/'ttf-liberation'[[:space:]]*//g" pkg_dir/PKGBUILD
+              if grep -q 'liberation' pkg_dir/PKGBUILD; then
+                echo "::error::ttf-liberation 沒摘掉（AUR 那行的寫法變了，sed 對不上）"
+                grep -n 'liberation' pkg_dir/PKGBUILD || true
+                exit 1
+              fi
+              _pr="$(awk -F= '/^pkgrel=/{print $2; exit}' pkg_dir/PKGBUILD)"
+              case "$_pr" in ''|*[!0-9]*) _pr=0 ;; esac
+              sed -i "s/^pkgrel=.*/pkgrel=$((_pr + 1))/" pkg_dir/PKGBUILD
+              echo "改寫後：$(grep -E '^pkgrel=' pkg_dir/PKGBUILD)"
+              sed -n '19,21p' pkg_dir/PKGBUILD
+              ;;
             topgrade-git)
               # aws-lc-sys 0.45（topgrade 的 Rust 依賴鏈拉進來的）要編 jitterentropy-base.c，
               # 那顆檔自帶硬性 #error：不準用最佳化編譯、必須 -O0。crate 確實給了 -O0，
