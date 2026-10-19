@@ -531,7 +531,6 @@ jobs:
           #   bun 的 bytecode 路径带不动活的 import.meta，做出来的 omp 连
           #   `omp --version` 都会立刻 SyntaxError: import.meta is only valid inside
           #   modules（2026-09-15 v18.2.0.r06f2c14b 实测，详见该 PKGBUILD 注释）；
-          # xlibre 两个包上游未改，同样直接取 AUR；
           # mpv-git 的打包文件维护在本仓库 mpv-git/ 目录；
           # pysolfc-git / protonvpn-cli-community-git 同理只取各自目录下的 PKGBUILD
           # （protonvpn 的上游 url 改成了 jonasjancarik 的续命 fork，不能取 AUR 版）
@@ -556,23 +555,6 @@ jobs:
               mkdir pkg_dir
               curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/oh-my-pi-git/PKGBUILD" \
                 -o pkg_dir/PKGBUILD ;;
-            xlibre-xserver-git|xlibre-input-libinput-git)
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
-              if [ "${{ matrix.repo_name }}" = "xlibre-xserver-git" ]; then
-                # AUR PKGBUILD 引用的 xkb/README.compiled 在上游已被挪到
-                # Xext/xkeyboard/，不替换的话 package_common() 会 install 报错中断
-                sed -i 's|"xkb/README.compiled"|"Xext/xkeyboard/README.compiled"|' pkg_dir/PKGBUILD
-                # AUR 版的 common 拆分包只 provides xlibre-xserver-common，而
-                # xorg-xwayland 等套件 depends xorg-server-common——补上 provides，
-                # 否则装了 xlibre 后这些套件的依赖永远无法满足
-                sed -i '/provides=("${_pkgbase}-common=/a\  provides+=("xorg-server-common=${pkgver%%.r*}")' pkg_dir/PKGBUILD
-              else
-                # AUR 版只 provides xf86-input-libinput，而 xlibre-xserver-git 与
-                # xlibre-meta depends 的是 xlibre-input-libinput——不补 provides
-                # 的话，yay 升级 xserver 时会报「xlibre-input-libinput-git
-                # 不满足依赖」（2026-09 实测踩过）
-                sed -i '/^provides=/a\  provides+=("xlibre-input-libinput=${pkgver%%.r*}")' pkg_dir/PKGBUILD
-              fi ;;
             protonvpn-cli-community-git)
               mkdir pkg_dir
               curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}/PKGBUILD" \
@@ -1311,27 +1293,6 @@ jobs:
               [ -n "$TARGET_PKGVER" ] || skip "拿不到 adguardhome-git 上游版本"
               ;;
 
-            xlibre-xserver-git|xlibre-input-libinput-git)
-              # 复刻 xlibre PKGBUILD 的 pkgver()：最高 xlibre-*-tag + HEAD 距离它的提交数。
-              # 注意 libinput 上游的 tag 前缀是 xlibre-xf86-input-libinput-，
-              # 不是包名 xlibre-input-libinput-。
-              # source 数组元素形如 "xlibre-xserver::git+https://..."，
-              # 先剥 <name>:: 前缀再剥 git+ 前缀，顺序与上面几类相反
-              SRC_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
-                        for s in "${source[@]}"; do printf "%s\n" "$s"; done' \
-                | sed -E 's/^[^:]*:://; s/^git\+//' \
-                | grep -E '^https?://' | head -n1)
-              rm -rf /tmp/gitpkg-src
-              git clone "$SRC_URL" /tmp/gitpkg-src || skip "clone $PKG 上游失败"
-              case "$PKG" in
-                xlibre-xserver-git)        tagprefix="xlibre-xserver-" ;;
-                xlibre-input-libinput-git) tagprefix="xlibre-xf86-input-libinput-" ;;
-              esac
-              tag=$(git -C /tmp/gitpkg-src tag -l "${tagprefix}*" --sort=-v:refname | head -n1)
-              [ -n "$tag" ] || skip "$PKG 上游没有 ${tagprefix}* tag"
-              rev=$(git -C /tmp/gitpkg-src rev-list --count "$tag"..HEAD)
-              hash=$(git -C /tmp/gitpkg-src rev-parse --short HEAD)
-              TARGET_PKGVER=$(printf '%s.r%s.%s' "${tag#"$tagprefix"}" "$rev" "$hash")
               ;;
 
             android-ndk-23|android-ndk-27)
@@ -1974,27 +1935,6 @@ jobs:
               && su builder -c 'makepkg -si --noconfirm --needed --asdeps --skippgpcheck')
           done
 
-      - name: 云端编译 xlibre-input-libinput-git 依赖的 xserver 拆分包
-        if: matrix.repo_name == 'xlibre-input-libinput-git' && steps.plan.outputs.build == 'true'
-        run: |
-          set -euo pipefail
-          install -d -o builder -g builder /build/xlibre-server
-          git clone "https://aur.archlinux.org/xlibre-xserver-git.git" /build/xlibre-server/xlibre-xserver-git
-          # 同「拉取」步骤：上游把 xkb/README.compiled 挪到了 Xext/xkeyboard/
-          sed -i 's|"xkb/README.compiled"|"Xext/xkeyboard/README.compiled"|' /build/xlibre-server/xlibre-xserver-git/PKGBUILD
-          chown -R builder:builder /build/xlibre-server
-          cd /build/xlibre-server/xlibre-xserver-git
-          # 驱动编译只需要 server/common/devel 三个拆分包。makepkg 没有「只打
-          # 一部分拆分包」的选项，七个全打也很快（只是重复跑几遍 meson install），
-          # 下面安装时只装这三个。
-          su builder -c 'makepkg -s --noconfirm -f'
-          # AUR 的 xlibre-xserver-git 自带循环依赖：server 拆分包 depends
-          # xlibre-input-libinput（正是本 job 要编的驱动）。容器里装它时声明
-          # 假定已满足即可，用户机器上两者都在我们自己的仓库里，不冲突。
-          pacman -U --noconfirm --needed --asdeps \
-            --assume-installed xlibre-input-libinput \
-            ./xlibre-xserver{,-common,-devel}-git-*.pkg.tar.zst
-
       - name: 改写 PKGBUILD（版本、config、cjktty 补丁）
         if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'
         env:
@@ -2391,7 +2331,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'xlibre-xserver-git' && matrix.repo_name != 'xlibre-input-libinput-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'jbr21' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'jbr21' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -3017,11 +2957,6 @@ jobs:
               mv -v "$f" "${base}-rc${rest}"
             done
             ls -lh linux-cachyos-cjktty*.pkg.tar.zst
-          fi
-          if [ "${{ matrix.repo_name }}" = "xlibre-xserver-git" ]; then
-            # 拆分打包里带一个 bootstrap 变体，用户点名不要。makepkg 没有
-            # 「只打一部分拆分包」的选项，躲不掉打包这一步，打完直接丢弃
-            rm -fv xlibre-xserver-bootstrap-git-*.pkg.tar.zst
           fi
           if [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ]; then
             # ── LLVM soname 守門（防止上面的「鎖 ABI」改動被靜默回退）
