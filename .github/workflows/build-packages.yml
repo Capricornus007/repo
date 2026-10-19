@@ -2720,6 +2720,14 @@ jobs:
           if [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ]; then
             pacman -S --ask=20 --noconfirm --needed rustup
             export RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
+            # 必鬚自己 mkdir：Arch 的 rustup 在**打包期**用 CARGO_HOME=$pkgdir/usr 建置，
+            # proxy（/usr/bin/{rustc,cargo,…}）是包裡的檔案，所以執行期 `rustup toolchain
+            # install` 永遠不會去建 $CARGO_HOME——下面 chown 就會
+            # `chown: cannot access '/opt/cargo'` 紅掉（run 39198734304 的 mesa job 實測，
+            # 同步驟 rustup 三段全成功、夜用鏈也裝好了，死的只有這行）。而 makepkg 那層
+            # 帶 CARGO_HOME=/opt/cargo（見「云端编译」的 _mp_env），cargo 要在那裡寫
+            # registry cache ⇒ 目錄必須存在且屬 builder。
+            mkdir -p /opt/rustup /opt/cargo
             rustup toolchain install nightly --profile minimal --no-self-update
             rustup default nightly
             rustup show active-toolchain
@@ -3053,6 +3061,42 @@ jobs:
             else
               echo ">> 本輪未產出 lib32-mesa-tkg-git（32 位元等自有 lib32-*-git 齊了的那一輪）"
             fi
+          fi
+          # ── Artix 血緣守門（不分包，每顆都過）────────────────────────────────
+          # 目標機是 Artix：沒有 systemd 本體，只有 `artix-archlinux-support` 那個
+          # 「只寫 Provides: systemd systemd-libs libsystemd、不帶任何 .so」的殼包。
+          # 於是「依賴已滿足」在 pacman 那邊是**假綠**，而 CI 容器是 Arch、真有
+          # libsystemd.so.0 → 連結期也過。兩層都綠，裝到目標機才炸。
+          # 2026-10-19 實證：feed 的 brightnessctl-git 裝進目標機後
+          #   brightnessctl: error while loading shared libraries: libsystemd.so.0
+          # 分級：真的 NEEDED 到 → 硬紅（無條件，這在 Artix 上必定啟動即死）；
+          # 只在 .PKGINFO 聲明 → 必須列名白名單才放行，且降為 warning，因為
+          # Electron／KDE 那類上游包會原樣帶上聲明（目標機 objdump 實扫：
+          # codex-desktop-git、kcoreaddons-git、qoder-gui-bin、qoder-gui-cn 四顆
+          # 全都「聲明但未鏈接」，裝著可用，不該因此把整輪打紅）。
+          _sysd_link=0; _sysd_dep=''
+          for f in ./*.pkg.tar.zst; do
+            [ -e "$f" ] || continue
+            chk="$PWD/.sysd-check-$$"; rm -rf "$chk"; mkdir -p "$chk"
+            bsdtar -xf "$f" -C "$chk" 2>/dev/null
+            if find "$chk" -type f \( -perm -u+x -o -name '*.so*' \) -print0 2>/dev/null \
+                 | xargs -0 -r objdump -p 2>/dev/null \
+                 | grep -qE 'NEEDED[[:space:]]+libsystemd\.so\.0'; then
+              echo "::error::$f 的產物 NEEDED libsystemd.so.0 —— Artix 上沒這顆 .so，裝下去一跑就死"; _sysd_link=1
+            fi
+            d="$(bsdtar -xOf "$f" .PKGINFO 2>/dev/null \
+                 | grep -aE '^depend = (systemd|systemd-libs)([= ]|$)' | sed 's/^depend = //; s/ *$//' | tr '\n' ' ')" || d=''
+            [ -z "$d" ] || _sysd_dep="$_sysd_dep  $f → [$d]"
+            rm -rf "$chk"
+          done
+          [ "$_sysd_link" = 0 ] || exit 1
+          if [ -n "$_sysd_dep" ]; then
+            case " ${{ matrix.repo_name }} " in
+              *" qoder-gui-bin "*|*" qoder-gui-cn "*|*" codex-desktop-git "*|*" kcoreaddons-git "*)
+                echo "::warning::聲明 systemd 但未鏈接（已在白名單，目標機靠虛擬 Provides 過關）:$_sysd_dep" ;;
+              *)
+                echo "::error::產物聲明了 systemd／systemd-libs 卻不在白名單:$_sysd_dep"; exit 1 ;;
+            esac
           fi
           if [ "${{ matrix.repo_name }}" = "qt6ct-git" ]; then
             # ── 釘選落地驗收（只認產物實物，不認 makepkg 綠燈）

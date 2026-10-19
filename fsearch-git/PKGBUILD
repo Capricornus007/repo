@@ -37,13 +37,15 @@
 #    但那是「碰巧可用」而不是宣告出來的依賴；這裡把 devtools 寫進 makedepends
 #    （容器內已存在 → makepkg -s 用 --needed，不會多裝、也不會拖入 docker 之外的東西）。
 #
-# 3) 0001-fix_new_window.patch 留著（規則 14「一方有一方無 → 補上」）：實測 master HEAD
-#    cb6cd67 的 src/fsearch.c:290 仍是 `gboolean minimized = g_variant_get_boolean(parameter);`，
-#    而選單項 app.new_window 沒有 target、Ctrl+N 那條 accel 是以 parameter=NULL 啟動的
-#    → 踩 GLib critical／新建視窗狀態錯，上游沒修。已在 master HEAD 上跑過
-#    `git apply --check`（乾淨通過），所以 prepare() 用 patch 的**預設 fuzz**，
-#    不抄 AUR 的 `-F100`——那個在上游漂移後會靜默錯套，紅也紅得不明不白。
-#    改這個檔要連同 sha256sums 一起更新（本包不標 kind:aur，校驗和是真的在驗）。
+# 3) 0001-fix_new_window.patch 已**刪除**（2026-10-19，run 39198734304 的 fsearch job
+#    實測 `Hunk #2 FAILED at 498` → prepare() 紅）。原因不是 patch 寫壞，是上游把
+#    `app.new_window` 的三條啟動路徑全補上了參數，NULL 這條 UB 已不存在：
+#      src/fsearch.c:500  set_accel_for_action(app, "app.new_window(false)", "<control>n")
+#      src/menus.ui:11    <attribute name="target" type="b">false</attribute>
+#      src/fsearch_window.ui:55  <property name="action-target">boolean false</property>
+#    （上游 master HEAD 5b7c014 實查，三處逐行驗過）。所以正確修法是拿掉 patch，
+#    不是加 --fuzz／-F100 硬套——那樣會把一段已無對應問題的程式改出 `new_window_null`
+#    這個多餘動作，紅是綠了，包卻變髒。
 _pkgbase=fsearch
 pkgname=${_pkgbase}-git
 pkgver=0.3.2.r2935.gcb6cd67
@@ -75,17 +77,10 @@ conflicts=("${_pkgbase}")
 replaces=("${_pkgbase}")
 source=(
   "${_pkgbase}::git+${url}.git"
-  '0001-fix_new_window.patch'
 )
 sha256sums=(
   'SKIP'
-  '66b92a2bcba6006469d8aecb94612d4f633f47800bbe502d6e2061d5218478b1'
 )
-
-prepare() {
-  cd "$srcdir/${_pkgbase}" || return 1
-  patch -Np1 -i "$srcdir/0001-fix_new_window.patch"
-}
 
 pkgver() {
   cd "$srcdir/${_pkgbase}" || return 1
