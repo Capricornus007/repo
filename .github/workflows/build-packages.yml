@@ -785,7 +785,16 @@ jobs:
                 pkg_dir/PKGBUILD > pkg_dir/PKGBUILD.t && mv pkg_dir/PKGBUILD.t pkg_dir/PKGBUILD
               grep -q 'LLVMInitializeAMDGPU' pkg_dir/PKGBUILD \
                 || { echo "::error::Target.h 補丁沒注入進 prepare()（錨點 msg2 \"Tree cleaned\" 不見了）"; exit 1; }
-              grep -n 'LLVMInitializeAMDGPU' pkg_dir/PKGBUILD | head -2
+              # 加 epoch=1：2026-10-20 我在目標機上手建並裝了
+              # mesa-tkg-git 27.0.0_devel.231953.0913fce718f-1（未簽名）。它比 feed 當時的
+              # 26.3.0 新，`pacman -Syu` 會判定「已是最新」→ 這顆手建物會永久擋住 feed
+              # 升級（本倉契約 8，且明令不可用 --force 繞）。抬 pkgrel 對 -git 無效
+              # （makepkg 重置為 1），epoch 才會進版號比較與資產名（實查
+              # spirv-llvm-translator-git 本機 `2:7.0.1…` → 資產 `2.7.0.1…`），
+              # 所以 CI 產出 `1!27.0.0_devel…` 嚴格高於我那顆，裝機時是升級而非同版號。
+              grep -qE '^epoch=' pkg_dir/PKGBUILD || sed -i '/^pkgver=/i epoch=1' pkg_dir/PKGBUILD
+              grep -nE '^epoch=' pkg_dir/PKGBUILD || { echo "::error::epoch 沒加上，feed 產物會被目標機的手建包擋住"; exit 1; }
+              grep -nE '^epoch=|^pkgver=' pkg_dir/PKGBUILD | head -3
               ;;
             helium-browser-bin)
               # 用戶 2026-10-19 點名：要把 ttf-liberation 從這臺機器上卸掉，而它是被
