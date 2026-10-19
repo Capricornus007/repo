@@ -755,6 +755,38 @@ jobs:
           # 21000」的解析上限（run #231 整個 workflow 因此無效、一個 job 都沒起）。
           # 現在 clone 留在上一步的通用分支，這裡只做 PKGBUILD 手術。
           case "${{ matrix.repo_name }}" in
+            mesa-tkg-git)
+              # ── LLVM 24 的 llvm-c/Target.h 要自己 include（2026-10-20 本地實測定位）
+              # 症狀：build() 紅在
+              #   src/amd/llvm/ac_llvm_util.c:20:4: error: call to undeclared function
+              #     'LLVMInitializeAMDGPUTargetInfo' [-Werror=implicit-function-declaration]
+              # （實測 6 errors、ninja 停在 [1452/4166]；把該檔補好後同一病因在
+              #   src/gallium/drivers/radeonsi/gfx/si_gfx_screen.c:104 再紅一次，
+              #   停在 [2768/4166]）。
+              # 根因：那組 `LLVMInitialize##TargetName##TargetInfo` 宣告是由
+              #   llvm-c/Target.h 用 LLVM_TARGET(TargetName) 對 llvm/Config/Targets.def
+              #   展開生成的（實查本機：Targets.def 有 LLVM_TARGET(AMDGPU)，
+              #   巨集區塊在 Target.h 而不是 TargetMachine.h）。而引用那些符號的 4 個
+              #   TU 裡，只有 src/amd/compiler/tests/main.cpp 自己 include 了 Target.h，
+              #   ac_llvm_util.c／radv_physical_device.c／si_gfx_screen.c 都沒帶 →
+              #   看不到宣告。所以「要用就自己 include」是上游自己的寫法，補 include
+              #   與之一致，不是繞過型別檢查。
+              # ⚠️ 別用「展開後的名字」去 grep 標頭找宣告——那是巨集生成的，字串永遠
+              #   不會原樣出現在標頭裡，會得到假陰性（我在本機就這樣誤判過一次，
+              #   差點去改 LLVM 打包）。
+              # 逐檔掃而不是點名清單：上游再加呼叫點時自動涵蓋；補不上就 exit 1，
+              # 不讓它靜默漏掉而晚 30 分鐘在 ninja 才爆。
+              # 注入方式刻意不用 heredoc：`<<'PY'` 的結束標記必須頂零，而 YAML block
+              # scalar 不允許任何一行比基準縮排更淺，縮排的 PY 不會被當成結束標記
+              # （本倉 scripts/workflow-step-budget.py 的 bash -n 那關實測報
+              # `unexpected end of file from case command`）。改成整段放變數、awk -v 插入。
+              _tgt_patch='  for _f in $(grep -rl LLVMInitializeAMDGPU src/ 2>/dev/null); do grep -q "llvm-c/Target.h" "$_f" && continue; sed -i "1i #include <llvm-c/Target.h>" "$_f"; grep -q "llvm-c/Target.h" "$_f" || { echo "Target.h 補丁打不上：$_f"; exit 1; }; echo "  + llvm-c/Target.h -> $_f"; done'
+              awk -v p="$_tgt_patch" '$0 ~ /msg2 "Tree cleaned"/ {print; print p; next} {print}' \
+                pkg_dir/PKGBUILD > pkg_dir/PKGBUILD.t && mv pkg_dir/PKGBUILD.t pkg_dir/PKGBUILD
+              grep -q 'LLVMInitializeAMDGPU' pkg_dir/PKGBUILD \
+                || { echo "::error::Target.h 補丁沒注入進 prepare()（錨點 msg2 \"Tree cleaned\" 不見了）"; exit 1; }
+              grep -n 'LLVMInitializeAMDGPU' pkg_dir/PKGBUILD | head -2
+              ;;
             helium-browser-bin)
               # 用戶 2026-10-19 點名：要把 ttf-liberation 從這臺機器上卸掉，而它是被
               # helium-browser-bin 的依賴釘住的。AUR 那顆把 'ttf-liberation' 寫死在
