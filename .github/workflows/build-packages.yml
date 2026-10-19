@@ -783,6 +783,34 @@ jobs:
               echo "改寫後：$(grep -E '^pkgrel=' pkg_dir/PKGBUILD)"
               sed -n '19,21p' pkg_dir/PKGBUILD
               ;;
+            i3blocks-git)
+              # 實物查證（`gh release download` 那顆 1.5.r11.g9a06a38-1，tar -tf 全清單）：
+              # 整包都落在 /usr/local 底下——usr/local/bin/i3blocks、
+              # usr/local/etc/i3blocks.conf、usr/local/share/man/man1/i3blocks.1.gz、
+              # usr/local/share/bash-completion/completions/i3blocks。裝機時 pacman 直接拒：
+              #   i3blocks-git: /usr/local/share/man exists in filesystem (owned by filesystem)
+              # → 這顆在 feed 裡等於「有條目但裝不起來」（本機 2026-10-19 實測）。
+              # 根因不是 `make` 那層：AUR PKGBUILD 的 build() 是
+              #   ./autogen.sh && ./configure && make PREFIX=/usr
+              # configure 沒拿 --prefix，它生成的 config.mk 用**小寫** `prefix=/usr/local`，
+              # 而 package()/build() 只在 make 層傳**大寫** PREFIX —— 兩者不是同一個變數，
+              # 大寫那個壓不下小寫那個。正解是把 prefix 交給 configure。
+              #
+              # 同時加 epoch=1：這顆是 -git 包，版號由 pkgver() 從上游 HEAD 算，上游沒動
+              # 的話資產名一模一樣 → 被 plan 的「已在 release 裡」永久跳過（契約 1），
+              # 修正上不了車；而抬 pkgrel 對 -git 無效（makepkg 會重置成 1，本倉 pre-commit
+              # 那支 bump-pkgrel 就是這樣講的）。epoch 會進資產名（實查：本機
+              # spirv-llvm-translator-git 是 `2:7.0.1.r464…`，資產名是 `…-2.7.0.1.r464…`，
+              # 冒號被攤平成點）→ 加 epoch 才真的觸發重建。
+              sed -i 's|^\([[:space:]]*\)\./configure$|\1./configure --prefix=/usr --sysconfdir=/etc|' pkg_dir/PKGBUILD
+              if ! grep -q 'configure --prefix=/usr' pkg_dir/PKGBUILD; then
+                echo "::error::i3blocks 的 ./configure 沒補上 --prefix（那行的寫法變了）"
+                grep -n 'configure' pkg_dir/PKGBUILD || true
+                exit 1
+              fi
+              grep -qE '^epoch=' pkg_dir/PKGBUILD || sed -i '/^pkgname=/a epoch=1' pkg_dir/PKGBUILD
+              grep -nE '^epoch=|^\s*./configure' pkg_dir/PKGBUILD
+              ;;
             topgrade-git)
               # aws-lc-sys 0.45（topgrade 的 Rust 依賴鏈拉進來的）要編 jitterentropy-base.c，
               # 那顆檔自帶硬性 #error：不準用最佳化編譯、必須 -O0。crate 確實給了 -O0，
@@ -949,6 +977,22 @@ jobs:
             echo "build=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # ── 兄弟依賴必須「已發佈」才准發這顆包 ────────────────────────────────
+          # 下一步「构建 ffmpeg-full-git 的 AUR 依賴」會在**容器內**現 build 那四顆，
+          # 所以 makepkg 一定過、job 一定綠——但產物的 .PKGINFO 照樣寫著
+          # `depend = svt-jpeg-xs-git` 等，而它們**不在 feed 裡**，裝到目標機就是
+          # `The following package cannot be upgraded due to unresolvable dependencies`
+          # （2026-10-19 本機實測：`pacman -T` 掃 ffmpeg-full-git 的 132 條依賴，
+          #  只有 svt-jpeg-xs-git 任何倉都查無；mpeghdec-git／quirc-git／astc-encoder-git
+          #  都已在 current-repo 資產裡）。容器綠＋裝不上，比直接紅更壞。
+          # ⚠️ 這裡比的是**feed 名稱**，與 AUR 倉名不完全同：AUR 那幾顆叫
+          #  mpeghdec／quirc／astc-encoder，我們發佈出去是 -git 版號那套名字。
+          for _sib in mpeghdec-git quirc-git svt-jpeg-xs-git astc-encoder-git; do
+            pacman -Si -- "$_sib" >/dev/null 2>&1 && continue
+            echo ">> $_sib 尚未發佈到 junlin03-aur，本輪跳過 ffmpeg-full-git（等它進 feed 的下一輪）"
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          done
           echo "build=true" >> "$GITHUB_OUTPUT"
           echo "pkgver=$latest_pkgver" >> "$GITHUB_OUTPUT"
 
