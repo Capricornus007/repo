@@ -1293,8 +1293,6 @@ jobs:
               [ -n "$TARGET_PKGVER" ] || skip "拿不到 adguardhome-git 上游版本"
               ;;
 
-              ;;
-
             android-ndk-23|android-ndk-27)
               # 固定版本包：pkgver 写死在各自仓库的 PKGBUILD 里，
               # 首次构建入库后 plan 的 release 资产比对应会永远跳过

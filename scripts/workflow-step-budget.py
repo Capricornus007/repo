@@ -18,8 +18,10 @@
 """
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 
 LIMIT = 21000
 WARN = 19000
@@ -83,6 +85,40 @@ def check(path):
     return any(level == 'RED ' for _, level, _ in bad)
 
 
+def check_shell(path):
+    """把每個 `run:` 抽出來跑 `bash -n`。
+
+    為啥要這一道：`run: |` 是 YAML **block scalar**，裡面的 shell 對 YAML 而言只是
+    一大坨字串——所以「刪掉一個 `case` 分支後多留一個 `;;`」這種錯，PyYAML 綠、
+    actionlint 也綠，只有 GitHub 真正把腳本丟給 bash 才炸，而且一炸就是**所有跑到
+    該步驟的 job 全紅**（2026-10-19 實測：刪 xlibre 版號分支時把前一個 case 的收尾
+    `;;` 多留一份，`/__w/_temp/….sh: line 263: syntax error near unexpected token ';;'`，
+    一輪紅掉 8 個 job，日誌還要等 run 結束才取得到）。
+    `${{ }}` 先換成佔位字串，否則 bash 會把 `${{` 當成非法參數展開。
+    """
+    bad = False
+    with open(path, encoding='utf-8') as fh:
+        doc = yaml.safe_load(fh)
+    for jn, job in (doc.get('jobs') or {}).items():
+        for st in (job.get('steps') or []):
+            script = st.get('run')
+            if not isinstance(script, str):
+                continue
+            shell = st.get('shell')
+            if shell and 'bash' not in str(shell):
+                continue            # python／sh 等另說，別用 bash 去判
+            tmp = os.path.join(tempfile.mkdtemp(prefix='wfsh-'), 's.sh')
+            with open(tmp, 'w', encoding='utf-8') as fh2:
+                fh2.write(re.sub(r'\$\{\{.*?\}\}', 'X', script, flags=re.S))
+            r = subprocess.run(['bash', '-n', tmp], capture_output=True, text=True)
+            shutil.rmtree(os.path.dirname(tmp), ignore_errors=True)
+            if r.returncode:
+                line = (r.stderr.strip().splitlines() or ['(無訊息)'])[-1]
+                print(f'RED {path}  job={jn} step={st.get("name", "?")!r} bash 語法錯：{line}')
+                bad = True
+    return bad
+
+
 def main():
     if len(sys.argv) > 1:
         files = sys.argv[1:]
@@ -97,6 +133,7 @@ def main():
             continue
         try:
             failed |= check(f)
+            failed |= check_shell(f)
         except FileNotFoundError:
             print(f'SKIP {f}（不存在）')
         except yaml.YAMLError as exc:
