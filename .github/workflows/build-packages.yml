@@ -683,6 +683,18 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
+            android-ndk-30)
+              # 本倉 in-tree 維護（2026-10-20，用戶指定放自動構建倉）。
+              # 為什麼不走 android-ndk-23/-27 那套「獨立倉 Capricornus007/android-ndk-NN」模式：
+              # 那兩顆的 PKGBUILD 在 GitHub 鏡像倉裡，因為當時實測 dl.google.com 從本網路不可達。
+              # 今天實測該站已直連可用（HTTP 200、range 請求 0.23 s），所以這顆直接取
+              # dl.google.com，不再多養一個鏡像倉。
+              # 三個檔案都要抓：PKGBUILD 的 source=() 引了同目錄的 profile.d 腳本與 .install。
+              mkdir pkg_dir
+              base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
+              curl -sfL "$base/PKGBUILD"                -o "pkg_dir/PKGBUILD"
+              curl -sfL "$base/android-ndk-30.sh"       -o "pkg_dir/android-ndk-30.sh"
+              curl -sfL "$base/android-ndk-30.install"  -o "pkg_dir/android-ndk-30.install" ;;
             xorg-xwayland-git)
               # 本倉 in-tree 維護（比照 wlroots-git）：xserver 的 xwayland-24.1 分支
               # + MR !733 HiDPI xprop 縮放補丁（燒成 hidpi.patch），並用
@@ -1396,9 +1408,10 @@ jobs:
               [ -n "$TARGET_PKGVER" ] || skip "拿不到 adguardhome-git 上游版本"
               ;;
 
-            android-ndk-23|android-ndk-27)
+            android-ndk-23|android-ndk-27|android-ndk-30)
               # 固定版本包：pkgver 写死在各自仓库的 PKGBUILD 里，
               # 首次构建入库后 plan 的 release 资产比对应会永远跳过
+              # （android-ndk-30 的 pkgver 另有防漂移校驗：zip 內 Pkg.Revision 不等就 build 紅）
               TARGET_PKGVER="$CUR_PKGVER"
               ;;
 
@@ -2432,7 +2445,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'jbr21' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-23' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'android-ndk-30' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'wlroots-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'jbr21' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -2555,15 +2568,17 @@ jobs:
           fi
 
       - name: 预下载 NDK 镜像源码
-        if: (matrix.repo_name == 'android-ndk-23' || matrix.repo_name == 'android-ndk-27') && steps.plan.outputs.build == 'true'
+        if: (matrix.repo_name == 'android-ndk-23' || matrix.repo_name == 'android-ndk-27' || matrix.repo_name == 'android-ndk-30') && steps.plan.outputs.build == 'true'
         run: |
           set -euo pipefail
           cd pkg_dir
           # makepkg 的 CURL_OPTIONS（max-time 300）撑不住 ~700MB 的下载；
           # 把源码包先放进 PKGBUILD 同目录，makepkg 会直接复用不再下载。
+          # URL 兩種來源都要認：23/27 走自建 GitHub 鏡像（當時 dl.google.com 不可達），
+          # 30 走 dl.google.com 直連（2026-10-20 實測可達）。
           zip_url=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
-                    for u in "${source[@]}"; do printf "%s\n" "$u"; done'             | grep -E '^https://github\.com/.*/releases/download/' | head -n1)
-          [ -n "$zip_url" ] || { echo "PKGBUILD 里找不到镜像源码 URL"; exit 1; }
+                    for u in "${source[@]}"; do printf "%s\n" "$u"; done'             | grep -E '^https://(github\.com/.*/releases/download/|dl\.google\.com/)' | head -n1)
+          [ -n "$zip_url" ] || { echo "PKGBUILD 裡找不到可預下載的源码 URL（鏡像或 dl.google.com 直連）"; exit 1; }
           fname="${zip_url##*/}"
           if [ -f "$fname" ]; then
             echo "$fname 已存在，跳过下载"
