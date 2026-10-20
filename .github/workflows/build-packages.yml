@@ -2222,23 +2222,46 @@ jobs:
               curl -sfL -o config "$config_url"
               grep -m1 'Kernel Configuration' config || true
 
-              # cjktty 补丁：优先 cjktty-<series>.patch，没有就退到同线最高的 -rcN
+              # cjktty 补丁选取（版本无关，别再写成某一版的口吻）：
+              #   1) 本线精确匹配 cjktty-<series>.patch 或 cjktty-<series>.<N>.patch
+              #   2) 本线的 rc 版 cjktty-<series>-rc<N>.patch
+              #   3) 跨线回退：取同一 v<major>.x 桶里 sort -V 最新的一份
+              # 第 3 步是**故意的**，不是将就：cjktty 补丁对小版本漂移耐受
+              #（实测过 7.3-rc1 可干净套 7.2-rc7，也验证过 bigshans 那份正式 7.2 同样可套）。
+              # 仓库只查本仓 Capricornus007/cjktty-patches —— 那是**刻意从 bigshans
+              # 复刻出来的**，因为上游过去不及时候补补丁，不要改成查 parent。
+              # 回退必须回报「套的是哪条线的补丁」，并且只容忍相邻次版本：
+              # 7.2 补 7.3 成立，7.0 补 7.4 不成立——差超过 1 个次版本就让它红，
+              # 别出一颗看起来成功、其实没 CJK 的内核。
               avail=$(gh_api "https://api.github.com/repos/Capricornus007/cjktty-patches/contents/v${series%%.*}.x" \
                       | jq -r '.[].name' || true)
               esc="${series//./\\.}"
               pick=$(printf '%s\n' "$avail" | grep -E "^cjktty-${esc}(\.[0-9]+)?\.patch$" | sort -V | tail -n1 || true)
+              [ -n "$pick" ] && how="本线精确"
               [ -n "$pick" ] || pick=$(printf '%s\n' "$avail" | grep -E "^cjktty-${esc}-rc[0-9]+\.patch$" | sort -V | tail -n1 || true)
+              [ -n "$pick" ] && how="本线 rc"
               if [ -z "$pick" ]; then
-                # 跨线回退：rc 线的内核往往还能套上一线的 rc 补丁
-                #（实测 7.3-rc1 可干净套 7.2-rc7 的补丁）。取整个 v<major>.x 里
-                # sort -V 最新的一个，并留下警告便于追查。
                 pick=$(printf '%s\n' "$avail" | grep -E '^cjktty-.*\.patch$' | sort -V | tail -n1 || true)
+                how="跨线回退"
                 if [ -n "$pick" ]; then
-                  echo "::warning::$series 没有专属 cjktty 补丁，跨线回退到 $pick（若 hunk 失败请先补 cjktty-patches）"
+                  pb_series=$(printf '%s' "$pick" | sed -nE 's/^cjktty-([0-9]+\.[0-9]+).*/\1/p')
+                  p_maj=${pb_series%%.*}; p_min=${pb_series##*.}
+                  t_maj=${series%%.*};   t_min=${series##*.}
+                  if [ "$p_maj" != "$t_maj" ]; then
+                    echo "::error::补丁 $pick 属 v${p_maj}.x，目标 $series 在 v${t_maj}.x —— 跨大版不回退"
+                    exit 1
+                  fi
+                  gap=$(( t_min - p_min ))
+                  if [ "$gap" -gt 1 ]; then
+                    echo "::error::补丁线 $pb_series 与目标 $series 差 $gap 个次版本，超出「小版本漂移可耐受」的范围。"
+                    echo "::error::先去 Capricornus007/cjktty-patches 补一份 $series 的补丁再来，别硬出包。"
+                    exit 1
+                  fi
+                  echo "::warning::$series 没有专属 cjktty 补丁，跨线回退到 $pick（来自 $pb_series，差 $gap 个次版本；若 hunk 失败请先补补丁）"
                 fi
               fi
-              [ -n "$pick" ] || { echo "错误：cjktty-patches 里找不到 $series 的补丁"; exit 1; }
-              echo "选用 cjktty 补丁: $pick"
+              [ -n "$pick" ] || { echo "错误：cjktty-patches 的 v${series%%.*}.x 里找不到任何可用补丁"; exit 1; }
+              echo "选用 cjktty 补丁: $pick（$how，目标线 $series）"
               curl -sfL -o 0001-cjktty.patch \
                 "https://raw.githubusercontent.com/Capricornus007/cjktty-patches/master/v${series%%.*}.x/$pick"
               sed -i -E 's|^[[:space:]]*"\$\{_cjktty_source\}/v[0-9]+\.x/cjktty-[^"]+\.patch"[[:space:]]*$|    "0001-cjktty.patch"|' PKGBUILD
