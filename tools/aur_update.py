@@ -9,7 +9,8 @@ build 那條會 clone 上游 PKGBUILD 並實際執行 prepare()/build()（任意
 設計上寧可漏推也不能亂推：任何一步算不出可信結果就整包跳過並印原因，
 不猜、不寫半個版本號進去。
 """
-import argparse, json, os, re, shlex, subprocess, sys, tempfile, urllib.request
+import argparse, json, os, re, shlex, subprocess, sys, tempfile
+import urllib.parse, urllib.request
 
 AUR_HTTPS = "https://aur.archlinux.org/{base}.git"
 AUR_SSH = "ssh://aur@aur.archlinux.org/{base}.git"
@@ -21,6 +22,16 @@ NV_LISTING = "https://download.nvidia.com/XFree86/Linux-x86_64/"
 CONTENT_RULES = {
     "linux-cachyos-cjktty": [
         {"var": "_nv_ver", "resolver": "nvidia_newest"},
+    ],
+    # flutter-beta 的 pkgver 是靜態的，而且 URL 與 sums 都綁在它身上。
+    # 官方 manifest 直接給 sha256，所以不必下載 tarball 就能把兩樣都更新對。
+    "flutter-beta": [
+        {"kind": "flutter", "channel": "beta"},
+    ],
+    # linux-cjktty 跟的是 Arch 的 core/linux（見 resolve_arch_pkg 的說明）。
+    # 跨大版會被上面那道补丁路徑守門擋下來，所以這裡只吃同次版本內的跟進。
+    "linux-cjktty": [
+        {"kind": "arch_pkg", "pkg": "linux", "repo": "core"},
     ],
 }
 
@@ -72,6 +83,58 @@ def resolve_nvidia_newest():
     return vs[-1], f'列表最新 {vs[-1]}（候選末三個 {vs[-3:]}）'
 
 
+FLUTTER_RELEASES = "https://storage.googleapis.com/flutter_infra_release/releases/releases_linux.json"
+
+
+def resolve_flutter(channel):
+    """Flutter 官方 release manifest：同時給 version 與 sha256。
+
+    有 sha256 就不用為了算 sums 去下載 200MB tarball。實測該 JSON 的
+    current_release 有 beta/dev/stable 三個鍵，releases[] 每條都帶 sha256。
+    PKGBUILD 的 pkgver 用底線（`3.48.0_0.2.pre`），URL 裡再 ${pkgver/_/-} 換回連字號，
+    所以這裡要主動把 '-' 換成 '_'，否則寫進去的是非法 pkgver。
+    """
+    try:
+        d = json.loads(urllib.request.urlopen(FLUTTER_RELEASES, timeout=30).read().decode())
+    except Exception as e:
+        return None, f'抓 Flutter manifest 失敗: {e}'
+    # current_release[channel] 是 **commit hash**，不是版本字串（實測 beta =
+    # 07502c7de3806b668e2fb57e3eaf412d833b1726），所以要拿它去 releases[] 比 hash。
+    want = d.get('current_release', {}).get(channel)
+    if not want:
+        return None, f'manifest 裡沒有 current_release.{channel}'
+    for r in d.get('releases', []):
+        if r.get('channel') == channel and r.get('hash') == want:
+            ver = str(r['version']).replace('-', '_')
+            sha = r.get('sha256')
+            if not re.fullmatch(r'[0-9a-fA-F]{64}', sha or ''):
+                return None, f'{channel} {ver} 的 manifest sha256 不可信: {sha!r}'
+            return (ver, sha.lower()), f'{channel} 最新 {ver}'
+    return None, f'manifest 的 releases[] 找不到 hash={want} 的 {channel} 條目'
+
+
+def resolve_arch_pkg(pkg, repo=None):
+    """Arch 官方倉庫的現行版號。
+
+    linux-cjktty 的源碼 URL 是直接從 pkgver 拼的
+    （`v${pkgver%%.*}.x/linux-<pkgver>.tar.xz` 與
+      `gitlab…/linux/-/raw/${pkgver}-${pkgrel}/config.x86_64`），
+    所以它的真值是 Arch 那顆 `core/linux`，不是 kernel.org 的 mainline——
+    抓 kernel.org 會拿到沒有 .archN 後綴的版本，config 那條 URL 直接 404。
+    """
+    url = f"https://archlinux.org/packages/search/json/?name={urllib.parse.quote(pkg)}"
+    try:
+        d = json.loads(urllib.request.urlopen(url, timeout=30).read().decode())
+    except Exception as e:
+        return None, f'查 Arch 倉庫失敗: {e}'
+    # 欄位名是 `repo` 不是 `repository`（實測後者回 None，害我把唯一的 linux 過濾掉）。
+    hits = [p for p in d.get('results', []) if not repo or p.get('repo') == repo]
+    if not hits:
+        return None, f'Arch 倉庫查無 {pkg}' + (f'（repo={repo}）' if repo else '')
+    p = hits[0]
+    return (p['pkgver'], p['pkgrel'], p.get('repo')), f"{p.get('repo')}/{pkg} = {p['pkgver']}-{p['pkgrel']}"
+
+
 RESOLVERS = {"nvidia_newest": resolve_nvidia_newest}
 
 
@@ -88,11 +151,22 @@ def source_entries(adir):
 
 
 def git_sources(entries):
+    """解析 source 條目裡的 git 源，支援兩種寫法：
+        git+https://host/path/repo.git[#branch=x][&module=y]
+        <目錄名>::git+https://host/path/repo      ← xfce 系常用，實測 garcon-git /
+                                                   xfce4-volumed-pulse-git 就是這型，
+                                                   舊版只認 'git+' 開頭會整批漏掉。
+    pkgver() 通常 cd 進那個 <目錄名>，所以目錄名必須照它來，不能自己推。
+    """
     out = []
     for e in entries:
-        if not e.startswith('git+'):
+        rest = e
+        prefix = None
+        if '::' in rest:
+            prefix, _, rest = rest.partition('::')
+        if not rest.startswith('git+'):
             continue
-        spec = e[4:]
+        spec = rest[4:]
         url, _, frag = spec.partition('#')
         module = branch = None
         for kv in frag.split('&'):
@@ -100,8 +174,15 @@ def git_sources(entries):
                 module = kv[7:]
             elif kv.startswith('branch='):
                 branch = kv[7:]
-        name = module or os.path.basename(url.rstrip('/'))
-        out.append((url, name[:-4] if name.endswith('.git') else name, branch))
+        if prefix:
+            name = prefix
+        elif module:
+            name = module
+        else:
+            name = os.path.basename(url.rstrip('/'))
+        if name.endswith('.git'):
+            name = name[:-4]
+        out.append((url, name, branch))
     return out
 
 
@@ -132,8 +213,16 @@ def compute(adir, cache):
                 d = os.path.join(srcdir, name)
                 if not os.path.isdir(os.path.join(d, '.git')):
                     run(['rm', '-rf', d])
-                    if run(['git', 'clone', '-q', url, d]).returncode:
-                        ok = False; notes.append(f'clone 失敗 {url}'); break
+                    # 只要 refs 與 commit（describe / rev-list / tag 列舉），永遠不需要檔案內容。
+                    # 實測 flutter-git 完整 clone 吃到 326MB 還沒抓完，blobless 同一倉 138MB，
+                    # CI 裡這條會變成 26 包矩陣的瓶頸，所以一律 --filter=blob:none。
+                    r = run(['git', 'clone', '-q', '--filter=blob:none', url, d])
+                    if r.returncode:
+                        # 老 git / 不支援 partial clone 的伺服器：退回完整 clone。
+                        run(['rm', '-rf', d])
+                        r = run(['git', 'clone', '-q', url, d])
+                        if r.returncode:
+                            ok = False; notes.append(f'clone 失敗 {url}'); break
                 else:
                     run(['git', '-C', d, 'fetch', '-q', '--tags', '--force', 'origin'])
                 ref = f'origin/{branch}' if branch else '@{u}'
@@ -155,9 +244,72 @@ def compute(adir, cache):
                     edits.append((r'^pkgrel=.*$', 'pkgrel=1', 'pkgrel 歸 1'))
                     notes.append(f'{old_ver} -> {cand}')
     else:
-        notes.append('靜態版號型（無 pkgver()）')
+        # 別寫成「無 pkgver()」就完事——靜態版號當然是版號，只是要另一種解析來源。
+        if CONTENT_RULES.get(os.path.basename(adir)):
+            notes.append('靜態版號型，改走內容規則')
+        else:
+            notes.append(f'靜態版號型（現值 {old_ver}），且 CONTENT_RULES 裡沒有它的解析規則'
+                         f'——要自動跟版得先加一條')
 
     for rule in CONTENT_RULES.get(os.path.basename(adir), []):
+        if rule.get('kind') == 'arch_pkg':
+            got, why = resolve_arch_pkg(rule['pkg'], rule.get('repo'))
+            if not got:
+                notes.append(f'arch_pkg 規則放棄：{why}')
+                continue
+            aver, arel, _ = got
+            cur = re.search(r'^pkgver=(\S+)', pb, re.M)
+            curl_ = re.search(r'^pkgrel=(\S+)', pb, re.M)
+            if not cur or not curl_:
+                notes.append('arch_pkg 規則：PKGBUILD 缺 pkgver=/pkgrel=，放棄')
+                continue
+            if not is_newer(aver, cur.group(1).strip('"\'')):
+                notes.append(f'arch_pkg：{why}，現值 {cur.group(1)} 不比它舊 → 不推')
+                continue
+            # ⚠️ linux-cjktty 的 PKGBUILD 把 cjktty 补丁档名寫死成
+            #    `$_cjktty_repo/raw/master/v7.x/cjktty-7.2-rc7.patch`。跨大版
+            #    （7.x → 8.x，或 7.2 → 7.3）時那個路徑一定不存在，自動跟版會推出一個
+            #    構不起來的包。所以跨大版一律停下來等人，不猜补丁名。
+            new_maj = str(aver).split('.')[:2]
+            old_maj = str(cur.group(1).strip('"\'')).split('.')[:2]
+            if new_maj[:1] != old_maj[:1]:
+                notes.append(f'arch_pkg 算出 {aver}，但跨大版（{old_maj[0]}→{new_maj[0]}）'
+                             f'会让写死的 cjktty 补丁路径失效 → 交给人处理')
+                continue
+            if new_maj != old_maj:
+                notes.append(f'arch_pkg 算出 {aver}，次版本变了（{cur.group(1)}）——'
+                             f'补丁档名可能也要换，先不推')
+                continue
+            edits.append((r'^pkgver=.*$', f'pkgver={aver}', f'pkgver {cur.group(1)}->{aver}'))
+            # config.x86_64 那條 URL 是 ${pkgver}-${pkgrel}，pkgrel 不同步就會 404。
+            edits.append((r'^pkgrel=.*$', f'pkgrel={arel}', f'pkgrel {curl_.group(1)}->{arel}（跟 Arch 同步，URL 要用）'))
+            notes.append(f'arch_pkg: {cur.group(1)} -> {aver}（{why}）')
+            continue
+
+        if rule.get('kind') == 'flutter':
+            got, why = resolve_flutter(rule['channel'])
+            if not got:
+                notes.append(f'flutter 規則放棄：{why}')
+                continue
+            ver, sha = got
+            cur = re.search(r'^pkgver=(\S+)', pb, re.M)
+            if not cur:
+                notes.append('flutter 規則：PKGBUILD 沒有 pkgver=，放棄')
+                continue
+            if not is_newer(ver, cur.group(1).strip('"\'')):
+                notes.append(f'flutter：算出 {ver}，不比現值 {cur.group(1)} 新 → 不推')
+                continue
+            edits.append((r'^pkgver=.*$', f'pkgver={ver}', f'pkgver {cur.group(1)}->{ver}'))
+            # 只換第一顆（tarball 那顆）；後面 .sh/.csh 是倉內附檔，不該動。
+            edits.append((r"^(sha256sums=\(')[0-9a-fA-F]{64}(')", rf'\g<1>{sha}\g<2>',
+                          'tarball sha256 取自官方 manifest'))
+            if not re.search(r"^pkgrel=", pb, re.M):
+                notes.append('警告：找不到 pkgrel=，無法歸 1')
+            else:
+                edits.append((r'^pkgrel=.*$', 'pkgrel=1', 'pkgrel 歸 1'))
+            notes.append(f'flutter {rule["channel"]}: {cur.group(1)} -> {ver}（{why}，sums 一併更新）')
+            continue
+
         got, why = RESOLVERS[rule['resolver']]()
         if not got:
             notes.append(f'內容規則 {rule["var"]} 放棄：{why}')
@@ -215,6 +367,26 @@ def apply_bump(adir, edits, msg, push, do_sums):
     return '已 push' if rp.returncode == 0 else f'push 失敗: {rp.stderr.strip()[:200]}'
 
 
+def resolve_pkgbase(name):
+    """把包名換成它真正的 pkgbase。
+
+    AUR 的 git repo 是**按 pkgbase 建**的，split 包沒有自己的 repo。實測
+    `linux-cjktty-headers` 的 RPC 回 base=linux-cjktty，而
+    `git clone https://aur.archlinux.org/linux-cjktty-headers.git` 回 **rc=0 但倉是空的**
+    （AUR 對未知路徑會建立空倉），於是程式一路走到讀 PKGBUILD 才 FileNotFoundError。
+    回 None 代表查無此包。
+    """
+    url = f"https://aur.archlinux.org/rpc/?v=5&type=info&arg[]={urllib.parse.quote(name)}"
+    try:
+        d = json.loads(urllib.request.urlopen(url, timeout=25).read().decode())
+    except Exception:
+        return None, 'RPC 查詢失敗'
+    if not d.get('resultcount'):
+        return None, 'AUR 查無此名（可能已被刪除或本來就不是獨立包）'
+    r = d['results'][0]
+    return r.get('PackageBase'), r.get('Version')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--bases', help='JSON 陣列或逗号分隔的 pkgbase 清單')
@@ -233,13 +405,29 @@ def main():
         ap.error('要給 --bases 或 --file')
 
     os.makedirs(a.work, exist_ok=True)
-    results = []
-    for base in bases:
+    results, seen = [], set()
+    for name in bases:
+        real, aurver = resolve_pkgbase(name)
+        if not real:
+            results.append((name, 'FAIL', aurver))
+            print(f'{name:32s} 查無：{aurver}', flush=True); continue
+        if real != name:
+            print(f'{name:32s} → 不是獨立 pkgbase，實際是 {real} 的 split 包，併進去處理', flush=True)
+        if real in seen:
+            results.append((real, 'SKIP', '同 pkgbase，已處理過')); continue
+        seen.add(real)
+
+        base = real
         adir = os.path.join(a.work, base)
         if not os.path.isdir(os.path.join(adir, '.git')):
             run(['rm', '-rf', adir])
             if run(['git', 'clone', '-q', AUR_HTTPS.format(base=base), adir]).returncode:
                 results.append((base, 'FAIL', 'clone AUR 失敗')); print(f'{base:32s} clone 失敗', flush=True); continue
+        # AUR 對未知路徑會給一個 rc=0 的**空倉**，PKGBUILD 不存在才會炸 FileNotFoundError。
+        # 上面 resolve_pkgbase 已經擋掉多數情況，這裡再守一次，空倉直接回報而不是拋例外。
+        if not os.path.isfile(os.path.join(adir, 'PKGBUILD')):
+            results.append((base, 'FAIL', 'clone 回來是空倉（沒有 PKGBUILD）'))
+            print(f'{base:32s} 空倉，跳過', flush=True); continue
         run(['git', '-C', adir, 'fetch', '-q', 'origin'])
         run(['git', '-C', adir, 'reset', '-q', '--hard', 'origin/master'])
         try:

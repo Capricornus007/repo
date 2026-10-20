@@ -56,7 +56,7 @@ jobs:
           id aurbot >/dev/null 2>&1 || useradd -m aurbot
           install -d -o aurbot -g aurbot /home/aurbot/aurwork
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # 金鑰與 known_hosts 一起設好：known_hosts 寫死，不用 ssh-keyscan 現掃，
       # 否則中間人可以塞一把自己的鍵進去把 AUR 金鑰吃掉。
