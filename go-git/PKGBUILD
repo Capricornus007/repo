@@ -44,8 +44,18 @@ pkgver() {
 	# 改法：取倉內最高**穩定** tag（排掉 beta/rc）當基版號 ＋ 該 tag 到 HEAD 的分岔
 	# 距離當 r ＋ HEAD 短 hash。master 往前走 r 單調遞增；上游真發了 1.28.0 之後基
 	# 版號自己跳上去，vercmp 仍判遞增（1.28 > 1.27），不會卡代。
+	# 第二個坑（2026-10-21）：基版號也**不能**取「倉內最高穩定 tag」。master 在
+	# go1.27.3 發佈後就進到 1.28 開發循環，但 tag 裡最高只有 go1.27.3，於是 pkgver
+	# 永久落在 1.27.x —— 跟 flutter-git 被 describe 凍在 3.33 是同一型錯誤，方向相反。
+	# 權威來源是 Go 自己的建置碼：src/cmd/dist/build.go 輕解析
+	# src/internal/goversion/goversion.go 的 `const Version = N`，再
+	# sprintf("go1.%s-devel_", N) 拼出 `go version` 顯示的那串。實測 master 上該檔回
+	# `const Version = 28` → 循環 1.28，與本機 `go version` = go1.28-devel_7f86f95763 一致。
+	# 讀不到該檔時退回舊的「最高穩定 tag」算法：寧可保守，也不能讓 pkgver() 失敗。
 	cd "$srcdir/$_pkgname" || return 1
-	local base dist hash
+	local cyc base dist hash
+	cyc=$(sed -n 's/^const Version = \([0-9][0-9]*\).*/1.\1/p' \
+		src/internal/goversion/goversion.go 2>/dev/null)
 	base=$(git tag --list 'go[0-9]*' --sort=-v:refname \
 		| grep -avE '(beta|rc)[0-9]*$' | head -1)
 	case "$base" in
@@ -54,7 +64,12 @@ pkgver() {
 	esac
 	dist=$(git rev-list --count "$base..HEAD") || return 1
 	hash=$(git rev-parse --short=9 HEAD) || return 1
-	printf '%s.r%s.g%s\n' "${base#go}" "$dist" "$hash"
+	if [ -z "$cyc" ]; then
+		echo ">> internal/goversion 讀不到，退回以最高穩定 tag 當基版號" >&2
+		printf '%s.r%s.g%s\n' "${base#go}" "$dist" "$hash"
+		return 0
+	fi
+	printf '%s.0.r%s.g%s\n' "$cyc" "$dist" "$hash"
 }
 
 build() {
