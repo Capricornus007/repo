@@ -1,0 +1,45 @@
+# 由 Capricornus007 維護、交給 aur-update.yml 自動回推的 AUR 包。
+# 一格一行，# 開頭是註解。
+#
+# AUR RPC 不支持 by-maintainer（實測 type=search&by-maintainer= 回 resultcount 0，
+# /rpc/v5/ 形式回 "Incorrect request type specified."），所以清單只能寫死在倉裡。
+# 這反而是好事：要推哪些包是明確決定，不是掃出來的。
+#
+# 工具對「算不出可信結果」的包會整包跳過並印原因，不會亂寫版本號，
+# 所以清單可以放心放全；靜態版號型（linux-cjktty 那類）會自己跳掉。
+
+# --- 內核系（linux-cjktty / -headers 是靜態版號，會自動 SKIP，留著當文件）---
+linux-cjktty
+linux-cjktty-headers
+linux-cachyos-cjktty
+linux-cachyos-cjktty-headers
+
+# --- 輸入法 ---
+fcitx5-git
+fcitx5-rime-git
+xcb-imdkit-git
+
+# --- 桌面 / Cinnamon ---
+cinnamon-control-center-git
+cinnamon-session-git
+cinnamon-desktop-git
+muffin-git
+garcon-git
+
+# --- Xfce4 面板插件 ---
+xfce4-volumed-pulse-git
+xfce4-systemload-plugin-git
+xfce4-smartbookmark-plugin-git
+xfce4-notifyd-layer-shell-git
+xfce4-genmon-plugin-git
+xfce4-fsguard-plugin-git
+xfce4-diskperf-plugin-git
+xfce4-cpugraph-plugin-devel
+
+# --- 其他 ---
+gnome-keyring-git
+gnome-backgrounds-git
+fzf-git
+kvantum-qt4-git
+flutter-git
+flutter-beta
