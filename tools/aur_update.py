@@ -34,6 +34,26 @@ def verkey(v):
     return [int(x) if x.isdigit() else x for x in re.split(r'[._-]', str(v))]
 
 
+def is_newer(new, old):
+    """用 pacman 自己的 vercmp 判，不自己寫演算法。
+
+    各包的 pkgver() 格式**本來就不統一**，而且不該統一：實測同一輪裡就有
+    xcb-imdkit-git 的 `1.0.9.r1.g621048b`、gnome-keyring-git 的 `51.0+8+ge9706199`、
+    fzf-git 的 `v0.74.5.r2.g55c122f1` 三種寫法（.r 與 + 混用）。vercmp 全部認得，
+    自己拆字串比反而會錯。
+    拿不到 vercmp 時退回簡化比對，並在註記裡說明是退回路徑。
+    """
+    if new == old:
+        return False
+    r = run(['vercmp', str(new), str(old)])
+    if r.returncode == 0 and r.stdout.strip() in ('-1', '0', '1'):
+        return r.stdout.strip() == '1'
+    try:
+        return verkey(new) > verkey(old)
+    except TypeError:
+        return True
+
+
 def resolve_nvidia_newest():
     """NVIDIA 官方目錄列表取最大版號。
 
@@ -126,8 +146,10 @@ def compute(adir, cache):
                           f'. {shlex.quote(os.path.join(adir, "PKGBUILD"))} >/dev/null 2>&1; pkgver')
                 r = run(['bash', '-c', script])
                 cand = r.stdout.strip().splitlines()[-1].strip() if r.stdout.strip() else ''
-                if r.returncode or not cand or ' ' in cand or cand == old_ver:
-                    notes.append(f'pkgver() 無新值（輸出 {cand!r} rc={r.returncode}）')
+                if r.returncode or not cand or ' ' in cand:
+                    notes.append(f'pkgver() 輸出不可信（{cand!r} rc={r.returncode}）')
+                elif not is_newer(cand, old_ver):
+                    notes.append(f'pkgver() 算出 {cand}，不比現值 {old_ver} 新 → 不推（防降級）')
                 else:
                     edits.append((r'^pkgver=.*$', f'pkgver={cand}', f'pkgver {old_ver}->{cand}'))
                     edits.append((r'^pkgrel=.*$', 'pkgrel=1', 'pkgrel 歸 1'))
@@ -144,8 +166,8 @@ def compute(adir, cache):
         if not cur:
             notes.append(f'內容規則 {rule["var"]} 在 PKGBUILD 裡找不到，放棄（寫法變了？）')
             continue
-        if verkey(cur.group(1).strip('"\'')) >= verkey(got):
-            notes.append(f'{rule["var"]} 已是 {cur.group(1)}，不比 {got} 舊，不動')
+        if not is_newer(got, cur.group(1).strip('"\'')):
+            notes.append(f'{rule["var"]} 現值 {cur.group(1)} 不比 {got} 舊，不動')
             continue
         edits.append((rf'^{re.escape(rule["var"])}=.*$', f'{rule["var"]}={got}',
                       f'{rule["var"]} {cur.group(1)}->{got}'))

@@ -40,8 +40,10 @@ jobs:
     steps:
       - name: 裝依賴
         run: |
-          pacman -Syu --noconfirm --needed openssh python >/dev/null
-          git --version; python --version; command -v updpkgsums
+          # archlinux:base-devel 鏡像**不含 git**（base 與 base-devel 的群組裡都沒有），
+          # 實測第一次跑就在 `git --version` 上 127 掉。這條全程靠 git  clone/push AUR。
+          pacman -Syu --noconfirm --needed git openssh python >/dev/null
+          git --version; python --version; command -v updpkgsums; command -v vercmp
 
       - uses: actions/checkout@v4
 
