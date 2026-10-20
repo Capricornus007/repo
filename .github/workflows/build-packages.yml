@@ -852,6 +852,24 @@ jobs:
               grep -qE '^epoch=' pkg_dir/PKGBUILD || sed -i '/^pkgname=/a epoch=1' pkg_dir/PKGBUILD
               grep -nE '^epoch=|^\s*./configure' pkg_dir/PKGBUILD
               ;;
+            xf86-input-libinput-git)
+              # AUR 那份寫 `provides=("$_pkgname")`——**未帶版本的 Provides**。
+              # 實測裝不起來（本機 2026-10-20）：
+              #   removing xf86-input-libinput breaks dependency
+              #   'xf86-input-libinput<2.0.0' required by xorg-server-tearfree
+              # `pactree -r xf86-input-libinput` 顯示只有 xorg-server-tearfree 一家依賴它，
+              # 而它要的是**有區間**的版本；裸名字滿足不了任何區間比較（契約 9 的 Artix 假綠同理）。
+              # 正解是把版本一起提供出去，讓 <2.0.0 比得出來。
+              # 同時加 epoch=1 觸發重建（-git 包抬 pkgrel 無效，見 i3blocks-git 那段）。
+              sed -i 's|^provides=("\$_pkgname")$|provides=("\$_pkgname=${pkgver%%.r*}")|' pkg_dir/PKGBUILD
+              if ! grep -qF 'provides=("$_pkgname=${pkgver%%.r*}")' pkg_dir/PKGBUILD; then
+                echo "::error::xf86-input-libinput 的 provides 沒補上版本（那行寫法變了）"
+                grep -n 'provides' pkg_dir/PKGBUILD || true
+                exit 1
+              fi
+              grep -qE '^epoch=' pkg_dir/PKGBUILD || sed -i '/^pkgname=/a epoch=1' pkg_dir/PKGBUILD
+              grep -nE '^epoch=|provides' pkg_dir/PKGBUILD
+              ;;
             topgrade-git)
               # aws-lc-sys 0.45（topgrade 的 Rust 依賴鏈拉進來的）要編 jitterentropy-base.c，
               # 那顆檔自帶硬性 #error：不準用最佳化編譯、必須 -O0。crate 確實給了 -O0，
