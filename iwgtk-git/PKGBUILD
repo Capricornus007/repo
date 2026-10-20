@@ -1,13 +1,21 @@
 pkgname=iwgtk-git
 pkgver=0.9.r12.gc4e73d4
 pkgrel=1
+# epoch=1：本檔有 pkgver()（第 30 行），makepkg 會把 pkgrel 重置為 1，抬它無效；
+# 而上游沒動時 CI 算出的版號與既有資產同名 → 被 plan 永久跳過（本倉契約 1），
+# 剛改掉的 `iwd` 依賴就落不到機器上。加 epoch 才會產生嚴格更高的版號。
+epoch=1
 pkgdesc='Lightweight wireless networking GUI (front-end for iwd) - git version'
 arch=('x86_64')
 url='https://github.com/J-Lentz/iwgtk'
 license=('GPL-3.0-or-later')
 
 depends=(
-    'iwd>=1.29'
+    # 用裸名，不用 `iwd>=1.29`：這顆是 -git 包、iwd 也在滾動更新，等號以下的版本釘
+    # 只會製造「裝不動整批」的場面——2026-10-20 實測：一次補裝 375 顆的交易被這條
+    # 依賴整批中止（`removing iwd breaks dependency 'iwd>=1.29' required by iwgtk-git`），
+    # pacman 遇到一個無法滿足的目標就放棄整個交易，其餘 374 顆一顆都沒裝。
+    'iwd'
     'gtk4>=4.12'
     'qrencode'
     'adwaita-icon-theme'
