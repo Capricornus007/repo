@@ -227,5 +227,15 @@ jobs:
           {"key": "nwg-look-git", "repo_name": "nwg-look-git", "variant": "none"},
           {"key": "gstreamer-git", "repo_name": "gstreamer-git", "variant": "none"},
           {"key": "lib32-gstreamer-git", "repo_name": "lib32-gstreamer-git", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
-          {"key": "lib32-glib2", "repo_name": "lib32-glib2", "variant": "none", "kind": "multilib"}
+          {"key": "lib32-glib2", "repo_name": "lib32-glib2", "variant": "none", "kind": "multilib"},
+          {"key": "afdko-git", "repo_name": "afdko-git", "variant": "none", "kind": "aur"},
+          {"key": "dav1d-git", "repo_name": "dav1d-git", "variant": "none", "kind": "aur"},
+          {"key": "duf-git", "repo_name": "duf-git", "variant": "none", "kind": "aur"},
+          {"key": "dust-git", "repo_name": "dust-git", "variant": "none", "kind": "aur"},
+          {"key": "ffnvcodec-headers-git", "repo_name": "ffnvcodec-headers-git", "variant": "none", "kind": "aur"},
+          {"key": "kvantum-qt4-git", "repo_name": "kvantum-qt4-git", "variant": "none", "kind": "aur"},
+          {"key": "lsix-git", "repo_name": "lsix-git", "variant": "none", "kind": "aur"},
+          {"key": "pacman-contrib-git", "repo_name": "pacman-contrib-git", "variant": "none", "kind": "aur"},
+          {"key": "qalculate-qt-git", "repo_name": "qalculate-qt-git", "variant": "none", "kind": "aur"},
+          {"key": "ripgrep-all-git", "repo_name": "ripgrep-all-git", "variant": "none", "kind": "aur"}
         ]
