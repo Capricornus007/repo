@@ -63,7 +63,13 @@ jobs:
           # qt6ct-git job，紅在「初始化 Arch Linux 環境」，根本還沒走到我的 artix 區塊）。
           # 我們這裡是直接 makepkg、不走 chroot，所以 artix 基座下跳過它是對的，
           # 不是繞過問題。
-          _init_pkgs='git jq curl sudo pacman-contrib gnupg github-cli'
+          # doas 取代 sudo（用戶 2026-10-20 裁定：本機與自動構建倉一致，不准再出現 sudo）。
+          # 實查：本倉全 workflows 沒有任何一處真的呼叫 sudo——容器是 root 直接跑
+          # （`container:` 未設 `options: --user`），所以這顆純粹是歷史殘留。
+          # 換成 doas 是規則對齊、不改變行為；同時本機 /etc/makepkg.conf 已設
+          # PACMAN_AUTH=(doas)，因為 makepkg 未設該變數時會退回 `sudo -k`，
+          # 在無 sudo 的機器上直接「su: 驗證記號處理錯誤」全軍覆沒（實測過）。
+          _init_pkgs='git jq curl doas pacman-contrib gnupg github-cli'
           if [ '${{ matrix.kind }}' != 'artix' ]; then _init_pkgs="$_init_pkgs devtools"; fi
           until pacman -Syu --noconfirm --disable-download-timeout $_init_pkgs; do
             _pi=$((_pi + 1))
