@@ -60,6 +60,21 @@ jobs:
       # 它的 pkgver 是 ${_pkgver/-/.} 算出來的（連字號→點號，pacman 不準 pkgver 含 -），
       # 而 source URL 裡是連字號版，所以 build-packages.yml 需要三個特例：plan 的 crave) case、
       # 改寫步 sed _pkgver=、以及走 in-tree 回推而非 updpkgsums。
+      # 以下 packages 是純 JSON 塊，fromJSON 不會剝註解，所以說明只能寫在這裡：
+      # · fcitx5-qt 在 AUR 已拆成 qt5/qt6 兩顆（沒有單一的 fcitx5-qt-git），
+      # · 本機的 fcitx5-qt 由這兩顆取代。
+      # · chinese-addons / rime 鏈上的 AUR 依賴，必須先進矩陣，否則跟 afdko-git
+      # · 同一型失敗（容器裡 target not found → Could not resolve all dependencies）。
+      # · fcitx5-configtool-git 刻意**不**進矩陣：AUR 那份靜態 pkgver 停在 5.1.2.r1
+      # · （比倉庫的 5.1.16 還舊），而且 depends 列了倉庫已不存在 plasma-framework5，
+      # · 裝它等於降級 + 必然解析失敗。configtool 改吃倉庫版。
+      # · afdko-git 的兩個依賴都不在官方倉庫（本機是從 archlinuxcn / chaotic-aur 裝的），
+      # · 容器裡只有官方倉庫 → run #529 就是死在 `target not found: python-cu2qu`。
+      # · 必須先讓它們進 feed，順序上跟 afdko-git 同一輪就能解析到。
+      # · kvantum-qt4-git 刻意移出矩陣：它 depends `qt4`，而 qt4 不在任何官方倉庫
+      # · （本機那顆是從 andontie-aur / arch4edu 裝的），AUR 的 qt4 是 4.8.7 那個年代的東西，
+      # · 在 base-devel 容器裡構起來動輒數小時且多半過不了 toolchain。
+      # · run #529 的失敗就是 `target not found: qt4`。要這顆請直接從第三方倉庫裝，別走 feed。
       packages: |
         [
           {"key": "dae-git", "repo_name": "dae-git", "variant": "none"},
@@ -148,6 +163,13 @@ jobs:
           {"key": "xf86-input-libinput-git", "repo_name": "xf86-input-libinput-git", "variant": "none", "kind": "aur"},
           {"key": "feh-git", "repo_name": "feh-git", "variant": "none", "kind": "aur"},
           {"key": "fcitx5-git", "repo_name": "fcitx5-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-gtk-git", "repo_name": "fcitx5-gtk-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-qt5-git", "repo_name": "fcitx5-qt5-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-qt6-git", "repo_name": "fcitx5-qt6-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-chinese-addons-git", "repo_name": "fcitx5-chinese-addons-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-rime-git", "repo_name": "fcitx5-rime-git", "variant": "none", "kind": "aur"},
+          {"key": "libime-git", "repo_name": "libime-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-lua-git", "repo_name": "fcitx5-lua-git", "variant": "none", "kind": "aur"},
           {"key": "xcb-imdkit-git", "repo_name": "xcb-imdkit-git", "variant": "none", "kind": "aur"},
           {"key": "iwgtk-git", "repo_name": "iwgtk-git", "variant": "none", "kind": "aur"},
           {"key": "wl-clipboard-git", "repo_name": "wl-clipboard-git", "variant": "none", "kind": "aur"},
@@ -228,12 +250,13 @@ jobs:
           {"key": "gstreamer-git", "repo_name": "gstreamer-git", "variant": "none"},
           {"key": "lib32-gstreamer-git", "repo_name": "lib32-gstreamer-git", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
           {"key": "lib32-glib2", "repo_name": "lib32-glib2", "variant": "none", "kind": "multilib"},
+          {"key": "python-cu2qu", "repo_name": "python-cu2qu", "variant": "none", "kind": "aur"},
+          {"key": "python-ufonormalizer", "repo_name": "python-ufonormalizer", "variant": "none", "kind": "aur"},
           {"key": "afdko-git", "repo_name": "afdko-git", "variant": "none", "kind": "aur"},
           {"key": "dav1d-git", "repo_name": "dav1d-git", "variant": "none", "kind": "aur"},
           {"key": "duf-git", "repo_name": "duf-git", "variant": "none", "kind": "aur"},
           {"key": "dust-git", "repo_name": "dust-git", "variant": "none", "kind": "aur"},
           {"key": "ffnvcodec-headers-git", "repo_name": "ffnvcodec-headers-git", "variant": "none", "kind": "aur"},
-          {"key": "kvantum-qt4-git", "repo_name": "kvantum-qt4-git", "variant": "none", "kind": "aur"},
           {"key": "lsix-git", "repo_name": "lsix-git", "variant": "none", "kind": "aur"},
           {"key": "pacman-contrib-git", "repo_name": "pacman-contrib-git", "variant": "none", "kind": "aur"},
           {"key": "qalculate-qt-git", "repo_name": "qalculate-qt-git", "variant": "none", "kind": "aur"},
