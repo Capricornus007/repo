@@ -9,7 +9,7 @@ build 那條會 clone 上游 PKGBUILD 並實際執行 prepare()/build()（任意
 設計上寧可漏推也不能亂推：任何一步算不出可信結果就整包跳過並印原因，
 不猜、不寫半個版本號進去。
 """
-import argparse, json, os, re, shlex, subprocess, sys, tempfile
+import argparse, json, os, re, shlex, shutil, subprocess, sys, tempfile
 import urllib.parse, urllib.request
 
 AUR_HTTPS = "https://aur.archlinux.org/{base}.git"
@@ -20,9 +20,6 @@ NV_LISTING = "https://download.nvidia.com/XFree86/Linux-x86_64/"
 # linux-cachyos-cjktty:211 的 _nv_ver 就是這種——它同時決定 source URL 與 sums，
 # 而且預設空轉（:118 `_build_nvidia_open:=no`），所以落後時不會報錯、只會過期。
 CONTENT_RULES = {
-    "linux-cachyos-cjktty": [
-        {"var": "_nv_ver", "resolver": "nvidia_newest"},
-    ],
     # flutter-beta 的 pkgver 是靜態的，而且 URL 與 sums 都綁在它身上。
     # 官方 manifest 直接給 sha256，所以不必下載 tarball 就能把兩樣都更新對。
     "flutter-beta": [
@@ -32,6 +29,17 @@ CONTENT_RULES = {
     # 跨大版會被上面那道补丁路徑守門擋下來，所以這裡只吃同次版本內的跟進。
     "linux-cjktty": [
         {"kind": "arch_pkg", "pkg": "linux", "repo": "core"},
+    ],
+    # zencjk / cachyos 的內核線一律走上游本體（zen-kernel tags、CachyOS/linux releases），
+    # 使用者明確說明 Capricornus007/linux-cachyos-cjktty 那幾個 GitHub 倉因為有自動
+    # 構建倉就基本沒在更新，**不能当真值來源**，所以這裡不去鏡射它們
+    #（也確認過：本工具只推 AUR，不同步那些 GitHub 倉）。
+    "linux-zencjk": [
+        {"kind": "zen_pkg"},
+    ],
+    "linux-cachyos-cjktty": [
+        {"kind": "cachy_kernel"},
+        {"var": "_nv_ver", "resolver": "nvidia_newest"},
     ],
 }
 
@@ -111,6 +119,75 @@ def resolve_flutter(channel):
                 return None, f'{channel} {ver} 的 manifest sha256 不可信: {sha!r}'
             return (ver, sha.lower()), f'{channel} 最新 {ver}'
     return None, f'manifest 的 releases[] 找不到 hash={want} 的 {channel} 條目'
+
+
+def gh_json(path):
+    """GitHub API，兩條路徑：本機有 gh 就用它（帶登入態，不會被匿名限流），
+    CI 容器裡沒有 gh，退回 urllib 並帶 token。
+
+    教訓：匿名打 api.github.com 從這臺機器出去會直接 403
+    （"API rate limit exceeded for 203.10.99.35"），實測同一時間 gh api 正常。
+    """
+    if shutil.which('gh'):
+        r = run(['gh', 'api', path])
+        if r.returncode == 0:
+            try:
+                return json.loads(r.stdout)
+            except Exception:
+                pass
+    tok = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
+    hdr = {'User-Agent': 'aur-update'}
+    if tok:
+        hdr['Authorization'] = f'Bearer {tok}'
+    try:
+        req = urllib.request.Request(f"https://api.github.com/{path}", headers=hdr)
+        return json.loads(urllib.request.urlopen(req, timeout=30).read().decode())
+    except Exception:
+        return None
+
+
+def resolve_zen():
+    """linux-zencjk 的內核版號：只認 v<ver>-zen<N> 且非 rc 的 tag。
+
+    鏡射 build-packages.yml 的 linux-zencjk 分支，連教訓一起抄：取 API 的 .[0]
+    會抓到 v7.1.9-lqx1 那種**沒有 zen 補丁**的線，updpkgsums 連 404 後靜默跳過。
+    """
+    d = gh_json("repos/zen-kernel/zen-kernel/tags?per_page=100")
+    if not isinstance(d, list):
+        return None, '拿不到 zen-kernel tag 列表'
+    tags = [t.get('name', '') for t in d]
+    ok = [t[1:] for t in tags if re.fullmatch(r'v\d+\.\d+(\.\d+)?-zen\d+', t)]
+    if not ok:
+        return None, 'tag 列表裡沒有 v*-zen* 形態的（上游改命名了？）'
+    top = sorted(ok, key=verkey)[-1]
+    base, _, ztail = top.partition('-zen')
+    return f'{base}.zen{ztail}', f'zen-kernel 最新 {top}'
+
+
+def resolve_cachy_kernel():
+    """linux-cachyos-cjktty 的內核版號：CachyOS/linux 的 cachyos-<ver>-<rel> release tag。
+
+    與 build-packages.yml 同一來源。必須回 (major, minor, pkgrel) 三段，因為
+    PKGBUILD 是 `_major=7.2` + `_minor=9` + `pkgver=${_major}.${_minor}`，
+    而且 `_patchsource` 用 ${_major} 拼 URL——只改 pkgver 會跟補丁線脫勾。
+    tag 尾號即 pkgrel（CI 註解裡本地歷史產物 7.2.rc6-1/-2 就是這麼來的）。
+    """
+    d = gh_json("repos/CachyOS/linux/releases?per_page=100")
+    if not isinstance(d, list):
+        return None, '拿不到 CachyOS/linux release 列表'
+    tags = [r.get('tag_name', '') for r in d if re.match(r'^cachyos-\d+\.', r.get('tag_name', ''))]
+    rel = [t for t in tags if '-rc' not in t]
+    if not rel:
+        return None, '沒有非 rc 的 cachyos-* tag'
+    top = sorted(rel, key=verkey)[-1]
+    base = top[len('cachyos-'):]
+    ver, _, prel = base.rpartition('-')
+    parts = ver.split('.')
+    if len(parts) != 3 or not parts[0].isdigit() or not parts[1].isdigit() or not parts[2].isdigit():
+        return None, f'tag {top} 解析出的版本 {ver} 不是 major.minor.patch 三段'
+    if not prel.isdigit():
+        return None, f'tag {top} 的尾號 {prel!r} 不是 pkgrel'
+    return (f'{parts[0]}.{parts[1]}', parts[2], prel), f'CachyOS/linux 最新正式版 {top} → {ver}-{prel}'
 
 
 def resolve_arch_pkg(pkg, repo=None):
@@ -252,6 +329,41 @@ def compute(adir, cache):
                          f'——要自動跟版得先加一條')
 
     for rule in CONTENT_RULES.get(os.path.basename(adir), []):
+        if rule.get('kind') == 'zen_pkg':
+            got, why = resolve_zen()
+            if not got:
+                notes.append(f'zen 規則放棄：{why}'); continue
+            cur = re.search(r'^pkgver=(\S+)', pb, re.M)
+            if not cur:
+                notes.append('zen 規則：找不到 pkgver=，放棄'); continue
+            if not is_newer(got, cur.group(1).strip('"\'')):
+                notes.append(f'zen：{why}，現值 {cur.group(1)} 不比它舊 → 不推'); continue
+            edits.append((r'^pkgver=.*$', f'pkgver={got}', f'pkgver {cur.group(1)}->{got}'))
+            edits.append((r'^pkgrel=.*$', 'pkgrel=1', 'pkgrel 歸 1'))
+            notes.append(f'zen: {cur.group(1)} -> {got}（{why}）')
+            continue
+
+        if rule.get('kind') == 'cachy_kernel':
+            got, why = resolve_cachy_kernel()
+            if not got:
+                notes.append(f'cachy_kernel 規則放棄：{why}'); continue
+            major, minor, prel = got
+            cm = re.search(r'^_major=(\S+)', pb, re.M)
+            cn = re.search(r'^_minor=(\S+)', pb, re.M)
+            cr = re.search(r'^pkgrel=(\S+)', pb, re.M)
+            if not (cm and cn and cr):
+                notes.append('cachy_kernel：PKGBUILD 缺 _major/_minor/pkgrel 任一項，放棄'); continue
+            cur_v = f'{cm.group(1)}.{cn.group(1)}'
+            if not is_newer(f'{major}.{minor}', cur_v):
+                notes.append(f'cachy_kernel：{why}，現值 {cur_v} 不比它舊 → 不推'); continue
+            # 跨大版要同時換補丁線目錄（_patchsource 用 ${_major}），
+            # 而 cjktty 補丁是另一條倉線——這裡只改內核線，補丁線交給 CI 那套守門。
+            edits.append((r'^_major=.*$', f'_major={major}', f'_major {cm.group(1)}->{major}'))
+            edits.append((r'^_minor=.*$', f'_minor={minor}', f'_minor {cn.group(1)}->{minor}'))
+            edits.append((r'^pkgrel=.*$', f'pkgrel={prel}', f'pkgrel {cr.group(1)}->{prel}（tag 尾號即 pkgrel）'))
+            notes.append(f'cachy_kernel: {cur_v}-{cr.group(1)} -> {major}.{minor}-{prel}（{why}）')
+            continue
+
         if rule.get('kind') == 'arch_pkg':
             got, why = resolve_arch_pkg(rule['pkg'], rule.get('repo'))
             if not got:
@@ -324,8 +436,13 @@ def compute(adir, cache):
         edits.append((rf'^{re.escape(rule["var"])}=.*$', f'{rule["var"]}={got}',
                       f'{rule["var"]} {cur.group(1)}->{got}'))
         if not any('pkgver' in d for _, _, d in edits):
-            new_rel = str(int(re.match(r'(\d+)', old_rel).group(1)) + 1)
-            edits.append((r'^pkgrel=.*$', f'pkgrel={new_rel}', f'pkgrel {old_rel}->{new_rel}'))
+            # 只有在「沒有別的規則已經管過 pkgrel」時才用 +1 表達內容級換代。
+            # 實測踩過：cachy_kernel 把 pkgrel 設成 tag 尾號 2 之後，這條又加成 3。
+            if not any(p == r'^pkgrel=.*$' for p, _, _ in edits):
+                new_rel = str(int(re.match(r'(\d+)', old_rel).group(1)) + 1)
+                edits.append((r'^pkgrel=.*$', f'pkgrel={new_rel}', f'pkgrel {old_rel}->{new_rel}'))
+            else:
+                notes.append('pkgrel 已由別的規則定值，不再 +1')
         notes.append(f'{rule["var"]}: {cur.group(1)} -> {got}（{why}）')
 
     return edits, '；'.join(notes)
@@ -365,6 +482,26 @@ def apply_bump(adir, edits, msg, push, do_sums):
     run(['git', '-C', adir, 'remote', 'set-url', 'origin', AUR_SSH.format(base=base)])
     rp = run(['git', '-C', adir, 'push', 'origin', 'HEAD:master'])
     return '已 push' if rp.returncode == 0 else f'push 失敗: {rp.stderr.strip()[:200]}'
+
+
+def can_push(base, adir):
+    """問伺服器有沒有寫入權，不要靠推理判身分。
+
+    教訓：AUR 的 `Maintainer` 欄位會漏掉共同維護者，實測 linux-zencjk 的
+    Maintainer 是 eeeeei、本倉維護者是 Capricornus007，我據此判「推不進去」是錯的
+    ——那顆其實在用者的共同維護清單裡，`git push --dry-run` 實測過。
+    RPC 也沒有可用的 by-maintainer / by-co-maintainer（兩者都回 resultcount 0），
+    列舉不出來，所以只能實測。--dry-run 不動伺服器任何 ref。
+    """
+    run(['git', '-C', adir, 'remote', 'set-url', 'origin', AUR_SSH.format(base=base)])
+    r = run(['git', '-C', adir, 'push', '--dry-run', 'origin', 'HEAD:master'])
+    run(['git', '-C', adir, 'remote', 'set-url', 'origin', AUR_HTTPS.format(base=base)])
+    out = (r.stdout or '') + (r.stderr or '')
+    if r.returncode == 0:
+        return True, '有寫入權'
+    if re.search(r'permission|denied|not allowed|protected', out, re.I):
+        return False, '無寫入權（可能已轉讓或你只是觀察者）'
+    return False, f'探測失敗: {out.strip().splitlines()[-1][:120] if out.strip() else r.returncode}'
 
 
 def resolve_pkgbase(name):
@@ -430,6 +567,10 @@ def main():
             print(f'{base:32s} 空倉，跳過', flush=True); continue
         run(['git', '-C', adir, 'fetch', '-q', 'origin'])
         run(['git', '-C', adir, 'reset', '-q', '--hard', 'origin/master'])
+        ok, why = can_push(base, adir)
+        if not ok:
+            results.append((base, 'SKIP', f'不可推：{why}'))
+            print(f'{base:32s} 不動：{why}', flush=True); continue
         try:
             edits, note = compute(adir, os.path.join(a.work, base + '.cache'))
         except Exception as e:

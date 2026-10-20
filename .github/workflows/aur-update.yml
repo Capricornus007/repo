@@ -100,6 +100,10 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           DO_PUSH: ${{ inputs.push }}
+          # resolve_zen / resolve_cachy_kernel 打 api.github.com，匿名從容器出去會 403
+          # （實測這臺機器匿名回 "API rate limit exceeded for 203.10.99.35"）。
+          # GITHUB_TOKEN 是短效、限本倉的，不是 AUR 金鑰。
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           ARGS='--file aur/bases.txt'
           if [ "$EVENT_NAME" = 'workflow_dispatch' ] && [ "$DO_PUSH" = 'true' ]; then
@@ -109,5 +113,6 @@ jobs:
             echo "::notice::模式＝dry-run（只 commit 不 push）"
           fi
           echo "+ (aurbot) python tools/aur_update.py $ARGS"
-          # makepkg / updpkgsums 拒絕 root，所以整段在 aurbot 身分下跑。
-          su aurbot -c "cd '$GITHUB_WORKSPACE' && AUR_WORK=/home/aurbot/aurwork python tools/aur_update.py $ARGS"
+          # makepkg / updpkgsums 拒絕 root，所以整段在 aurbot 身分下跑；
+          # -m 保留環境，否則 su 會把上面那個 GH_TOKEN 剝掉。
+          su -m aurbot -c "cd '$GITHUB_WORKSPACE' && AUR_WORK=/home/aurbot/aurwork python tools/aur_update.py $ARGS"

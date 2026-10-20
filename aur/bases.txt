@@ -8,11 +8,15 @@
 # 工具對「算不出可信結果」的包會整包跳過並印原因，不會亂寫版本號，
 # 所以清單可以放心放全；靜態版號型（linux-cjktty 那類）會自己跳掉。
 
-# --- 內核系（linux-cjktty / -headers 是靜態版號，會自動 SKIP，留著當文件）---
+# --- 內核系（走內容規則跟上游：Arch core/linux、zen-kernel tag、CachyOS/linux release）---
 linux-cjktty
 linux-cjktty-headers
 linux-cachyos-cjktty
 linux-cachyos-cjktty-headers
+# zencjk 的 AUR Maintainer 是 eeeeei，使用者是**共同維護者**（有寫入權，
+# 實測 git push --dry-run 過）。這種擁有權 RPC 查不出來，所以工具改成實測。
+linux-zencjk
+linux-zencjk-headers
 
 # --- 輸入法 ---
 fcitx5-git
