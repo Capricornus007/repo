@@ -207,6 +207,10 @@ def apply_bump(adir, edits, msg, push, do_sums):
         return '寫入後與原檔相同（無實際差異），不推'
     if not push:
         return 'DRY-RUN 已 commit，未 push'
+    # clone 走 HTTPS（免互動、不用 host key），但 AUR **只收 SSH push**，
+    # 所以真推之前要把 origin 換掉。
+    base = os.path.basename(adir)
+    run(['git', '-C', adir, 'remote', 'set-url', 'origin', AUR_SSH.format(base=base)])
     rp = run(['git', '-C', adir, 'push', 'origin', 'HEAD:master'])
     return '已 push' if rp.returncode == 0 else f'push 失敗: {rp.stderr.strip()[:200]}'
 
