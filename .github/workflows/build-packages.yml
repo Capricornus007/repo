@@ -3654,5 +3654,13 @@ jobs:
               continue
             fi
             echo "删除数据库已不引用的资产: $asset"
-            gh release delete-asset "$REPO_RELEASE_TAG" "$asset" --repo "$GH_REPO" --yes
+            # 兩條 workflow（kernels／git packages）共用同一個 release，清理可能撞在同一份
+            # 資產上；目標狀態是「不存在」，所以 404 就當成功，不要讓它把整條 deploy 判紅
+            # （run 39590235854 的 Build Kernels #317 就是這樣紅的：資產已被另一邊刪掉）。
+            if ! out=$(gh release delete-asset "$REPO_RELEASE_TAG" "$asset" --repo "$GH_REPO" --yes 2>&1); then
+              case "$out" in
+                *"not found"*|*"HTTP 404"*) echo "已不存在（可能由另一條 deploy 清掉）: $asset" ;;
+                *) echo "$out" >&2; exit 1 ;;
+              esac
+            fi
           done
