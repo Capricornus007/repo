@@ -71,7 +71,11 @@ jobs:
           # 在無 sudo 的機器上直接「su: 驗證記號處理錯誤」全軍覆沒（實測過）。
           _init_pkgs='git jq curl doas pacman-contrib gnupg github-cli'
           if [ '${{ matrix.kind }}' != 'artix' ]; then _init_pkgs="$_init_pkgs devtools"; fi
-          until pacman -Syu --noconfirm --disable-download-timeout $_init_pkgs; do
+          # --assume-installed libclang：Arch 2026-10-21 起沒有任何套件提供 `libclang`
+          # （clang 23.1.3 的 PROVIDES 只剩 clang-analyzer／clang-tools-extra），
+          # 而 shiboken6-generator 仍 depends=libclang → -Syu 的升級交易解不開。
+          # libclang.so 實際由 clang 本體提供，這裡只讓求解器放行。
+          until pacman -Syu --noconfirm --disable-download-timeout --assume-installed libclang $_init_pkgs; do
             _pi=$((_pi + 1))
             # 必須用 if，不能用 `[ … ] && { … ; exit 1; }`：本步驟的 shell 是 `sh -e`
             # （runner 上就是 dash），而 dash 的 errexit 對「AND-OR 清單裡最後被執行的那條
@@ -166,7 +170,14 @@ jobs:
             # 2026-09-15/16 CI 逐層實測：缺 generator→find_package(Shiboken6) 紅；
             # 補 shiboken6→find_package(PySide6) 紅；全補後 build() 才在
             # 「python3 -m build」因缺 python-build 紅。整套一起預裝；無 bindings 的包多裝無害。
-            pacman -S --noconfirm --needed shiboken6 shiboken6-generator pyside6 python-build python-setuptools
+            # ⚠️ 2026-10-21：Arch 把 `libclang` 這個 provides 從 clang 拿掉了
+            # （extra.db 全庫已無任何套件提供它；`clang 23.1.3` 的 PROVIDES 只剩
+            # clang-analyzer／clang-tools-extra），而 shiboken6-generator 仍
+            # `depends=libclang` → 求解器直接解不開，全部 KDE job 紅在這一歩
+            # （run 39577674582 實測）。libclang.so 其實由 clang 本體提供，所以用
+            # --assume-installed 讓求解器放行：不造假套件、也不動真實依賴。
+            pacman -S --noconfirm --needed --assume-installed libclang \
+              shiboken6 shiboken6-generator pyside6 python-build python-setuptools
           fi
 
           if [ "${{ matrix.kind }}" = 'multilib' ] \
