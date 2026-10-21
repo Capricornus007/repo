@@ -284,22 +284,12 @@ jobs:
           fi
 
 
-          # 2026-10-21（使用者指示「直接把我 pacman 配置挖過去」）：把本機真正在用的
-          # 第三方 Arch 倉補齊，讓容器跟目標機看到同一批套件（例：gtk2 官方已移除，
-          # 本機靠 andontie-aur／arch4edu 拿到）。刻意**不搬**的三類：
-          #   · Artix 的 system/world/galaxy/lib32 與 *-goblins/gremlins：不同發行版，
-          #     塞進 Arch 容器會混 glibc/init 依賴；
-          #   · ALHP 的 extra-x86-64-v3/v2：會蓋掉官方包，且容器 CPU 未必支援；
-          #   · xlibre-beta：使用者已明令不再使用；linuxrepos：域名解析已死（舊註解記過）。
-          # 全部排在 core/extra 之後 → 同名包仍由官方優先；掛完不做 -Syu（避免半套升級）。
+          # 第三方 Arch 倉（對齊目標機；來源與取捨見 docs/in-tree-packages.md）。
           printf '%s\n' \
             'Server = https://geo-mirror.chaotic.cx/$repo/$arch' \
             'Server = https://cdn-mirror.chaotic.cx/$repo/$arch' \
             > /etc/pacman.d/chaotic-mirrorlist
-          # archlinuxcn 給多個鏡像：官方 CDN 在 GitHub runner 上實測連不上
-          # （2026-10-21 run 39565140324：Failed to connect ... after 8008 ms），
-          # 但 pacman 會按 Server 順序自動換下一條，所以列多個就好——不必摘掉整個倉。
-          # 順序依「實測可達性」排：bfsu 0.2s／tuna 0.5s／ustc 1.7s／官方 2.6s。
+          # 多鏡像＋實測排序（官方 CDN 在 runner 上不可達）：見 docs。
           printf '%s\n' \
             'Server = https://mirrors.bfsu.edu.cn/archlinuxcn/$arch' \
             'Server = https://mirrors.tuna.tsinghua.edu.cn/archlinuxcn/$arch' \

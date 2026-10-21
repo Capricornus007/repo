@@ -1207,3 +1207,22 @@ doas 一律清洗環境（實測 `DIFFPROG=meld doas /usr/bin/printenv DIFFPROG`
 本機跑的是 Artix 穩定版 xorg-server；這顆只是「尖端選項」，**不是**拿來日常替換的。
 真要裝之前先確認顯卡驅動的 ABI：`provides` 的 `X-ABI-VIDEODRV_VERSION`／`X-ABI-XINPUT_VERSION`
 會隨 master 變，驅動對不上就得一起升。
+
+## CI 容器掛的第三方 Arch 倉（2026-10-21，使用者「直接把我 pacman 配置挖過去」）
+
+把目標機真正在用的第三方 Arch 倉補進容器，讓兩邊看到同一批套件（例：`gtk2` 官方已移除，
+本機靠 andontie-aur／arch4edu 拿到）。**刻意不搬**的三類：
+
+* **Artix 的 `system`／`world`／`galaxy`／`lib32` 與 `*-goblins`／`gremlins`**：不同發行版，
+  塞進 Arch 容器會混 glibc／init 依賴（`kind: artix` 那條走獨立容器，不靠這裡）。
+* **ALHP 的 `extra-x86-64-v3`／`v2`**：會蓋掉官方包，且容器 CPU 未必支援。
+* **`xlibre-beta`**：使用者已明令不再使用；`linuxrepos`：域名解析已死（舊註解記過）。
+
+其餘六個照目標機掛：`chaotic-aur`、`archlinuxcn`、`arch4edu`、`ownstuff`、`andontie-aur`、
+`herecura`。全部排在 `core`／`extra` **之後**（同名包仍由官方優先），掛完只做 `-Sy`
+不做 `-Syu`（避免半套升級）。
+
+**archlinuxcn 要列多個 Server**：官方 CDN 在 GitHub runner 上實測連不上
+（2026-10-21 run 39565140324：`Failed to connect … after 8008 ms`），但 pacman 會按
+`Server` 順序自動換下一條，所以列多個就好——不必摘掉整個倉。順序依實測可達性：
+bfsu 0.2s／tuna 0.5s／ustc 1.7s／官方 2.6s。
