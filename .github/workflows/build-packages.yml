@@ -668,7 +668,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|npm-git|pnpm-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|npm-git|pnpm-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git)
               # 這批包為什麼走本倉目錄版（逐包理由）：見 docs/in-tree-packages.md。
               # 那個 step 的表達式有 21000 字元上限、註解也計入，加包只加清單、
               # 說明寫進該檔，別寫回這裡。
@@ -903,6 +903,15 @@ jobs:
               echo "改寫後：$(grep -E '^pkgrel=' pkg_dir/PKGBUILD)"
               sed -n '19,21p' pkg_dir/PKGBUILD
               ;;
+            python-cu2qu)
+              # setuptools >=81 把 pkg_resources 拆出去，而 cu2qu 的 setup.py 還在
+              # import 它 → `ModuleNotFoundError: No module named 'pkg_resources'`
+              # （run 39565140324 實測）。用 venv 釘 setuptools<81 來建：不改上游
+              # 源碼、也不動容器的系統 setuptools。
+              sed -i 's|^build() {|build() {\n  python -m venv --system-site-packages /tmp/cu2qu-v\n  /tmp/cu2qu-v/bin/pip install -q "setuptools<81"\n  export PATH=/tmp/cu2qu-v/bin:$PATH|' pkg_dir/PKGBUILD
+              grep -q cu2qu-v pkg_dir/PKGBUILD \
+                || { echo "::error::cu2qu 的 venv 注入失敗（build() 錨點變了）"; exit 1; }
+              sed -n "/^build() {/,+4p" pkg_dir/PKGBUILD ;;
             i3blocks-git)
               # 實物查證（`gh release download` 那顆 1.5.r11.g9a06a38-1，tar -tf 全清單）：
               # 整包都落在 /usr/local 底下——usr/local/bin/i3blocks、
