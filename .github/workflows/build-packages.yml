@@ -710,6 +710,16 @@ jobs:
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
               curl -sfL "$base/PKGBUILD"    -o "pkg_dir/PKGBUILD"
               curl -sfL "$base/hidpi.patch" -o "pkg_dir/hidpi.patch" ;;
+            fcitx5-qt-git)
+              # 本倉 in-tree 維護（2026-10-21，使用者指定合成一顆，不要吃 AUR 拆出來的
+              # fcitx5-qt5-git / qt6-git / gtk-git）：上游 CMakeLists 的 ENABLE_QT5 與
+              # ENABLE_QT6 預設都是 On，一次 cmake 就兩套都建——實測本機 fcitx5-qt
+              # 同時提供 /usr/lib/qt/plugins/platforminputcontexts/ 與 /usr/lib/qt6/plugins/...。
+              # 那三顆進矩陣後連紅（run 39516944880），且紅在
+              # `git clone aur... SSL_read: unexpected eof` 這種瞬斷，多一顆多一個斷點。
+              mkdir pkg_dir
+              base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
+              curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
             fcitx5-git)
               # 本倉 in-tree 維護（2026-09-17）：AUR 版 build() 的
               # -DENABLE_SYSTEMD=OFF 打的是不存在的選項名（上游只有

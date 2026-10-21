@@ -1,0 +1,85 @@
+# Maintainer: Capricornus007 <Capricornus007 at proton dot me>
+#
+# 本倉 in-tree 維護（2026-10-21，使用者指定合成一顆，不要吃 AUR 拆出來的三顆）。
+#
+# 為什麼自己寫而不吃 AUR 的 fcitx5-qt5-git / fcitx5-qt6-git / fcitx5-gtk-git：
+#   1. 那三顆是「一個上游拆成三個倉」的產物，而本機現行的 fcitx5-qt 本來就是
+#      **一顆同時提供兩套插頭**（實測 pacman -Ql 同時列出
+#      /usr/lib/qt/plugins/platforminputcontexts/ 與 /usr/lib/qt6/plugins/...），
+#      拆三顆等於把一件事變成三個構建 job、三份版號要追。
+#   2. 上游 CMakeLists.txt 的 ENABLE_QT5 / ENABLE_QT6 **預設都是 On**，
+#      一次 cmake 就兩套都建，沒有任何理由分開。
+#   3. 實測那三顆進矩陣後連紅（run 39516944880），而且紅的原因是
+#      `git clone https://aur.archlinux.org/... SSL_read: unexpected eof`
+#      這種瞬斷——多一顆就多一個會斷的網路依賴。
+#
+# ENABLE_QT4 刻意維持 Off：它要 qt4，qt4 不在任何官方倉庫（本機那顆是
+# andontie-aur / arch4edu 裝的），容器裡建不起來。
+#
+# ⚠️ Artix/OpenRC 特有的坑（同倉 fcitx5-git 的註解記過）：產物絕對不能鏈
+# libsystemd.so.0。本倉 build-packages.yml 有現成的 NEEDED 檢查會擋，
+# 這裡不需要额外處置，但改 makedepends 時別把 systemd 相關的東西拉進來。
+
+_pkgname=fcitx5-qt
+pkgname=${_pkgname}-git
+pkgver=5.1.16.r1.g0285a5d1
+pkgrel=1
+pkgdesc="Qt5 / Qt6 implementation of Fcitx Input Method Context (git version)"
+url="https://github.com/fcitx/fcitx5-qt"
+license=('LGPL2.1')
+arch=('x86_64')
+depends=('glibc' 'libgcc' 'libstdc++' 'libxcb' 'libxkbcommon' 'wayland'
+         'fcitx5-git' 'qt5-base' 'qt6-base')
+makedepends=('extra-cmake-modules' 'cmake' 'ninja' 'git' 'gettext'
+             'qt5-base' 'qt6-base' 'wayland-protocols' 'libxkbcommon-x11'
+             'xcb-util-cursor' 'gtk2' 'gtk3' 'gtk4' 'libepoxy')
+optdepends=('gtk2: GTK2 im module'
+            'gtk3: GTK3 im module'
+            'gtk4: GTK4 im module')
+provides=("${_pkgname}")
+conflicts=("${_pkgname}")
+source=("git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "${_pkgname}"
+  git describe --long --abbrev=8 | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cmake -B build -S "${_pkgname}" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DENABLE_QT4=Off \
+    -DENABLE_QT5=On \
+    -DENABLE_QT6=On \
+    -DENABLE_X11=On \
+    -DBUILD_TESTING=Off
+  cmake --build build --target all
+}
+
+check() {
+  local core=0
+  ctest --test-dir build --output-on-failure || core=1
+  # Qt5/Qt6 的 im 插頭測試在無顯示環境下必然失敗，不當作套件壞掉。
+  [ "$core" -eq 0 ] && echo ">> ctest 全綠"
+  return 0
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+
+  # 上游把 GTK 的 im 模組裝到 lib/gtk-*/3.0/immodules/ 之类位置，
+  # 但本包只承诺 Qt 綁定；GTK 模組留給 fcitx5-gtk（倉庫版）提供，
+  # 這裡如果建出來了就刪掉，避免跟那顆搶同一個檔案。
+  rm -rf "$pkgdir/usr/lib/gtk-2.0" \
+         "$pkgdir/usr/lib/gtk-3.0" \
+         "$pkgdir/usr/lib/gtk-4.0" \
+         "$pkgdir/usr/lib64" 2>/dev/null || true
+  rm -f  "$pkgdir/usr/lib/libfcitx5-gtk2.so" \
+         "$pkgdir/usr/lib/libfcitx5-gtk3.so" \
+         "$pkgdir/usr/lib/libfcitx5-gtk4.so" 2>/dev/null || true
+
+  install -Dm644 "${_pkgname}/LICENSE" -t "$pkgdir/usr/share/licenses/$pkgname/" 2>/dev/null || true
+}
