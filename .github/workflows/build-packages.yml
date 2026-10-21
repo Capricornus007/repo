@@ -931,6 +931,22 @@ jobs:
               grep -nE '^epoch=' pkg_dir/PKGBUILD || { echo "::error::epoch 沒加上，feed 產物會被目標機的手建包擋住"; exit 1; }
               grep -nE '^epoch=|^pkgver=' pkg_dir/PKGBUILD | head -3
               ;;
+            fcitx5-chinese-addons-git)
+              # AUR 的 depends 寫 `fcitx5-qt6-git`（AUR 把上游拆成 qt5/qt6 兩顆），
+              # 但本倉的 fcitx5-qt 是使用者 2026-10-21 明確要求的**合一顆**
+              # （Qt4/5/6 同包，feed 名稱 fcitx5-qt-git）→ feed 裡沒有 qt6-git，
+              # plan 的「-git 依賴門檻」與 makepkg -s 都會 target not found。
+              # 把依賴指到合一顆；產物 metadata 也會是 fcitx5-qt-git，與 feed 一致。
+              sed -i 's/fcitx5-qt6-git/fcitx5-qt-git/g' pkg_dir/PKGBUILD
+              if grep -q 'fcitx5-qt6-git' pkg_dir/PKGBUILD; then
+                echo "::error::fcitx5-qt6-git 沒改掉（AUR 寫法變了，sed 對不上）"
+                grep -n 'fcitx5-qt' pkg_dir/PKGBUILD || true
+                exit 1
+              fi
+              grep -q 'fcitx5-qt-git' pkg_dir/PKGBUILD \
+                || { echo "::error::fcitx5-qt-git 沒寫進去"; exit 1; }
+              grep -n 'fcitx5-qt' pkg_dir/PKGBUILD | head -2
+              ;;
             helium-browser-bin)
               # 用戶 2026-10-19 點名：要把 ttf-liberation 從這臺機器上卸掉，而它是被
               # helium-browser-bin 的依賴釘住的。AUR 那顆把 'ttf-liberation' 寫死在
