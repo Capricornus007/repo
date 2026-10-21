@@ -5,7 +5,7 @@
 pkgname=nodejs-better-sqlite3-git
 _pkgname=better-sqlite3
 pkgver=13.0.3.r0.g0000000
-pkgrel=1
+pkgrel=2
 pkgdesc="The fastest and simplest library for SQLite3 in Node.js (upstream git)"
 arch=('x86_64')
 url="https://github.com/WiseLibs/better-sqlite3"
@@ -33,6 +33,14 @@ build() {
 
 package() {
   cd "$_pkgname"
-  npm install -g --prefix "$pkgdir/usr" . --ignore-scripts --no-audit --no-fund
+  # npm install -g . 會把「本地目錄」裝成 symlink，build/Release/*.node 不會進包
+  # （實測 2026-10-22 的 1-1 資產只有 3.4K、require 直接 MODULE_NOT_FOUND）。
+  # 手動搬 package.json/lib/build，並在沒有 native 模組時硬失敗，堵住假綠。
+  install -dm755 "$pkgdir/usr/lib/node_modules/$_pkgname"
+  cp -a package.json lib build "$pkgdir/usr/lib/node_modules/$_pkgname/"
+  find "$pkgdir" -name 'better_sqlite3.node' | grep -q . || {
+    echo "better_sqlite3.node 沒進包，拒絕產出空殼" >&2
+    return 1
+  }
   find "$pkgdir" -name package.json -print0 | xargs -r -0 sed -i '/_where/d'
 }
