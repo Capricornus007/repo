@@ -547,6 +547,7 @@ package_gst-plugins-bad-libs-git() {
     usr/lib/gstreamer-1.0/libgstcoloreffects.so
     usr/lib/gstreamer-1.0/libgstdebugutilsbad.so
     usr/lib/gstreamer-1.0/libgstdecklink.so
+    usr/lib/gstreamer-1.0/libgstdecklink2.so
     usr/lib/gstreamer-1.0/libgstdvb.so
     usr/lib/gstreamer-1.0/libgstdvbsubenc.so
     usr/lib/gstreamer-1.0/libgstdvbsuboverlay.so
