@@ -388,6 +388,13 @@ check() (
   # 補環境、不跳測試。
   export GST_PLUGIN_SCANNER="$PWD/build/subprojects/gstreamer/libs/gst/helpers/gst-plugin-scanner"
 
+  # 容器裡沒有 GPU（也沒有 /dev/dri），GL 測試會在「建立 EGL display」這步直接失敗：
+  # 2026-10-21 run 39570379334 的 gst-plugins-base:libs_gstglmemory（603 過 1 敗）。
+  # 補環境而不是跳測試：走 mesa 的 surfaceless EGL + llvmpipe 軟體渲染。
+  export EGL_PLATFORM=surfaceless
+  export LIBGL_ALWAYS_SOFTWARE=1
+  export GALLIUM_DRIVER=llvmpipe
+
   export CK_TIMEOUT_MULTIPLIER=5
   export NO_AT_BRIDGE=1 GTK_A11Y=none
 
