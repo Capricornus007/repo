@@ -521,7 +521,12 @@ def apply_bump(adir, edits, msg, push, do_sums):
         return f'.SRCINFO 產生失敗: {r.stderr.strip()[:200]}'
     open(os.path.join(adir, '.SRCINFO'), 'w').write(r.stdout)
 
-    run(['git', '-C', adir, 'add', '-A'])
+    # AUR 只收扁平倉庫：updpkgsums 會在 adir 下建 src/ 下載源碼，`git add -A`
+    # 把整個 src/ 提交進去，AUR 一律拒收（run 39597934563 的 xcb-imdkit 等多顆：
+    # "the repository must not contain subdirectories"）。只 stage 追蹤檔的修改，
+    # 以及本工具唯二會寫的 PKGBUILD／.SRCINFO。
+    run(['git', '-C', adir, 'add', '-u'])
+    run(['git', '-C', adir, 'add', '--', 'PKGBUILD', '.SRCINFO'])
     if run(['git', '-C', adir, 'diff', '--cached', '--quiet']).returncode != 0:
         # `su -m` 會把呼叫端的 HOME 帶進來，aurbot 的 ~/.gitconfig 因此讀不到。
         # 舊版不看 commit 的返回碼：缺身分時 commit 失敗，後面的 push 只是把**舊 HEAD**
