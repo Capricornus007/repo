@@ -267,7 +267,16 @@ jobs:
             'Server = https://geo-mirror.chaotic.cx/$repo/$arch' \
             'Server = https://cdn-mirror.chaotic.cx/$repo/$arch' \
             > /etc/pacman.d/chaotic-mirrorlist
-          printf '%s\n' 'Server = https://repo.archlinuxcn.org/$arch' > /etc/pacman.d/archlinuxcn-mirrorlist
+          # archlinuxcn 給多個鏡像：官方 CDN 在 GitHub runner 上實測連不上
+          # （2026-10-21 run 39565140324：Failed to connect ... after 8008 ms），
+          # 但 pacman 會按 Server 順序自動換下一條，所以列多個就好——不必摘掉整個倉。
+          # 順序依「實測可達性」排：bfsu 0.2s／tuna 0.5s／ustc 1.7s／官方 2.6s。
+          printf '%s\n' \
+            'Server = https://mirrors.bfsu.edu.cn/archlinuxcn/$arch' \
+            'Server = https://mirrors.tuna.tsinghua.edu.cn/archlinuxcn/$arch' \
+            'Server = https://mirrors.ustc.edu.cn/archlinuxcn/$arch' \
+            'Server = https://repo.archlinuxcn.org/$arch' \
+            > /etc/pacman.d/archlinuxcn-mirrorlist
           printf '%s\n' \
             'Server = https://repository.arch4edu.org/$arch' \
             'Server = https://mirrors.nju.edu.cn/arch4edu/$arch' \
@@ -310,7 +319,7 @@ jobs:
             if [ -z "$_bad" ]; then
               echo "::warning::pacman -Sy 失敗但抓不到是哪個倉，照原樣繼續"; cat /tmp/_sy.log; break
             fi
-            echo "::warning::第三方倉 $_bad 同步不到，本次先摘掉它"
+            echo "::warning::第三方倉 $_bad 的鏡像全都不通（前一層已列多個 Server），本次才摘掉它"
             awk -v r="[$_bad]" '/^\[/{skip=($0==r)} skip==0' /etc/pacman.conf > /tmp/_pacman.conf && cp /tmp/_pacman.conf /etc/pacman.conf
           done
           echo "第三方倉已就緒：$(pacman -Sl chaotic-aur archlinuxcn arch4edu ownstuff andontie-aur herecura 2>/dev/null | wc -l) 個條目"
