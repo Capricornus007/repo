@@ -617,6 +617,26 @@ jobs:
       - name: 拉取对应的套件仓库
         run: |
           set -euo pipefail
+          # 2026-10-21：AUR 的 git 服務偶發 TLS 斷線
+          # `fatal: unable to access …: TLS connect error: …unexpected eof while reading`
+          # → exit 128，一次就把整個 AUR job 判死（run 39582717995 有 8 顆同時中）。
+          # 所有 AUR clone 一律走這個重試；失敗要清掉半截目錄再來。
+          git config --global http.version HTTP/1.1
+          _aur_clone() {
+            _ac=0
+            until git clone "$2" "$1"; do
+              _ac=$((_ac + 1))
+              if [ "$_ac" -ge 10 ]; then
+                echo "::error::AUR clone 连续 ${_ac} 次失败"
+                exit 1
+              fi
+              rm -rf "$1"
+              _ab=$((_ac * 10))
+              if [ "$_ab" -gt 60 ]; then _ab=60; fi
+              echo "::warning::AUR clone 瞬断（第 ${_ac}/10 次），退避重试"
+              sleep $_ab
+            done
+          }
           # ffmpeg-full-git 直接取 AUR 的 PKGBUILD；kew-git 使用本倉庫版本；
           # oh-my-pi-git 改走 in-tree（本仓库 oh-my-pi-git/ 目录）：AUR 那份照上游
           #   compile-binary.ts 里新加的 `bytecode: true` 编译，而本仓库的非 frozen
@@ -629,7 +649,7 @@ jobs:
           # （protonvpn 的上游 url 改成了 jonasjancarik 的续命 fork，不能取 AUR 版）
           case "${{ matrix.repo_name }}" in
             ffmpeg-full-git)
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
+              _aur_clone pkg_dir "https://aur.archlinux.org/${{ matrix.repo_name }}.git" ;;
             kew-git)
               mkdir pkg_dir
               curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/kew-git/PKGBUILD" \
@@ -826,7 +846,7 @@ jobs:
               # nvidia-settings-beta），所以這裡**只准按 pkgbase clone**——拿 split 的包名
               # 來 clone 會 404。逐包理由與依賴／換代分析見 docs/in-tree-packages.md 的
               # NVIDIA -beta 段（這個 step 的說明不寫在 workflow 裡）。
-              git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir ;;
+              _aur_clone pkg_dir "https://aur.archlinux.org/${{ matrix.repo_name }}.git" ;;
             *)
               # AUR 包或本仓库维护的 -git 包：
               # sway/wlroots/waybar/i3status 家族：-git 取 AUR、穩定版取 Arch
@@ -847,7 +867,7 @@ jobs:
                 # 沒帶就沿用 repo_name（與既有條目行為完全相同）。
                 _aur_base="${{ matrix.pkgbase }}"
                 [ -n "$_aur_base" ] || _aur_base="${{ matrix.repo_name }}"
-                git clone "https://aur.archlinux.org/${_aur_base}.git" pkg_dir
+                _aur_clone pkg_dir "https://aur.archlinux.org/${_aur_base}.git"
               elif echo "${{ matrix.repo_name }}" | grep -qE '^(sway|wlroots|waybar|i3status)'; then
                 # 官方穩定版包（無 -git 後綴）：從 Arch 官方 GitLab 取 PKGBUILD
                 mkdir pkg_dir
