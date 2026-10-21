@@ -1,0 +1,72 @@
+# Android NDK r30 — mgx（primaryNdkVersion）與 xposedsmscode 都要 30.0.16248370。
+#
+# 寫法跟 ~/Downloads/android-ndk-23 那份一致：**不宣告 conflicts / provides**。
+# feed 現有的 android-ndk-23／-27 那兩顆宣告了 `conflicts=('android-ndk')`
+# ＋`provides=('android-ndk=<ver>')`，實測結果是「裝 23 會被 27 擋下來」
+# （pacman: android-ndk-23 and android-ndk-27 are in conflict (android-ndk)），
+# 而你舊系統上 23 與 27 是共存的（備份清單 pkg-explicit.txt 第 18、19 行）。
+# NDK 本來就是 sdkmanager 的 side-by-side 佈局（/opt/android-sdk/ndk/<version>），
+# 互斥宣告是錯的，所以這顆刻意不寫。
+#
+# 來源直取 dl.google.com：實測 2026-10-20 該站可達（HTTP 200、range 請求 0.23 s），
+# 不需要再走 android-ndk-23 那種自建 GitHub 鏡像。
+
+pkgname=android-ndk-30
+pkgver=30.0.16248370
+pkgrel=1
+pkgdesc='Android C/C++ developer kit (r30)'
+arch=('x86_64')
+url='https://developer.android.com/ndk/'
+license=('Apache' 'LGPL' 'custom')
+options=('!strip' 'staticlibs')
+backup=("etc/profile.d/android-ndk-30.sh")
+install="$pkgname.install"
+depends=('bash' 'glibc' 'gcc-libs' 'zlib')
+optdepends=(
+  'python: various helper scripts'
+  'perl: various helper scripts'
+)
+source=(
+  "android-ndk-30.sh"
+  "https://dl.google.com/android/repository/android-ndk-r30-linux.zip"
+)
+# Google 對 NDK 只發佈 SHA-1，沒有 SHA-256：下載頁那欄 40 位 hex 就是 SHA-1
+# （https://developer.android.com/ndk/downloads，實測 2026-10-20：
+#   android-ndk-r30-linux.zip  size=738633529  5107f898313790e449e87eee2183d9a20602dee9）。
+# 所以 sha1 用官方值驗 authenticity，sha256 留 SKIP。
+sha1sums=('SKIP'
+          '5107f898313790e449e87eee2183d9a20602dee9')
+sha256sums=('SKIP'
+            'SKIP')
+
+_package_impl() {
+  local dir rev
+  dir=$(find "$srcdir" -maxdepth 1 -type d -name 'android-ndk-r*' | head -1)
+  [ -n "$dir" ] || { echo "==> 錯誤：解壓後找不到 android-ndk-r* 目錄" >&2; return 1; }
+
+  # 關鍵校驗：`android-ndk-r30-linux.zip` 是「r30 最新修訂」，內容會隨時間漂移，
+  # 而 gradle 要的是特定 side-by-side 版號。版號對不上就讓建置紅，
+  # 不要靜默產出一個裝上去也無法被 `ndkVersion "30.0.16248370"` 找到的包。
+  rev=$(sed -n 's/^Pkg\.Revision[[:space:]]*=[[:space:]]*//p' "$dir/source.properties" | head -1)
+  if [ "$rev" != "$pkgver" ]; then
+    echo "==> 錯誤：zip 內 Pkg.Revision=$rev，與本包 pkgver=$pkgver 不符。" >&2
+    echo "    Google 那支 zip 已漂到別的修訂 → 把 pkgver 改成 $rev 並重取 SHA-1，" >&2
+    echo "    或改用 sdkmanager 裝指定的 side-by-side 版。" >&2
+    return 1
+  fi
+
+  install -Ddm755 "$pkgdir/opt/android-sdk/ndk"
+  # sdkmanager 佈局：gradle 與 AGP 是在 $ANDROID_HOME/ndk/<version> 找 NDK
+  mv "$dir" "$pkgdir/opt/android-sdk/ndk/$rev"
+
+  install -Dm644 "$srcdir/android-ndk-30.sh" -t "$pkgdir/etc/profile.d/"
+
+  install -Dm644 "$pkgdir/opt/android-sdk/ndk/$rev/NOTICE" \
+    "$pkgdir/usr/share/licenses/$pkgname/NOTICE"
+  install -Dm644 "$pkgdir/opt/android-sdk/ndk/$rev/meta/NOTICE" \
+    "$pkgdir/usr/share/licenses/$pkgname/NOTICE.meta" 2>/dev/null || true
+}
+
+package() {
+  _package_impl
+}

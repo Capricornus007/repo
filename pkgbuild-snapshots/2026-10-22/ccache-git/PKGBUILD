@@ -1,0 +1,107 @@
+# Maintainer: Capricornus007 <Capricornus007@users.noreply.github.com>
+# 基底：Arch 官方 packaging/ccache 的參數與 package() 佈局，改成吃上游 git 尖端。
+pkgname=ccache-git
+pkgver=4.14.1.r0.g0000000
+pkgrel=1
+pkgdesc='Compiler cache that speeds up recompilation by caching previous compilations (git)'
+url='https://ccache.dev/'
+arch=(x86_64)
+license=(GPL-3.0-or-later)
+depends=(
+  fmt
+  glibc
+  hiredis
+  libblake3
+  libgcc
+  libstdc++
+  'xxhash'
+  'libxxhash.so'
+  zstd
+  'libzstd.so'
+)
+makedepends=(
+  asciidoctor
+  cmake
+  git
+  perl
+  tl-expected
+)
+checkdepends=(doctest)
+# 為什麼這顆要進 feed 走尖端（不是裝飾）：本機實測 2026-10-12，world 那顆 ccache 4.14.1-1
+# 的 DT_NEEDED 釘死 libhiredis.so.1.3.0，而系統裡的 hiredis 已是 1.4.1（/usr/lib/libhiredis.so.1.4.0），
+# 於是 `ldd /usr/bin/ccache` 直接 not found、ccache 從 10-06 起整台機器不可用，
+# mgx 的原生編譯就是被它擋死（ccache: error while loading shared libraries）。
+# 倉庫端沒有人在 hiredis 換代時重建 ccache，這種「依賴換代→二進位靜默死掉」的坑
+# 只有讓它每輪跟著 feed 重建才會自動補上，所以走 -git 進自動構建倉。
+provides=("ccache=$pkgver-$pkgrel")
+conflicts=(ccache)
+source=("git+https://github.com/ccache/ccache.git")
+b2sums=('SKIP')
+_dirname=ccache
+
+pkgver() {
+  # 與 tcl-git/librime-git 同一套防禦：目錄不在／探不到 HEAD 就沿用寫死的 pkgver，
+  # 不讓探版本變成建置失敗的原因。
+  local d v
+  for d in "$_dirname" "$SRCDEST/$_dirname" "$srcdir/$_dirname"; do
+    [[ -d $d ]] && git -C "$d" rev-parse -q --verify HEAD >/dev/null 2>&1 && break
+    d=
+  done
+  if [[ -z $d ]]; then
+    printf '%s\n' "$pkgver"
+    return 0
+  fi
+  # 版本基線讀該 HEAD 自己的 CMakeLists.txt（project(ccache VERSION x.y.z)），
+  # 而不是只靠 tag：上游常先抬版號再打 tag，只認 tag 會報舊版（sing-box mod 計數那條同理）。
+  local base
+  base=$(git -C "$d" show HEAD:CMakeLists.txt 2>/dev/null |
+         sed -n 's/^[[:space:]]*project([[:space:]]*ccache[[:space:]]*VERSION[[:space:]]\([0-9][0-9.]*\).*/\1/p' | head -1)
+  if [[ -n $base ]]; then
+    printf '%s\n' "${base}.r$(git -C "$d" rev-list --count HEAD).g$(git -C "$d" rev-parse --short=7 HEAD)"
+    return 0
+  fi
+  v=$(git -C "$d" describe --tags --long --abbrev=7 HEAD 2>/dev/null |
+      sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g')
+    printf '%s\n' "${v:-4.14.1.r0.g$(git -C "$d" rev-parse --short=7 HEAD 2>/dev/null)}"
+}
+
+build() {
+  cd "$_dirname"
+  cmake -B build -S . \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_BUILD_TYPE=None \
+    -Wno-dev
+  cmake --build build
+  cmake --build build --target doc
+}
+
+check() {
+  cd "$_dirname"
+  ctest --test-dir build --output-on-failure
+}
+
+package() {
+  cd "$_dirname"
+  make DESTDIR="$pkgdir" install -C build
+  make DESTDIR="$pkgdir" install -C build/doc
+
+  install -vdm 755 "$pkgdir/usr/lib/ccache/bin"
+  local prog
+  for prog in gcc g++ c++; do
+    ln -vs /usr/bin/ccache "$pkgdir/usr/lib/ccache/bin/$prog"
+    ln -vs /usr/bin/ccache "$pkgdir/usr/lib/ccache/bin/$CHOST-$prog"
+  done
+  for prog in cc clang clang++; do
+    ln -vs /usr/bin/ccache "$pkgdir/usr/lib/ccache/bin/$prog"
+  done
+
+  install -vDm 644 -t "$pkgdir/usr/share/doc/$pkgname" doc/*.md doc/*.adoc
+  install -vDm 644 -t "$pkgdir/usr/share/licenses/$pkgname" LICENSE.adoc
+
+  # 收口：這顆包存在的意義就是「ccache 要能用」，所以裝完當場驗一次，
+  # 不要再讓「套件裝得上、二進位卻載不起來」這種事活到下一次編譯。
+  "$pkgdir/usr/bin/ccache" --version >/dev/null || {
+    echo '==> 錯誤：裝出來的 ccache 跑不起來（依賴斷鏈？）'
+    return 1
+  }
+}

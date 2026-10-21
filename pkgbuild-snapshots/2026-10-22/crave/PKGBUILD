@@ -1,0 +1,87 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+#
+# foss.crave.io 的客戶端 CLI（開源 Android 免費建置佇列）。
+#
+# 為什麼要自己打包：AUR 上的 `crave`(krishn) 是**手動跟版**的——上游約 2–6 週發一版
+# （實查 tag：7210→3/20、7214→4/20、7218→4/29、7220→5/06、7226→7/20、7237→10/07），
+# 而 AUR 那邊每次都要有人手裡改 pkgver 與校驗和，落後是常態。本包進自動構建倉，
+# 由 CI 比對 GitHub release 決定重建。
+#
+# 上游倉 `accupara/crave` **沒有源碼**（根目錄只有 LICENSE.txt、README.md、
+# get_crave.sh、get_crave.ps1；GitHub 語言統計＝Shell），發的是預構建二進位
+# （README 的 --help 是 argparse 風格、體積 30MB 級，屬 PyInstaller 那一類），
+# 所以只能走 -bin 式打包：下載、校驗、安裝，不能 build。
+# 授權也不是開源：LICENSE.txt 寫「© Crave.io Inc.，未簽訂商業授權者依 crave.io 網站
+# Terms of Use」，GitHub 標 NOASSERTION、AUR 標 proprietary。
+#
+# 官方安裝腳本 get_crave.sh 有兩個坑，本包都不跟：
+#   1) 裡面 `crave_version='0.2-7183'` 是**寫死的**（已過期三個版本），
+#   2) 它 `sudo mv ./crave /usr/local/bin`——直接佔用 /usr/local，跟 pacman 搶檔案。
+#
+# 版號寫法：上游 tag 是 `0.2-7237`，但 pkgver 不準含連字號（pacman 規則），
+# 所以照 AUR 與本倉 openai-codex-git 的同一招——原料放 _pkgver，pkgver 做字元替換。
+# 注意這代表 URL 裡出現的是「連字號版」，CI 那個「把模板裡的 pkgver 換成新版的」
+# 比對邏輯對不上，因此 build-packages.yml 需要為本包加一個特例（改寫 _pkgver 那行），
+# 與 jbr21/jbr25 的 NEW_JBR_VER 同一種處理。
+pkgname=crave
+_pkgver=0.2-7237
+pkgver="${_pkgver/-/.}"
+pkgrel=1
+pkgdesc="Command line client for crave.io build queues (foss.crave.io free Android ROM builder)"
+url="https://foss.crave.io"
+arch=('x86_64' 'aarch64')
+license=('custom:Crave.io Terms of Use')
+options=('!strip' '!debug')
+depends=('glibc' 'libxcrypt-compat' 'openssh' 'rsync' 'zlib')
+# 上游二進位會**自己更新自己**（`-n/--noUpdate` 就是關掉這個）。裝進 /usr/bin 之後
+# 讓它自我更新會跟套件管理打架（下次 pacman 升級時檔案已被替換、校驗和對不上），
+# 所以本包把真二進位放 /usr/lib/crave/，/usr/bin/crave 是恆加 -n 的包裝腳本。
+# 代價：`crave version` 仍可用，但用戶拿不到上游自動推版——升級改由本倉 CI 負責。
+
+_case_arch() {
+  case "$1" in
+    x86_64)  printf 'amd64' ;;
+    aarch64) printf 'aarch64' ;;
+  esac
+}
+
+_qarch=$( _case_arch "$CARCH" )
+
+source=("LICENSE.txt::https://raw.githubusercontent.com/accupara/crave/master/LICENSE.txt")
+sha256sums=('SKIP')
+
+source_x86_64=("crave-${_pkgver}-linux-amd64.bin::https://github.com/accupara/crave/releases/download/${_pkgver}/crave-${_pkgver}-linux-amd64.bin")
+source_aarch64=("crave-${_pkgver}-linux-aarch64.bin::https://github.com/accupara/crave/releases/download/${_pkgver}/crave-${_pkgver}-linux-aarch64.bin")
+
+# 上游**只發 md5**（release 資產裡的 `crave.md5sum`），沒有 sha256、也沒有簽名。
+# 下面兩行是本包自己下載後算一次寫死；CI 升版時同步更新，並順手跟官方 md5 比對當雙重確認。
+# 2026-10-13 核對：amd64 md5 aa5fe829b2ff0eb5d29801f41a83e342、aarch64 md5
+# f6f040153fca5d7429b3a61c5e1390c2，兩者都與官方 crave.md5sum 逐字相符。
+sha256sums_x86_64=('34c3e5c6e778e72f78ac662e66b55f4872fd394bff1b437f5db13b3ecb5a72a7')
+sha256sums_aarch64=('fe498bf9262913e3fbebc584294c50c3bece0f56db6160d45e77c7b4f8e78cea')
+
+package() {
+  local bin
+  # 不能加 `-type f`：非壓縮檔的 source 在 $srcdir 裡是**符號鏈接**（指回 $startdir），
+  # 只有從 tarball 解出來的才是真檔——qoder-cli 那包用 -type f 是因為它解壓。
+  bin="$(find "$srcdir" -maxdepth 1 -name "crave-${_pkgver}-linux-${_qarch}.bin" -print -quit)"
+  [ -n "$bin" ] || { echo "错误：找不到上游二進位 crave-${_pkgver}-linux-${_qarch}.bin" >&2; return 1; }
+
+  install -Dm755 "$bin" "$pkgdir/usr/lib/crave/crave.bin"
+
+  # argparse 的全域旗標要放在次命令之前（usage: crave [-h] [-c F] [-q] [-v] [-n] {run,list,...}），
+  # 所以 -n 必須插在 "$@" 前面，不能放後面。
+  install -d "$pkgdir/usr/bin"
+  cat > "$pkgdir/usr/bin/crave" <<'WRAPPER'
+#!/bin/sh
+# 本包插入的包裝腳本：關掉上游二進位的自我更新，升級一律走套件管理。
+# 要繞過它就直接執行 /usr/lib/crave/crave.bin。
+exec /usr/lib/crave/crave.bin -n "$@"
+WRAPPER
+  # 必須補 chmod：heredoc 走出來吃 umask（644），裝完直接「拒絕不符權限的操作」
+  # （2026-10-13 實測踩到，pacman -Q 看起來是裝好的、命令卻跑不起來）。
+  chmod 755 "$pkgdir/usr/bin/crave"
+
+  install -Dm644 "$srcdir/LICENSE.txt" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE.txt"
+}

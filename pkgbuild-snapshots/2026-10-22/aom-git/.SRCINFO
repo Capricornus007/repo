@@ -1,0 +1,26 @@
+pkgbase = aom-git
+	pkgdesc = An open, royalty-free video coding format designed for video transmissions over the Internet
+	pkgver = 3.13.1.r240.ga27d804206a
+	pkgrel = 1
+	url = https://aomedia.org/
+	arch = i686
+	arch = x86_64
+	license = BSD-2-Clause
+	license = LicenseRef-aom
+	checkdepends = python
+	makedepends = git
+	makedepends = cmake
+	makedepends = doxygen
+	makedepends = graphviz
+	makedepends = perl
+	makedepends = yasm
+	depends = glibc
+	depends = libgcc
+	depends = libstdc++
+	provides = aom=3.13.1.r240.ga27d804206a
+	provides = libaom.so
+	conflicts = aom
+	source = git+https://aomedia.googlesource.com/aom
+	sha256sums = SKIP
+
+pkgname = aom-git

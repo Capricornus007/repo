@@ -1,0 +1,116 @@
+# CMake 的開發版（上游 master）。基準對照物是 Arch 官方 cmake
+# （pkgver 4.4.3-2）：https://gitlab.archlinux.org/archlinux/packaging/packages/cmake/-/raw/main/PKGBUILD
+# 本機實測 Artix 來源全部抓不到（api.artixlinux.org／code.artixlinux.org 連 DNS 都解析不出來），
+# 故 depends/makedepends/optdepends/旗標全部以 Arch 為準逐條搬。官方這包本來就是
+# **從 git 倉取的**（source 是 git+kitware、#tag=v$pkgver），所以 -git 化不需要動任何
+# 構建邏輯，只是把「釘 tag」改成「跟 origin/master」。
+#
+# ⚠️ 循環依賴／系統性風險：cmake 是本機大量包的 makedepends，而且**本倉 CI 自己就要用
+#   cmake**（例如 multitail）。換上 cmake-git 之後，若 master 的某個 cmake 行為回歸或
+#   policy 預設改了（cmake 4.x 系列一直在砍舊 policy），受害的是「之後所有用 cmake 的構建」，
+#   包含 AUR 與本倉的包。另外這包 build 出來是 **開發版**（master 比最新 release v4.4.3
+#   還多一千多個 commit，含每天一顆的 "CMake Nightly Date Stamp"），不是穩定分支。
+#   換之前請確認手上有官方 cmake 的 pkg 檔可以塞回去。
+#
+# ⚠️ CI 成本：cmake 的 git 倉很大（makepkg 會先做一份 mirror 克隆，數百 MB 起跳），
+#   而且 build() 同時出 man + HTML 文件 + Qt6 GUI + emacs 位元組碼，單包實測要幾十分鐘。
+#   矩陣是 90 分鐘一輪，這顆會長期佔著並行槽；加進矩陣前要想清楚值不值。
+
+_name=cmake
+pkgname=$_name-git
+# 佔位值，僅供人讀：實際由 pkgver() 從 origin/master 現算覆寫。
+# 實測 v4.4.3 是 origin/master 的祖先（kitware API compare master→v4.4.3 回 0 個 commits），
+# 所以 describe 的錨點就是最新穩定 release tag v4.4.3，不會錨到 branch-4.x 上的熱修 tag。
+pkgver=4.4.3.r1173.g1d03705da6
+pkgrel=1
+# epoch=1：cmake 會在 branch-4.x 上持續打 v4.4.x 熱修 tag；那些 tag 不在 master 線上時
+# describe 的錨點會停在舊的 v4.4.0 一帶，距離數再大也可能被 vercmp 判比庫裡那條舊。
+# 這是本倉最陰的一類故障（repo-add 拒收 → 剛蓋好的包被清掉 → 這包再也不換代），
+# 不准用 --force 繞，靠 epoch 跨過去。
+epoch=1
+pkgdesc='A cross-platform open-source make system'
+arch=('x86_64')
+url='https://www.cmake.org/'
+license=('BSD-3-Clause')
+# 以下 depends／makedepends／optdepends 逐條抄 Arch 官方（AUR 那份 cmake-git 的 depends
+# 還停在舊版清單，少了 expat／glibc／libgcc／libstdc++／ncurses／zlib，不能拿它當基準）。
+depends=('cppdap'
+         'curl'
+         'expat'
+         'glibc'
+         'hicolor-icon-theme'
+         'jsoncpp'
+         'libarchive'
+         'libgcc'
+         'libstdc++'
+         'libuv'
+         'ncurses'
+         'rhash'
+         'zlib')
+makedepends=('emacs'
+             'git'
+             'nlohmann-json'
+             'python-sphinx'
+             'qt6-base')
+optdepends=(
+  'make: for unix Makefile generator'
+  'ninja: for ninja generator'
+  'qt6-base: cmake-gui'
+)
+# 官方用 validpgpkeys + `#tag=v$pkgver?signed` 驗 Brad King 的 tag 簽名。追 master 沒有
+# 可釘的單一 tag/commit，?signed 無從套起（金鑰留在這裡當紀錄，實際來源可信度靠 HTTPS + CI）。
+validpgpkeys=('CBA23971357C2E6590D9EFD3EC8FEF3A7BFB4EDA') # Brad King <brad.king@kitware.com>
+source=("git+https://gitlab.kitware.com/cmake/${_name}.git#branch=master")
+sha512sums=('SKIP')
+provides=("$_name")
+conflicts=("$_name")
+
+pkgver() {
+  # 目錄名 = ${pkgname%-git} = cmake（kitware 的倉目錄名剛好也是 cmake），
+  # 與 CI 泛用版本探測的克隆名一致；對不上會恆 skip。
+  # 只看 origin/master，不看 HEAD（探測輪與實建輪必須同值，否則每輪白編幾十分鐘）。
+  # --match 'v[0-9]*'：實測 kitware 的 414 個 tag 全部是 v<數字> 開頭，加這道是防日後
+  # 有人掛非版號 tag（dae-git 的 lastst 教訓）。--abbrev=8 是因為倉大，7 碼容易撞。
+  cd "${pkgname%-git}"
+  git describe --tags --long --abbrev=8 --match 'v[0-9]*' origin/master \
+    | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd "${_name}"
+  # AUR 那份帶一個 cmake-cppflags.patch（「Honor CPPFLAGS」，上游 issue 12928），
+  # **這裡不搬**：Arch 官方現行 PKGBUILD 已經沒有這個補丁（source 只有 git tag 一條），
+  # 也就是上游/bootstrap 已自理 CPPFLAGS，再套會 patch 失敗。不是漏搬。
+  :
+}
+
+build() {
+  cd "${_name}"
+  # bootstrap 旗標逐字抄官方，一個不動：--sphinx-man/--sphinx-html 少了就是文件比穩定版少，
+  # --system-libs 少了會把 curl/expat/libarchive/zlib… 全靜態塞進產物，
+  # --qt-gui 少了就沒有 cmake-gui。
+  ./bootstrap --prefix=/usr \
+    --mandir=/share/man \
+    --docdir=/share/doc/cmake \
+    --datadir=/share/cmake \
+    --sphinx-man \
+    --sphinx-html \
+    --system-libs \
+    --qt-gui \
+    --parallel=$(/usr/bin/getconf _NPROCESSORS_ONLN)
+  make
+}
+
+package() {
+  cd "${_name}"
+  make DESTDIR="${pkgdir}" install
+
+  # 以下三個動作也是官方的，全搬：
+  # 1) HTML 文件的 _sources（ rst 原始檔）對用戶沒用、體積又大
+  rm -r "$pkgdir"/usr/share/doc/cmake/html/_sources
+  # 2) emacs 模式要位元組編譯，否則啟動慢
+  emacs -batch -f batch-byte-compile "${pkgdir}"/usr/share/emacs/site-lisp/cmake-mode.el
+  # 3) license：官方放 LICENSE.rst，但放進licenses/<pkgname>/，這裡的 $pkgname 是 cmake-git，
+  #    與本包目錄一致（穩定版是 licenses/cmake，兩包互斥、不會撞路徑）
+  install -Dm644 LICENSE.rst -t "${pkgdir}"/usr/share/licenses/$pkgname
+}

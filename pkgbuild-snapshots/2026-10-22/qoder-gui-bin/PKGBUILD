@@ -1,0 +1,144 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+#
+# Qoder 桌面端（agent workbench），國際版。
+#
+# 2026-09-19 命名更正（用戶指出）：本包名 qoder-gui-bin 過去装的其實是 **Qoder IDE**
+# （VS Code fork 那條產品線，/usr/share/qoder-ide）。那不是「GUI 桌面端」。IDE 內容先搬到
+# qoder-ide-bin，qoder-gui-bin 騰回來放真正的國際版桌面端 —— 與 CN 版 qoder-gui-cn
+# （同一產品線的中國版）對稱。qoder-ide-bin 其後於 2026-09-22 依用戶指示移出自動構建
+# （c3a217e），倉裡現在沒有那包；要撈回來：git show c3a217e^:qoder-ide-bin/PKGBUILD。
+#
+#   本版（國際桌面端） source download.qoder.com/qoder-app → 裝 /opt/Qoder/、
+#                      qoder.desktop、/usr/share/icons/hicolor/*/apps/qoder.png
+#   qoder-gui-cn       source static.qoder.com.cn/qoder-app → 裝 /opt/Qoder-CN/、
+#                      qoder-cn.desktop、qoder-cn.png
+#   qoder-ide-bin      （已移出構建，見上）source center.qoder.sh / qoder-ide.oss-accelerate
+#                      → 裝 /usr/share/qoder-ide/、qoder-ide.desktop
+# 這三者的主檔目錄、desktop 檔名、圖示名、StartupWMClass、scheme handler 互不重疊，
+# 可任意並存；也與命令列的 qoder-cli / qoder-cli-cn 互不干擾。
+#
+# 2026-09-24 複核（用戶質疑是否誤装成 IDE，逐項實測）：把 source_x86_64 那顆 RPM 抓下來
+# 解開 —— 佈局是 /opt/Qoder/{qoder,chrome-sandbox,resources,…}，qoder.desktop 為
+# Name=Qoder、Exec=/opt/Qoder/qoder %U、StartupWMClass=qoder、
+# Comment「Qoder - Agent workbench for human and AI software teams」；
+# resources/product.json 是桌面端的欄位集（productId=qoder / electronApplicationName=
+# Qoder App / appId=com.qoder.app / dataDirectoryName=com.qoder.app.stable /
+# desktopUpdateDownloadBaseUrl=…/qoder-app/releases），**不是** VS Code fork 那種
+# product.json（nameShort/applicationName/dataFolderName/urlProtocol 一個都沒有）。
+# 下載檔 sha256 與 manifest.json 的 linux-rpm-x64、與本包死值三者一致。裝的是桌面端無誤。
+#
+# 版本與校驗來源（權威）：
+#   GET https://download.qoder.com/qoder-app/releases/latest/manifest.json
+#     {"schemaVersion":1,"version":"0.2.5","artifacts":[
+#        {"id":"linux-rpm-x64",
+#         "url":"https://download.qoder.com.cn/qoder-app/releases/0.2.5/Qoder-linux-x86_64.rpm",
+#         "sha256":"76fbecc145d78b24b36ddb36dfe080b756ab1e35589edfc8e04777ed0cde60ef"}, …]}
+#   manifest 裡寫的 URL 網域是 .com.cn，但實測 download.qoder.com.cn 會回
+#   404 或穿不完整的檔案（2026-09-23 實測 sha256 不符 manifest）——國際版 RPMs
+#   只穩定地回應在 download.qoder.com（.com），而 .com.cn 反而 404
+#   NoSuchKey。所以 PKGBUILD 的 source_x86_64 必用 **.com**，CI 的
+#   check_url_template 也得把 manifest 的 .com.cn URL 正規化為 .com 再比對
+#  （否則模板檢查會因網域不一致誤判為「上游改命名」）。
+#   releases/<ver>/<檔名> 的寫法對舊版本同样可用，故 URL 用 ${pkgver} 模板。
+#
+# 架構：只有 x86_64。manifest 的 Linux 產物只有 linux-deb-x64 與 linux-rpm-x64
+#   兩項，没有任何 arm64 Linux（arm64 只給 mac），故 arch 如實只標 x86_64。
+#
+# 不碰 /usr/bin：上游 RPM 裡本來就沒有 /usr/bin 條目（electron-builder 只在 deb
+#   建連結），主檔是 /opt/Qoder/qoder；而 /usr/bin/qoder 這個名字已由 qoder-cli
+#   的 symlink 佔用。本包只在 /usr/share/applications 放 qoder.desktop。
+#
+# 與 CN 版的差異：國際版上游目錄名就是無空格的 /opt/Qoder（CN 是「Qoder CN」帶
+#   空格），因此不需要 CN 包那套目錄改名 + desktop Exec 重寫 + 殘留掃描。
+
+pkgname=qoder-gui-bin
+pkgver=0.4.8
+pkgrel=2
+# 2026-09-19 本包從「Qoder IDE」改裝成「Qoder 桌面端」，版號因此從 IDE 的 1.31.0
+# 掉回桌面端的 0.4.2；DB 裡那顆 1.31.0-1 被 vercmp 判成比較新，repo-add 每輪都回
+# 「A newer version … already present」而拒絕換代，剛蓋好的 246MB 產物接著被
+# 「清理未引用資產」刪掉（實測 run #259）→ feed 永遠停在 IDE。epoch 抬到 1 让
+# 「1:0.4.2」大於「1.31.0」，換代與既有安裝的升級路徑同時恢復。
+epoch=1
+pkgdesc="Qoder - agent workbench for human and AI software teams (desktop app, international build)"
+url="https://qoder.com"
+arch=('x86_64')
+license=('custom:Qoder Product Service Terms')
+options=('!strip' '!debug')
+# 依賴按實測 NEEDED 逐條對應：readelf -d /opt/Qoder/qoder 得 34 條，扣掉
+# glibc / gcc-libs 自帶的 6 條與包內自帶的 libffmpeg.so，剩 27 個外部 soname；
+# 與 CN 桌面端、國際版 IDE 的 NEEDED 集合逐條相同（同一套 Electron）。
+depends=(
+  'alsa-lib'              # libasound.so.2
+  'at-spi2-core'          # libatk-bridge-2.0.so.0 + libatspi.so.0
+  'atk'                   # libatk-1.0.so.0
+  'cairo'                 # libcairo.so.2
+  'dbus'                  # libdbus-1.so.3
+  'desktop-file-utils'    # /usr/share/applications 的 update-desktop-database 觸發器
+  'expat'                 # libexpat.so.1
+  'gcc-libs'              # libgcc_s.so.1
+  'glibc'                 # libc.so.6 / libm.so.6 / libdl.so.2 / libpthread.so.0 / ld-linux
+  'glib2'                 # libglib-2.0.so.0 + libgobject-2.0.so.0 + libgio-2.0.so.0
+  'gtk3'                  # libgtk-3.so.0
+  'hicolor-icon-theme'    # 圖示落在 /usr/share/icons/hicolor/，需要有這個基底目錄
+  'libcups'               # libcups.so.2
+  'libx11'                # libX11.so.6
+  'libxcomposite'         # libXcomposite.so.1
+  'libxdamage'            # libXdamage.so.1
+  'libxext'               # libXext.so.6
+  'libxfixes'             # libXfixes.so.3
+  'libxrandr'             # libXrandr.so.2
+  'libxcb'                # libXcb.so.1
+  'libxkbcommon'          # libxkbcommon.so.0
+  'mesa'                  # libgbm.so.1 + libEGL/libGLESv2 的執行期實作
+  'nspr'                  # libnspr4.so
+  'nss'                   # libnss3.so + libnssutil3.so + libsmime3.so
+  'pango'                 # libpango-1.0.so.0
+  'shared-mime-info'      # desktop 註冊 x-scheme-handler/qoder 需要 mime 資料庫觸發器
+  'systemd-libs'          # libudev.so.1（Artix 有獨立 systemd-libs，不需要 systemd）
+)
+# AUR 上的 'qoder'（"qoder beta"）是同一個桌面端的另一種打包，會搶 /opt/Qoder 與
+# qoder.desktop。本包不提供任何 virtual（qoder-cli 已 conflicts 'qoder'，若這裡再
+# provides 'qoder' 就會跟它死鎖 —— 只 conflicts、不 provides）。
+conflicts=('qoder')
+
+source=("LICENSE.html::https://qoder.com/product-service")
+sha256sums=('SKIP')
+
+source_x86_64=("Qoder-linux-x86_64-${pkgver}.rpm::https://download.qoder.com/qoder-app/releases/${pkgver}/Qoder-linux-x86_64.rpm")
+# 校驗和取自上面 manifest.json 中 id=linux-rpm-x64 的 sha256 欄位；CI 升版時同步改寫。
+sha256sums_x86_64=('f34535e88e899db75c5b79822bc91e1f2591864d5a4c5eee7d83ad194406638c')
+
+package() {
+  local rpm="Qoder-linux-x86_64-${pkgver}.rpm"
+  # bsdtar 直接吃 RPM（libarchive 的 rpm reader 會解出 cpio payload）。落地佈局：
+  #   ./opt/Qoder/{qoder,chrome-sandbox,resources/,locales/…}
+  #   ./usr/share/applications/qoder.desktop
+  #   ./usr/share/icons/hicolor/<size>/apps/qoder.png
+  bsdtar -xf "$srcdir/$rpm" -C "$pkgdir" || return 1
+
+  local dir="$pkgdir/opt/Qoder"
+  [ -d "$dir" ] || { echo "错误：解包后找不到 opt/Qoder 目錄，請人工確認上游佈局" >&2; return 1; }
+  [ -f "$dir/qoder" ] || { echo "错误：找不到 /opt/Qoder/qoder 主檔" >&2; return 1; }
+
+  # chrome-sandbox：2026-09-19 實測上游就是 0755、**沒有** setuid 位（與 CN 版一致，
+  # 跟 IDE 那份 4755 不同）→ 走 unprivileged user namespace 的 sandbox 路徑。
+  # 這裡只把權限固定成 0755，不擅自加成 setuid；哪天上游改回 4755 由 CI 校驗和變動
+  # 與人工複核把關。
+  local sbx="$dir/chrome-sandbox"
+  [ -f "$sbx" ] || { echo "错误：解包后找不到 chrome-sandbox" >&2; return 1; }
+  chmod 0755 "$sbx" "$dir/qoder" "$dir/chrome_crashpad_handler"
+
+  # desktop 防呆：上游哪天改了 Exec 路徑或 WMClass，這裡立刻紅，讓人工確認，
+  # 而不是把錯的.desktop 塞進包裡（本包不做任何路徑改寫，故只驗不修）。
+  local dsk="$pkgdir/usr/share/applications/qoder.desktop"
+  [ -f "$dsk" ] || { echo "错误：找不到 qoder.desktop" >&2; return 1; }
+  grep -q 'Exec=/opt/Qoder/qoder' "$dsk" \
+    || { echo "错误：qoder.desktop 的 Exec 不是預期的 /opt/Qoder/qoder，請人工確認上游改動" >&2; return 1; }
+
+  # 2026-09-19 實測：本包 /usr/share 下只有 applications 與 icons 兩處，**沒有**
+  # bash/zsh 補全檔、也沒有 metainfo/appdata（國際版 IDE 的 RPM 才自帶 qoder/_qoder
+  # 補全）。故無「qoder→qoder-app 改名」之類的處理需求。
+  install -Dm644 "$srcdir/LICENSE.html" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE.html"
+}
