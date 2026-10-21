@@ -31,7 +31,7 @@ pkgbase=spirv-llvm-translator-git
 #   → 與 64 位元那半邊錯版，正是 2026-10-12 黑屏的同一類「裝得上、依賴滿足、實物找不到」。
 pkgname=(spirv-llvm-translator-git lib32-spirv-llvm-translator-git)
 pkgver=0.r0.g00000000000
-pkgrel=1
+pkgrel=2
 # epoch=2：AUR 那顆 `spirv-llvm-translator-git` 是 epoch=1／pkgver=r2012.0838497，
 # 而且已經 908 天沒更新（2026-10-13 實測 yay 列表與 AUR PKGBUILD）。我方是 epoch 0，
 # 版本比較先比 epoch ⇒ 只要 feed 這一顆沒發佈（例如建置紅），yay 就會拿那顆兩年半前的
@@ -246,7 +246,10 @@ package_lib32-spirv-llvm-translator-git() {
   provides=('lib32-spirv-llvm-translator')
   conflicts=('lib32-spirv-llvm-translator')
   replaces=('lib32-spirv-llvm-translator')
-  depends=(lib32-glibc lib32-libstdc++ lib32-spirv-tools
+  # GCC 16 起 lib32-gcc-libs 不再 Provides: lib32-libstdc++（2026-10-21 實查
+  # Arch core/lib32-gcc-libs 16.2.1 的 provides 只剩 soname 虛名），Arch 官方
+  # lib32-spirv-llvm-translator 也是直接依賴 lib32-gcc-libs。
+  depends=(lib32-glibc lib32-gcc-libs lib32-spirv-tools
            lib32-llvm-libs-git "lib32-llvm-libs-abi=$_lib32_llvm_abi")
   cd $_pkgbase
   DESTDIR="$pkgdir" cmake --install build32
