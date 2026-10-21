@@ -243,6 +243,29 @@ jobs:
             }
           fi
 
+          if [ "${{ matrix.repo_name }}" = 'fcitx5-qt-git' ]; then
+            # fcitx5-qt-git 開了 ENABLE_QT4=On（用戶 2026-10-21：「請給三版 qt 都提供
+            # 處理，不能無 qt4」），而 qt4 不在 Arch 官方、也不在 chaotic-aur／
+            # archlinuxcn（實查兩倉 db：chaotic 0/3211、archlinuxcn 0/4699 命中），
+            # 只有 arch4edu 與 andontie-aur 有**同一顆** qt4-4.8.7-39。
+            # 掛 arch4edu 的風險先量過：qt4 的 20 條依賴逐條查全部官方可解（libgl 是
+            # libglvnd 的 provides，Arch 端 real 查有），且 qt4 自己沒有 provides，
+            # 不會遮掉任何官方包；倉排在 core/extra 之後，同名的 pacman 取先出現的倉，
+            # 所以實際只從這裡拿 qt4 一顆。
+            # ⚠️ 只 -Sy 不 -Syu：本檔 kind=artix 那段記過「中途換掉 glibc/gcc」的教訓。
+            printf '%s\n' \
+              'Server = https://repository.arch4edu.org/$arch' \
+              'Server = https://mirrors.nju.edu.cn/arch4edu/$arch' \
+              > /etc/pacman.d/arch4edu-mirrorlist
+            printf '\n[arch4edu]\nSigLevel = Never\nInclude = /etc/pacman.d/arch4edu-mirrorlist\n' >> /etc/pacman.conf
+            pacman -Sy --noconfirm >/dev/null
+            # 裝不出 qt4 就在這裡明講，不要拖到 cmake 找 Qt4 才紅（那時的訊息看起來像
+            # 「上游不支援 Qt4」，會把人帶錯方向）。
+            pacman -S --noconfirm --needed qt4 \
+              || { echo "::error::容器裝不到 qt4（arch4edu 掛點或依賴解不开）"; exit 1; }
+            echo "  qmake-qt4 = $(qmake-qt4 -query QT_VERSION 2>/dev/null || echo '查不到')"
+          fi
+
           if [ "${{ matrix.kind }}" = 'multilib' ] || [ "${{ matrix.repo_name }}" = 'gstreamer-git' ]; then
             # 容器沒有 machine-id：CI run #396 實測 glib 的 gdbus 測試报
             # 「GDBus.Error:org.freedesktop.DBus.Error.Failed: Unable to load

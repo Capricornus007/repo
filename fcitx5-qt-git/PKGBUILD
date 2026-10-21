@@ -13,8 +13,25 @@
 #      `git clone https://aur.archlinux.org/... SSL_read: unexpected eof`
 #      這種瞬斷——多一顆就多一個會斷的網路依賴。
 #
-# ENABLE_QT4 刻意維持 Off：它要 qt4，qt4 不在任何官方倉庫（本機那顆是
-# andontie-aur / arch4edu 裝的），容器裡建不起來。
+# ENABLE_QT4=On（2026-10-21，使用者明令「請給三版 qt 都提供處理，不能無 qt4」）。
+# 上游 CMakeLists.txt:13 確實留著 `option(ENABLE_QT4 "Enable Qt 4" Off)` 與
+# add_subdirectory(qt4)，只是預設關；本機實跑三版同開：cmake 找到
+# `Qt4: /usr/sbin/qmake-qt4 (4.8.7)`，make 一路到 100% **零錯誤**，裝出來是
+#   /usr/lib/qt4/plugins/inputmethods/libqtim-fcitx5.so   ← Qt4 那版插頭
+#   /usr/lib/qt/plugins/platforminputcontexts/…          ← Qt5
+#   /usr/lib/qt6/plugins/platforminputcontexts/…         ← Qt6
+# 三個目錄互不重疊（qt4 走 /usr/lib/qt4/，實查 pacman -Ql qt4 的插件目錄），
+# 所以不用拆包也不會跟誰搶檔案。Qt4 那顆 NEEDED 只有 libQtCore/QtGui/QtDBus.so.4
+# ＋同包的 libFcitx5Qt4DBusAddons.so.1＋xkbcommon/X11，全場 19 條 .so（含版本檔與符號連結）逐條 readelf 零 libsystemd。
+#
+# qt4 只進 makedepends、**不進 depends**：Arch 官方(core/extra)與 chaotic-aur、
+# archlinuxcn 都沒有 qt4（實查四倉：chaotic 0/3211、archlinuxcn 0/4699），只有
+# arch4edu 與 andontie-aur 有同一顆 `qt4-4.8.7-39`。把它釘成硬依賴等於要求每台
+# 吃 feed 的機器都得掛第三方倉，那是拿 Qt5/Qt6 使用者換 Qt4——所以走 optdepends，
+# 沒裝 qt4 的機器上那個目錄沒人讀，插頭自然不會被載，不會有半壞狀態。
+# 容器那側的掛倉寫在 build-packages.yml 的「初始化 Arch Linux 环境」，判準也查過：
+# qt4 的 20 條依賴全部官方可解（libgl 由 libglvnd 提供，Arch 端實查 provides 有 libgl），
+# 且 qt4 自己**沒有 provides**，掛上 arch4edu 不會遮掉任何官方包。
 #
 # ⚠️ Artix/OpenRC 特有的坑（同倉 fcitx5-git 的註解記過）：產物絕對不能鏈
 # libsystemd.so.0。本倉 build-packages.yml 有現成的 NEEDED 檢查會擋，
@@ -24,16 +41,17 @@ _pkgname=fcitx5-qt
 pkgname=${_pkgname}-git
 pkgver=5.1.16.r1.g0285a5d1
 pkgrel=1
-pkgdesc="Qt5 / Qt6 implementation of Fcitx Input Method Context (git version)"
+pkgdesc="Qt4 / Qt5 / Qt6 implementation of Fcitx Input Method Context (git version)"
 url="https://github.com/fcitx/fcitx5-qt"
 license=('LGPL2.1')
 arch=('x86_64')
 depends=('glibc' 'libgcc' 'libstdc++' 'libxcb' 'libxkbcommon' 'wayland'
          'fcitx5-git' 'qt5-base' 'qt6-base')
 makedepends=('extra-cmake-modules' 'cmake' 'ninja' 'git' 'gettext'
-             'qt5-base' 'qt6-base' 'wayland-protocols' 'libxkbcommon-x11'
+             'qt4' 'qt5-base' 'qt6-base' 'wayland-protocols' 'libxkbcommon-x11'
              'xcb-util-cursor' 'gtk2' 'gtk3' 'gtk4' 'libepoxy')
-optdepends=('gtk2: GTK2 im module'
+optdepends=('qt4: Qt4 程式的輸入法插頭（WPS Office 那類；本機 qt4 來自 andontie-aur/arch4edu）'
+            'gtk2: GTK2 im module'
             'gtk3: GTK3 im module'
             'gtk4: GTK4 im module')
 provides=("${_pkgname}")
@@ -51,7 +69,7 @@ build() {
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_INSTALL_LIBDIR=lib \
-    -DENABLE_QT4=Off \
+    -DENABLE_QT4=On \
     -DENABLE_QT5=On \
     -DENABLE_QT6=On \
     -DENABLE_X11=On \
