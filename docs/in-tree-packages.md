@@ -1105,3 +1105,64 @@ libLLVM ⇒ 以 provider 身分满足 makepkg 的裸名 `rust`（與 opencc/spir
 3. 驗收：本機完整跑 `makepkg -dc`（build+check+package）**EXIT=0** 出包；包內
    `usr/lib/*.so` 七顆與 `pacman -Ql spirv-tools` 的檔案清單**逐檔一致**（零 `.a`），
    SONAME 與 NEEDED 也與 distro 那批一致。
+
+## topgrade-git（2026-10-21；用戶「你直接復刻然後給我修理出來不就完了，同時兼容 sudo 跟 doas」）
+
+原本是「AUR PKGBUILD + case 裡兩條 sed 注入」，現在整顆搬進本倉 `topgrade-git/`
+（PKGBUILD + 一顆補丁檔），那條 sed case 已退役。**搬的動機不是整潔，是注入式改不動**：
+doas 的修補要動 Rust 源碼，sed 只能改 PKGBUILD 的文字，改不了 crate 的行為。
+
+### 壞的是什麼（都有實測，不是讀程式讀出來的）
+`topgrade --only config_update --dry-run` 在本機必紅：
+`config-update failed: 0: doas does not support the preserve_env_list option`
+（Location 指到 `src/sudo.rs:506`）。根因是 `SudoKind::Doas` 跟 WinSudo/Gsudo/Pkexec
+同組、遇到 `preserve_env_list` 一律回 `UnsupportedSudo`——**是用戶端自己拒的，沒去 exec doas**，
+所以改 `/etc/doas.conf` 的 `keepenv`/`setenv` 一點機會都沒有（這條查過才敢講）。
+全倉只有 `src/steps/os/linux.rs:1070` 會碰到它：`pacdiff` 要帶 `DIFFPROG`。
+
+### 修法與證據
+doas 一律清洗環境（實測 `DIFFPROG=meld doas /usr/bin/printenv DIFFPROG` → 空、rc=1），
+所以照維護者在 issue #1435 讲的思路自己模擬：把目標包一層 `env VAR=value …`
+（實測 `doas /usr/sbin/env 'DIFFPROG=meld' /usr/bin/printenv DIFFPROG` → `meld`、rc=0，
+本機 `/etc/doas.conf` 只有 `permit nopass :wheel`，沒有命令白名單會擋）。
+`SudoKind::Sudo` 那段完全沒動、仍走 `--preserve-env=`，**sudo 與 doas 兩邊都支援**。
+源碼版對照（同一指令）：舊版 FAILED → 新版 `Dry running: /usr/sbin/doas /usr/sbin/env
+'DIFFPROG=meld' /usr/sbin/pacdiff`、Summary `OK`；未設 `DIFFPROG` 時不塞 env 那層，
+命令外形與修補前一致。同一份修補推在 fork 分支 `Capricornus007/topgrade:fix/doas-preserve-env`
+（commit `77579740`，只動 `src/sudo.rs`）。
+
+### 沒有順手扩大範圍（查過才收手）
+`sudo.rs` 裡 doas 還會被拒的另外三類是 `login_shell`／`preserve_env`(All)／`set_home`。
+逐一查可達性：`preserve_env+set_home` 只有 `gem update --system` 那條用，而它前面有閘門
+`!Path::new("/usr/lib/ruby/vendor_ruby/rubygems/defaults/operating_system.rb").exists()`——
+本機該檔**存在**（8月 11 2025 那顆 ruby 帶的）→ topgrade 直接 SkipStep，碰不到；
+`login_shell` 全在 nix 那幾條，本機沒 nix。所以這輪只修真的會紅的那一處，
+其余留字據在这里，将来誰在這臺機器上裝了 nix/asdf ruby 再回來補。
+
+### 兩個構建層面的坑（都踩在同一輪）
+1. **補丁必須在 `prepare()` 裡顯式打**。實測把 `.patch` 放進 `source=()` 而讓 makepkg
+   自動套用，在「git clone 落在 `$srcdir/topgrade/` 子目錄」的情況下是**假成功**：
+   第一次構建就產出一顆未修的包，裝機後照樣 FAILED，而 src tree 乾乾淨淨停在 c082f174。
+   現在是 `patch -N -p1` + `grep -q 'skipping unset' src/sudo.rs || exit 1`，驗的是內容不是 rc。
+2. **`-O*` 要从 CFLAGS/CXXFLAGS 摘掉**（原 sed case 的實質內容，搬進 `build()`）。
+   aws-lc-sys 0.45 編 jitterentropy-base.c 有硬性 `#error` 不準最佳化，cc-rs 把環境
+   CFLAGS 附加在 crate 的 `-O0` **後面**，makepkg 的 `-O2` 生效 → run #360 那樣紅。
+   只摘 `-O[0-9s]+`，`-D_FORTIFY_SOURCE`／`-fstack-clash-protection`／`-fcf-protection` 全留。
+3. 不設 AUR 那層的 `RUSTUP_TOOLCHAIN=stable`：本機 rustup 只裝了 nightly 與 1.99.1，
+   沒有 stable，那行會直接「toolchain not installed」。上游根目錄 `rust-toolchain.toml`
+   釘 `channel = "1.99.1"`，讓它自己生效；CI 容器那种非 rustup 的 cargo 會忽略該檔而用
+   系統 rust（實查 Arch 倉 `rust = 1.99.1`，與釘選同版）→ 兩條路同一個編譯器。
+
+### 四接點
+* `topgrade-git/PKGBUILD`（epoch=1 的理由寫在檔頭：feed 已發佈同名未修產物，
+  版號由 `pkgver()` 現算，不抬 epoch 會被契約 1 永久跳過）
+* `topgrade-git/0001-fix-sudo-emulate-preserve_env_list-for-doas.patch`
+* `build-packages.yml:620` 那條 in-tree 大 alternation 加 `|topgrade-git`（首命中即中，
+  原来的 `topgrade-git)` sed case 已刪，`-O` 處理由 PKGBUILD 自己承担）
+* `build-git-packages.yml` 的矩陣條目**沒動**：`"kind": "aur"` 繼續留著，
+  作用是讓「更新校驗和並回推 AUR」那步（`matrix.kind != 'aur'`）不觸發——
+  AUR 那顆是 Mark Wagie 的，本倉不該回推；llvm 那批用的是同一手法。
+
+### 退場方式
+上游把 doas 這處修掉之後，本補丁會**打不上而讓構建變紅**（`grep` 那道閘門會明講原因），
+不是靜默失靈。那時刪掉 `.patch` 與 `prepare()` 裡那三行，必要時連 epoch 一起退。

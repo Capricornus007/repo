@@ -1,0 +1,64 @@
+From 7757974010149c9914113fa363d32f7a438f8462 Mon Sep 17 00:00:00 2001
+From: Capricornus007 <Capricornus007@users.noreply.github.com>
+Date: Wed, 21 Oct 2026 13:21:47 +0900
+Subject: [PATCH] fix(sudo): emulate preserve_env_list for doas
+
+doas always sanitizes the environment and exposes no per-call way to keep
+variables, so the option was rejected outright and `pacdiff` lost DIFFPROG
+on doas systems. Wrap the target in `env VAR=value ...` instead, which doas
+execs as root with the requested variables set. Unset variables are skipped,
+and sudo keeps using --preserve-env as before.
+---
+ src/sudo.rs | 36 +++++++++++++++++++++++++++++++++++-
+ 1 file changed, 35 insertions(+), 1 deletion(-)
+
+diff --git a/src/sudo.rs b/src/sudo.rs
+index 59c26f5..849a2d4 100644
+--- a/src/sudo.rs
++++ b/src/sudo.rs
+@@ -498,7 +498,41 @@ impl Sudo {
+                     args.push("-a".into());
+                     args.push(vars.iter().join(","));
+                 }
+-                SudoKind::Doas | SudoKind::WinSudo | SudoKind::Gsudo | SudoKind::Pkexec => {
++                // doas cannot be told at call time which variables to keep: it always
++                // sanitizes the environment, and the only knob is a static `setenv {}`
++                // or `keepenv` in /etc/doas.conf. Emulate preserve_env_list instead by
++                // wrapping the target in `env VAR=value ...`, which doas execs as root.
++                SudoKind::Doas => {
++                    let env_bin = which("env").ok().flatten().map(|p| p.to_string_lossy().into_owned());
++                    match env_bin {
++                        Some(env_path) => {
++                            let mut forwarded: Vec<String> = Vec::new();
++                            for var in vars {
++                                match std::env::var(var) {
++                                    Ok(value) => forwarded.push(format!("{}={}", var, value)),
++                                    Err(_) => tracing::debug!("doas: skipping unset ${} from preserve_env_list", var),
++                                }
++                            }
++                            if forwarded.is_empty() {
++                                // Nothing to carry over, so don't add a needless env layer.
++                                tracing::debug!(
++                                    "doas: preserve_env_list requested no set variables, running unwrapped"
++                                );
++                            } else {
++                                args.push(env_path);
++                                args.append(&mut forwarded);
++                            }
++                        }
++                        None => {
++                            return Err(UnsupportedSudo {
++                                sudo_kind: self.kind,
++                                option: "preserve_env_list",
++                            }
++                            .into());
++                        }
++                    }
++                }
++                SudoKind::WinSudo | SudoKind::Gsudo | SudoKind::Pkexec => {
+                     return Err(UnsupportedSudo {
+                         sudo_kind: self.kind,
+                         option: "preserve_env_list",
+-- 
+2.56.0
+

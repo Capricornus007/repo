@@ -617,7 +617,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|npm-git|pnpm-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|npm-git|pnpm-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git)
               # 這批包為什麼走本倉目錄版（逐包理由）：見 docs/in-tree-packages.md。
               # 那個 step 的表達式有 21000 字元上限、註解也計入，加包只加清單、
               # 說明寫進該檔，別寫回這裡。
@@ -897,22 +897,6 @@ jobs:
               fi
               grep -qE '^epoch=' pkg_dir/PKGBUILD || sed -i '/^pkgname=/a epoch=1' pkg_dir/PKGBUILD
               grep -nE '^epoch=|provides' pkg_dir/PKGBUILD
-              ;;
-            topgrade-git)
-              # aws-lc-sys 0.45（topgrade 的 Rust 依賴鏈拉進來的）要編 jitterentropy-base.c，
-              # 那顆檔自帶硬性 #error：不準用最佳化編譯、必須 -O0。crate 確實給了 -O0，
-              # 但 cc-rs 把環境 CFLAGS 附加在它後面，而 makepkg 的 -O2 在最後面生效。
-              # run #360 的實物命令行（節錄）：
-              #   "cc" "-O3" … "-O0" … "-O2" "-O2" … -c …/jitterentropy-base.c
-              #     → error: #error "The CPU Jitter random number generator must not be
-              #        compiled with optimizations. … Use the compiler switch -O0"
-              # 對策：只把環境旗標裡的 -O* 拿掉（-D_FORTIFY_SOURCE、-fstack-clash-protection、
-              # -fcf-protection 等加固全部保留），優化等級交給 crate 與 cargo profile 自己決定。
-              # 本地對真 AUR PKGBUILD 驗過注入結果與效果：注入後 build() 頭兩行正確，
-              # 拿日誌裡那串真實 CFLAGS 跑一次 → -O2 消失、其餘旗標原樣保留。
-              sed -i "/^build() {/a\\  CXXFLAGS=\"\$(printf %s \"\$CXXFLAGS\" | sed -E 's/-O[0-9s]+//g')\"; export CXXFLAGS" pkg_dir/PKGBUILD
-              sed -i "/^build() {/a\\  CFLAGS=\"\$(printf %s \"\$CFLAGS\" | sed -E 's/-O[0-9s]+//g')\"; export CFLAGS" pkg_dir/PKGBUILD
-              sed -n "/^build() {/,+3p" pkg_dir/PKGBUILD
               ;;
             sway-git)
               # AUR PKGBUILD 用 arch-meson … -D sd-bus-provider=libsystemd 且 sway
