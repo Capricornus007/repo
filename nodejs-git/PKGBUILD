@@ -4,7 +4,7 @@
 
 pkgname=nodejs-git
 pkgver=22.4.0.r616.g88beb76e5c1
-pkgrel=1
+pkgrel=2
 pkgdesc="JavaScript runtime built on Chrome's V8 JavaScript engine"
 arch=('i686' 'x86_64')
 url="https://nodejs.org/"
@@ -35,7 +35,6 @@ build() {
     --prefix="/usr" \
     --with-intl=system-icu \
     --without-npm \
-    --shared-brotli \
     --shared-cares \
     --shared-libuv \
     --shared-nghttp2 \
