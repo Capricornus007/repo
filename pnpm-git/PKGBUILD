@@ -23,7 +23,7 @@
 _pkgname=pnpm
 pkgname="$_pkgname-git"
 pkgver=12.10.0.r1.g251582898   # 佔位值，實際由下方 pkgver() 覆寫
-pkgrel=3
+pkgrel=4
 pkgdesc='Fast, disk space efficient package manager (upstream git, Rust line)'
 arch=(x86_64)
 url='https://pnpm.io'

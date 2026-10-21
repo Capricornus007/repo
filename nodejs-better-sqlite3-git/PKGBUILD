@@ -1,0 +1,38 @@
+# nodejs-better-sqlite3 的源碼直出 -git 版：追 WiseLibs/better-sqlite3 的
+# 預設分支，node-gyp 就地編譯（實測 node 26.11 / node-addon-api 可編過）。
+# 與固定版 nodejs-better-sqlite3（npm tarball + prebuilds）互斥，安裝本包
+# 會取代它。pkgver 由 pkgver() 現算，CI 的 plan 走 -git 探測。
+pkgname=nodejs-better-sqlite3-git
+_pkgname=better-sqlite3
+pkgver=13.0.3.r0.g0000000
+pkgrel=1
+pkgdesc="The fastest and simplest library for SQLite3 in Node.js (upstream git)"
+arch=('x86_64')
+url="https://github.com/WiseLibs/better-sqlite3"
+license=('MIT')
+depends=('nodejs')
+makedepends=('git' 'npm' 'node-gyp' 'python' 'make' 'gcc')
+provides=('nodejs-better-sqlite3' 'better-sqlite3')
+conflicts=('nodejs-better-sqlite3' 'better-sqlite3')
+replaces=('nodejs-better-sqlite3')
+options=('!strip')
+source=("${_pkgname}::git+https://github.com/WiseLibs/better-sqlite3.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_pkgname"
+  _tag=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+  printf "%s.r%s.g%s" "${_tag:-0}" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "$_pkgname"
+  npm install --ignore-scripts --no-audit --no-fund
+  node-gyp rebuild
+}
+
+package() {
+  cd "$_pkgname"
+  npm install -g --prefix "$pkgdir/usr" . --ignore-scripts --no-audit --no-fund
+  find "$pkgdir" -name package.json -print0 | xargs -r -0 sed -i '/_where/d'
+}
