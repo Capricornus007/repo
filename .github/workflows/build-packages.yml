@@ -210,17 +210,6 @@ jobs:
             }
           fi
 
-          if [ "${{ matrix.repo_name }}" = 'fcitx5-qt-git' ]; then
-            # fcitx5-qt-git 開了 ENABLE_QT4=On（用戶 2026-10-21：「請給三版 qt 都提供
-            # 處理，不能無 qt4」）。qt4 只在 arch4edu／andontie-aur（本步驟開頭已全域
-            # 掛好第三方倉），這裡只負責「確定裝得到」並把版本印出來：
-            # 裝不到就在這裡明講，別拖到 cmake 找 Qt4 才紅（那時的訊息看起來像
-            # 「上游不支援 Qt4」，會把人帶錯方向）。
-            command -v qmake-qt4 >/dev/null && echo "  qt4 已在容器裡" || \
-              pacman -S --noconfirm --needed qt4 \
-                || { echo "::error::容器裝不到 qt4（arch4edu 掛點或依賴解不开）"; exit 1; }
-            echo "  qmake-qt4 = $(qmake-qt4 -query QT_VERSION 2>/dev/null || echo '查不到')"
-          fi
 
           if [ "${{ matrix.kind }}" = 'multilib' ] || [ "${{ matrix.repo_name }}" = 'gstreamer-git' ]; then
             # 容器沒有 machine-id：CI run #396 實測 glib 的 gdbus 測試报
@@ -311,6 +300,18 @@ jobs:
           PACMAN_THIRD_PARTY
           pacman -Sy --noconfirm >/dev/null
           echo "第三方倉已就緒：$(pacman -Sl chaotic-aur archlinuxcn arch4edu ownstuff andontie-aur herecura 2>/dev/null | wc -l) 個條目"
+
+          if [ "${{ matrix.repo_name }}" = 'fcitx5-qt-git' ]; then
+            # fcitx5-qt-git 開了 ENABLE_QT4=On（用戶 2026-10-21：「請給三版 qt 都提供
+            # 處理，不能無 qt4」）。qt4 只在 arch4edu／andontie-aur（本步驟開頭已全域
+            # 掛好第三方倉），這裡只負責「確定裝得到」並把版本印出來：
+            # 裝不到就在這裡明講，別拖到 cmake 找 Qt4 才紅（那時的訊息看起來像
+            # 「上游不支援 Qt4」，會把人帶錯方向）。
+            command -v qmake-qt4 >/dev/null && echo "  qt4 已在容器裡" || \
+              pacman -S --noconfirm --needed qt4 \
+                || { echo "::error::容器裝不到 qt4（arch4edu 掛點或依賴解不开）"; exit 1; }
+            echo "  qmake-qt4 = $(qmake-qt4 -query QT_VERSION 2>/dev/null || echo '查不到')"
+          fi
 
       - name: 初始化容器源與建置環境（tkg／artix／makepkg，接上一歩）
         run: |
