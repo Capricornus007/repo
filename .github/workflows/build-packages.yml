@@ -92,43 +92,10 @@ jobs:
             pacman -Sy --noconfirm --needed ninja
           fi
 
-          if [ "${{ matrix.repo_name }}" = 'ffmpeg-full-git' ]; then
-            # 与维护者本机相同的第三方仓库清单。完整功能版 ffmpeg 的依赖
-            # 由这些仓库提供；只有 mpeghdec、quirc、svt-jpeg-xs-git 仍从 AUR 构建。
-            # linuxrepos（archlinux.repo.063240.xyz）已移除：域名权威 DNS 挂了
-            # （lame delegation），且该仓库里根本没有 ffmpeg 依赖的任何包。
-            install -d /etc/pacman.d
-            printf '%s\n' \
-              'Server = https://geo-mirror.chaotic.cx/$repo/$arch' \
-              'Server = https://cdn-mirror.chaotic.cx/$repo/$arch' \
-              > /etc/pacman.d/chaotic-mirrorlist
-            printf '%s\n' 'Server = https://repo.archlinuxcn.org/$arch' \
-              > /etc/pacman.d/archlinuxcn-mirrorlist
-            printf '%s\n' \
-              'Server = https://repository.arch4edu.org/$arch' \
-              'Server = https://mirrors.nju.edu.cn/arch4edu/$arch' \
-              > /etc/pacman.d/arch4edu-mirrorlist
-            printf '%s\n' \
-              'Server = https://ftp.f3l.de/~martchus/$repo/os/$arch' \
-              'Server = https://martchus.no-ip.biz/repo/arch/$repo/os/$arch' \
-              > /etc/pacman.d/ownstuff-mirrorlist
-            cat >> /etc/pacman.conf <<'PACMAN_REPOS'
-
-          [chaotic-aur]
-          SigLevel = Never
-          Include = /etc/pacman.d/chaotic-mirrorlist
-          [archlinuxcn]
-          SigLevel = Never
-          Include = /etc/pacman.d/archlinuxcn-mirrorlist
-          [arch4edu]
-          SigLevel = Never
-          Include = /etc/pacman.d/arch4edu-mirrorlist
-          [ownstuff]
-          SigLevel = Never
-          Include = /etc/pacman.d/ownstuff-mirrorlist
-          PACMAN_REPOS
-            pacman -Syu --noconfirm --needed
-          fi
+          # ffmpeg-full-git 原本在這裡自己掛一份第三方倉（chaotic/archlinuxcn/arch4edu/
+          # ownstuff）；2026-10-21 起改由本步驟**末尾**的統一區塊提供（同一組倉 + andontie-aur
+          # + herecura，依使用者指示對齊本機 pacman.conf），避免同一份 pacman.conf 出現
+          # 重複的 [arch4edu] 區段（pacman 會直接報 duplicate repository）。
 
           if [ "${{ matrix.kind }}" = 'kde' ] || [ "${{ matrix.kind }}" = 'wayland' ] || [ "${{ matrix.kind }}" = 'aur' ] \
              || [ "${{ matrix.repo_name }}" = 'nashira-git' ] \
@@ -245,24 +212,13 @@ jobs:
 
           if [ "${{ matrix.repo_name }}" = 'fcitx5-qt-git' ]; then
             # fcitx5-qt-git 開了 ENABLE_QT4=On（用戶 2026-10-21：「請給三版 qt 都提供
-            # 處理，不能無 qt4」），而 qt4 不在 Arch 官方、也不在 chaotic-aur／
-            # archlinuxcn（實查兩倉 db：chaotic 0/3211、archlinuxcn 0/4699 命中），
-            # 只有 arch4edu 與 andontie-aur 有**同一顆** qt4-4.8.7-39。
-            # 掛 arch4edu 的風險先量過：qt4 的 20 條依賴逐條查全部官方可解（libgl 是
-            # libglvnd 的 provides，Arch 端 real 查有），且 qt4 自己沒有 provides，
-            # 不會遮掉任何官方包；倉排在 core/extra 之後，同名的 pacman 取先出現的倉，
-            # 所以實際只從這裡拿 qt4 一顆。
-            # ⚠️ 只 -Sy 不 -Syu：本檔 kind=artix 那段記過「中途換掉 glibc/gcc」的教訓。
-            printf '%s\n' \
-              'Server = https://repository.arch4edu.org/$arch' \
-              'Server = https://mirrors.nju.edu.cn/arch4edu/$arch' \
-              > /etc/pacman.d/arch4edu-mirrorlist
-            printf '\n[arch4edu]\nSigLevel = Never\nInclude = /etc/pacman.d/arch4edu-mirrorlist\n' >> /etc/pacman.conf
-            pacman -Sy --noconfirm >/dev/null
-            # 裝不出 qt4 就在這裡明講，不要拖到 cmake 找 Qt4 才紅（那時的訊息看起來像
+            # 處理，不能無 qt4」）。qt4 只在 arch4edu／andontie-aur（本步驟開頭已全域
+            # 掛好第三方倉），這裡只負責「確定裝得到」並把版本印出來：
+            # 裝不到就在這裡明講，別拖到 cmake 找 Qt4 才紅（那時的訊息看起來像
             # 「上游不支援 Qt4」，會把人帶錯方向）。
-            pacman -S --noconfirm --needed qt4 \
-              || { echo "::error::容器裝不到 qt4（arch4edu 掛點或依賴解不开）"; exit 1; }
+            command -v qmake-qt4 >/dev/null && echo "  qt4 已在容器裡" || \
+              pacman -S --noconfirm --needed qt4 \
+                || { echo "::error::容器裝不到 qt4（arch4edu 掛點或依賴解不开）"; exit 1; }
             echo "  qmake-qt4 = $(qmake-qt4 -query QT_VERSION 2>/dev/null || echo '查不到')"
           fi
 
@@ -307,6 +263,54 @@ jobs:
               echo ">> 容器裡沒有 /usr/lib/gdk-pixbuf-2.0（這才是真缺）"
             fi
           fi
+
+
+          # 2026-10-21（使用者指示「直接把我 pacman 配置挖過去」）：把本機真正在用的
+          # 第三方 Arch 倉補齊，讓容器跟目標機看到同一批套件（例：gtk2 官方已移除，
+          # 本機靠 andontie-aur／arch4edu 拿到）。刻意**不搬**的三類：
+          #   · Artix 的 system/world/galaxy/lib32 與 *-goblins/gremlins：不同發行版，
+          #     塞進 Arch 容器會混 glibc/init 依賴；
+          #   · ALHP 的 extra-x86-64-v3/v2：會蓋掉官方包，且容器 CPU 未必支援；
+          #   · xlibre-beta：使用者已明令不再使用；linuxrepos：域名解析已死（舊註解記過）。
+          # 全部排在 core/extra 之後 → 同名包仍由官方優先；掛完不做 -Syu（避免半套升級）。
+          printf '%s\n' \
+            'Server = https://geo-mirror.chaotic.cx/$repo/$arch' \
+            'Server = https://cdn-mirror.chaotic.cx/$repo/$arch' \
+            > /etc/pacman.d/chaotic-mirrorlist
+          printf '%s\n' 'Server = https://repo.archlinuxcn.org/$arch' > /etc/pacman.d/archlinuxcn-mirrorlist
+          printf '%s\n' \
+            'Server = https://repository.arch4edu.org/$arch' \
+            'Server = https://mirrors.nju.edu.cn/arch4edu/$arch' \
+            > /etc/pacman.d/arch4edu-mirrorlist
+          printf '%s\n' \
+            'Server = https://ftp.f3l.de/~martchus/$repo/os/$arch' \
+            'Server = https://martchus.no-ip.biz/repo/arch/$repo/os/$arch' \
+            > /etc/pacman.d/ownstuff-mirrorlist
+          printf '%s\n' 'Server = https://aur.andontie.net/$arch' > /etc/pacman.d/andontie-mirrorlist
+          printf '%s\n' 'Server = https://repo.herecura.eu/$repo/$arch' > /etc/pacman.d/herecura-mirrorlist
+          cat >> /etc/pacman.conf <<'PACMAN_THIRD_PARTY'
+
+          [chaotic-aur]
+          SigLevel = Never
+          Include = /etc/pacman.d/chaotic-mirrorlist
+          [archlinuxcn]
+          SigLevel = Never
+          Include = /etc/pacman.d/archlinuxcn-mirrorlist
+          [arch4edu]
+          SigLevel = Never
+          Include = /etc/pacman.d/arch4edu-mirrorlist
+          [ownstuff]
+          SigLevel = Never
+          Include = /etc/pacman.d/ownstuff-mirrorlist
+          [andontie-aur]
+          SigLevel = Never
+          Include = /etc/pacman.d/andontie-mirrorlist
+          [herecura]
+          SigLevel = Never
+          Include = /etc/pacman.d/herecura-mirrorlist
+          PACMAN_THIRD_PARTY
+          pacman -Sy --noconfirm >/dev/null
+          echo "第三方倉已就緒：$(pacman -Sl chaotic-aur archlinuxcn arch4edu ownstuff andontie-aur herecura 2>/dev/null | wc -l) 個條目"
 
       - name: 初始化容器源與建置環境（tkg／artix／makepkg，接上一歩）
         run: |
