@@ -111,7 +111,7 @@ gstreamer／lib32-glib2（用戶 2026-10-08 點名：「lib32-glib2 跟 gst 那�
   · **lib32-glib2 標 `kind: multilib`**（新 kind）：需要 [multilib] 倉與
     `/usr/share/meson/cross/lib32`（實查 extra 與 world 的 meson-1.12.0-1 都有
     該檔）；`arch-meson` 來自 devtools，工作流在 `kind != artix` 時已裝。
-    「初始化 Arch Linux 環境」那步新增一段 `kind == 'multilib'`：開 [multilib]
+    「初始化容器環境（Arch／Artix）」那步新增一段 `kind == 'multilib'`：開 [multilib]
     ＋`pacman -Syu`＋預裝 lib32 底層鏈。**不與 kind:tkg 共用分支**——tkg 那段
     還要做 LLVM 對齊與 customization.cfg，混進來會把 mesa 專有邏輯帶進 lib32。
   · **checkdepends 有 bootstrap 迴圈**（含 lib32-glib2 自己）＋ 3 條 glib 測試
@@ -436,7 +436,7 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
     所以 plan 尾部「makepkg 會把 pkgrel 重置為 1」那段不生效，AUR 只抬 pkgrel 時
     照樣會重建（這是我們要的行為）。
   · **kind 只能用 `aur`**：`kind: aur` 一次給齊四件事——(1)「拉取」步走 AUR（本輪另開了
-    顯式分支，兩邊一致）；(2)「初始化 Arch Linux 環境」把自有 `junlin03-aur` 掛成 pacman
+    顯式分支，兩邊一致）；(2)「初始化容器環境（Arch／Artix）」把自有 `junlin03-aur` 掛成 pacman
     源（那個條件是 `kind` ∈ kde／wayland／aur，或 repo_name = nashira-git）；(3) 建置帶
     `--skipchecksums --nocheck`，AUR 輔助檔的 sha 過時時不會紅（run #225 實測過那類症狀）；
     (4)「更新校驗和並回推 PKGBUILD」的 giant if 有 `matrix.kind != 'aur'` → 自動不去
@@ -950,7 +950,7 @@ f5aa969 那份印 `RED ... 模板字串 21147 bytes（上限 21000）`、`${{ }}
 （「沒閉合」不能靠比對 `${{` 與 `}}` 的總數——shell／awk 裡本來就有一堆單獨的 `}}`，
 腳本第一版這樣寫，直接把 build-packages.yml 誤報兩條紅，已改成逐個 `${{` 往後找。）
 
-修法不是「把註解刪一刪」——那樣只是把同一顆雷往後挪。今天是把「初始化 Arch Linux
+修法不是「把註解刪一刪」——那樣只是把同一顆雷往後挪。今天是把「初始化容器環境（Arch／Artix）
 环境」那步（21147 bytes）**從 tkg 區塊前拆成兩步**：拆後 11373／10796，兩邊都留
 一倍以上餘裕。拆步安全的兩個前提已逐個核對：跨 step 只共享**檔案系統**
 （/etc/pacman.conf、/etc/makepkg.conf、builder 使用者、git 全域設定都留得住），

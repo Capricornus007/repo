@@ -45,7 +45,7 @@ jobs:
           rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc || true
           df -h / || true
 
-      - name: 初始化 Arch Linux 环境
+      - name: 初始化容器環境（Arch／Artix）
         run: |
           set -euo pipefail
           # 鏡像常瞬斷：run #232 的 openai-codex-git 就紅在這裡
@@ -60,7 +60,7 @@ jobs:
           # devtools 是 Arch 專有的 chroot 建置工具鏈（makechrootpkg 等），Artix 倉裡
           # 沒有這顆：實測 kind=artix 的 job 在換成 artixlinux/artixlinux:base-devel 之後，
           # 這一步會 `error: target not found: devtools` 並連重試 4 次全紅（run #356 的
-          # qt6ct-git job，紅在「初始化 Arch Linux 環境」，根本還沒走到我的 artix 區塊）。
+          # qt6ct-git job，紅在「初始化容器環境（Arch／Artix）」，根本還沒走到我的 artix 區塊）。
           # 我們這裡是直接 makepkg、不走 chroot，所以 artix 基座下跳過它是對的，
           # 不是繞過問題。
           # doas 取代 sudo（用戶 2026-10-20 裁定：本機與自動構建倉一致，不准再出現 sudo）。
@@ -339,7 +339,7 @@ jobs:
       - name: 初始化容器源與建置環境（tkg／artix／makepkg，接上一歩）
         run: |
           set -euo pipefail
-          # ⚠️ 這一段是從「初始化 Arch Linux 環境」拆出來的，不是新功能。理由：GitHub 對
+          # ⚠️ 這一段是從「初始化容器環境（Arch／Artix）」拆出來的，不是新功能。理由：GitHub 對
           #   **字串值帶 GitHub 表達式（dollar-brace 記法）的 step** 有 **21000 位元組**
           #   的硬上限（中文 1 字＝3 bytes、shell 註解也計入），踩過就整個 workflow
           #   f5aa969 那輪三條 workflow 全 0 秒紅，而 PyYAML 與 actionlint **都查不出來**，
@@ -2676,7 +2676,7 @@ jobs:
         # 四個 Qoder 包的源都在阿里雲 OSS / 境內 CDN（qoder-ide.oss-accelerate…、
         # static.qoder.com.cn），體積大：國際 GUI 的 RPM 250MB、CN GUI 190MB、
         # 兩個 CLI 的 tarball 各 80MB。makepkg 自帶的 CURL_OPTIONS 有 --max-time 300
-        # （見「初始化 Arch Linux 環境」），境外 runner 拉這種大檔很容易在半途被掐斷
+        # （見「初始化容器環境（Arch／Artix）」），境外 runner 拉這種大檔很容易在半途被掐斷
         # ——同 android-ndk 那 700MB zip 的教訓，所以照同一套「預下載」做法：
         # 先用不設 max-time 的 curl 把檔落到 PKGBUILD 同目錄，
         # 檔名與 source 陣列逐字一致，makepkg 見檔已在就直接複用、不再觸網。

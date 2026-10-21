@@ -7,8 +7,7 @@
 **都查不出來**，只有 GitHub 自己會講：
     failed to parse workflow: error parsing called workflow ...
     (Line: 49, Col: 14): Exceeded max expression length 21000
-（2026-10-13 實測：f5aa969 那輪三條 workflow 全 0 秒紅，就是「初始化 Arch Linux
-環境」那步從 20788 長到 21147 bytes。）
+（2026-10-13 實測：f5aa969 那輪三條 workflow 全 0 秒紅，就是「初始化容器環境（Arch／Artix）」那步從 20788 長到 21147 bytes。）
 
 三個必須算對的細節：
   · 上限算的是**位元組**不是字元——繁中註解 1 字＝3 bytes。

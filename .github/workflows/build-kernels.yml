@@ -51,13 +51,13 @@ jobs:
       #   nvidia-settings-beta，不是另一顆包、也不是 Arch 官方那顆。
       # · kind: aur 是 AUR 來源在既有慣例該用的值，它一次給你三件事：
       #   (1) 「拉取对应的套件仓库」走 AUR clone；
-      #   (2) 「初始化 Arch Linux 環境」把自有 junlin03-aur 掛成 pacman 源——
+      #   (2) 「初始化容器環境（Arch／Artix）」把自有 junlin03-aur 掛成 pacman 源——
       #       nvidia-beta-dkms 的 depends 有 `nvidia-utils-beta=${pkgver}`（硬釘等號），
       #       不掛源就 `target not found` 直接紅；
       #   (3) 「更新校验和并回推 PKGBUILD」的 giant if 有 `matrix.kind != 'aur'`，
       #       自動排除回推（本倉沒有 Capricornus007/nvidia-utils-beta 這種獨立倉，
       #       不排除會索要憑證 → CI 無 TTY → exit 128）。
-      #   不能改用 kind: artix（實查「初始化 Arch Linux 環境」的代碼：是 kind != artix
+      #   不能改用 kind: artix（實查「初始化容器環境（Arch／Artix）」的代碼：是 kind != artix
       #   才裝 devtools，所以 artix 那條不會炸 devtools，但會丟掉三件必須的事）：
       #   (a) 只有 kind 是 kde／wayland／aur 才掛 junlin03-aur 源 → artix 那條解不開
       #       nvidia-utils-beta=615.78.08 這個等號硬釘依賴，makepkg -s 直接紅；
