@@ -116,4 +116,7 @@ jobs:
           echo "+ (aurbot) python tools/aur_update.py $ARGS"
           # makepkg / updpkgsums 拒絕 root，所以整段在 aurbot 身分下跑；
           # -m 保留環境，否則 su 會把上面那個 GH_TOKEN 剝掉。
-          su -m aurbot -c "cd '$GITHUB_WORKSPACE' && AUR_WORK=/home/aurbot/aurwork python tools/aur_update.py $ARGS"
+          # HOME 必須明著指回 aurbot：-m 會連呼叫端的 HOME 一起保留，aurbot 的
+          # ~/.gitconfig（user.name/email）與 ~/.ssh/{config,id_ed25519} 就都讀不到。
+          # 舊版因此 commit 失敗、push 舊 HEAD 得到 up-to-date，全部假報「已 push」。
+          su -m aurbot -c "cd '$GITHUB_WORKSPACE' && HOME=/home/aurbot AUR_WORK=/home/aurbot/aurwork python tools/aur_update.py $ARGS"

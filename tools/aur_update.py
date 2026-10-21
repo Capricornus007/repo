@@ -41,6 +41,11 @@ CONTENT_RULES = {
         {"kind": "cachy_kernel"},
         {"var": "_nv_ver", "resolver": "nvidia_newest"},
     ],
+    # xfce4-cpugraph-plugin-devel 的 source 是 archive.xfce.org 的靜態 tarball，
+    # 目錄 `<major.minor>/` 與檔名都綁 pkgver，不能只改 pkgver。
+    "xfce4-cpugraph-plugin-devel": [
+        {"kind": "xfce_archive", "pkg": "xfce4-cpugraph-plugin"},
+    ],
 }
 
 
@@ -210,6 +215,29 @@ def resolve_arch_pkg(pkg, repo=None):
         return None, f'Arch 倉庫查無 {pkg}' + (f'（repo={repo}）' if repo else '')
     p = hits[0]
     return (p['pkgver'], p['pkgrel'], p.get('repo')), f"{p.get('repo')}/{pkg} = {p['pkgver']}-{p['pkgrel']}"
+
+
+def resolve_xfce_archive(pkg):
+    """archive.xfce.org 的靜態 tarball（xfce4-cpugraph-plugin-devel 型）。
+
+    source 目錄 `<major.minor>/` 與檔名都綁 pkgver；回傳 (版本, tarball URL)。
+    """
+    base = f"https://archive.xfce.org/src/panel-plugins/{pkg}/"
+    try:
+        html = urllib.request.urlopen(base, timeout=30).read().decode('utf-8', 'replace')
+        dirs = re.findall(r'href="(\d+\.\d+)/"', html)
+        if not dirs:
+            return None, 'archive.xfce.org 找不到版本目錄'
+        top = sorted(set(dirs), key=verkey)[-1]
+        listing_url = f'{base}{top}/'
+        listing = urllib.request.urlopen(listing_url, timeout=30).read().decode('utf-8', 'replace')
+        hits = re.findall(r'href="(' + re.escape(pkg) + r'-([0-9][^"]*?)\.tar\.xz)"', listing)
+        if not hits:
+            return None, f'archive.xfce.org 的 {top}/ 沒有 tarball'
+        href, ver = sorted(hits, key=lambda x: verkey(x[1]))[-1]
+        return (ver, urllib.parse.urljoin(listing_url, href)), f'archive.xfce.org 最新 {ver}'
+    except Exception as e:
+        return None, f'archive.xfce.org 查詢失敗: {e}'
 
 
 RESOLVERS = {"nvidia_newest": resolve_nvidia_newest}
@@ -398,6 +426,30 @@ def compute(adir, cache):
             notes.append(f'arch_pkg: {cur.group(1)} -> {aver}（{why}）')
             continue
 
+        if rule.get('kind') == 'xfce_archive':
+            got, why = resolve_xfce_archive(rule['pkg'])
+            if not got:
+                notes.append(f'xfce_archive 規則放棄：{why}')
+                continue
+            ver = got[0]
+            cur = re.search(r'^pkgver=(\S+)', pb, re.M)
+            if not cur:
+                notes.append('xfce_archive：找不到 pkgver=，放棄')
+                continue
+            curver = cur.group(1).strip('"\'')
+            if not is_newer(ver, curver):
+                notes.append(f'xfce_archive：{why}，現值 {curver} 不比它舊 → 不推')
+                continue
+            majmin = '.'.join(ver.split('.')[:2])
+            edits.append((r'^pkgver=.*$', f'pkgver={ver}', f'pkgver {curver}->{ver}'))
+            # source 目錄 `<major.minor>/` 也綁版號；檔名用 ${pkgver} 會自己跟上。
+            edits.append((r'(src/panel-plugins/[^/\s]+/)\d+\.\d+/', rf'\g<1>{majmin}/',
+                          f'source 目錄 {majmin}/'))
+            if re.search(r'^pkgrel=', pb, re.M):
+                edits.append((r'^pkgrel=.*$', 'pkgrel=1', 'pkgrel 歸 1'))
+            notes.append(f'xfce_archive: {curver} -> {ver}（{why}，updpkgsums 重算）')
+            continue
+
         if rule.get('kind') == 'flutter':
             got, why = resolve_flutter(rule['channel'])
             if not got:
@@ -471,7 +523,19 @@ def apply_bump(adir, edits, msg, push, do_sums):
 
     run(['git', '-C', adir, 'add', '-A'])
     if run(['git', '-C', adir, 'diff', '--cached', '--quiet']).returncode != 0:
-        run(['git', '-C', adir, 'commit', '-m', msg])
+        # `su -m` 會把呼叫端的 HOME 帶進來，aurbot 的 ~/.gitconfig 因此讀不到。
+        # 舊版不看 commit 的返回碼：缺身分時 commit 失敗，後面的 push 只是把**舊 HEAD**
+        # 推出去（Everything up-to-date，rc=0），於是每一顆都顯示「已 push」卻什麼都沒上。
+        before = run(['git', '-C', adir, 'rev-parse', 'HEAD']).stdout.strip()
+        r = run(['git', '-C', adir,
+                 '-c', 'user.name=Capricornus007',
+                 '-c', 'user.email=Capricornus007@users.noreply.github.com',
+                 'commit', '-m', msg])
+        if r.returncode:
+            return f'commit 失敗: {r.stderr.strip()[:300]}'
+        after = run(['git', '-C', adir, 'rev-parse', 'HEAD']).stdout.strip()
+        if not after or after == before:
+            return 'commit 沒有產生新 commit，中止不推'
     else:
         return '寫入後與原檔相同（無實際差異），不推'
     if not push:
@@ -481,7 +545,17 @@ def apply_bump(adir, edits, msg, push, do_sums):
     base = os.path.basename(adir)
     run(['git', '-C', adir, 'remote', 'set-url', 'origin', AUR_SSH.format(base=base)])
     rp = run(['git', '-C', adir, 'push', 'origin', 'HEAD:master'])
-    return '已 push' if rp.returncode == 0 else f'push 失敗: {rp.stderr.strip()[:200]}'
+    if rp.returncode:
+        return f'push 失敗: {rp.stderr.strip()[:200]}'
+    pout = (rp.stdout or '') + (rp.stderr or '')
+    if 'Everything up-to-date' in pout:
+        return 'push 顯示 up-to-date（HEAD 沒前進），不當成功'
+    # push 的 rc=0 不代表遠端真的前進；用 ls-remote 對一次 ref 才是證據。
+    ls = run(['git', '-C', adir, 'ls-remote', 'origin', 'refs/heads/master'])
+    remote = ls.stdout.split()[0] if ls.returncode == 0 and ls.stdout.strip() else ''
+    if remote != after:
+        return f'push 後遠端 ref 不一致（遠端 {remote or "?"} / 本地 {after}），不當成功'
+    return f'已 push {after[:7]}'
 
 
 def can_push(base, adir):
