@@ -358,6 +358,23 @@ jobs:
       - name: 初始化容器源與建置環境（tkg／artix／makepkg，接上一歩）
         run: |
           set -euo pipefail
+
+            # _syu_retry：與「初始化容器環境」那步同一個函式。**step 之間不共用 shell**，
+            # 所以這裡要再定義一次（2026-10-21 實測：漏了它 → line 126: command not found，rc=127）。
+            _syu_retry() {
+              _sy=0
+              until pacman -Syu --noconfirm; do
+                _sy=$((_sy + 1))
+                if [ "$_sy" -ge 10 ]; then
+                  echo "::error::pacman -Syu 连续 ${_sy} 次失败"
+                  exit 1
+                fi
+                _b=$((_sy * 10))
+                if [ "$_b" -gt 60 ]; then _b=60; fi
+                echo "::warning::pacman -Syu 第 ${_sy}/10 次失败，退避重试"
+                sleep $_b
+              done
+            }
           # ⚠️ 這一段是從「初始化容器環境（Arch／Artix）」拆出來的，不是新功能。理由：GitHub 對
           #   **字串值帶 GitHub 表達式（dollar-brace 記法）的 step** 有 **21000 位元組**
           #   的硬上限（中文 1 字＝3 bytes、shell 註解也計入），踩過就整個 workflow
