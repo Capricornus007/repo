@@ -90,6 +90,24 @@ jobs:
             echo "::warning::鏡像瞬斷，初始化依賴重試（第 ${_pi} 次）"
             sleep $((_pi * 20))
           done
+          # 2026-10-21：所有 -Syu 一律走這個重試。lib32-glib2 那次就是下載抖一下
+          # 直接「Errors occurred, no packages were upgraded」→ 整個 job 紅
+          # （run 39581360908 實測）。10 次、退避封頂 60 秒，重試用盡才判紅。
+          # 本步驟是 `sh -e`（dash）：判斷式一律用 if，不可用 `[ … ] && …`。
+          _syu_retry() {
+            _sy=0
+            until pacman -Syu --noconfirm; do
+              _sy=$((_sy + 1))
+              if [ "$_sy" -ge 10 ]; then
+                echo "::error::pacman -Syu 连续 ${_sy} 次失败"
+                exit 1
+              fi
+              _b=$((_sy * 10))
+              if [ "$_b" -gt 60 ]; then _b=60; fi
+              echo "::warning::pacman -Syu 第 ${_sy}/10 次失败，退避重试"
+              sleep $_b
+            done
+          }
           # oh-my-pi 的 rust natives（audiopus_sys 等）用 cmake+Ninja generator，
           # AUR PKGBUILD 的 makedepends 漏列 ninja，容器預設沒有 → 補裝
           if [ "${{ matrix.repo_name }}" = 'oh-my-pi-git' ]; then
@@ -191,7 +209,7 @@ jobs:
             printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
             # 必須 -Syu 全量升級：容器鏡像是建置快照日的舊庫，跨倉依賴（glibc/gcc-libs）
             # 不同步會導致 makepkg 的依賴解析直接失敗。
-            pacman -Syu --noconfirm
+            _syu_retry
             # 先預裝 lib32 底層鏈：lib32-glib2 的 makedepends 會拉這些，但 bootstrap
             # 迴圈（checkdepends 含 lib32-glib2 自己）在乾淨容器裡要靠這幾顆先站穩。
             pacman -S --noconfirm --needed \
@@ -367,7 +385,7 @@ jobs:
             # 容器只有 core/extra、預設 [multilib] 是註解掉的，補一段未註解的進去再同步。
             printf '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
             # 必须 -Syu 全量升级（容器镜像自带的是构建快照日的旧库）。
-            pacman -Syu --noconfirm
+            _syu_retry
             # ── LLVM 对齐目标机（2026-09-18 实证根因）
             # 产物装在使用者的 Artix 机器上，其 llvm/clang 是 Artix [world-goblins]
             # 的 23.1.1（本机实测 llvm-libs 23.1.1-1，packager ndowens@artixlinux.org），
@@ -474,7 +492,7 @@ jobs:
             done
             [ "$synced" = true ] || { echo "::error::Artix 倉連續 5 次同步失敗"; exit 1; }
             # 全量升到 gremlins 態，讓編譯用的 Qt 與目標機同版
-            pacman -Syu --noconfirm
+            _syu_retry
             # 實物檢查：這輪若還印 6.11.x，PKGBUILD 的釘選就會發出裝不上的包。
             # 用 -Si 查 DB，不用 qmake —— 這個時刻容器裡根本還沒裝 qt6-base
             # （它是 PKGBUILD 的 depends，makepkg 之後才裝），實測 run #358 就在
