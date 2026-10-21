@@ -1166,3 +1166,37 @@ doas 一律清洗環境（實測 `DIFFPROG=meld doas /usr/bin/printenv DIFFPROG`
 ### 退場方式
 上游把 doas 這處修掉之後，本補丁會**打不上而讓構建變紅**（`grep` 那道閘門會明講原因），
 不是靜默失靈。那時刪掉 `.patch` 與 `prepare()` 裡那三行，必要時連 epoch 一起退。
+
+## xorg-server-git（2026-10-21；用戶「鏈 libsystemd 你刪了不就好了？」）
+
+在此之前 feed 只有 `xorg-xwayland-git`，`xorg-server-git` 一直吃 chaotic-aur；而那份是 **Arch 的建法**
+（`-D systemd_logind=true`、depends 帶 `systemd-libs`），裝到 Artix 上就是鏈 libsystemd。
+用戶點破得很對：那不是「不能建」，只是一個建置開關。所以改成 in-tree 自己建 **Artix 口味**：
+`-D systemd_logind=false`、depends 不帶 systemd-libs。
+
+### 為什麼這樣就沒有 libsystemd（實物依據）
+本機 Artix 穩定版 `/usr/lib/Xorg` 的 NEEDED 逐條看過：`libudev.so.1`、`libdbus-1.so.3` 在，
+**libsystemd 與 libelogind 都不在**。也就是 Artix 官方本身就是「udev 管裝置、不接 logind」，
+本包照同一組開關建，產物自然一樣不鏈 systemd。
+
+### 收哪些、不收哪些
+切三顆：`xorg-server-git`／`xorg-server-common-git`／`xorg-server-xvfb-git`。
+刻意不做 xephyr／xnest／devel／src：前兩顆本機與 CI 都沒用到；devel 只有編 xorg 驅動才需要
+（本倉目前沒有這類包）；src 只是把整棵樹打包給人看。要補就照官方 PKGBUILD 加 `package_` 函式。
+
+### 兩個不吃官方做法的點
+1. **不套 `0001-Revert_damage_*.patch`**：那是 21.1.x 穩定版的上游回退補丁，master 早就改過，
+   硬套打不上。
+2. **拿掉 `-fno-plt` 與 `-Wl,-z,now`**（官方 PKGBUILD 同款理由，FS#55102／FS#54845）：
+   xorg 模組會載入失敗（undefined symbol）。
+
+### 四接點
+* `xorg-server-git/PKGBUILD`（本倉 in-tree）
+* `build-packages.yml:662` 那條 in-tree 大 alternation 加 `|xorg-server-git`
+* `build-git-packages.yml` 矩陣加 `{"key": "xorg-server-git", "repo_name": "xorg-server-git", "variant": "none"}`
+* 本檔
+
+### 退場
+本機跑的是 Artix 穩定版 xorg-server；這顆只是「尖端選項」，**不是**拿來日常替換的。
+真要裝之前先確認顯卡驅動的 ABI：`provides` 的 `X-ABI-VIDEODRV_VERSION`／`X-ABI-XINPUT_VERSION`
+會隨 master 變，驅動對不上就得一起升。

@@ -1,0 +1,139 @@
+# Maintainer: Capricornus007 <Capricornus007 at proton dot me>
+#
+# 本倉 in-tree 維護（2026-10-21，使用者指示「xorg 系列 -git 也做」「鏈 libsystemd 你刪了
+# 不就好了」）。在此之前 feed 只有 xorg-xwayland-git；xorg-server-git 一直吃 chaotic-aur，
+# 而那份是 **Arch 的建法**：`-D systemd_logind=true` + depends 帶 `systemd-libs`，裝到
+# Artix 上就是鏈 libsystemd。所以自己建一份 **Artix 口味**的：`-D systemd_logind=false`，
+# depends 不帶 systemd-libs —— 這正是 Artix 官方 xorg-server 的作法（實查本機
+# /usr/lib/Xorg 的 NEEDED：只有 libudev.so.1／libdbus-1.so.3，**沒有** libsystemd、也沒有
+# libelogind）。
+#
+# 只切三顆：server／common／xvfb。刻意不做 xephyr／xnest／devel／src：
+#   · xephyr/xnest 對本機與 CI 都沒用到；
+#   · devel 只有編 xorg 驅動才需要，而本倉目前沒有這類包；
+#   · src 需要把整棵樹打包再解開，只是為了給人看原始碼，價值低。
+#   （要的話照官方 PKGBUILD 補 package_ 函式即可。）
+#
+# 不套 Arch 那份的 0001-Revert_damage_*.patch：那是針對 21.1.x 穩定版的上游回退補丁，
+# master 早就改過，硬套會打不上。
+#
+# ⚠️ 這顆**不是**給日常替換用的：本機跑的是 Artix 穩定版 xorg-server，-git 只是尖端選項。
+#    真要裝之前先確認顯卡驅動的 ABI（provides 的 X-ABI-* 會隨 master 變）。
+
+pkgbase=xorg-server-git
+pkgname=('xorg-server-git' 'xorg-server-common-git' 'xorg-server-xvfb-git')
+pkgver=21.1.25.r0.g0000000
+pkgrel=1
+arch=('x86_64')
+license=('LicenseRef-Adobe-Display-PostScript' 'BSD-3-Clause' 'LicenseRef-DEC-3-Clause'
+         'HPND' 'LicenseRef-HPND-sell-MIT-disclaimer-xserver' 'HPND-sell-variant'
+         'ICU' 'ISC' 'MIT' 'MIT-open-group' 'NTP' 'SGI-B-2.0' 'SMLNJ' 'X11'
+         'X11-distribute-modifications-variant')
+groups=('xorg')
+url="https://xorg.freedesktop.org"
+makedepends=('xorgproto' 'pixman' 'libx11' 'mesa' 'mesa-libgl' 'xtrans'
+             'libxkbfile' 'libxfont2' 'libpciaccess' 'libxv' 'libxcvt'
+             'libxmu' 'libxrender' 'libxi' 'libxaw' 'libxtst' 'libxres'
+             'xorg-xkbcomp' 'xorg-util-macros' 'xorg-font-util' 'libepoxy'
+             'xcb-util' 'xcb-util-image' 'xcb-util-renderutil' 'xcb-util-wm'
+             'xcb-util-keysyms' 'libxshmfence' 'libunwind' 'meson' 'git')
+source=("${pkgbase}::git+https://gitlab.freedesktop.org/xorg/xserver.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "${pkgbase}"
+  # 上游 tag 是 xorg-server-21.1.x；沒有 tag 可描述時退回 21.1.0.r<commits>.g<hash>
+  local tag
+  tag=$(git describe --long --tags --abbrev=7 2>/dev/null | sed 's/^xorg-server-//;s/\([^-]*-g\)/r\1/;s/-/./g')
+  if [ -n "$tag" ]; then
+    printf '%s\n' "$tag"
+  else
+    printf '21.1.0.r%s.g%s\n' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+  fi
+}
+
+build() {
+  # Arch 的 makepkg.conf 會帶 -fno-plt / -Wl,-z,now，xorg 模組載入會 undefined symbol
+  # （FS#55102、FS#54845）；跟官方 PKGBUILD 一樣拿掉。
+  export CFLAGS=${CFLAGS/-fno-plt}
+  export CXXFLAGS=${CXXFLAGS/-fno-plt}
+  export LDFLAGS=${LDFLAGS/-Wl,-z,now}
+
+  arch-meson "${pkgbase}" build \
+    -D ipv6=true \
+    -D xvfb=true \
+    -D xnest=false \
+    -D xcsecurity=true \
+    -D xorg=true \
+    -D xephyr=false \
+    -D glamor=true \
+    -D udev=true \
+    -D dtrace=false \
+    -D systemd_logind=false \
+    -D suid_wrapper=true \
+    -D linux_acpi=false \
+    -D xkb_dir=/usr/share/X11/xkb \
+    -D xkb_output_dir=/var/lib/xkb \
+    -D libunwind=true
+  meson configure build
+  ninja -C build
+  DESTDIR="${srcdir}/fakeinstall" ninja -C build install
+}
+
+_install() {
+  local src f dir
+  for src; do
+    f="${src#fakeinstall/}"
+    dir="${pkgdir}/${f%/*}"
+    install -m755 -d "${dir}"
+    cp -av "${src}" "${dir}/"
+    rm -rf "${src}"
+  done
+}
+
+package_xorg-server-common-git() {
+  pkgdesc="Xorg server common files (git master)"
+  depends=(xkeyboard-config xorg-xkbcomp xorg-setxkbmap)
+  provides=("xorg-server-common=${pkgver}")
+  conflicts=('xorg-server-common')
+
+  _install fakeinstall/usr/lib/xorg/protocol.txt
+  _install fakeinstall/usr/share/man/man1/Xserver.1
+  install -m644 -Dt "${pkgdir}/var/lib/xkb/" "${pkgbase}"/xkb/README.compiled
+  install -m644 -Dt "${pkgdir}/usr/share/licenses/${pkgname}" "${pkgbase}"/COPYING
+}
+
+package_xorg-server-git() {
+  pkgdesc="Xorg X server (git master, systemd-free build)"
+  depends=(libepoxy libxfont2 pixman xorg-server-common-git libunwind
+           dbus libgl xf86-input-libinput nettle
+           libxdmcp sh glibc libxau libtirpc
+           libpciaccess libdrm libxshmfence libxcvt)
+  provides=('X-ABI-VIDEODRV_VERSION=25.2' 'X-ABI-XINPUT_VERSION=24.4'
+            'X-ABI-EXTENSION_VERSION=10.0' 'x-server' "xorg-server=${pkgver}")
+  conflicts=('xorg-server' 'nvidia-utils<=331.20' 'glamor-egl' 'xf86-video-modesetting')
+  replaces=('glamor-egl' 'xf86-video-modesetting')
+
+  _install fakeinstall/usr/bin/{X,Xorg,gtf}
+  _install fakeinstall/usr/lib/Xorg{,.wrap}
+  _install fakeinstall/usr/lib/xorg/modules/*
+  _install fakeinstall/usr/share/X11/xorg.conf.d/10-quirks.conf
+  _install fakeinstall/usr/share/man/man1/{Xorg,Xorg.wrap,gtf}.1
+  _install fakeinstall/usr/share/man/man4/{exa,fbdevhw,inputtestdrv,modesetting}.4
+  _install fakeinstall/usr/share/man/man5/{Xwrapper.config,xorg.conf,xorg.conf.d}.5
+
+  install -m755 -d "${pkgdir}/etc/X11/xorg.conf.d"
+  install -m644 -Dt "${pkgdir}/usr/share/licenses/${pkgname}" "${pkgbase}"/COPYING
+}
+
+package_xorg-server-xvfb-git() {
+  pkgdesc="Virtual framebuffer X server (git master)"
+  depends=(libxfont2 libunwind pixman xorg-server-common-git xorg-xauth
+           libgl nettle libtirpc libxdmcp sh glibc libxau)
+  provides=("xorg-server-xvfb=${pkgver}")
+  conflicts=('xorg-server-xvfb')
+
+  _install fakeinstall/usr/bin/Xvfb
+  _install fakeinstall/usr/share/man/man1/Xvfb.1
+  install -m644 -Dt "${pkgdir}/usr/share/licenses/${pkgname}" "${pkgbase}"/COPYING
+}
