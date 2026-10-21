@@ -251,13 +251,19 @@ source=(
 
   # 2026-10-12：關掉 gst-editing-services 那條穩定失敗的 validate 場景（實測依據寫在檔頭）
   0003-ges-disable-regressed-complex_effect_bin_desc.patch
+
+  # 2026-10-21：上游 1.28 的 async start 競態——舊 start thread 的
+  # DEVICE_MONITOR_STARTED 會漏到重啟後的 bus，讓 gst_gstdevice 隨機紅
+  # （CI run 39585737348；單核本地 11 次內重現，修後 900 次全綠）
+  0004-devicemonitor-post-started-before-completion.patch
 )
 b2sums=('SKIP'
         'aa51f74b874d38a958f99d0166f5d1a49ee9a11c03e890106e38c28c34522995dc1197f1d2772a8973195617319fb6e0f181addcca1050b1bee1127412fb76b5'
         'SKIP'
         '30f18e98863644c66ed39e54caaedb17a96e3294e5e260b01cd93c6373d120079af9bd92512b25b09f9228e880a2b032da4374a4a85062642dcaf070112408cd'
         '4e425222d8fd1fc3c49750ad4920433e3b298698e96e714fb9d6f887ac62509f2b187a131fa31da53dcedd2a150ca59d3bd7d7519b7df91a0cff90c65094edbc'
-        'd60c16957822f98c553c009bc9f2275a3d7691a2491ec9cb37e219ec120b718457a07ab3b4ac0b1aa5f3fb6e5f6850bf62ee7690c699545039b3042a01cdf23a')
+        'd60c16957822f98c553c009bc9f2275a3d7691a2491ec9cb37e219ec120b718457a07ab3b4ac0b1aa5f3fb6e5f6850bf62ee7690c699545039b3042a01cdf23a'
+        '111c302d03fab89568cfc845b4e38f041dd81c76b999f67ce782447d84b10eaeb1ba4f6012e5343d73ade50293dda853b24d100516598a29c684a6e3d1b6ce68')
 validpgpkeys=(
   D637032E45B8C6585B9456565D2EEE6F6F349D7C # Tim Müller <tim@gstreamer-foundation.org>
 )
