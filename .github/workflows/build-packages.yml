@@ -3140,6 +3140,11 @@ jobs:
           _mp_env=""
           [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ] \
             && _mp_env="RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo "
+          # GIT_CONFIG_* 直接進 makepkg 的環境：/etc/gitconfig 那份實測沒擋住
+          # （2026-10-21 run 39580052686 的 mesa-tkg-git 仍走 HTTP/2 撞
+          # `RPC failed; HTTP 502 … HTTP/2 stream 7 reset by server`）。
+          # 這三個變數 git 一定吃，不管系統/全域 config 檔或 NOSYSTEM。
+          _mp_env="${_mp_env}GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.version GIT_CONFIG_VALUE_0=HTTP/1.1 "
           until $_runas "${_mp_env}makepkg $flags" 2>&1 | tee /tmp/makepkg.log; do
             _mp=$((_mp + 1))
             bad=$(grep -oE '^:: File [^ ]+ is corrupted' /tmp/makepkg.log | awk '{print $3}' | sort -u || true)
@@ -3151,8 +3156,12 @@ jobs:
             else
               echo "makepkg 失败（非可恢复故障），不再重试"; exit 1
             fi
-            [ "$_mp" -ge 3 ] && { echo "::error::makepkg 连续 3 次失败"; exit 1; }
-            sleep $((_mp * 25))
+            # 使用者 2026-10-21：「提高重試次數直接到幾十個」。下載類瞬斷（502／
+            # stream reset／下載超時）純屬上游抖動，重試比直接判紅有用：
+            # 上限 20 次、退避封頂 120 秒（最壞約 20~25 分鐘，仍在 360 分鐘 job 上限內）。
+            [ "$_mp" -ge 20 ] && { echo "::error::makepkg 连续 ${_mp} 次失败"; exit 1; }
+            _backoff=$((_mp * 25)); [ "$_backoff" -gt 120 ] && _backoff=120
+            sleep $_backoff
           done
           if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ] && [ "${{ matrix.variant }}" = "rc" ]; then
             # RC 產物檔名插入 -rc（如 linux-cachyos-cjktty-rc-7.3.rc1-1-…），
