@@ -47,13 +47,14 @@ license=('LGPL2.1')
 arch=('x86_64')
 depends=('glibc' 'libgcc' 'libstdc++' 'libxcb' 'libxkbcommon' 'wayland'
          'fcitx5-git' 'qt5-base' 'qt6-base')
+# 2026-10-21：拿掉 gtk2/gtk3/gtk4/libepoxy。上游 CMakeLists 裡一次都沒提到 gtk
+# （實查 `grep -ic gtk` = 0），本包也從沒建出過 gtk 模組（pacman -Ql 內 gtk 檔案 0 個），
+# 那些模組是 fcitx5-gtk 的事。留著它們的直接後果是 CI 兩輪都紅在 makepkg：
+# **gtk2 已經不在 Arch 官方倉**（Arch 套件 API 查無），容器 `target not found: gtk2`。
 makedepends=('extra-cmake-modules' 'cmake' 'ninja' 'git' 'gettext'
              'qt4' 'qt5-base' 'qt6-base' 'wayland-protocols' 'libxkbcommon-x11'
-             'xcb-util-cursor' 'gtk2' 'gtk3' 'gtk4' 'libepoxy')
-optdepends=('qt4: Qt4 程式的輸入法插頭（WPS Office 那類；本機 qt4 來自 andontie-aur/arch4edu）'
-            'gtk2: GTK2 im module'
-            'gtk3: GTK3 im module'
-            'gtk4: GTK4 im module')
+             'xcb-util-cursor')
+optdepends=('qt4: Qt4 程式的輸入法插頭（WPS Office 那類；本機 qt4 來自 andontie-aur/arch4edu）')
 provides=("${_pkgname}")
 conflicts=("${_pkgname}")
 source=("git+${url}.git")
@@ -87,17 +88,6 @@ check() {
 
 package() {
   DESTDIR="$pkgdir" cmake --install build
-
-  # 上游把 GTK 的 im 模組裝到 lib/gtk-*/3.0/immodules/ 之类位置，
-  # 但本包只承诺 Qt 綁定；GTK 模組留給 fcitx5-gtk（倉庫版）提供，
-  # 這裡如果建出來了就刪掉，避免跟那顆搶同一個檔案。
-  rm -rf "$pkgdir/usr/lib/gtk-2.0" \
-         "$pkgdir/usr/lib/gtk-3.0" \
-         "$pkgdir/usr/lib/gtk-4.0" \
-         "$pkgdir/usr/lib64" 2>/dev/null || true
-  rm -f  "$pkgdir/usr/lib/libfcitx5-gtk2.so" \
-         "$pkgdir/usr/lib/libfcitx5-gtk3.so" \
-         "$pkgdir/usr/lib/libfcitx5-gtk4.so" 2>/dev/null || true
 
   install -Dm644 "${_pkgname}/LICENSE" -t "$pkgdir/usr/share/licenses/$pkgname/" 2>/dev/null || true
 }
