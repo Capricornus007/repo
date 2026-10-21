@@ -105,7 +105,8 @@ jobs:
              || [ "${{ matrix.repo_name }}" = 'doxygen-git' ] \
              || [ "${{ matrix.repo_name }}" = 'librime-git' ] \
              || [ "${{ matrix.repo_name }}" = 'spirv-tools-git' ] \
-             || [ "${{ matrix.repo_name }}" = 'spirv-headers-git' ]; then
+             || [ "${{ matrix.repo_name }}" = 'spirv-headers-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'fcitx5-qt-git' ]; then
             # 把自有 junlin03-aur 掛成匿名 pacman 源。矩陣 job 並行，靠它看見
             # 兄弟 job 已發布的 KDE 依賴產物（release 資產公開可取，實測
             # …/current-repo/junlin03-aur.db 與包檔均 HTTP 200）。冷啟動時
@@ -298,7 +299,20 @@ jobs:
           SigLevel = Never
           Include = /etc/pacman.d/herecura-mirrorlist
           PACMAN_THIRD_PARTY
-          pacman -Sy --noconfirm >/dev/null
+          # 任一第三方倉連不上時，pacman -Sy 會整體失敗、extra.db 也處於半套狀態，
+          # 後面的 makepkg -s 就變成「libxkbcommon / qt5-base 都 target not found」
+          # （2026-10-21 run 39565140324 實測：repo.archlinuxcn.org 在 runner 上
+          # 不可達 → 連累 100+ job）。改成自我修復：哪個倉的 .db 抓不到就把它整段
+          # 從 pacman.conf 摘掉再重試，其餘倉照常可用。
+          for _try in 1 2 3 4 5 6 7; do
+            if pacman -Sy --noconfirm >/tmp/_sy.log 2>&1; then break; fi
+            _bad=$(grep -oE "failed retrieving file '[^']+\.db'" /tmp/_sy.log | head -1 | sed "s/.*'\(.*\)\.db'/\1/")
+            if [ -z "$_bad" ]; then
+              echo "::warning::pacman -Sy 失敗但抓不到是哪個倉，照原樣繼續"; cat /tmp/_sy.log; break
+            fi
+            echo "::warning::第三方倉 $_bad 同步不到，本次先摘掉它"
+            awk -v r="[$_bad]" '/^\[/{skip=($0==r)} skip==0' /etc/pacman.conf > /tmp/_pacman.conf && cp /tmp/_pacman.conf /etc/pacman.conf
+          done
           echo "第三方倉已就緒：$(pacman -Sl chaotic-aur archlinuxcn arch4edu ownstuff andontie-aur herecura 2>/dev/null | wc -l) 個條目"
 
           if [ "${{ matrix.repo_name }}" = 'fcitx5-qt-git' ]; then
