@@ -42,14 +42,15 @@ sha256sums=('SKIP')
 
 pkgver() {
   cd "${pkgbase}"
-  # 上游 tag 是 xorg-server-21.1.x；沒有 tag 可描述時退回 21.1.0.r<commits>.g<hash>
-  local tag
-  tag=$(git describe --long --tags --abbrev=7 2>/dev/null | sed 's/^xorg-server-//;s/\([^-]*-g\)/r\1/;s/-/./g')
-  if [ -n "$tag" ]; then
-    printf '%s\n' "$tag"
-  else
-    printf '21.1.0.r%s.g%s\n' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
-  fi
+  # 版本要看**真正的版本字串**，不是 tag 名：上游 main 的 meson.build 是
+  # `version: '26.1.99.1'`，編出來的二進位自己印 `X.Org X Server 1.26.1.99`
+  # （實跑 `usr/lib/Xorg -version` 驗過）。用 tag 會得到
+  # `server.26.1.branchpoint.r86`——那只是分支點標籤的名字，不是版本。
+  # 讀 meson.build 也順帶免疫「tag 命名/分支改名」這種事。
+  local ver
+  ver=$(sed -n "s/^ *version: '\([0-9][^']*\)',*$/\1/p" meson.build | head -1)
+  [ -n "$ver" ] || ver=0
+  printf '%s.r%s.g%s\n' "$ver" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
 }
 
 build() {
