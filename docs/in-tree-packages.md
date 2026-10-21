@@ -1192,9 +1192,16 @@ doas 一律清洗環境（實測 `DIFFPROG=meld doas /usr/bin/printenv DIFFPROG`
 
 ### 四接點
 * `xorg-server-git/PKGBUILD`（本倉 in-tree）
-* `build-packages.yml:662` 那條 in-tree 大 alternation 加 `|xorg-server-git`
+* `build-packages.yml` 那條 in-tree 大 alternation 加 `|xorg-server-git`（別記行號，改動會漂）
 * `build-git-packages.yml` 矩陣加 `{"key": "xorg-server-git", "repo_name": "xorg-server-git", "variant": "none"}`
 * 本檔
+
+### 版本號：讀 meson.build，不讀 tag 名（2026-10-21 使用者「先跑版本輸出再定奪」）
+`git describe --long --tags` 抓到的是**分支點標籤** `server-26.1.branchpoint`，於是 `pkgver` 一度變成
+`server.26.1.branchpoint.r86.g0780950`——那不是版本。實跑產物 `usr/lib/Xorg -version` 印的是
+`X.Org X Server 1.26.1.99`，而 `main` 的 `meson.build` 寫 `version: '26.1.99.1'`。
+現在 `pkgver()` 直接讀 `meson.build` 的 version 再接 commit 數／短 hash → `26.1.99.1.r86.g0780950`；
+順帶免疫 tag 命名與分支改名。
 
 ### 退場
 本機跑的是 Artix 穩定版 xorg-server；這顆只是「尖端選項」，**不是**拿來日常替換的。
