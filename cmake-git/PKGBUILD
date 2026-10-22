@@ -66,14 +66,17 @@ provides=("$_name")
 conflicts=("$_name")
 
 pkgver() {
-  # 目錄名 = ${pkgname%-git} = cmake（kitware 的倉目錄名剛好也是 cmake），
-  # 與 CI 泛用版本探測的克隆名一致；對不上會恆 skip。
-  # 只看 origin/master，不看 HEAD（探測輪與實建輪必須同值，否則每輪白編幾十分鐘）。
-  # --match 'v[0-9]*'：實測 kitware 的 414 個 tag 全部是 v<數字> 開頭，加這道是防日後
-  # 有人掛非版號 tag（dae-git 的 lastst 教訓）。--abbrev=8 是因為倉大，7 碼容易撞。
+  # 版號要跟 `cmake --version` 的輸出一致：master 的 tag 停在舊 RC
+  # （v4.5.0-rc1），但原始碼內是日期版 4.5.20261021。改讀
+  # Source/CMakeVersion.cmake 的 MAJOR/MINOR/PATCH，再加 commits/hash。
   cd "${pkgname%-git}"
-  git describe --tags --long --abbrev=8 --match 'v[0-9]*' origin/master \
-    | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+  local major minor patch rev hash
+  major=$(awk '/set\(CMake_VERSION_MAJOR /{print $2}' Source/CMakeVersion.cmake)
+  minor=$(awk '/set\(CMake_VERSION_MINOR /{print $2}' Source/CMakeVersion.cmake)
+  patch=$(awk '/set\(CMake_VERSION_PATCH /{print $2}' Source/CMakeVersion.cmake)
+  rev=$(git rev-list --count HEAD)
+  hash=$(git rev-parse --short=8 HEAD)
+  printf '%s.%s.%s.r%s.g%s' "$major" "$minor" "$patch" "$rev" "$hash"
 }
 
 prepare() {
