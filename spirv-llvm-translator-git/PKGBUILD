@@ -275,9 +275,24 @@ package_lib32-spirv-llvm-translator-git() {
   # （run 39679301603 的 warning「自有 lib32 家族缺：lib32-spirv-llvm-translator-git」就是這條）。
   rm -rf "$pkgdir/usr/bin" "$pkgdir/usr/include" "$pkgdir/usr/lib" \
          "$pkgdir/usr/share/man" "$pkgdir/usr/share/doc"
-  _stray=$(find "$pkgdir/usr" -mindepth 2 -maxdepth 2 \
-             -not -path "$pkgdir/usr/lib32" -not -path "$pkgdir/usr/share" | tr '\n' ' ')
-  [ -z "$_stray" ] || { echo "ERROR: $pkgname 還帶著非 lib32 的路徑：$_stray" >&2; exit 1; }
+  # 殘留點名：/usr 下只准有 lib32 與 share，share 下只准有 licenses。
+  # ⚠️ 上一版這裡用 `find -mindepth 2 -maxdepth 2 -not -path "…/usr/lib32"`，那個
+  #   `-not -path` 只排除目錄**本身**，不排除裡面的檔 ⇒ depth 2 剛好命中
+  #   usr/lib32/libLLVMSPIRVLib.so.24.0git，把好的產物判成錯（run 39717172753 實測紅）。
+  #   改用 glob 逐層點名，深度算錯也不會誤殺正解。
+  _stray=''
+  for _d in "$pkgdir"/usr/*; do
+    [ -e "$_d" ] || continue
+    case ${_d##*/} in
+      lib32|share) ;;
+      *) _stray="$_stray ${_d##*/}" ;;
+    esac
+  done
+  for _d in "$pkgdir"/usr/share/*; do
+    [ -e "$_d" ] || continue
+    [ "${_d##*/}" = licenses ] || _stray="$_stray share/${_d##*/}"
+  done
+  [ -z "$_stray" ] || { echo "ERROR: $pkgname 還帶著非 lib32 的路徑：${_stray# }" >&2; exit 1; }
   # 自證：這顆的**實際 NEEDED** 必須是 32 位元 LLVM 的 soname，而且與依賴鎖一致。
   # 光看檔名不夠——上一輪的教訓就是「包裡有檔、依賴也寫了，但鏈的是另一版」。
   local _need
