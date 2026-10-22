@@ -925,23 +925,13 @@ jobs:
                 pkg_dir/PKGBUILD > pkg_dir/PKGBUILD.t && mv pkg_dir/PKGBUILD.t pkg_dir/PKGBUILD
               grep -q 'LLVMInitializeAMDGPU' pkg_dir/PKGBUILD \
                 || { echo "::error::Target.h 補丁沒注入進 prepare()（錨點 msg2 \"Tree cleaned\" 不見了）"; exit 1; }
-              # ── LLVM 24 trunk 換了 PassBuilder 建構子（2026-10-22 實測 run 39771561679）
-              # ninja 停在 [1457/4168]：ac_llvm_helper.cpp:274:9 error: no matching
-              # constructor for 'PassBuilder'／note: no known conversion from
-              # 'TargetMachine *' to 'LLVMContext &' for 1st argument。本機標頭
-              # /usr/include/llvm/Passes/PassBuilder.h:156 現行簽名第一參數就是
-              # LLVMContext&（spirv-llvm-translator 同病因）。上游 mesa main 到
-              # a0b42c85c0f 還沒跟上（該檔最後一筆 2026-09-11 9875d2b2a50），只能自己補。
-              # 不動呼叫端：全樹只有 ac_llvm_util.c:191 一顆，而 struct ac_llvm_compiler
-              # 只有 tm／meo／beo 沒有 context，TargetMachine 也沒有 getContext()，
-              # 每顆 shader 模組又各用自己那顆 context ⇒ 只能延到 run() 用
-              # module.getContext() 構造。註冊只做一次：本機 PassManager.h:422 的
-              # clear() 只清結果、不清 proxy，每次 run 重複註冊會讓 proxy 無限成長。
-              # 驗證：改後的 struct 抽成獨立 TU，對本機 llvm 24.0.0git 標頭
-              # clang++ -fsyntax-only -std=c++17 -Wall -Werror=reorder 跑過（rc=0 無警告）。
-              # 用 git apply 不用 patch：chaotic 那份 PKGBUILD 的 makedepends 沒點名
-              # patch，而 git 是 -git 包的硬依賴。
-              _pb_patch='  if git apply --check -p1 "$_where/passbuilder-llvm-context.patch" 2>/dev/null; then git apply -p1 "$_where/passbuilder-llvm-context.patch" && echo "  + PassBuilder(LLVMContext&) 補丁已套上"; elif git apply --reverse --check -p1 "$_where/passbuilder-llvm-context.patch" 2>/dev/null; then echo "  · PassBuilder 補丁已由上游涵蓋，跳過"; else echo "::error::PassBuilder 補丁無法套用（上游動過 ac_llvm_helper.cpp 這段）"; exit 1; fi'
+              # ── LLVM 24 trunk 把 PassBuilder 建構子第一參數改成 LLVMContext&，
+              # 上游 mesa main 還沒跟上 ⇒ 選型理由、只註冊一次的原因、本機
+              # -fsyntax-only 驗證全部寫在 mesa-tkg-git/passbuilder-llvm-context.patch
+              # 檔頭（這個 step 有 21000 位元組的 GitHub 硬上限，註解也計入）。
+              # 用 git apply 不用 patch：chaotic 那份 PKGBUILD 沒點名 patch，
+              # 而 git 是 -git 包的硬依賴。
+              _pb_patch='  if git apply --check -p1 "$_where/passbuilder-llvm-context.patch" 2>/dev/null; then git apply -p1 "$_where/passbuilder-llvm-context.patch"; elif ! git apply --reverse --check -p1 "$_where/passbuilder-llvm-context.patch" 2>/dev/null; then echo "::error::PassBuilder 補丁套不上"; exit 1; fi'
               awk -v p="$_pb_patch" '$0 ~ /msg2 "Tree cleaned"/ {print; print p; next} {print}' \
                 pkg_dir/PKGBUILD > pkg_dir/PKGBUILD.t && mv pkg_dir/PKGBUILD.t pkg_dir/PKGBUILD
               grep -q 'passbuilder-llvm-context.patch' pkg_dir/PKGBUILD \
@@ -1088,7 +1078,19 @@ jobs:
               # AUR 版 makedepends 只有 git，但 configure 默认开 --enable-image
               # 要 gif_lib.h，容器没有 giflib → build() 红（2026-09-17 实测
               # "cannot find the gif_lib.h header"）。补进 makedepends。
-              sed -i "s/^makedepends=('git')/makedepends=('git' 'giflib')/" pkg_dir/PKGBUILD ;;
+              sed -i "s/^makedepends=('git')/makedepends=('git' 'giflib')/" pkg_dir/PKGBUILD
+              # ── 自帶 --screenshot（i3lock-color 歷史上沒這選項；實測與動機在
+              # i3lock-color-git/screenshot-option.patch 檔頭）
+              curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/i3lock-color-git/screenshot-option.patch" \
+                -o pkg_dir/screenshot-option.patch \
+                || { echo "::error::拿不到 i3lock-color-git/screenshot-option.patch"; exit 1; }
+              sed -i '/^source=/a source+=("screenshot-option.patch")' pkg_dir/PKGBUILD
+              sed -i '/^md5sums=/a md5sums+=("SKIP")' pkg_dir/PKGBUILD
+              # 先補 cd 再補 patch（順序錯了 patch 會在 $startdir 跑）；套不上就判紅
+              awk '/^prepare\(\) \{$/ {print; print "    cd \"${srcdir}/${_gitname}\""; print "    patch -p1 -N --quiet -i \"$srcdir/screenshot-option.patch\" || { echo \"::error::screenshot 補丁套用失敗（上游動過 i3lock.c）\"; exit 1; }"; next} {print}' \
+                pkg_dir/PKGBUILD > pkg_dir/PKGBUILD.t && mv pkg_dir/PKGBUILD.t pkg_dir/PKGBUILD
+              grep -q 'screenshot-option.patch' pkg_dir/PKGBUILD \
+                || { echo "::error::screenshot 補丁沒注入進 PKGBUILD（source= 或 prepare() 錨點不見了）"; exit 1; } ;;
                         
             fd-git)
               # AUR 那份沒有 build()，package() 直接 cargo install 打預設 features，

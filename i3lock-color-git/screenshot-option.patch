@@ -1,0 +1,81 @@
+########################################################################
+# aetherium 自建倉補丁：讓 i3lock-color 認得 --screenshot（並真的做事）
+#
+# 為什麼要這支：~/.config/i3/config 的鎖屏指令要跟 sway 側的 swaylock-effects
+# 對齊，裡面有 --screenshot。實測本機這顆 i3lock-color-git（r915.e6c0caf，
+# 也就是上游 master 的 HEAD）回 "unrecognized option '--screenshot'" 後
+# 直接退出 1，而 i3 把 stderr 丟掉 → 按 $mod+l 完全沒反應。
+# 查證：上游全樹 grep 'screenshot' 零命中 ⇒ 這選項在 i3lock-color 歷史上
+# 從來不存在（它是 i3lock-fancy 那類腳包用的），所以「升級就有」不成立，
+# 只能自己加。
+#
+# 這支補丁做的是真功能，不是「接受但忽略」的假別名：
+# capture_bg_pixmap()（xcb.c:496，宣告在 xcb.h:34）本來就是 --blur 抓桌面
+# 用的那條路，這裡用同一個函式把畫面抓成 cairo image surface 交給 img，
+# 差別只在「不套模糊」。
+#
+# 實測（本機，同 commit 對照）：
+#   改後的 i3lock：--screenshot --version → 正常印版本、rc=0
+#   現裝的上游版：  --screenshot --version → unrecognized option
+#   視覺驗證：鎖屏 2 秒後用 import -window root 截圖
+#     加 --screenshot → 2240x1400、唯一顏色 25,294 種（真的抓到桌面）
+#     只有 --color=000000 → 2240x1400、唯一顏色 1 種（全黑）
+#
+# 驗證方式（唯讀）：
+#   cd <i3lock-color 源碼>; patch -p1 --dry-run -i 這支; 或 git apply --check
+########################################################################
+diff --git a/i3lock.c b/i3lock.c
+index ebc3216..f599719 100644
+--- a/i3lock.c
++++ b/i3lock.c
+@@ -206,6 +206,10 @@ bool blur = false;
+ bool step_blur = false;
+ int blur_sigma = 5;
+ 
++/* aetherium: --screenshot grabs the live screen and uses it as the lock
++ * background, without requiring --blur. */
++bool screenshot_bg = false;
++
+ /* do not verify password */
+ bool no_verify = false;
+ 
+@@ -1779,6 +1783,7 @@ int main(int argc, char *argv[]) {
+         {"show-failed-attempts", no_argument, NULL, 'f'},
+         {"screen", required_argument, NULL, 'S'},
+         {"blur", required_argument, NULL, 'B'},
++        {"screenshot", no_argument, NULL, 997},
+ 
+         // options for unlock indicator colors
+         {"insidever-color", required_argument, NULL, 300},
+@@ -2619,6 +2624,9 @@ int main(int argc, char *argv[]) {
+             case 998:
+                 image_raw_format = strdup(optarg);
+                 break;
++            case 997:
++                screenshot_bg = true;
++                break;
+             case 999:
+                 debug_mode = true;
+                 break;
+@@ -2772,6 +2780,21 @@ int main(int argc, char *argv[]) {
+         xcb_free_pixmap(conn, bg_pixmap);
+     }
+ 
++    if (screenshot_bg && img == NULL) {
++        xcb_pixmap_t bg_pixmap = capture_bg_pixmap(conn, screen, last_resolution);
++        cairo_surface_t *xcb_img = cairo_xcb_surface_create(conn, bg_pixmap, get_root_visual_type(screen), last_resolution[0], last_resolution[1]);
++
++        img = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, last_resolution[0], last_resolution[1]);
++        cairo_t *ctx = cairo_create(img);
++
++        cairo_set_source_surface(ctx, xcb_img, 0, 0);
++        cairo_paint(ctx);
++
++        cairo_destroy(ctx);
++        cairo_surface_destroy(xcb_img);
++        xcb_free_pixmap(conn, bg_pixmap);
++    }
++
+     xcb_window_t stolen_focus = find_focused_window(conn, screen->root);
+ 
+     /* Open the fullscreen window, already with the correct pixmap in place */
