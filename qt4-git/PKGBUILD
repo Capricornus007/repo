@@ -282,7 +282,14 @@ package() {
   done
 
   # Install the licenses
-  install -D -m644 LICENSE.GPL3 "${pkgdir}"/usr/share/licenses/${pkgname}/LICENSE.GPL3
+  # ⚠️ AUR 那三份（LICENSE.GPL3 / LICENSE.LGPLv3 / LICENSE.FDL）是 **Fedora tarball 才有的
+  #   檔案**；git 樹裡 `LICENSE.GPL3` 不存在（實查 code.qt.io cgit plain：
+  #   LICENSE.GPL3 → 404，而 LICENSE.LGPL=200/26840、LICENSE.LGPLv21=200/26832、
+  #   LICENSE.LGPLv3=200/8049、LICENSE.FDL=200/22961）。run 39823328871 就是紅在
+  #   `install: cannot stat 'LICENSE.GPL3'`（整棵 Qt 已經編完、死在 package() 的最後一步）。
+  #   所以改裝 git 樹實際有的三份；license= 陣列不動（Qt4 的双授權是 LGPLv2.1 為主、
+  #   GPL3 為選項，少一個文字檔不改變授權本身）。
+  install -D -m644 LICENSE.LGPLv21 "${pkgdir}"/usr/share/licenses/${pkgname}/LICENSE.LGPLv21
   install -D -m644 LICENSE.LGPLv3 "${pkgdir}"/usr/share/licenses/${pkgname}/LICENSE.LGPLv3
   install -D -m644 LICENSE.FDL "${pkgdir}"/usr/share/licenses/${pkgname}/LICENSE.FDL
 
