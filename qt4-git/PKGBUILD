@@ -10,7 +10,7 @@
 # 本機那顆 qt4 來自 andontie-aur（arch4edu 也有）。AUR 那份的源是 **Fedora 的
 # qt-everywhere-opensource-src-4.8.7.tar.gz**，再疊 21 個自帶檔案（5 個 .desktop +
 # 16 條補丁，含 gcc6/8/9/11、glibc-2.25、icu59、openssl-1.1、cups、trayicon、clipboard）。
-# 收進本倉後改成直接吃 code.qt.io 的 4.8.7 分支，並把那些 aux 檔整份進倉
+# 收進本倉後改成直接吃 code.qt.io 的 4.8 維護分支尖端，並把那些 aux 檔整份進倉
 # （實測 21/21 抓齊），不再依賴 AUR 頁面與 Fedora 的 distfiles 位址。
 # 轉換手法：逐條機械替換（pkgname/conflicts/provides/_pkgfqn/source/sums/pkgver()），
 # prepare()、build()、package() 的邏輯**原封不動**保留 AUR 那套，因為 4.8.7 分支
