@@ -23,7 +23,7 @@
 _pkgname=pnpm
 pkgname="$_pkgname-git"
 pkgver=12.10.0.r1.g251582898   # 佔位值，實際由下方 pkgver() 覆寫
-pkgrel=3
+pkgrel=5
 pkgdesc='Fast, disk space efficient package manager (upstream git, Rust line)'
 arch=(x86_64)
 url='https://pnpm.io'
@@ -56,7 +56,7 @@ prepare() {
 	rm -f .cargo/config.toml
 
 	# 補 AUR 漏掉的那一步：產生 deps-restorer 要 include_str! 的 esm loader bundle。
-	# 版號不寫死在我這裡，問倉內 pnpm-workspace.yaml 的 catalog（上游抬版自動跟）。
+	# 上游移除了 catalog 區塊；兩顆 bundler 依賴改由 npm latest 取得。
 	#
 	# ⚠️ 這三步是 2026-10-06 在本地逐字重跑 CI 紅的那一步測出來的，不是推上去試：
 	#   1. 只裝 esbuild 不夠。bundle-runtime.mjs 會去打包 resolver.mjs，而它
@@ -67,23 +67,15 @@ prepare() {
 	#   3. npm 12 會對 esbuild 的 postinstall 發 install-scripts 警告，但平台包
 	#      `@esbuild/linux-x64` 照裝、二進位照用 → 不需要额外放行。
 	# 兩步都過之後實測生出 `cas-loader.mjs.inc`（113K），cargo 那一步才有的吃。
-	local esb eres
-	esb=$(awk '/^catalog:/{c=1;next} /^[^[:space:]#]/{c=0}
-	           c && /^[[:space:]]+esbuild:/{gsub(/[^0-9.]/,"",$2); print $2; exit}' pnpm-workspace.yaml)
-	eres=$(awk '/^catalog:/{c=1;next} /^[^[:space:]#]/{c=0}
-	            c && /^[[:space:]]+enhanced-resolve:/{gsub(/[^0-9.]/,"",$2); print $2; exit}' pnpm-workspace.yaml)
-	case "$esb$eres" in
-	""|*[!0-9.]*)
-		echo "無法從 pnpm-workspace.yaml 的 catalog 解析版號（esbuild=$esb enhanced-resolve=$eres）" >&2
-		return 1 ;;
-	esac
-	msg "catalog：esbuild=$esb enhanced-resolve=$eres"
+	# 2026-10-21 upstream removed the workspace `catalog:` block the old parser read.
+	# Resolve the two bundler deps from npm latest instead; this package is -git,
+	# so latest is the line we follow anyway.
+	msg "bundle 工具：esbuild/enhanced-resolve 取 npm latest"
 
 	mkdir -p "$srcdir/_bundle-tool"
 	cd "$srcdir/_bundle-tool" || return 1
 	printf '{"name":"bundle-tool","version":"1.0.0","private":true}\n' > package.json
-	npm install --no-save --no-audit --no-fund \
-		"esbuild@$esb" "enhanced-resolve@$eres" || return 1
+	npm install --no-save --no-audit --no-fund esbuild enhanced-resolve || return 1
 
 	# bundle-runtime.mjs 用 import.meta.url 定位輸入與輸出，從哪裡叫都對；而
 	# `import esbuild from 'esbuild'` 與 resolver.mjs 的 enhanced-resolve 都是

@@ -1,10 +1,22 @@
-# Maintainer: Chocobo1 <chocobo1 AT archlinux DOT net>
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 本倉目錄版 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md，
+# **不要寫回 workflow** —— 那個 step 有 21000 字元表達式上限且註解也計入）。
+#
+# 為什麼收進本倉（用戶 2026-10-22：「軟件包版本號必須跟輸出版本號對應去啊」
+# ＋「那你倒是對齊去啊？」）：AUR 那版的 pkgver() 是
+# `git tag -l --sort -v:refname | head -n1`，拿的是**已發佈的最高 tag**，
+# 而 chafa 印出來的是 configure.ac 的三個 m4 欄位。本機實測同一顆：
+#   pacman -Q chafa-git     → 1.18.3.r259.g413b76e
+#   chafa --version         → Chafa version 1.19.0
+# 名字對不上就是這一層。改讀 m4 ⇒ pkgver 起點 1.19.0，與輸出對應。
+# 除此之外 build/check/package 全部原樣沿用 AUR（不順手改構建邏輯）。
 
 pkgname=chafa-git
-pkgver=1.18.2.r70.g61a9ae4
+# 佔位值，僅供人讀：實際由 pkgver() 從上游 HEAD 現算覆寫。
+pkgver=1.19.0.r259.g413b76e0c8
 pkgrel=1
 pkgdesc="Terminal graphics for the 21st century"
-arch=('i686' 'x86_64')
+arch=('x86_64')
 url="https://hpjansson.org/chafa/"
 license=('LGPL-3.0-or-later')
 depends=('glibc' 'freetype2' 'libavif' 'libjpeg-turbo' 'libjxl' 'librsvg' 'libtiff' 'libwebp')
@@ -19,10 +31,20 @@ sha256sums=('SKIP')
 pkgver() {
   cd "chafa"
 
-  _tag=$(git tag -l --sort -v:refname | grep -E '^v?[0-9\.]+$' | head -n1)
-  _rev=$(git rev-list --count $_tag..HEAD)
-  _hash=$(git rev-parse --short HEAD)
-  printf "%s.r%s.g%s" "$_tag" "$_rev" "$_hash" | sed 's/^v//'
+  # ⚠️ 不准改回 `git tag -l --sort -v:refname`：那個只認已發佈 tag（1.18.x），
+  #   拿不到上游在 configure.ac 宣告的開發中版號（實測 1.19.0），包名就永遠比
+  #   `chafa --version` 落一個小版——這正是用戶點名的「不對應」。
+  local maj min mic rev hash
+  maj=$(sed -n 's/^m4_define(\[chafa_major_version\], \[\([^]]*\)\]).*/\1/p' configure.ac | head -1)
+  min=$(sed -n 's/^m4_define(\[chafa_minor_version\], \[\([^]]*\)\]).*/\1/p' configure.ac | head -1)
+  mic=$(sed -n 's/^m4_define(\[chafa_micro_version\], \[\([^]]*\)\]).*/\1/p' configure.ac | head -1)
+  if [ -z "$maj" ] || [ -z "$min" ] || [ -z "$mic" ]; then
+    echo "ERROR: configure.ac 拿不到 chafa_{major,minor,micro}_version（上游改了 m4 鍵名？）" >&2
+    return 1
+  fi
+  rev=$(git rev-list --count HEAD)
+  hash=$(git rev-parse --short=10 HEAD)
+  printf '%s.%s.%s.r%s.g%s\n' "$maj" "$min" "$mic" "$rev" "$hash"
 }
 
 build() {

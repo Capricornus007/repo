@@ -11,7 +11,7 @@
 _pkgname=npm
 pkgname="$_pkgname-git"
 pkgver=12.2.0.r1.gb317f16c8   # 佔位值，實際由下方 pkgver() 覆寫
-pkgrel=1
+pkgrel=2
 pkgdesc='JavaScript package manager (upstream git)'
 arch=('any')
 url="https://www.npmjs.com"

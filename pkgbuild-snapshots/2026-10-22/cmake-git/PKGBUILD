@@ -66,14 +66,27 @@ provides=("$_name")
 conflicts=("$_name")
 
 pkgver() {
-  # 目錄名 = ${pkgname%-git} = cmake（kitware 的倉目錄名剛好也是 cmake），
-  # 與 CI 泛用版本探測的克隆名一致；對不上會恆 skip。
-  # 只看 origin/master，不看 HEAD（探測輪與實建輪必須同值，否則每輪白編幾十分鐘）。
-  # --match 'v[0-9]*'：實測 kitware 的 414 個 tag 全部是 v<數字> 開頭，加這道是防日後
-  # 有人掛非版號 tag（dae-git 的 lastst 教訓）。--abbrev=8 是因為倉大，7 碼容易撞。
+  # 版號要跟 `cmake --version` 的輸出一致：master 的 tag 停在舊 RC
+  # （v4.5.0-rc1），但原始碼內是日期版 4.5.20261021。改讀
+  # Source/CMakeVersion.cmake 的 MAJOR/MINOR/PATCH，再加 commits/hash。
   cd "${pkgname%-git}"
-  git describe --tags --long --abbrev=8 --match 'v[0-9]*' origin/master \
-    | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+  local major minor patch rev hash
+  # ⚠️ 那三行上游寫成 `set(CMake_VERSION_MAJOR 4)`，所以 `$2` 是 **`4)`**——括號會跟著
+  #   數字一起被抓出來。plan 步對版本字串有驗證（含 [!0-9A-Za-z._+-] 就 skip），
+  #   `4).5).20261021).r77866.g…` 會被判成「拿不到上游版本」而整輪跳過：
+  #   run 39714083888 實測 job 全綠卻一顆包都沒出。gsub 剝乾淨，並留一道「缺任一欄
+  #   就直接紅」的自證，不要让它静默變成上一種跳過。
+  _cv() { sed -n "s/^set($1 \\([0-9][0-9]*\\)).*/\\1/p" Source/CMakeVersion.cmake | head -1; }
+  major=$(_cv CMake_VERSION_MAJOR)
+  minor=$(_cv CMake_VERSION_MINOR)
+  patch=$(_cv CMake_VERSION_PATCH)
+  if [ -z "$major" ] || [ -z "$minor" ] || [ -z "$patch" ]; then
+    echo "ERROR: 從 Source/CMakeVersion.cmake 拿不到版本欄位（MAJOR=[$major] MINOR=[$minor] PATCH=[$patch]）" >&2
+    return 1
+  fi
+  rev=$(git rev-list --count HEAD)
+  hash=$(git rev-parse --short=8 HEAD)
+  printf '%s.%s.%s.r%s.g%s' "$major" "$minor" "$patch" "$rev" "$hash"
 }
 
 prepare() {

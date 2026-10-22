@@ -1,14 +1,29 @@
-# Maintainer: Yardena Cohen <yardenack at gmail dot com>
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 本倉目錄版 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md，
+# **不要寫回 workflow** —— 那個 step 有 21000 字元表達式上限且註解也計入）。
+#
+# 為什麼收進本倉（用戶 2026-10-22：「軟件包版本號必須跟輸出版本號對應去啊」
+# ＋「另外調查其他軟件包是否也有沒對齊的情況」＋「那你倒是對齊去啊？」）：
+# AUR 那版（本機實裝 1:3.5.3.r74.g394b4a3f）的 pkgver() 是
+# `git describe --long --tags`，錨點只能是**最後一個已發佈 tag**（3.5.3），
+# 而 htop 自己印的是 configure.ac 的 `htop_release_version`。本機同一支二進位
+# 實測：`htop --version` → `htop 3.6.0-dev-3.5.3-74-g394b4a3`。
+# 於是同一顆東西有兩個名字，用戶看包名會以為落后兩個小版。改讀 m4 欄位後
+# pkgver 起點 = 3.6.0_dev，與輸出對應；rNN/gNN 仍是「離最近 tag 多遠」之外的
+# 全域 commit 數（單調，repo-add 不會拒收）。
 
 gitname=htop
 pkgname=${gitname}-git
-pkgver=3.3.0.r64.gef6658c2
+# 佔位值，僅供人讀：實際由 pkgver() 從上游 HEAD 現算覆寫。
+pkgver=3.6.0_dev.r7821.g394b4a3f88
 pkgrel=1
+# epoch=1：沿用 AUR 那版的 epoch，比較基準不變（3.6.0_dev > 3.5.3 本來就赢，
+# 但拿掉 epoch 會被庫裡既有那條 `1:3.5.3…` 判成降級 → repo-add 拒收 → 包被清掉）。
 epoch=1
 pkgdesc="Interactive text-mode process viewer"
 url="https://github.com/htop-dev/htop"
 license=('GPL-2.0-or-later')
-arch=('i686' 'x86_64')
+arch=('x86_64')
 depends=('libcap' 'libcap.so' 'libnl' 'ncurses' 'libncursesw.so')
 makedepends=('git' 'lm_sensors')
 optdepends=('lsof: list open files for running process'
@@ -22,7 +37,20 @@ sha256sums=('SKIP')
 
 pkgver() {
     cd "${srcdir}/${gitname}"
-    git describe --long --tags --abbrev=8 | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+    # ⚠️ 不准改回 `git describe --tags`：那個只能錨到已發佈 tag（3.5.3），
+    #   拿不到上游宣告的開發版號，包名與 `htop --version` 就永遠錯開。
+    local rel rev hash
+    rel=$(sed -n 's/^m4_define(\[htop_release_version\], \[\([^]]*\)\]).*/\1/p' configure.ac | head -1)
+    if [ -z "$rel" ]; then
+        echo "ERROR: configure.ac 裡找不到 htop_release_version（上游改了 m4 鍵名？）" >&2
+        return 1
+    fi
+    # `-` 換 `_`：pkgver 合法但 CI 拆 pkgrel 用的是 `${x##*-}`，字串裡再帶連字號
+    # 會被拆錯（本倉 nodejs/cmake 都這條路）。
+    rel=${rel//-/_}
+    rev=$(git rev-list --count HEAD)
+    hash=$(git rev-parse --short=10 HEAD)
+    printf '%s.r%s.g%s\n' "$rel" "$rev" "$hash"
 }
 
 prepare() {

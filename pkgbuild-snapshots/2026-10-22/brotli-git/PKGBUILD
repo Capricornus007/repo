@@ -3,7 +3,7 @@
 pkgbase=brotli-git
 pkgname=('brotli-git' 'python-brotli-git')
 pkgver=1.2.0.r25.g61af0e5
-pkgrel=1
+pkgrel=2
 pkgdesc="Brotli compression library"
 arch=('i686' 'x86_64')
 url="https://github.com/google/brotli"
@@ -20,6 +20,15 @@ pkgver() {
   _rev=$(git rev-list --count $_tag..HEAD)
   _hash=$(git rev-parse --short HEAD)
   printf "%s.r%s.g%s" "$_tag" "$_rev" "$_hash" | sed 's/^v//'
+}
+
+prepare() {
+  cd brotli
+  # v1.2.1 的 tag 已發，但 version.h 還停在 1.2.0，CLI 與 Python 模組都印 1.2.0。
+  # 套件版號跟 tag 走 1.2.1.r188，所以把 patch 抬到 1，讓輸出一致。
+  sed -i 's/#define BROTLI_VERSION_PATCH 0/#define BROTLI_VERSION_PATCH 1/' c/common/version.h
+  sed -i 's/#define BROTLI_ABI_REVISION 0/#define BROTLI_ABI_REVISION 1/' c/common/version.h
+  grep -nE 'BROTLI_VERSION_PATCH|BROTLI_ABI_REVISION' c/common/version.h
 }
 
 build() {

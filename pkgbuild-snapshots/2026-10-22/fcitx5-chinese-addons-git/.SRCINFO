@@ -12,6 +12,7 @@ pkgbase = fcitx5-chinese-addons-git
 	makedepends = fcitx5-lua-git
 	makedepends = ninja
 	makedepends = fmt
+	makedepends = nlohmann-json
 	depends = curl
 	depends = libime-git
 	depends = qt6-webengine

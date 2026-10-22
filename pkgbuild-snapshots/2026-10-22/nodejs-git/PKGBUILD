@@ -1,0 +1,71 @@
+# Maintainer: Chocobo1 <chocobo1 AT archlinux DOT net>
+# Contributor: Lex Black <autumn-wind at web dot de>
+# Contributor: Bartłomiej Piotrowski <nospam@bpiotrowski.pl>
+
+pkgname=nodejs-git
+pkgver=22.4.0.r616.g88beb76e5c1
+pkgrel=2
+pkgdesc="JavaScript runtime built on Chrome's V8 JavaScript engine"
+arch=('i686' 'x86_64')
+url="https://nodejs.org/"
+license=('MIT')
+depends=('glibc' 'c-ares' 'brotli' 'icu' 'libnghttp2' 'libnghttp3' 'libngtcp2' 'libuv' 'openssl' 'sqlite' 'zlib')
+makedepends=('git' 'procps-ng' 'python')
+optdepends=('npm: nodejs package manager')
+provides=("nodejs=$pkgver")
+conflicts=('nodejs')
+options=('!lto')
+source=("git+https://github.com/nodejs/node.git")
+sha256sums=('SKIP')
+
+
+pkgver() {
+  cd node
+
+  # main 的 tag 落後於實際版本（v26.12.1 之後 main 已是 27.0.0-pre，2800+ commits）。
+  # 版號必須跟 `node -v` 對應：直接讀 src/node_version.h，不再拿 tag 當版本。
+  local major minor patch rel rev hash
+  major=$(awk '/#define NODE_MAJOR_VERSION/{print $3}' src/node_version.h)
+  minor=$(awk '/#define NODE_MINOR_VERSION/{print $3}' src/node_version.h)
+  patch=$(awk '/#define NODE_PATCH_VERSION/{print $3}' src/node_version.h)
+  rel=$(awk '/#define NODE_VERSION_IS_RELEASE/{print $3}' src/node_version.h)
+  [ "$rel" = "0" ] && rel=pre || rel=rel
+  rev=$(git rev-list --count HEAD)
+  hash=$(git rev-parse --short HEAD)
+  printf "%s.%s.%s.%s.r%s.g%s" "$major" "$minor" "$patch" "$rel" "$rev" "$hash"
+}
+
+build() {
+  cd "node"
+
+  ./configure \
+    --prefix="/usr" \
+    --with-intl=system-icu \
+    --without-npm \
+    --shared-cares \
+    --shared-libuv \
+    --shared-nghttp2 \
+    --shared-nghttp3 \
+    --shared-ngtcp2 \
+    --shared-openssl \
+    --shared-sqlite \
+    --shared-zlib
+  make
+}
+
+check() {
+  cd "node"
+
+  #make test
+}
+
+package() {
+  cd "node"
+
+  make DESTDIR="$pkgdir" install
+
+  install -d "$pkgdir/usr/share/doc/nodejs"
+  cp -r "doc/api" "$pkgdir/usr/share/doc/nodejs"
+
+  install -Dm644 "LICENSE" -t "$pkgdir/usr/share/licenses/nodejs"
+}
