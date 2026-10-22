@@ -784,6 +784,11 @@ jobs:
               for _f in PKGBUILD customization.cfg llvm32.native LICENSE; do
                 curl -sfL "$_mesa_base/$_f" -o "pkg_dir/$_f"
               done
+              # 本倉自帶的源碼級補丁（不在 source 陣列裡，走 PKGBUILD 自己的 $_where，
+              # 也就是本目錄＝startdir；注入點見下方「改写 PKGBUILD」的 mesa-tkg-git 分支）。
+              curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/mesa-tkg-git/passbuilder-llvm-context.patch" \
+                -o pkg_dir/passbuilder-llvm-context.patch \
+                || { echo "::error::拿不到 mesa-tkg-git/passbuilder-llvm-context.patch"; exit 1; }
               # 上游 mesa 已把 anti-lag 從 vulkan-layers 的允許值移除，tkg 那串的判定條件
               # （有 commit 54fe5b04 就加 anti-lag）現在恆真 → meson 直接 ERROR（#406 實測）。
               # 只關掉他們 cfg 裡的開關、不改他們的 PKGBUILD；chaotic 修好後這行等於沒做。
@@ -920,6 +925,27 @@ jobs:
                 pkg_dir/PKGBUILD > pkg_dir/PKGBUILD.t && mv pkg_dir/PKGBUILD.t pkg_dir/PKGBUILD
               grep -q 'LLVMInitializeAMDGPU' pkg_dir/PKGBUILD \
                 || { echo "::error::Target.h 補丁沒注入進 prepare()（錨點 msg2 \"Tree cleaned\" 不見了）"; exit 1; }
+              # ── LLVM 24 trunk 換了 PassBuilder 建構子（2026-10-22 實測 run 39771561679）
+              # ninja 停在 [1457/4168]：ac_llvm_helper.cpp:274:9 error: no matching
+              # constructor for 'PassBuilder'／note: no known conversion from
+              # 'TargetMachine *' to 'LLVMContext &' for 1st argument。本機標頭
+              # /usr/include/llvm/Passes/PassBuilder.h:156 現行簽名第一參數就是
+              # LLVMContext&（spirv-llvm-translator 同病因）。上游 mesa main 到
+              # a0b42c85c0f 還沒跟上（該檔最後一筆 2026-09-11 9875d2b2a50），只能自己補。
+              # 不動呼叫端：全樹只有 ac_llvm_util.c:191 一顆，而 struct ac_llvm_compiler
+              # 只有 tm／meo／beo 沒有 context，TargetMachine 也沒有 getContext()，
+              # 每顆 shader 模組又各用自己那顆 context ⇒ 只能延到 run() 用
+              # module.getContext() 構造。註冊只做一次：本機 PassManager.h:422 的
+              # clear() 只清結果、不清 proxy，每次 run 重複註冊會讓 proxy 無限成長。
+              # 驗證：改後的 struct 抽成獨立 TU，對本機 llvm 24.0.0git 標頭
+              # clang++ -fsyntax-only -std=c++17 -Wall -Werror=reorder 跑過（rc=0 無警告）。
+              # 用 git apply 不用 patch：chaotic 那份 PKGBUILD 的 makedepends 沒點名
+              # patch，而 git 是 -git 包的硬依賴。
+              _pb_patch='  if git apply --check -p1 "$_where/passbuilder-llvm-context.patch" 2>/dev/null; then git apply -p1 "$_where/passbuilder-llvm-context.patch" && echo "  + PassBuilder(LLVMContext&) 補丁已套上"; elif git apply --reverse --check -p1 "$_where/passbuilder-llvm-context.patch" 2>/dev/null; then echo "  · PassBuilder 補丁已由上游涵蓋，跳過"; else echo "::error::PassBuilder 補丁無法套用（上游動過 ac_llvm_helper.cpp 這段）"; exit 1; fi'
+              awk -v p="$_pb_patch" '$0 ~ /msg2 "Tree cleaned"/ {print; print p; next} {print}' \
+                pkg_dir/PKGBUILD > pkg_dir/PKGBUILD.t && mv pkg_dir/PKGBUILD.t pkg_dir/PKGBUILD
+              grep -q 'passbuilder-llvm-context.patch' pkg_dir/PKGBUILD \
+                || { echo "::error::PassBuilder 補丁沒注入進 prepare()"; exit 1; }
               # 加 epoch=1：2026-10-20 我在目標機上手建並裝了
               # mesa-tkg-git 27.0.0_devel.231953.0913fce718f-1（未簽名）。它比 feed 當時的
               # 26.3.0 新，`pacman -Syu` 會判定「已是最新」→ 這顆手建物會永久擋住 feed
@@ -2178,6 +2204,43 @@ jobs:
             echo "LLVM 換代對照：llvm-libs-git 資產時間=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '$1~/^llvm-libs-git-/{print $2}' | sort | tail -1) ／ translator 資產時間=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '$1~/^spirv-llvm-translator-git-/{print $2}' | sort | tail -1)"
             if [ "$_needs_rebuild" = "yes" ]; then
               echo ">> feed 裡的 LLVM 比已發布的 translator 新（符號级 ABI 已換代），強制重建 translator（繞過『已在 release 裡』）"
+              {
+                echo "build=true"
+                echo "pkgver=$TARGET_PKGVER"
+                echo "pkgrel=$TARGET_PKGREL"
+                echo "pkgbase=$PKGBASE"
+              } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          # ── mesa-tkg-git／lib32-mesa-tkg-git：同 soname 內的 LLVM C++ 符號換代也要重建
+          # 上面那道 ABI 閘門比的是 `llvm-libs-abi=24.0git` 這種 **soname 級** 字面值，
+          # 而 2026-10-22 實測斷的是**符號級**：llvm-libs-git 從 r603875 走到 r603935，
+          # soname 仍是 24.0git、`llvm-libs-abi=` 一個字都沒變，但
+          # `llvm::PassBuilder::PassBuilder(TargetMachine*, PipelineTuningOptions,
+          # std::optional<PGOOptions>, ...)` 的簽名換了 ⇒ 裝在機器上的
+          # /usr/lib/dri/radeonsi_drv_video.so 直接 dlopen 失敗：
+          #   libva error: dlopen ... undefined symbol: _ZN4llvm11PassBuilderC1E... LLVM_24.0
+          #   vaInitialize failed with error code -1
+          # 後果是**整臺機沒有硬體影片解碼**（連 H.264 都走 CPU 軟解，Shorts 掉幀），
+          # 而且這道斷裂是靜默的：CI 綠、包裝得上、只有播放時才知道。
+          # 判據與 translator 那條同構：release 資產的 created_at（ISO8601，字面序＝時間序），
+          # feed 裡 llvm-libs-git 比已發布的 mesa 新 ⇒ mesa 是拿舊 LLVM 編的。
+          # ⚠️ 代價要講清楚：llvm-git 是 -git 包、每天換代 ⇒ 這條會讓 mesa 每天多編一次
+          #    （mesa 是全倉最慢的一顆，單輪 1–2 小時量級）。選擇這個代價的理由是
+          #    「硬解靜默歸零」比多燒 runner 貴得多；若要改成只在 llvm 大版換代時重建，
+          #    就得把 mesa 依賴鎖成 `llvm-libs-git=<精確 pkgver>` 並由 llvm 的 job 順帶 bump。
+          if [ "$PKGBASE" = "mesa-tkg-git" ] || [ "$PKGBASE" = "lib32-mesa-tkg-git" ]; then
+            _llvm_mesa=$(gh_api "https://api.github.com/repos/${GH_REPO}/releases/tags/${REPO_RELEASE_TAG}" \
+              | jq -r '.assets[] | select(.name | startswith("llvm-libs-git-") or startswith("'"$PKGBASE"'-")) | "\(.name)\t\(.created_at)"' \
+              2>/dev/null || true)
+            _mesa_rebuild=$(printf '%s\n' "$_llvm_mesa" | awk -F'\t' '
+              $1 ~ /^llvm-libs-git-/                { if ($2 > llvm) llvm = $2 }
+              $1 ~ /^'"$PKGBASE"'-/                 { if ($2 > m)     m   = $2 }
+              END { if (llvm != "" && m != "" && llvm > m) print "yes"; else print "no" }')
+            echo "LLVM 換代對照（mesa）：llvm-libs-git 資產時間=$(printf '%s\n' "$_llvm_mesa" | awk -F'\t' '$1~/^llvm-libs-git-/{print $2}' | sort | tail -1) ／ $PKGBASE 資產時間=$(printf '%s\n' "$_llvm_mesa" | awk -F'\t' -v p="$PKGBASE" '$1 ~ "^"p"-"{print $2}' | sort | tail -1)"
+            if [ "$_mesa_rebuild" = "yes" ]; then
+              echo ">> feed 裡的 LLVM 比已發布的 $PKGBASE 新（符號級 ABI 已換代），強制重建（繞過『已在 release 裡』）"
               {
                 echo "build=true"
                 echo "pkgver=$TARGET_PKGVER"
