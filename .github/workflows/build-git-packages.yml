@@ -263,5 +263,7 @@ jobs:
           {"key": "qalculate-qt-git", "repo_name": "qalculate-qt-git", "variant": "none", "kind": "aur"},
           {"key": "ripgrep-all-git", "repo_name": "ripgrep-all-git", "variant": "none", "kind": "aur"},
           {"key": "xtitle-git", "repo_name": "xtitle-git", "variant": "none", "kind": "aur"},
-          {"key": "downgrade-git", "repo_name": "downgrade-git", "variant": "none", "kind": "aur"}
+          {"key": "downgrade-git", "repo_name": "downgrade-git", "variant": "none", "kind": "aur"},
+          {"key": "pacman-git", "repo_name": "pacman-git", "variant": "none", "kind": "aur"},
+          {"key": "meson-git", "repo_name": "meson-git", "variant": "none", "kind": "aur"}
         ]

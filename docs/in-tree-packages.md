@@ -1407,3 +1407,48 @@ git 倉的 `Makefile` 只在 `dist/`（那是佈局用的），build 流程走 `
 上游無 tag，AUR 那顆用 `r<commit 數>.<short sha>`。實測 master HEAD =
 `6f46584`、`git rev-list --count HEAD` = 47 ⇒ `pkgver=r47.6f46584`（不是猜的，
 `pkgver()` 每次 build 現算）。`provides/conflicts=('xtitle')` 讓它直接頂掉舊包。
+
+## pacman-git / meson-git（2026-10-23；從 andontie-aur 收編，附 Artix 適配）
+
+**pacman-git 的重點不是「追尖端」，是 Arch 官方那份在本機根本裝不起來。** 實查三件事：
+
+    pacman -Si systemd            → 任何已配置的倉都沒有（Artix 走 OpenRC/elogind）
+    pacman -Si pacman-mirrorlist  → 查無；artix-mirrorlist 在 [system]
+    Arch 官方 package()           → 把 dirmngr/gpg-agent/keyboxd 五個 socket 的 symlink
+                                    塞進 /usr/lib/systemd/system/sockets.target.wants/
+                                    另外裝 /usr/lib/sysusers.d/alpm.conf
+
+⇒ 照抄 Arch 那份必定 `target not found: systemd`。本包的「補丁」就是把 wantsdir 迴圈與
+alpm.sysusers 整段拿掉、depends 換 artix-mirrorlist、隨包 /etc/pacman.conf 的預設段名改成
+Artix 的 `[system]/[world]`（Arch 是 `[core]/[extra]`，還原預設會得到指向不存在倉庫的配置）。
+產物實測：`tar -tf` 查 systemd/sysusers **0 檔**，libalpm.so.16 與 makepkg/repo-add 齊全。
+
+基準用 Arch 打包倉（7.1.0.r9.g54d9411 那顆），**不用 AUR 的 pacman-git**——AUR 那份 PKGBUILD
+基準停在 6.1.0。踩過的坑：Arch 那份 `pkgver()`/`build()` 裡是 `cd "$pkgname"`，改成 -git 後
+$pkgname 變成 `pacman-git` 而源碼目錄叫 `pacman`，本機 makepkg 直接
+`cd: pacman-git: 沒有此一檔案或目錄`（CI 的通用探測有軟鏈所以不會紅，本地一定紅）⇒ 四處 cd
+全部寫死 `pacman`。
+
+⚠️ 版號比較：`git describe --abbrev=7` 在本機給 7 字元 sha（`ga6f7467`），andontie-aur 那顆是
+8 字元（`ga6f7467d`）⇒ vercmp 認為本倉這顆**比較舊**，第一次換來源要用 `-U` 或 `--ask`，
+上游一有提交就自然超越。`HoldPkg = pacman glibc` 只擋移除、不擋升級。
+
+**meson-git** 收編時補的是實測缺漏：upstream 有 `data/shell-completions/bash/meson`，
+AUR 那份只裝 zsh（`pacman -Ql meson-git | grep bash-completion` 為空）。fish 上游沒有，不硬造。
+依賴逐個查過都在官方倉（python-aiohttp／python-strictyaml／python-build／python-installer／
+python-wheel／python-tqdm），容器裡不會 target not found。
+
+### 查過但**決定不打**的 pacman 補丁（逐條附證據）
+- `pacman-fancy-git` 的 `progress.patch`：純視覺，而且硬編 TERM 白名單（只認 `xterm-kitty`
+  與 `st-256color`），在本機的 xfce4-terminal 下等於沒開。
+- `pacman-accel-git`：根本不是補丁，是 felixonmars 的 Ruby/Sinatra 本地鏡像代理服務，
+  還附 systemd unit。要它等於多裝一個常駐服務，跟「補丁」無關。
+- CachyOS 的 `PrettyProgressBar`：需要往 /etc/pacman.conf 加一行才生效（排除條件）；
+  它的 `static_sqlite`／`disable-always-stale` 是 CachyOS 自家 LLVM/sqlite 打包需求；
+  那兩條 backport（invalidate curl data、effective URL 不帶認證）Arch 官方早已帶、
+  master 也已含，重打會衝突。
+- 唯一有功能價值的是 CachyOS 註解掉的「並行驗證簽名」（libalpm/sync.c +168/-48），
+  但它是 experimental、CachyOS 自己都沒啟用 ⇒ 先擱著，別進主 feed。
+- 上游 master 現況（實查 `doc/pacman.conf.5.asciidoc` 與 `src/pacman/conf.c`）已有
+  `ParallelDownloads`、`NoProgressBar`、`Color`、`VerbosePkgLists`、`DownloadOnly`、
+  `CacheServer`；`ShowSize`/`TotalDownload` 已被取代。自訂進度條字形上游明確拒絕（MR 67 closed）。
