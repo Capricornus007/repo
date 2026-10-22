@@ -261,5 +261,7 @@ jobs:
           {"key": "lsix-git", "repo_name": "lsix-git", "variant": "none", "kind": "aur"},
           {"key": "pacman-contrib-git", "repo_name": "pacman-contrib-git", "variant": "none", "kind": "aur"},
           {"key": "qalculate-qt-git", "repo_name": "qalculate-qt-git", "variant": "none", "kind": "aur"},
-          {"key": "ripgrep-all-git", "repo_name": "ripgrep-all-git", "variant": "none", "kind": "aur"}
+          {"key": "ripgrep-all-git", "repo_name": "ripgrep-all-git", "variant": "none", "kind": "aur"},
+          {"key": "xtitle-git", "repo_name": "xtitle-git", "variant": "none", "kind": "aur"},
+          {"key": "downgrade-git", "repo_name": "downgrade-git", "variant": "none", "kind": "aur"}
         ]

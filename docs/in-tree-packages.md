@@ -1375,3 +1375,35 @@ go 的 `go1.28-devel_<sha>` 裡那個 `devel` 是 Go 自己的顯示慣例、不
 go-git 的 `pkgver()` 已經在讀 Go 自己的權威來源
 （`src/internal/goversion/goversion.go` 的 `const Version = 28` → 1.28 循環），
 方向與 `go version` 一致，剩下只差 `devel` 這個詞，代價是整條倉庫換代卡死，不換。
+
+## xtitle-git / downgrade-git（2026-10-23；把 [linuxrepos] 整段換掉）
+
+动机不是「想要 git 版」，是**那個倉的鏡像掛了**：`[linuxrepos]` 只有一條
+`https://archlinux.repo.063240.xyz`，本機實測 TLS 連線直接失敗（curl 回 HTTP 000、
+`pacman -Sy` 整輪被它拖到 EOF）。而該倉跟這臺機器有關的包只剩 `downgrade`、`xtitle`
+兩顆（其餘是 0 命中）。⇒ 收進自建倉 = 換掉依賴，`[linuxrepos]` 整段可刪。
+
+**兩顆都做成 -git**（使用者指示），落點三接點：
+1. `build-git-packages.yml` 矩陣：兩條，`kind: "aur"`。
+   ⚠️ 這裡的 `aur` **不是**「去 clone AUR」，只是借用「校驗和回推」那道 giant if 的
+   `matrix.kind != 'aur'` 把它們擋掉——兩顆的 pkgver 都是 build 時從上游 HEAD 現算，
+   回推校驗和沒有意義（llvm-git／i3-git 同一手法）。case 首命中即中，抓取走 in-tree。
+2. `build-packages.yml` 的 in-tree case 清單：加 `|xtitle-git|downgrade-git`。
+3. 兩份 PKGBUILD 進倉。依賴都在官方倉（libxcb／xcb-util／xcb-util-wm／expac／
+   pacman-contrib，實測 Artix `[world]` 有、Arch `[extra]` 有）⇒ 不用掛 junlin03-aur。
+
+### downgrade 的坑：git 倉**沒有頂層 Makefile**
+AUR 那份非 -git 的 source 是 release tarball，tarball 裡才有頂層 `Makefile`；
+git 倉的 `Makefile` 只在 `dist/`（那是佈局用的），build 流程走 `justfile`
+（`just dist <version>`）。所以照抄 AUR 的 `build(){ make … }` 必然紅。
+改法：不 build，直接從源碼樹裝——`src/downgrade`、`src/pacignore` → `/usr/bin`，
+`dist/conf/downgrade.conf` → `/etc/xdg/downgrade`，`dist/completion/<cmd>/{bash,fish,zsh}`
+→ 三個 shell 各自的 completion 目錄（含 `pacignore`，非 -git 那份只裝 downgrade，
+等于順帶補了缺漏）。本機對真實 clone 乾跑 `package()` 已驗證產物清單。
+代價：`man 8 downgrade` 沒有（man page 只存在於 tarball 的 `doc/`），要得引入
+`makedepends=('just')` 跑 `just dist`。那是文件、不影響功能，暫不做。
+
+### xtitle 的 pkgver 是量出來的
+上游無 tag，AUR 那顆用 `r<commit 數>.<short sha>`。實測 master HEAD =
+`6f46584`、`git rev-list --count HEAD` = 47 ⇒ `pkgver=r47.6f46584`（不是猜的，
+`pkgver()` 每次 build 現算）。`provides/conflicts=('xtitle')` 讓它直接頂掉舊包。
