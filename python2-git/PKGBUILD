@@ -17,7 +17,7 @@ optdepends=('tk: for IDLE'
 provides=('python2')
 conflicts=('python2' 'python<3')
 _gentoo_patches="python-gentoo-patches-${_pybasever}.18_p16"
-source=("cpython::git+https://github.com/python/cpython#branch=2.7"
+source=("cpython::git+https://github.com/python/cpython#tag=v2.7.18"
         'mtime-workaround.patch'
         "https://distfiles.gentoo.org/distfiles/2d/$_gentoo_patches.tar.xz")
 noextract=("$_gentoo_patches.tar.xz")
@@ -26,9 +26,20 @@ sha256sums=('SKIP'
             'SKIP')
 
 # ── 為什麼做 -git 並收進本倉（2026-10-23，使用者明確指示）───────────────────
-# 本機那顆 python2 來自 andontie-aur。上游 2.7 分支雖然凍結，但**不是死的**：
-# 2.7.18 之後分支上還有安全修補與建置修正，AUR 那顆用 2.7.18 tarball + Gentoo 的
-# 40 條 backport 補丁去湊，等於把「上游已合併的東西」再打一遍。
+# 本機那顆 python2 來自 andontie-aur。
+# ⚠️ 分支實況（2026-10-23 實查，第一版我在這裡猜錯過一次）：cpython **已經沒有 `2.7`
+#   分支**了——`git ls-remote --heads https://github.com/python/cpython` 只有 8 條 head
+#   （main 與 3.x 系），`2.7` 只以 tag 存在（refs/tags/2.7、refs/tags/v2.7.18）。
+#   後果分兩面，而且兩面行為不同，這是這次 CI 紅的真正原因：
+#     · plan 步的探測用 `git clone --branch 2.7` → git-clone 的 --branch 也吃 tag，
+#       所以探測**成功**、build=true；
+#     · makepkg 的 /usr/share/makepkg/source/git.sh 第 120 行把 `branch=X` 解析成
+#       `origin/X`（遠端追蹤分支），tag 不會出現在那裡 →
+#       `fatal: invalid reference: origin/2.7` → 紅（run 39822659311 實測）。
+#   正解是寫 `#tag=v2.7.18`：git.sh 對 `tag=` 走 `ref=${fragment##*=}` 直接 checkout，
+#   探測端也有 `tag=*)` 分支。Python 2 的「尖端」本來就等於最終發佈狀態 v2.7.18，
+#   所以這顆的版號會是定值 2.7.18.r0.g<sha>；收進本倉的價值在「補丁與构建自己掌控、
+#   不再依賴 andontie-aur」，不是追一個不存在的移動分支——這點講清楚，不含糊。
 # 改成直接吃 2.7 分支 HEAD 之後，prepare() 用 _apply 逐條**證明**每條補丁的狀態：
 #   · 套得上 → 套（這是打包用的修正，源碼裡沒有）
 #   · 反向套得上（-R --dry-run 通過）→ 代表該變更**已在源碼裡**，跳過並印出名字
