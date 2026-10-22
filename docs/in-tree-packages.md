@@ -1268,3 +1268,31 @@ lib32-spirv-llvm-translator-git: /usr/include/LLVMSPIRVLib/LLVMSPIRVLib.h exists
 換代順序（#6 的執行鏈）：`spirv-llvm-translator-git` 兩顆 split 都要重發（同一次建置產兩顆，
 `pkgver()` 動的包 CI 強制 `TARGET_PKGREL=1`，所以 plan 步靠「資產已在 release 裡」判跳過 ⇒
 必須先把 release 裡那兩顆舊資產刪掉才會真的重建）→ 再 dispatch `mesa-tkg-git`（kind tkg）。
+
+## htop-git / chafa-git（2026-10-22；用戶點名的「版號要對上輸出版本號」兩顆）
+
+用戶原話：「軟件包版本號必須跟輸出版本號對應去啊」「另外調查其他軟件包是否也有沒對齊的情況」
+「那你倒是對齊去啊？」。本輪全倉掃出來的錯位清單裡，`go-git`／`fzf-git`／`gstreamer-git`
+那幾顆是**輸出比包名新**（devel 字串／上游自己印 lower），屬另一類；這兩顆是
+**AUR 的 pkgver() 只能拿到已發佈 tag，而程式自己印的是原始碼裡的開發版號**，
+同一顆二進位兩個名字。實測對照（本機，2026-10-22）：
+
+    htop --version   → htop 3.6.0-dev-3.5.3-74-g394b4a3      pacman -Q htop-git  → 1:3.5.3.r74.g394b4a3f
+    chafa --version  → Chafa version 1.19.0                  pacman -Q chafa-git → 1.18.3.r259.g413b76e
+
+AUR 兩版的版號來源分別是 `git describe --long --tags`（錨在 tag 3.5.3）與
+`git tag -l --sort -v:refname | head -n1`（錨在已發佈的 1.18.x），兩者都**讀不到**
+上游在來源裡宣告的開發版：htop 是 `configure.ac` 的
+`m4_define([htop_release_version], [3.6.0-dev])`，chafa 是
+`m4_define([chafa_{major,minor,micro}_version], …)`（實查 master 現值 1/19/0）。
+所以这两顆只能收進本倉改 `pkgver()`，AUR 那份動不了。
+
+落點（四接點，與本檔其他包同一套）：
+1. `build-git-packages.yml` 矩陣：兩條拿掉 `"kind": "aur"`（in-tree 走默認 kind）。
+2. `build-packages.yml`「抓取 PKGBUILD」的 in-tree case 清單：加 `|htop-git|chafa-git`。
+3. 同檔「更新校驗和並回推 PKGBUILD」那道 giant if：加 `&& matrix.repo_name != 'htop-git'`
+   與 chafa-git 那條（該步原本靠 `matrix.kind != 'aur'` 把它們擋掉，改成 in-tree 後
+   必須按名字擋，否則會去 push 一個不存在的「上游包倉」）。
+4. 兩份 PKGBUILD 進倉：只改 `pkgver()` 與標頭註解，build/check/package 原樣沿用 AUR。
+   取不到 m4 欄位時 `return 1`（plan 步會把它變成「跑 pkgver() 失敗」的 skip 並留字，
+   不會靜默拿舊號出貨）。
