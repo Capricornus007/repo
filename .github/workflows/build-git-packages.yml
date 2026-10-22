@@ -265,5 +265,7 @@ jobs:
           {"key": "xtitle-git", "repo_name": "xtitle-git", "variant": "none", "kind": "aur"},
           {"key": "downgrade-git", "repo_name": "downgrade-git", "variant": "none", "kind": "aur"},
           {"key": "pacman-git", "repo_name": "pacman-git", "variant": "none", "kind": "aur"},
-          {"key": "meson-git", "repo_name": "meson-git", "variant": "none", "kind": "aur"}
+          {"key": "meson-git", "repo_name": "meson-git", "variant": "none", "kind": "aur"},
+          {"key": "python2-git", "repo_name": "python2-git", "variant": "none", "kind": "aur"},
+          {"key": "qt4-git", "repo_name": "qt4-git", "variant": "none", "kind": "aur"}
         ]
