@@ -1226,3 +1226,45 @@ doas 一律清洗環境（實測 `DIFFPROG=meld doas /usr/bin/printenv DIFFPROG`
 （2026-10-21 run 39565140324：`Failed to connect … after 8008 ms`），但 pacman 會按
 `Server` 順序自動換下一條，所以列多個就好——不必摘掉整個倉。順序依實測可達性：
 bfsu 0.2s／tuna 0.5s／ustc 1.7s／官方 2.6s。
+
+## lib32-spirv-llvm-translator-git 搶了 64 位元那顆的檔（2026-10-22；待辦 #6 真正卡點）
+
+症狀（本機實測，不是推測）：
+
+```
+$ doas pacman -S lib32-llvm-git lib32-clang-git lib32-spirv-llvm-translator-git
+error: failed to commit transaction (conflicting files)
+lib32-spirv-llvm-translator-git: /usr/bin/llvm-spirv exists in filesystem (owned by spirv-llvm-translator-git)
+lib32-spirv-llvm-translator-git: /usr/include/LLVMSPIRVLib/LLVMSPIRVLib.h exists in filesystem (owned by spirv-llvm-translator-git)
+```
+
+解開 feed 那顆資產（`lib32-spirv-llvm-translator-git-2.7.0.1.r465…-1`）的清單，確實帶著
+`usr/bin/llvm-spirv` 與 `usr/include/LLVMSPIRVLib/{LLVMSPIRVLib.h,LLVMSPIRVOpts.h,LLVMSPIRVExtensions.inc}`；
+而官方 `lib32-spirv-llvm-translator 23.1.2-1` 的清單（從 artix lib32 倉抓下來 `tar -tf` 現查）
+只有 `usr/lib32/libLLVMSPIRVLib.so*`、`usr/lib32/pkgconfig/LLVMSPIRVLib.pc`、licenses 三樣。
+根因是 `build32` 那棵的 `cmake --install` 沒關 tool 與 header 的安裝目標
+（`LLVM_SPIRV_INCLUDE_TESTS=OFF` 只關測試，不關 `llvm-spirv` 執行檔）。
+
+**為什麼這件事會弄死 32 位元 mesa**：CI 容器同機也要同時裝 64 位元與 lib32 那兩顆 translator
+（`mesa-tkg-git` 的 LLVM 對齊步 `_pkgs` 一次列 12 顆），同一道 file conflict 讓 lib32 那顆裝不上；
+下一步用 `pacman -Q` 逐顆點名時就報缺，於是走「本輪只建 64 位元」的優雅降級分支，
+把 `customization.cfg` 的 `_lib32` 改成 false。run 39679301603 日誌實物：
+
+```
+自有 llvm 家族裝上 12 / 12 顆
+::warning::自有 lib32 家族缺：lib32-spirv-llvm-translator-git（要等 lib32-llvm-git 那輪先發佈）——本輪只建 64 位元，32 位元下一輪跟上
+>> 本輪未產出 lib32-mesa-tkg-git（32 位元等自有 lib32-*-git 齊了的那一輪）
+```
+
+也就是「下一輪」永遠到不了：feed 明明有那顆包，只是裝不進去。64 位元 mesa 已到
+`1:27.0.0_devel.232132`，32 位元那半邊停在 `26.3.0_devel.231175` 就是這條鏈的果。
+
+修法（`package_lib32-spirv-llvm-translator-git()`，照 `lib32-llvm-git` 既有做法而非新發明）：
+在兩道「必须有 /usr/lib32/libLLVMSPIRVLib.so」的實物守門**之後**刪掉 `/usr/{bin,include,lib}`
+與 `/usr/share/{man,doc}`，最後再加一道 `find /usr -mindepth 2 -maxdepth 2` 的殘留點名——
+除 `/usr/lib32` 與 `/usr/share` 之外還有別的路徑就直接紅。这样哪天上游又往 /usr 別處裝東西
+（例如 `/usr/lib/cmake`）會被撈出來，而不是又靜默變成一道 file conflict。
+
+換代順序（#6 的執行鏈）：`spirv-llvm-translator-git` 兩顆 split 都要重發（同一次建置產兩顆，
+`pkgver()` 動的包 CI 強制 `TARGET_PKGREL=1`，所以 plan 步靠「資產已在 release 裡」判跳過 ⇒
+必須先把 release 裡那兩顆舊資產刪掉才會真的重建）→ 再 dispatch `mesa-tkg-git`（kind tkg）。

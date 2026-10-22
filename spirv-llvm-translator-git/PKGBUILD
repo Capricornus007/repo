@@ -265,6 +265,19 @@ package_lib32-spirv-llvm-translator-git() {
     echo "ERROR: $pkgname 沒有 /usr/lib32/libLLVMSPIRVLib.so（32 位元那棵沒建出來）" >&2
     exit 1
   fi
+  # multilib 慣例：這顆只准帶 /usr/lib32 與自己的 license（實查官方
+  # lib32-spirv-llvm-translator 23.1.2-1 的清單＝lib32/libLLVMSPIRVLib.so* + lib32/pkgconfig + licenses，
+  # 別的一律沒有）。但 cmake --install 會把 `llvm-spirv` 執行檔與 /usr/include/LLVMSPIRVLib/*
+  # 一起塞進來，而那兩處歸 64 位元那顆 → 同機安裝直接 conflicting files（2026-10-22 本機實測：
+  # `lib32-spirv-llvm-translator-git: /usr/bin/llvm-spirv exists in filesystem (owned by spirv-llvm-translator-git)`）。
+  # 後果不只是裝不上：CI 容器同機撞同一道牆 → mesa 那步 `pacman -Q` 認定缺這顆 →
+  # 自動把 customization.cfg 的 _lib32 關掉 → 32 位元 mesa 永遠停舊版
+  # （run 39679301603 的 warning「自有 lib32 家族缺：lib32-spirv-llvm-translator-git」就是這條）。
+  rm -rf "$pkgdir/usr/bin" "$pkgdir/usr/include" "$pkgdir/usr/lib" \
+         "$pkgdir/usr/share/man" "$pkgdir/usr/share/doc"
+  _stray=$(find "$pkgdir/usr" -mindepth 2 -maxdepth 2 \
+             -not -path "$pkgdir/usr/lib32" -not -path "$pkgdir/usr/share" | tr '\n' ' ')
+  [ -z "$_stray" ] || { echo "ERROR: $pkgname 還帶著非 lib32 的路徑：$_stray" >&2; exit 1; }
   # 自證：這顆的**實際 NEEDED** 必須是 32 位元 LLVM 的 soname，而且與依賴鎖一致。
   # 光看檔名不夠——上一輪的教訓就是「包裡有檔、依賴也寫了，但鏈的是另一版」。
   local _need
