@@ -1296,3 +1296,20 @@ AUR 兩版的版號來源分別是 `git describe --long --tags`（錨在 tag 3.5
 4. 兩份 PKGBUILD 進倉：只改 `pkgver()` 與標頭註解，build/check/package 原樣沿用 AUR。
    取不到 m4 欄位時 `return 1`（plan 步會把它變成「跑 pkgver() 失敗」的 skip 並留字，
    不會靜默拿舊號出貨）。
+
+### 順帶記：對齊掃出來的「假錯位」三顆，**不准照著改**
+同一輪把全倉的「包名 vs 程式自己印的版號」比了一遍（本機實測）：
+
+    go-git         2:1.28.0.r1298.g05dbbf917   vs   go version → go1.28-devel_05dbbf9175
+    fzf-git        3:v0.74.5.r9.gac28b8c3      vs   fzf --version → 0.74 (devel)
+    gstreamer-git  1.29.2.1.r126320.gcf60f0a2  vs   gst-inspect-1.0 --version → 1.29.2
+
+這三條**不是錯位**，是「印出來的比包名粗」：fzf 的 devel 版只印 major.minor（丟掉 .5），
+gstreamer 的 meson 宣告本來就是四段 `1.29.2.1` 而工具只印前三段，
+go 的 `go1.28-devel_<sha>` 裡那個 `devel` 是 Go 自己的顯示慣例、不是可比較的版號。
+⚠️ 尤其是 go：**把 pkgver 改成 `1.28.devel` 會变成降級**——本機實測
+`vercmp 1.28.devel 1.28.0` 回 **-1**（alpha 段比數字段小），repo-add 會直接拒收，
+剛蓋好的包被清掉、這顆再也不換代（cmake-git 那段記的是同一種故障）。
+go-git 的 `pkgver()` 已經在讀 Go 自己的權威來源
+（`src/internal/goversion/goversion.go` 的 `const Version = 28` → 1.28 循環），
+方向與 `go version` 一致，剩下只差 `devel` 這個詞，代價是整條倉庫換代卡死，不換。
