@@ -1419,9 +1419,17 @@ git 倉的 `Makefile` 只在 `dist/`（那是佈局用的），build 流程走 `
                                     另外裝 /usr/lib/sysusers.d/alpm.conf
 
 ⇒ 照抄 Arch 那份必定 `target not found: systemd`。本包的「補丁」就是把 wantsdir 迴圈與
-alpm.sysusers 整段拿掉、depends 換 artix-mirrorlist、隨包 /etc/pacman.conf 的預設段名改成
+alpm.sysusers 整段拿掉、隨包 /etc/pacman.conf 的預設段名改成
 Artix 的 `[system]/[world]`（Arch 是 `[core]/[extra]`，還原預設會得到指向不存在倉庫的配置）。
 產物實測：`tar -tf` 查 systemd/sysusers **0 檔**，libalpm.so.16 與 makepkg/repo-add 齊全。
+
+⚠️ 鏡像清單依賴**不能**改成 `artix-mirrorlist`（我第一版就是這樣，CI 立刻紅在
+`error: target not found: artix-mirrorlist`，因為容器是 Arch 基座）。正解是照上游寫
+`pacman-mirrorlist`：實查 artix-mirrorlist 的 `Provides/Conflicts/Replaces` 三個欄位都是
+`pacman-mirrorlist`，本機 `pacman -Q pacman-mirrorlist` 回 `artix-mirrorlist 20261020-1`
+⇒ 容器裡拿 Arch 實體包、本機由 artix-mirrorlist 頂上，兩邊都成立。
+（同輪本地 makepkg 是綠的——本機是 Artix，查得到 artix-mirrorlist。這就是規則 21
+「本地綠不等於 CI 綠」的實例。）
 
 基準用 Arch 打包倉（7.1.0.r9.g54d9411 那顆），**不用 AUR 的 pacman-git**——AUR 那份 PKGBUILD
 基準停在 6.1.0。踩過的坑：Arch 那份 `pkgver()`/`build()` 裡是 `cd "$pkgname"`，改成 -git 後

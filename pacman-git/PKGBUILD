@@ -19,7 +19,7 @@ depends=(
   grep
   libarchive libarchive.so
   openssl libcrypto.so
-  artix-mirrorlist
+  pacman-mirrorlist
   libmakepkg-dropins
 )
 makedepends=(
@@ -62,8 +62,12 @@ sha256sums=('SKIP'
 #      倉都沒有 systemd**（Artix 用 OpenRC/elogind），所以照抄 Arch 那份會直接
 #      `target not found: systemd` 建不起來；就算建起來，那些 unit 與 sysusers.d 在這臺機器
 #      上永遠不會被讀。⇒ 這裡把 wantsdir 迴圈與 alpm.sysusers 整段拿掉、depends 去掉 systemd。
-#    · `pacman-mirrorlist` → `artix-mirrorlist`（實查：pacman-mirrorlist 在本機查無，
-#      artix-mirrorlist 在 [system]）。附帶把随包的 /etc/pacman.conf 預設段名改成
+#    · 鏡像清單依賴**保留寫 `pacman-mirrorlist`**（這條我一度改成 artix-mirrorlist，
+#      結果 CI 紅在 `target not found: artix-mirrorlist`——容器是 Arch 基座。實查
+#      artix-mirrorlist 的 Provides 就是 `pacman-mirrorlist`（且 Conflicts/Replaces 同名），
+#      所以照抄上游那個名字兩邊都成立：容器裡拿到 Arch 實體包，本機由 artix-mirrorlist
+#      頂上（`pacman -Q pacman-mirrorlist` → artix-mirrorlist 實測）。
+#      附帶把隨包的 /etc/pacman.conf 預設段名改成
 #      Artix 的 [system]/[world]（Arch 是 [core]/[extra]），否則新裝機還原預設值時
 #      會得到一個指向不存在倉庫的配置檔。
 #    · `libmakepkg-dropins` 保留（實查在 [system]，Artix 官方 pacman 也依賴它）。
