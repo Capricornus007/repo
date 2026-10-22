@@ -1,5 +1,10 @@
 # Maintainer: Capricornus007 <Capricornus007 at gmail dot com>
-# 上游：https://code.qt.io/qt/qt.git branch 4.8.7（Qt 4 已凍結，這條分支就是最終狀態）
+# 上游：https://code.qt.io/qt/qt.git branch **4.8**（Qt 4 的維護分支尖端）。
+# ⚠️ 分支名是 `4.8`，**不存在 `4.8.7` 分支**：實查 code.qt.io 的 refs 廣告清單，heads 只有
+#   4.5 / 4.6 / 4.6-digia / 4.7 / 4.7-digia / 4.8 / 4.8-bb10 / 4.8.0-symbian / 4.8.1-symbian，
+#   `4.8.7` 只以 tag `v4.8.7` 存在。第一版我寫 #branch=4.8.7 → CI 的 `git clone --branch`
+#   直接失敗 → plan 印「跑 qt4-git 的 pkgver() 失敗」→ 又是綠燈零產物（run 39822659311
+#   實測，job 119977700249 日誌第 2511 行）。
 
 # ── 為什麼做 -git 並收進本倉（2026-10-23，使用者明確指示「編不過不算藉口」）──────
 # 本機那顆 qt4 來自 andontie-aur（arch4edu 也有）。AUR 那份的源是 **Fedora 的
@@ -44,7 +49,7 @@ conflicts=(qt4 qt)
 provides=(qt4)
 options=('!lto') # Avoid static library issues
 _pkgfqn=qt   # -git 版：源碼目錄就是 clone 下來的 qt（非 -git 那份是 tarball 解出的長目錄名）
-source=("qt::git+https://code.qt.io/qt/qt.git#branch=4.8.7"
+source=("qt::git+https://code.qt.io/qt/qt.git#branch=4.8"
         "qtconfig-qt4.desktop"
         "assistant-qt4.desktop"
         "designer-qt4.desktop"
