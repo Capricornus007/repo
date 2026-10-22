@@ -1460,3 +1460,19 @@ python-wheel／python-tqdm），容器裡不會 target not found。
 - 上游 master 現況（實查 `doc/pacman.conf.5.asciidoc` 與 `src/pacman/conf.c`）已有
   `ParallelDownloads`、`NoProgressBar`、`Color`、`VerbosePkgLists`、`DownloadOnly`、
   `CacheServer`；`ShowSize`/`TotalDownload` 已被取代。自訂進度條字形上游明確拒絕（MR 67 closed）。
+
+## ⚠️ 通用陷阱（2026-10-23 實測踩到）：克隆目錄名 ≠ pkgname 派生名 ⇒ plan 靜默跳過、job 照綠
+`build-packages.yml` 的 plan 步對 `-git` 包是「自己克隆 upstream、跑 PKGBUILD 的 `pkgver()`」來算目標版號，
+它把克隆目錄軟鏈成這幾個名字才跑（`src/repo` → `src/<名字>`）：
+
+    $pkgname   ${pkgname%-git}   $_pkgname   $_gitname   $_base   $_gitrepo   $_pkgbase   $pkgbase
+
+所以 **`pkgver()` 裡 `cd` 的那個名字必須落在上面清單裡**。qt4-git（源碼目錄 `qt`）與
+python2-git（`cpython`）第一版都不在清單內 → `cd` 失敗 → plan 印「跑 pkgver() 失敗」→
+`skip` → **整個 job 綠燈、release 裡卻一個資產都沒有**（run 39821657583 實測：
+qt4-git/python2-git 兩顆都「成功」，`gh release view --json assets` 查無此二包，只有同期
+的 meson-git 真的有產物）。修法兩條都做：
+1. PKGBUILD 裡補 `_pkgname=qt` / `_pkgname=cpython`（探測支援這個變數，iwd-nosystemd-git 早就在用）；
+2. `pkgver()` 改成**一定回號**：`git describe` 拿不到標籤時退回 `r<總提交數>.g<sha>`，
+   不讓「算不出版號」變成靜默跳過。
+判準記死：**驗 -git 包有沒有出貨，要查 release 資產與 feed db，不能看 job 顏色。**

@@ -2,6 +2,7 @@
 
 _pybasever=2.7
 pkgname=python2-git
+_pkgname=cpython   # ⚠️ 給 CI plan 步的 pkgver() 探測用：它會照 $pkgname/${pkgname%-git}/$_pkgname 等名字軟鏈到克隆目錄，少了這行就 `cd cpython` 失敗 → 本輪被跳過（實測 run 39821657583）
 pkgver=2.7.18.r0.g000000000
 pkgrel=1
 pkgdesc="A high-level scripting language (built from the upstream 2.7 branch)"
@@ -51,8 +52,10 @@ _apply() {   # _apply <補丁檔> <patch 層級旗標>
 
 pkgver() {
   cd cpython
-  git describe --long --tags --match 'v2.7.*' \
-    | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+  _d=$(git describe --long --tags --match 'v2.7.*' 2>/dev/null) && {
+    printf '%s' "${_d#v}" | sed 's/\([^-]*-g\)/r\1/;s/-/./g'; return 0; }
+  # 同 qt4-git：探測失敗不能只讓 plan 跳過就好，退回總提交數保證有號
+  printf '2.7.18.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=9 HEAD)"
 }
 
 prepare() {

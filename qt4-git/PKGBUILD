@@ -19,6 +19,7 @@
 # Contributor: Pierre Schmitz <pierre@archlinux.de>
 
 pkgname=qt4-git
+_pkgname=qt   # ⚠️ 給 CI plan 步的 pkgver() 探測用：它會照 $pkgname/${pkgname%-git}/$_pkgname 等名字軟鏈到克隆目錄，少了這行就 `cd qt` 失敗 → 本輪被跳過（實測 run 39821657583）
 pkgver=4.8.7
 pkgrel=1
 arch=(i686 x86_64)
@@ -69,8 +70,11 @@ sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP
 
 pkgver() {
   cd qt
-  git describe --long --tags --match 'v4.8.7' 2>/dev/null \
-    | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+  _d=$(git describe --long --tags --match 'v4.8.7' 2>/dev/null) && {
+    printf '%s' "${_d#v}" | sed 's/\([^-]*-g\)/r\1/;s/-/./g'; return 0; }
+  # 找不到標籤也要給得出號，絕不讓 plan 靜默跳過（實測 run 39821657583 就是
+  # pkgver() 非零 → plan 印「跑 pkgver() 失敗」→ job 綠但產物不存在）。
+  printf '4.8.7.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=9 HEAD)"
 }
 
 prepare() {
