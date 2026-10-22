@@ -2172,7 +2172,7 @@ jobs:
               | jq -r '.assets[] | select(.name | startswith("llvm-libs-git-") or startswith("spirv-llvm-translator-git-")) | "\(.name)\t\(.created_at)"' \
               2>/dev/null || true)
             _needs_rebuild=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '
-              $1 ~ /^llvm-libs-git-/                 { if ($2 > lllvm) lllvm = $2 }
+              $1 ~ /^llvm-libs-git-/                 { if ($2 > llvm) llvm = $2 }
               $1 ~ /^spirv-llvm-translator-git-/     { if ($2 > ltr)   ltr   = $2 }
               END { if (llvm != "" && ltr != "" && llvm > ltr) print "yes"; else print "no" }')
             echo "LLVM 換代對照：llvm-libs-git 資產時間=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '$1~/^llvm-libs-git-/{print $2}' | sort | tail -1) ／ translator 資產時間=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '$1~/^spirv-llvm-translator-git-/{print $2}' | sort | tail -1)"
