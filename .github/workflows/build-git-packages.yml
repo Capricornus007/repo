@@ -178,7 +178,7 @@ jobs:
           {"key": "linutil-git", "repo_name": "linutil-git", "variant": "none", "kind": "aur"},
           {"key": "kbreakout-git", "repo_name": "kbreakout-git", "variant": "none", "kind": "kde"},
           {"key": "aom-git", "repo_name": "aom-git", "variant": "none", "kind": "aur"},
-          {"key": "brotli-git", "repo_name": "brotli-git", "variant": "none", "kind": "aur"},
+          {"key": "brotli-git", "repo_name": "brotli-git", "variant": "none"},
           {"key": "espeak-ng-git", "repo_name": "espeak-ng-git", "variant": "none", "kind": "aur"},
           {"key": "fcitx5-skin-ori-git", "repo_name": "fcitx5-skin-ori-git", "variant": "none", "kind": "aur"},
           {"key": "fd-git", "repo_name": "fd-git", "variant": "none", "kind": "aur"},
