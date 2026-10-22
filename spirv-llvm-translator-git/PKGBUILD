@@ -74,8 +74,13 @@ _llvm_abi=24.0git
 # 實物卻找不到 /usr/lib/libLLVM.so.<abi> → 又黑屏一次。值與 64 位元相同（同一棵 trunk）。
 _lib32_llvm_abi=24.0git
 options=(!emptydirs)
-source=("git+https://github.com/KhronosGroup/SPIRV-LLVM-Translator#branch=main")
-b2sums=('SKIP')
+# passbuilder-llvm-context.patch 的來由見 prepare() 的註解（同一個理由也寫進
+# docs/in-tree-packages.md 的 translator 條目）。校驗和是**我方自帶檔**，寫實值；
+# 上游 git 來源仍 SKIP（本檔列在「更新校验和并回推」的排除清單裡，updpkgsums 不會來動它）。
+source=("git+https://github.com/KhronosGroup/SPIRV-LLVM-Translator#branch=main"
+        "passbuilder-llvm-context.patch")
+b2sums=('SKIP'
+        'fac873be78bbcfd585200f996ead0d38f757c82645a837da95423d3631e0717a76aff740f860454f1c0c64cec27e3861b90b5ab2735376b169bcf6f3c84c622b')
 
 pkgver() {
   cd $_pkgbase
@@ -125,6 +130,35 @@ prepare() {
     return 1
   fi
   echo "上游已內建 verifier 繞法：命中 $n 處（#4083 / issue #4082）"
+
+  # ── passbuilder-llvm-context.patch（2026-10-22）
+  # 症狀與實測證據：CI run 39721740022 的 mesa-tkg-git（job 119696129171）紅在連結期——
+  #   ld.lld: error: undefined reference:
+  #     llvm::PassBuilder::PassBuilder(TargetMachine*, PipelineTuningOptions,
+  #       std::optional<PGOOptions>, PassInstrumentationCallbacks*,
+  #       IntrusiveRefCntPtr<vfs::FileSystem>)@LLVM_24.0
+  #   >>> referenced by /usr/lib/libLLVMSPIRVLib.so (disallowed by --no-allow-shlib-undefined)
+  # 同一顆**已發布**的 translator 在本機也是死的（`ldd -r /usr/lib/libLLVMSPIRVLib.so.24.0git`
+  # 回報同一個未解符號；`/usr/lib/libRusticlOpenCL.so.1.0.0` 的 NEEDED 有它）——也就是
+  # feed 上這顆是拿「舊 LLVM」編的，LLVM 換代到帶 LLVMContext 的 ctor 之後，它的符號
+  # 在 libLLVM.so.24.0git 裡已經不存在（實測 `nm -D --defined-only` 對舊簽名的命中數=0）。
+  # 標頭現況（本機 /usr/include/llvm/Passes/PassBuilder.h:156 實讀）：
+  #   explicit PassBuilder(LLVMContext &Context, TargetMachine *TM = nullptr,
+  #                        std::optional<PipelineTuningOptions> PTO = std::nullopt, ...)
+  # 首參是引用、沒有預設值 ⇒ 上游那句 `PassBuilder PB;` 在新標頭下**既編不過、也解不到
+  # 舊符號**，所以重建 translator 是必要的、而且非補不可。全 tree 只有這個構造點
+  # （實測 `grep -rn PassBuilder --include=*.cpp --include=*.h` 於 main HEAD 3bb60b6dfc4
+  # 只有 SPIRVWriter.cpp:8086 一处 `PassBuilder PB;`，另兩處是 `PassBuilder &PB` 回調），
+  # 補丁就只動一行：把模組自己的 LLVMContext 傳進去。32 位元那棵共用同一份原始碼，
+  # 一顆補丁蓋兩邊。
+  # 上游補回之後的收尾：下面的 else 分支會印「上游已自帶」，屆時把這整段與 source／
+  # b2sums 裡的對應行一起刪掉。
+  if grep -qE '^\s*PassBuilder PB;' lib/SPIRV/SPIRVWriter.cpp; then
+    git apply -v "$srcdir/passbuilder-llvm-context.patch"
+    echo "已套 passbuilder-llvm-context.patch（舊的無參 PassBuilder 構造在新標頭下已不存在）"
+  else
+    echo "上游已自帶帶 LLVMContext 的 PassBuilder 構造，跳過補丁——請順手刪掉本補丁與 source 那一行"
+  fi
 }
 
 _llvm_abi() {

@@ -518,6 +518,24 @@ upgrades」）有 5 個 `OpenccTest.ConvertWord_*` 失敗，130 通過。已用�
 **拿掉本包補丁也一樣失敗**（原版遍歷空清單回 false，行為一致），根因是本機
 opencc 1.3.2 而上游最新是 ver.1.4.2 → 解法是抬 opencc（待辦），**不是跳測試**。
 
+**「重建就能吃 capnp 2.0」是錯的（2026-10-22 查實）**：feed 現況
+`librime-git 2:1.17.0.r1965.g1b3417d2b6-1`（CI 綠：run 39720124363 job 119631420642），
+但實測**產物本身**仍硬鏈舊 capnp：
+`objdump -p usr/lib/rime-plugins/librime-proto.so` → `NEEDED libcapnp.so.1.5.0`。
+原因不在補丁（四支 capnp-2 補丁都在 tree 裡），而在**建置環境根本沒有 capnp 2.0**：
+`pacman -Ss '^capnproto'` 實測本機可見的各倉（world／extra／extra-x86-64-v*）只有
+`capnproto 1.5.0-1`，本 feed 也沒有 capnproto-git 這條；上游
+`gh api repos/capnproto/capnproto/tags` 最新是 `v1.5.0`（2.0 只在 master 的 v2.0-dev），
+AUR 那顆 `capnproto-git` 停在 `0.9.r3463`（2021-03-21，RPC 實查）。所以 CI 容器裡
+`depends=('capnproto')` 永遠解到 1.5.0，重建一千次還是 `libcapnp.so.1.5.0`。
+真要治，三件事缺一不可，而且**第 3 件是動本機 pacman、不由 CI 決定**：
+① feed 裡先有一顆 `capnproto-git`（吃 master／v2.0-dev）；
+② librime 的依賴從裸名 `capnproto` 改成點名 `capnproto-git` —— 與 opencc／spirv-tools
+同一課：pacman 對「同名實包」優先於 provider，裸名永遠解到 distro 那顆 1.5.0；
+③ 目標機真的裝上 capnp 2.0。本機此刻是 `capnproto 1.5.0-1 [installed]`
+且 `ldd -r /usr/lib/rime-plugins/librime-proto.so` 解析正常 ⇒ **當前盤上這個症狀是
+「尚未發生」**（要等 ①②③ 湊齊才不會复发），不是重啟 fcitx5 能驗出來的東西。
+
 ## tcl-git / tk-git（用戶 2026-10-12 點名「把 tk 也弄成 -git」）
 
 **為什麼走本倉目錄版**：Artix 的 world 目前停在 `tcl/tk 8.6.16-1`（實測
@@ -729,6 +747,50 @@ translator 共用）」：先從 release `current-repo` 抓自有 llvm 七顆（
 bug：① 舊正則 `libLLVM\.so\.[0-9][0-9.]*` 抓 `libLLVM.so.24.0git` 會截到 `24.0` 就停
 （`g` 不在字元類裡），換代上 trunk 之後必然**假紅**；② 舊版把 64 與 32 位元產物倒進
 同一目錄混著比，現在按包名分流各比各的 soname。
+
+### LLVM 在「同一個 soname 內」改 C++ API 時，translator 不會自己重建（2026-10-22）
+症狀：CI run 39721740022 的 mesa-tkg-git（job 119696129171）紅在連結期——
+
+```
+ld.lld: error: undefined reference: llvm::PassBuilder::PassBuilder(llvm::TargetMachine*,
+  llvm::PipelineTuningOptions, std::optional<llvm::PGOOptions>,
+  llvm::PassInstrumentationCallbacks*, llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem>)@LLVM_24.0
+>>> referenced by /usr/lib/libLLVMSPIRVLib.so (disallowed by --no-allow-shlib-undefined)
+```
+
+查實鏈路（全部是本機與 API 實測，不是推論）：
+
+- `nm -D --undefined-only /usr/lib/libLLVMSPIRVLib.so.24.0git`（解自 feed 上
+  `spirv-llvm-translator-git-2.7.0.1.r465.g3bb60b6dfc4-1`）→ 有上面那條 `PassBuilderC1(TargetMachine*, …)`；
+- `nm -D --defined-only /usr/lib/libLLVM.so.24.0git | grep -c 'PassBuilderC1EPNS_13TargetMachineE'` → **0**
+  （新符號首參是 `LLVMContext&`：`/usr/include/llvm/Passes/PassBuilder.h:156` 實讀
+  `explicit PassBuilder(LLVMContext &Context, TargetMachine *TM = nullptr, std::optional<PipelineTuningOptions> PTO = std::nullopt, …)`）；
+- `ldd -r /usr/lib/libLLVMSPIRVLib.so.24.0git` → 同一條 undefined symbol；
+  `objdump -p /usr/lib/libRusticlOpenCL.so.1.0.0 | grep NEEDED` → 有 `libLLVMSPIRVLib.so.24.0git`。
+  ⇒ **已裝在這臺機器上的 RustiCL OpenCL 一載入就會 symbol lookup error**，不只是 CI 紅燈的問題。
+
+根因是閘門的盲區：translator 的 `pkgver` 只跟著它自己的上游 main（實測
+`git ls-remote … main` = `3bb60b6dfc4`，與 feed 那顆同一個 sha，上游**沒有**新提交可跟），
+而決定符號的是「編它時容器裡那顆 LLVM」。既有的 mesa 閘門比的是 `llvm-libs-abi=24.0git`
+這種 **soname 級**字面值，LLVM 在 24.0git 內部換簽名時兩邊字面值完全一樣 ⇒ 永不觸發。
+
+做法（兩件，缺一不可）：
+
+1. `spirv-llvm-translator-git/passbuilder-llvm-context.patch`：全 tree 只有一個構造點
+   （`grep -rn PassBuilder --include=*.cpp --include=*.h` 於 main HEAD 命中
+   `lib/SPIRV/SPIRVWriter.cpp:8086` 的 `PassBuilder PB;`，另兩處是 `PassBuilder &PB` 回調），
+   改成 `PassBuilder PB(M->getContext());`（所在函式
+   `runSpirvWriterPasses(Module *M, …)`，`M` 就是那顆 Module）。`git apply --check` 對
+   上游 3bb60b6dfc4 實測通過；prepare() 用「還找得到舊寫法才套，找不到就印提示」的正向斷言，
+   上游自己修好之後不會靜默衝突。32 位元那棵共用同一份原始碼，一顆補丁蓋兩邊。
+2. `build-packages.yml` plan 步新增「LLVM 換代對照」閘門（排在既有 mesa ABI 閘門之後、
+   「已在 release 裡」之前）：讀同一個 by-tag REST 回應裡 `llvm-libs-git-*` 與
+   `spirv-llvm-translator-git-*` 兩顆資產的 `created_at`（ISO8601，字面序＝時間序，
+   實測該回應含全部 239 筆資產、不截斷）。feed 的 LLVM 比已發布的 translator 新 ⇒
+   判定 translator 是舊 LLVM 編的 ⇒ 繞過「已在 release 裡」強制重建。判據不需要任何額外狀態檔。
+   2026-10-22 實測輸入：translator 資產 `2026-10-22T03:43:11Z`、llvm-libs 資產 `2026-10-22T07:24:41Z`
+   ⇒ 判定 yes。代價：llvm-git 每天換代 ⇒ translator 每天至多多編一顆（產物 4.17 MiB）。
+   同名資產重上傳沒問題：translator 那顆今天的 `created_at` 就是**同名重發布**留下來的。
 
 ### ~~lib32 那半邊不動的理由~~（2026-10-13 作廢，見下面「lib32-llvm-git」）
 本節原文寫「32 位元 trunk LLVM 全網路沒有人產，所以 lib32-mesa 繼續配 23.1」。

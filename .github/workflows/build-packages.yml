@@ -2149,6 +2149,44 @@ jobs:
               exit 0
             fi
           fi
+          # ── spirv-llvm-translator-git：吃 LLVM 的「同 soname 內 C++ API 換代」也要重建
+          # translator 的 pkgver 只跟著它自己的上游 main 動，可決定產物符號的是**編它時
+          # 容器裡那顆 LLVM**。LLVM 在同一个 soname（24.0git）內改函式簽名時，translator
+          # 一個字都不變 ⇒「已在 release 裡」永久命中 ⇒ feed 裡那顆 libLLVMSPIRVLib.so
+          # 帶著已消失的版本化符號，把下游打紅。
+          # 實據（2026-10-22）：run 39721740022 的 mesa-tkg-git（job 119696129171）紅在
+          #   ld.lld: error: undefined reference: llvm::PassBuilder::PassBuilder(TargetMachine*,
+          #     PipelineTuningOptions, std::optional<PGOOptions>, ...)@LLVM_24.0
+          #   >>> referenced by /usr/lib/libLLVMSPIRVLib.so (disallowed by --no-allow-shlib-undefined)
+          # 上面那道 mesa 閘門比的是 `llvm-libs-abi=24.0git` 這種**soname 級**字面值，兩邊
+          # 都還是 24.0git ⇒ 對這類符號級斷裂完全無感。本倉的 translator 產物在本機實測
+          # `ldd -r /usr/lib/libLLVMSPIRVLib.so.24.0git` 同樣回報那個未解符號，而
+          # /usr/lib/libRusticlOpenCL.so.1.0.0 的 NEEDED 里有它 ⇒ 裝在那臺上的 RustiCL
+          # OpenCL 一載入就會 symbol lookup error，不是「CI 紅了就好」的事。
+          # 判據不需要額外狀態：release 資產的 created_at（ISO8601，字面序＝時間序）。
+          # feed 裡 llvm-libs-git 那顆比已發布的 translator 新 ⇒ translator 是拿舊 LLVM 編的。
+          # 代價：llvm-git 每天換代 ⇒ translator 每天至多多編一顆（產物 4.17 MiB，
+          # 上一輪實際建置連容器準備約 5 分鐘量級）。這比「整條 mesa／RustiCL 鏈靜默斷裂」便宜。
+          if [ "$PKGBASE" = "spirv-llvm-translator-git" ]; then
+            _llvm_coupled=$(gh_api "https://api.github.com/repos/${GH_REPO}/releases/tags/${REPO_RELEASE_TAG}" \
+              | jq -r '.assets[] | select(.name | startswith("llvm-libs-git-") or startswith("spirv-llvm-translator-git-")) | "\(.name)\t\(.created_at)"' \
+              2>/dev/null || true)
+            _needs_rebuild=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '
+              $1 ~ /^llvm-libs-git-/                 { if ($2 > lllvm) lllvm = $2 }
+              $1 ~ /^spirv-llvm-translator-git-/     { if ($2 > ltr)   ltr   = $2 }
+              END { if (llvm != "" && ltr != "" && llvm > ltr) print "yes"; else print "no" }')
+            echo "LLVM 換代對照：llvm-libs-git 資產時間=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '$1~/^llvm-libs-git-/{print $2}' | sort | tail -1) ／ translator 資產時間=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '$1~/^spirv-llvm-translator-git-/{print $2}' | sort | tail -1)"
+            if [ "$_needs_rebuild" = "yes" ]; then
+              echo ">> feed 裡的 LLVM 比已發布的 translator 新（符號级 ABI 已換代），強制重建 translator（繞過『已在 release 裡』）"
+              {
+                echo "build=true"
+                echo "pkgver=$TARGET_PKGVER"
+                echo "pkgrel=$TARGET_PKGREL"
+                echo "pkgbase=$PKGBASE"
+              } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
           if printf '%s\n' "$assets" | grep -q "^${asset_prefix}${TARGET_PKGVER}-${TARGET_PKGREL}-"; then
             skip "${asset_prefix}${TARGET_PKGVER}-${TARGET_PKGREL} 已在 release 里"
           fi
@@ -2421,12 +2459,27 @@ jobs:
               ;;
             u1s1-bin)
               # 新版本時把 pkgver 換成 LATEST 讀到的值；pkgrel 保持 1。
-              # PKGBUILD 的 source URL 是字面 ${pkgver} 模板字串。sed 替換端
-              # 不能寫 \1$NEW_PKGVER——sed 會把 \1 後的 $N 解析成第 N 個捕獲組
-              # 造成替換失效；用單引號字面 + 變數拼接最穩。
+              # ⚠️ 舊寫法只匹配「字面 ${pkgver} 模板」，而實測 2026-10-22
+              # Capricornus007/u1s1-bin master 的來源行是**實字版號**（上一次回推留下的）：
+              #   source_x86_64=("${_base_url}/u1s1-cli-1.14.1-linux-x64.tar.gz")
+              # 那一條 sed 整條落空 ⇒ 只改了 pkgver 沒改 URL ⇒ 出包叫
+              # u1s1-cn-bin-1.14.3-1、裝進去的是 1.14.1 的 tarball（實物查證：解開該資產
+              # opt/u1s1/u1s1-cli/package.json → "version": "1.14.1"）。這是「版號新、內容舊」
+              # 的假升級，比構建失敗更壞。
+              # 現在兩種寫法都吃：把 `u1s1-cli-<任何非斜線>-linux-<arch>` 中間那段整個換掉
+              # （模板形 `${pkgver}` 與實字形 `1.14.1` 都被同一条規則覆蓋），
+              # 並在換完後**硬驗** URL 裡確實是新版號，否則直接判紅，不靜默出包。
+              # 分隔符用 #：規則裡的 `(x64|arm64)` 自带 `|`，拿 `|` 當分隔符會
+              # 直接 `unknown option to 's'`（本地實跑踩過）。
               sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
-              sed -i 's/u1s1-cli-${pkgver}/u1s1-cli-'"${NEW_PKGVER}"'/g' PKGBUILD
+              sed -i -E "s#u1s1-cli-[^/]*-linux-(x64|arm64)#u1s1-cli-${NEW_PKGVER}-linux-\1#g" PKGBUILD
               grep -n 'u1s1-cli-' PKGBUILD
+              if ! grep -q "u1s1-cli-${NEW_PKGVER}-linux-x64" PKGBUILD; then
+                echo "::error::u1s1 的 source URL 沒換到 ${NEW_PKGVER}（上面 grep 是實物）——"
+                echo "::error::這樣會做出「pkgver 新版、內容舊版 tarball」的假升級，直接判紅。"
+                echo "::error::上游改檔名規則了就去看 https://u1s1app.com/releases/ 的實際 listing。"
+                exit 1
+              fi
               ;;
             element-desktop-nightly-bin)
               # 元素 nightly 包：更新 pkgver 為新的日期版本號。
