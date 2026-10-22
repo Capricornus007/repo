@@ -23,7 +23,7 @@
 
 pkgname=openai-codex-git
 pkgver=0.156.1.r3546.g7dae8c53d9
-pkgrel=2
+pkgrel=3
 pkgdesc="Lightweight coding agent that runs in your terminal"
 arch=('x86_64' 'aarch64')
 url="https://github.com/openai/codex"
@@ -41,8 +41,9 @@ optdepends=(
   'ripgrep: accelerated large-repo search'
 )
 options=('!lto')
-source=("${pkgname%-git}::git+${url}.git" "exec-bin-recursion-limit.patch")
-b2sums=('SKIP' 'SKIP')
+source=("${pkgname%-git}::git+${url}.git" "exec-bin-recursion-limit.patch"
+        "no-daemon-by-default.patch")
+b2sums=('SKIP' 'SKIP' 'SKIP')
 
 pkgver() {
   cd "${pkgname%-git}"
@@ -103,6 +104,28 @@ prepare() {
   if ! patch -p1 -N --quiet -i "$srcdir/exec-bin-recursion-limit.patch"; then
     grep -q 'recursion_limit' codex-rs/exec/src/main.rs || {
       echo "::error::無法套用 recursion_limit 補丁，上游也沒有該屬性"
+      return 1
+    }
+  fi
+
+  # 用戶 2026-10-22 要求「跟官方一樣打開直接就是界面，不要那鬼服務器」。
+  # 0.163 起 tui_app_server 已被標 removed，TUI 一律改走「共用 app-server daemon」，
+  # 而 daemon_auto_start 的出廠預設是 true（codex-rs/features/src/lib.rs:1062）。
+  # 實測（同一臺、同一版，只差這條開關）：
+  #   開  → codex 生出 `codex app-server --listen unix:// --managed-daemon`，
+  #         RSS 114 MB；TUI 結束後該程序 PPID 變 1（被 init 收養）、不會自己退。
+  #   關  → 整棵樹只有 1 顆 codex，退出 0 殘留。
+  # 關掉的路徑在上游是現成的：startup_orchestration.rs 的
+  #   (AppServerTarget::Embedded, None) => "auto_start_disabled"
+  # 也就是「TUI 內嵌 app server」，不是把功能砍掉、只是不讓它去拉常駐 daemon。
+  # 代价：`codex agents`（跨會話瀏覽共用 daemon 上的 session）這類功能用不了。
+  # 與 ~/.codex/config.toml 的 [features] daemon_auto_start=false 等價；兩邊都做
+  # 是為了「換機器／清 config 也不用再寫設定檔」。上游若改成預設 false，
+  # patch -N 會回報已套用，這時確認那行已是 false 就放過，別判紅。
+  if ! patch -p1 -N --quiet -i "$srcdir/no-daemon-by-default.patch"; then
+    grep -A4 'key: "daemon_auto_start"' codex-rs/features/src/lib.rs \
+      | grep -q 'default_enabled: false' || {
+      echo "::error::無法套用 no-daemon 補丁，上游也沒有把 daemon_auto_start 預設關掉"
       return 1
     }
   fi
