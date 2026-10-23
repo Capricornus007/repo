@@ -2195,13 +2195,14 @@ jobs:
           # feed 裡 llvm-libs-git 那顆比已發布的 translator 新 ⇒ translator 是拿舊 LLVM 編的。
           # 代價：llvm-git 每天換代 ⇒ translator 每天至多多編一顆（產物 4.17 MiB，
           # 上一輪實際建置連容器準備約 5 分鐘量級）。這比「整條 mesa／RustiCL 鏈靜默斷裂」便宜。
+          # created_at 一律截到分鐘：同批上傳的資產只差 1 秒，拿它當「LLVM 比 mesa 新」的證據會恆真
           if [ "$PKGBASE" = "spirv-llvm-translator-git" ]; then
             _llvm_coupled=$(gh_api "https://api.github.com/repos/${GH_REPO}/releases/tags/${REPO_RELEASE_TAG}" \
               | jq -r '.assets[] | select(.name | startswith("llvm-libs-git-") or startswith("spirv-llvm-translator-git-")) | "\(.name)\t\(.created_at)"' \
               2>/dev/null || true)
             _needs_rebuild=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '
-              $1 ~ /^llvm-libs-git-/                 { if ($2 > llvm) llvm = $2 }
-              $1 ~ /^spirv-llvm-translator-git-/     { if ($2 > ltr)   ltr   = $2 }
+              $1 ~ /^llvm-libs-git-/                 { if (substr($2,1,16) > llvm) llvm = substr($2,1,16) }
+              $1 ~ /^spirv-llvm-translator-git-/     { if (substr($2,1,16) > ltr)   ltr   = substr($2,1,16) }
               END { if (llvm != "" && ltr != "" && llvm > ltr) print "yes"; else print "no" }')
             echo "LLVM 換代對照：llvm-libs-git 資產時間=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '$1~/^llvm-libs-git-/{print $2}' | sort | tail -1) ／ translator 資產時間=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '$1~/^spirv-llvm-translator-git-/{print $2}' | sort | tail -1)"
             if [ "$_needs_rebuild" = "yes" ]; then
@@ -2237,8 +2238,8 @@ jobs:
               | jq -r '.assets[] | select(.name | startswith("llvm-libs-git-") or startswith("'"$PKGBASE"'-")) | "\(.name)\t\(.created_at)"' \
               2>/dev/null || true)
             _mesa_rebuild=$(printf '%s\n' "$_llvm_mesa" | awk -F'\t' '
-              $1 ~ /^llvm-libs-git-/                { if ($2 > llvm) llvm = $2 }
-              $1 ~ /^'"$PKGBASE"'-/                 { if ($2 > m)     m   = $2 }
+              $1 ~ /^llvm-libs-git-/                { if (substr($2,1,16) > llvm) llvm = substr($2,1,16) }
+              $1 ~ /^'"$PKGBASE"'-/                 { if (substr($2,1,16) > m)     m   = substr($2,1,16) }
               END { if (llvm != "" && m != "" && llvm > m) print "yes"; else print "no" }')
             echo "LLVM 換代對照（mesa）：llvm-libs-git 資產時間=$(printf '%s\n' "$_llvm_mesa" | awk -F'\t' '$1~/^llvm-libs-git-/{print $2}' | sort | tail -1) ／ $PKGBASE 資產時間=$(printf '%s\n' "$_llvm_mesa" | awk -F'\t' -v p="$PKGBASE" '$1 ~ "^"p"-"{print $2}' | sort | tail -1)"
             if [ "$_mesa_rebuild" = "yes" ]; then
