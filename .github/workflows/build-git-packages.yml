@@ -61,6 +61,13 @@ jobs:
       # 而 source URL 裡是連字號版，所以 build-packages.yml 需要三個特例：plan 的 crave) case、
       # 改寫步 sed _pkgver=、以及走 in-tree 回推而非 updpkgsums。
       # 以下 packages 是純 JSON 塊，fromJSON 不會剝註解，所以說明只能寫在這裡：
+      # · shiboken6-git（2026-10-23 用戶點名）：本機官方 shiboken6-generator 6.12.0-1 一跑就
+      #   `error while loading shared libraries: libclang.so.23.1`——它的 NEEDED 裡 LLVM 系只有
+      #   這一條（objdump 實測），而 clang 已被本倉 clang-git 24.0git 頂替，系統沒有 .23.1。
+      #   修法是「用 24 重built 整條鏈」，不是塞假 SONAME 軟連結騙 loader（用戶否決，
+      #   同 mesa／doxygen 那兩場的裁決）。逐包理由與**實跑證據**寫 docs/in-tree-packages.md。
+      #   kind:aur 只為借用回推那步的 `matrix.kind != 'aur'`（版號由 dev HEAD 現算）＋掛上
+      #   junlin03-aur 源；case 首命中即中，走本倉 shiboken6-git/PKGBUILD，不會去 clone AUR。
       # · fcitx5-qt 在 AUR 已拆成 qt5/qt6 兩顆（沒有單一的 fcitx5-qt-git），
       # · 本機的 fcitx5-qt 由這兩顆取代。
       # · chinese-addons / rime 鏈上的 AUR 依賴，必須先進矩陣，否則跟 afdko-git
@@ -89,6 +96,7 @@ jobs:
           {"key": "astc-encoder-git", "repo_name": "astc-encoder-git", "variant": "none"},
           {"key": "kew-git", "repo_name": "kew-git", "variant": "none"},
           {"key": "llvm-git", "repo_name": "llvm-git", "variant": "none", "kind": "aur"},
+          {"key": "shiboken6-git", "repo_name": "shiboken6-git", "variant": "none", "kind": "aur"},
           {"key": "librime-git", "repo_name": "librime-git", "variant": "none"},
           {"key": "opencc-git", "repo_name": "opencc-git", "variant": "none"},
           {"key": "ccache-git", "repo_name": "ccache-git", "variant": "none"},

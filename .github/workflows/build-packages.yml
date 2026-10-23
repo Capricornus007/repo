@@ -724,7 +724,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|brotli-git|nodejs-git|nodejs-better-sqlite3-git|npm-git|pnpm-git|fcitx5-chinese-addons-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git|htop-git|chafa-git|xtitle-git|downgrade-git|pacman-git|meson-git|python2-git|qt4-git|expac-git)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|brotli-git|nodejs-git|nodejs-better-sqlite3-git|npm-git|pnpm-git|fcitx5-chinese-addons-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git|htop-git|chafa-git|xtitle-git|downgrade-git|pacman-git|meson-git|python2-git|qt4-git|expac-git|shiboken6-git)
               # 這批包為什麼走本倉目錄版（逐包理由）：見 docs/in-tree-packages.md。
               # 那個 step 的表達式有 21000 字元上限、註解也計入，加包只加清單、
               # 說明寫進該檔，別寫回這裡。
@@ -2030,6 +2030,12 @@ jobs:
                 librime-git)               _extra_gate_deps="opencc-git" ;;
                 spirv-llvm-translator-git) _extra_gate_deps="spirv-tools-git spirv-headers-git" ;;
                 mesa-tkg-git)              _extra_gate_deps="spirv-llvm-translator-git" ;;
+                # shiboken6-git 的 makedepends 寫裸名 clang／llvm（同 translator 的手法：
+                # 靠「把容器 LLVM 換成自有 llvm-*-git」那步把裸名解析到我方 trunk）。
+                # 那步在 plan **之後**才跑，所以這裡先問一次兩顆進沒進 feed：
+                # 沒進的話容器會去裝官方 clang 23.1，產出一顆又鏈 .23.1 的死包
+                # ——那是本包存在的全部意義的反面，寧可本輪跳過等下輪。
+                shiboken6-git)             _extra_gate_deps="clang-git llvm-libs-git" ;;
                 *)                         _extra_gate_deps="" ;;
               esac
               for _d in $_extra_gate_deps; do
@@ -2207,6 +2213,49 @@ jobs:
             echo "LLVM 換代對照：llvm-libs-git 資產時間=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '$1~/^llvm-libs-git-/{print $2}' | sort | tail -1) ／ translator 資產時間=$(printf '%s\n' "$_llvm_coupled" | awk -F'\t' '$1~/^spirv-llvm-translator-git-/{print $2}' | sort | tail -1)"
             if [ "$_needs_rebuild" = "yes" ]; then
               echo ">> feed 裡的 LLVM 比已發布的 translator 新（符號级 ABI 已換代），強制重建 translator（繞過『已在 release 裡』）"
+              {
+                echo "build=true"
+                echo "pkgver=$TARGET_PKGVER"
+                echo "pkgrel=$TARGET_PKGREL"
+                echo "pkgbase=$PKGBASE"
+              } >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          # ── shiboken6-git：自有 LLVM 換代 → 已發布的那顆鏈的是舊 libclang，要重建
+          # 這顆包的 pkgver 只跟 pyside-setup 的 dev HEAD 動，而決定它能不能跑的是
+          # **建它時容器裡那顆 clang 的 libclang SONAME**（實測 6.12.0-3 的
+          # /usr/bin/shiboken6 NEEDED 裡 LLVM 系只有 `libclang.so.23.1` 一條）。
+          # LLVM 從 24.0git 抬到 25.0git 時 pyside 一個字都不變 ⇒「已在 release 裡」
+          # 恆命中 ⇒ feed 那顆永久鎖死在舊 soname，而它的依賴寫的是
+          # `llvm-libs-abi=<soname>`（PKGBUILD 的 depends 段有理由），pacman 會直接
+          # 拒絕升級——目標機就卡在「裝不上、也降不回」的死結（2026-10-12 黑屏的同型）。
+          # 判據跟上面 mesa 那條同構（問 alpm 自己的資料庫，不抓包檔）：
+          # 源裡 llvm-libs-git 發的 abi ≠ 已發布的 shiboken6-generator-git 吃的 abi
+          # ⇒ 強制重建。両者相同 ⇒ 不浪費 runner（shiboken 只在 LLVM 換**大版**時才需要重編，
+          # 不像 translator 那樣會被同 soname 內的 C++ 簽名換代打穿——它只吃 libclang 的 C API）。
+          # ⚠️ 剝法跟上面兩條**不完全一樣**，是故意的：mesa 那條用 `sed -n 's/.*llvm-libs-abi=//p'`
+          #   （粗剝），那種寫法在 PROVIDES 一整行上會把尾巴留成
+          #   `24.0git libLLVM.so=24.0git-64 libLTO.so=24.0git-64`（實測），而 DEPENDS 那側
+          #   剝出来是乾净的 `24.0git` ⇒ 兩邊**永遠不等** ⇒ 每輪都判「要重建」。
+          #   這裡改成帶捕獲組的精確形 `s/.*llvm-libs-abi=\([0-9A-Za-z._-]\{1,\}\).*/\1/p`，
+          #   實測同一行兩側都回 `24.0git`、欄位不存在時回空（空值走上面那條 skip，不會誤判成不等）。
+          #   只改本包這一段，mesa／translator 那兩條不动（不是我的包，且改它們要另開一輪驗）。
+          if [ "$PKGBASE" = "shiboken6-git" ]; then
+            want_abi=$(LC_ALL=C pacman -Si llvm-libs-git 2>/dev/null \
+                       | sed -n 's/.*llvm-libs-abi=\([0-9A-Za-z._-]\{1,\}\).*/\1/p' | head -1)
+            have_abi=$(LC_ALL=C pacman -Si shiboken6-generator-git 2>/dev/null \
+                       | sed -n 's/.*llvm-libs-abi=\([0-9A-Za-z._-]\{1,\}\).*/\1/p' | head -1)
+            echo "libclang ABI 對照：llvm-libs-git 發的=[$want_abi] ／ 已發布的 shiboken6-generator-git 吃的=[$have_abi]"
+            if [ -z "$want_abi" ]; then
+              # 查不到源裡那顆的 abi＝junlin03-aur 沒同步到或 llvm-*-git 還沒進 feed。
+              # 這裡**不**放行：放行只會讓後面 `_extra_gate_deps` 那道閘白設——
+              # 容器沒有自有 clang 時做出來的就是一顆鏈 23.1 的死包（正是要治的病）。
+              # 也**不**紅：排程每 3 小時一輪，等 llvm 那批發上去自然收斂（本倉既有設計）。
+              skip "查不到 llvm-libs-git 的 llvm-libs-abi（源未同步或 llvm-*-git 未發布），本輪跳過等下輪"
+            fi
+            if [ "$want_abi" != "$have_abi" ]; then
+              echo ">> feed 裡的 LLVM soname 與已發布的 shiboken6-generator-git 不一致，強制重建（繞過『已在 release 裡』）"
               {
                 echo "build=true"
                 echo "pkgver=$TARGET_PKGVER"
@@ -2973,7 +3022,7 @@ jobs:
           fi
 
       - name: 把容器 LLVM 換成自有 llvm-*-git 尖端（mesa 與 SPIRV translator 共用）
-        if: (matrix.repo_name == 'mesa-tkg-git' || matrix.repo_name == 'spirv-llvm-translator-git' || matrix.repo_name == 'doxygen-git') && steps.plan.outputs.build == 'true'
+        if: (matrix.repo_name == 'mesa-tkg-git' || matrix.repo_name == 'spirv-llvm-translator-git' || matrix.repo_name == 'doxygen-git' || matrix.repo_name == 'shiboken6-git') && steps.plan.outputs.build == 'true'
         run: |
           set -uo pipefail
           # ── 用戶 2026-10-12 裁定：「？那你倒是讓它使用 24 版本編去啊？」
@@ -3107,6 +3156,24 @@ jobs:
           pacman -Qo /usr/lib/llvm-config 2>&1 || true
           llvm-config --version | grep -qE '^2[4-9]' \
             || { echo "::error::容器 llvm-config 不是 trunk：$(llvm-config --version)"; exit 1; }
+          if [ "${{ matrix.repo_name }}" = "shiboken6-git" ]; then
+            # ── shiboken6-git：這顆只要**一條** libclang（實測 6.12.0-3 的
+            # /usr/bin/shiboken6 的 NEEDED 裡 LLVM 系只有 `libclang.so.23.1`，
+            # 既沒有 libclang-cpp 也沒有 libLLVM），上面的 `_pkgs` 已把 clang-git
+            # 帶進來，這裡只補一道「頂替真的生效」的硬驗，防止建完還是舊 soname。
+            # ⚠️ 問 SONAME 一律用 objdump 問 ELF，**不要用 readlink -f**：本倉 clang-git
+            #   的 libclang.so → .so.24.0git → .so.24.0.0git 是兩層連結，readlink -f 會解到
+            #   最後那段（24.0.0git），跟 NEEDED 裡的 DT_SONAME（24.0git）不是同一個字串
+            #   ——實測本機踩過，PKGBUILD 裡那道自證因此恆紅（逐包說明見 docs）。
+            _sh_son=$(objdump -p /usr/lib/libclang.so 2>/dev/null | awk '/SONAME/{print $2; exit}')
+            echo "容器 libclang SONAME=[${_sh_son}]"
+            case "${_sh_son}" in
+              libclang.so.2[4-9]*) ;;
+              *) echo "::error::容器 /usr/lib/libclang.so 不是 trunk（SONAME=[${_sh_son}]）——clang-git 沒頂替成功，建出來的會又是一顆鏈 23.1 的死包"; exit 1 ;;
+            esac
+            pacman -Q clang-git llvm-libs-git >/dev/null 2>&1 \
+              || { echo "::error::clang-git／llvm-libs-git 沒裝進容器（junlin03-aur 還沒發佈那一顆？）"; exit 1; }
+          fi
           # ── ② 鎖 ABI：從「這臺容器此刻真正的 soname」反推依賴，不寫死任何版本字串
           _son=$(basename "$(readlink -f /usr/lib/libLLVM.so 2>/dev/null)" 2>/dev/null | sed 's/^libLLVM\.so\.//')
           if [ -z "$_son" ] || [ "$_son" = "libLLVM.so" ]; then
