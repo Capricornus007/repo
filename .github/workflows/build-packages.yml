@@ -3161,10 +3161,21 @@ jobs:
           fi
           # 硬驗：容器此刻的 llvm-config 必須真的來自我們那套（不是官方 23.1）。
           # 這一步是防「裝了卻沒頂替」的靜默態——實測過 llvm-config 仍指向官方包的情況。
+          # ⚠️ 取值一律先進變數再判，**不准用 `llvm-config --version | grep -q`**：
+          #   本步驟是 `set -uo pipefail`，grep -q 命中就立刻收管道，llvm-config（本倉
+          #   llvm-git 那顆是 shell 包裝腳本，會分好幾段寫 stdout）下一筆寫入就收到
+          #   SIGPIPE ⇒ 管道退出碼 141，判明明過了還是紅（run 39918046490 的
+          #   shiboken6-git job 實測死在這行，日誌最後只有 readlink 與 pacman -Qo 兩行）。
           readlink -f /usr/lib/libLLVM.so
-          pacman -Qo /usr/lib/llvm-config 2>&1 || true
-          llvm-config --version | grep -qE '^2[4-9]' \
-            || { echo "::error::容器 llvm-config 不是 trunk：$(llvm-config --version)"; exit 1; }
+          _llc_bin=$(command -v llvm-config || true)
+          [ -n "$_llc_bin" ] || { echo "::error::容器裡找不到 llvm-config（clang／llvm 頂替後路徑變了？）"; exit 1; }
+          pacman -Qo "$_llc_bin" 2>&1 || true
+          _llc_ver=$(llvm-config --version 2>/dev/null || true)
+          case "$_llc_ver" in
+            2[4-9]*|3[0-9]*|4[0-9]*|5[0-9]*|6[0-9]*|7[0-9]*|8[0-9]*|9[0-9]*) ;;
+            *) echo "::error::容器 llvm-config 不是 trunk：[${_llc_ver}]（$_llc_bin）"; exit 1 ;;
+          esac
+          echo "llvm-config $_llc_bin 版號=$_llc_ver"
           if [ "${{ matrix.repo_name }}" = "shiboken6-git" ]; then
             # ── shiboken6-git：這顆只吃 libclang 的 C API（實測 6.12.0-3 的 NEEDED 裡
             # LLVM 系只有 `libclang.so.23.1` 一條，沒有 libclang-cpp、也沒有 libLLVM），
