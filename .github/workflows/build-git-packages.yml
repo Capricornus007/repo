@@ -111,7 +111,6 @@ jobs:
           {"key": "oh-my-pi-git", "repo_name": "oh-my-pi-git", "variant": "none"},
           {"key": "protonvpn-cli-community-git", "repo_name": "protonvpn-cli-community-git", "variant": "none"},
           {"key": "pysolfc-git", "repo_name": "pysolfc-git", "variant": "none"},
-          {"key": "android-ndk-23", "repo_name": "android-ndk-23", "variant": "none"},
           {"key": "android-ndk-27", "repo_name": "android-ndk-27", "variant": "none"},
           {"key": "android-ndk-30", "repo_name": "android-ndk-30", "variant": "none"},
           {"key": "u1s1-bin", "repo_name": "u1s1-bin", "variant": "none"},
