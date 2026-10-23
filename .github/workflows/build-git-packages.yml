@@ -68,6 +68,11 @@ jobs:
       #   同 mesa／doxygen 那兩場的裁決）。逐包理由與**實跑證據**寫 docs/in-tree-packages.md。
       #   kind:aur 只為借用回推那步的 `matrix.kind != 'aur'`（版號由 dev HEAD 現算）＋掛上
       #   junlin03-aur 源；case 首命中即中，走本倉 shiboken6-git/PKGBUILD，不會去 clone AUR。
+      # · zcode-ce-git（2026-10-23 用戶點名「ce-git 進倉庫」）：從 Zcode-CE git 源碼構建
+      #   （＝官方 zai-org/ZCode 開源 v3.15.1＋CE 修補的合併結果），取代已刪的
+      #   zcode-ce-bin（轉發二進位）。構建對齊 CE 自己的 release.yml（node＋pnpm＋
+      #   electron-builder 只留 pacman target），理由見 docs/in-tree-packages.md 條目。
+      #   kind:aur 同 shiboken6-git：借回推跳過＋掛 feed 源，case 走本倉目錄。
       # · fcitx5-qt 在 AUR 已拆成 qt5/qt6 兩顆（沒有單一的 fcitx5-qt-git），
       # · 本機的 fcitx5-qt 由這兩顆取代。
       # · chinese-addons / rime 鏈上的 AUR 依賴，必須先進矩陣，否則跟 afdko-git
@@ -97,6 +102,7 @@ jobs:
           {"key": "kew-git", "repo_name": "kew-git", "variant": "none"},
           {"key": "llvm-git", "repo_name": "llvm-git", "variant": "none", "kind": "aur"},
           {"key": "shiboken6-git", "repo_name": "shiboken6-git", "variant": "none", "kind": "aur"},
+          {"key": "zcode-ce-git", "repo_name": "zcode-ce-git", "variant": "none", "kind": "aur"},
           {"key": "librime-git", "repo_name": "librime-git", "variant": "none"},
           {"key": "opencc-git", "repo_name": "opencc-git", "variant": "none"},
           {"key": "ccache-git", "repo_name": "ccache-git", "variant": "none"},

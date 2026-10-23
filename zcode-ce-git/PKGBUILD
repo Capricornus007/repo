@@ -1,0 +1,101 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+#
+# 為什麼是這顆包（用戶 2026-10-23 指示：「刪了 ce-bin，我要的是那種——下載官方的
+# 最新（源碼）然後用 CE 修補，然後 ce-git 進倉庫」）：
+#   · 官方 ZCode 有開源倉 zai-org/ZCode（Apache-2.0，CE README 明載「本倉庫的上遊」），
+#     最新 tag v3.15.1；Zcode-CE 3.15.1-ce.1 就是官方 v3.15.1 的**源碼級全量移植**
+#     ＋CE 修補（遙測移除、服務端重建等，台账見其 docs/development/upstream-sync.md）。
+#   · 所以「官方最新＋CE 修補」的正確實現＝構建 Zcode-CE 的 git HEAD——CE 替我們
+#     完成了官方→CE 的合併，這顆包每次構建都吃到 CE 的最新移植結果；CE 一跟上遊
+#     我們自動跟（git pkgver）。上一版 zcode-ce-bin（轉發 CE CI 產物）已按指示刪除。
+#   · 產物自帶 Electron（CE 官方立場：用系統 Electron 重組會把 Electron 大版本耦合
+#     給發行版，見其 aur/PKGBUILD 檔頭論證），所以這裡不依賴 electronNN。
+#
+# 為什麼只建 pacman target（prepare() 裡 sed）：
+#   · 上游 bundle 對 linux 固定建 AppImage+deb+rpm+pacman 四份；rpm 需要 rpmbuild
+#     （Arch 容器沒有）、AppImage/deb 在本倉純屬浪費。bundle.mjs 的產物驗證
+#     （findBuiltArtifact）只要**任一**副檔名命中即過，砍到只剩 pacman 不影響門禁。
+#
+# 構建環境對齊 CE 自己的 release.yml（照抄，不發明）：
+#   · ZCODE_ENV=production；
+#   · ZCODE_CDN_BASE_URL＝社區 CDN（gh variable list -R Zcode-CE/Zcode-CE 實測值，
+#     其 docs/development/remote-workspace.md 台賬確認）——不設的話 CE 版的安裝包
+#     會指向官方 CDN 取運行時資產，CE 版本在那邊不存在，開箱連線失敗；
+#   · ELECTRON_MIRROR／ELECTRON_BUILDER_BINARIES_MIRROR 蓋成 GitHub 官方下載點：
+#     bundle 腳本的默認值是 npmmirror（國內 CDN，為本地開發優化），GitHub runner
+#     訪問它慢且不穩，CE 的 release.yml 也是這樣蓋的。
+#
+# ⚠️ 版本由 pkgver() 從 package.json＋git 現算 ⇒ 本檔列進「回推校驗和」排除清單
+#   （靠矩陣 kind:aur，與 llvm-git 同一手法）。
+
+pkgname=zcode-ce-git
+pkgver=3.15.1.ce.1.r1.g7fc3bfe
+pkgrel=1
+pkgdesc="ZCode 的開源社區版（官方 zai-org/ZCode v3.15.1 開源上游＋CE 修補），從源碼構建"
+arch=('x86_64')
+url="https://github.com/Zcode-CE/Zcode-CE"
+license=('Apache-2.0')
+# 與 electron-builder.config.js 的 PACMAN_RUNTIME_DEPENDENCIES 逐字一致（Arch 官方
+# 倉庫可解析的 Electron 運行時閉包；內層產物的 .PKGINFO 被剝掉，依賴由本檔宣告）。
+depends=('gtk3' 'nss' 'libxss' 'libxtst' 'libnotify' 'alsa-lib' 'mesa' 'xdg-utils')
+makedepends=('git' 'nodejs' 'pnpm' 'libarchive')
+provides=('zcode-ce')
+conflicts=('zcode-ce' 'zcode-ce-bin')
+options=('!strip')
+install=zcode-ce-git.install
+source=("$pkgname::git+https://github.com/Zcode-CE/Zcode-CE.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$pkgname"
+  # package.json 的 version 形如 3.15.1-ce.1；pacman 的 pkgver 不準連字號，換點號。
+  local _v
+  _v=$(node -p 'require("./package.json").version' | tr '-' '.')
+  printf '%s.r%s.g%s' "$_v" "$(git rev-list --count HEAD)" "$(git rev-parse --short=8 HEAD)"
+}
+
+prepare() {
+  cd "$pkgname"
+  # 只留 pacman target（理由見檔頭）。sed 後 grep 回證，改不動就紅——上游重排了
+  # target 陣列的寫法時，寧可紅也不要悄悄建出四份沒用的。
+  sed -i 's|target: \["AppImage", "deb", "rpm", "pacman"\]|target: ["pacman"]|' \
+    packages/desktop/electron-builder.config.js
+  grep -q 'target: \["pacman"\]' packages/desktop/electron-builder.config.js || {
+    echo "::error::electron-builder 的 linux target 改寫沒落地（上游改了 config 寫法？）"
+    return 1
+  }
+}
+
+build() {
+  cd "$pkgname"
+  export ZCODE_ENV=production
+  export ZCODE_CDN_BASE_URL='https://cdn.eidolonmachine.xyz'
+  export ELECTRON_MIRROR='https://github.com/electron/electron/releases/download/'
+  export ELECTRON_BUILDER_BINARIES_MIRROR='https://github.com/electron-userland/electron-builder-binaries/releases/download/'
+  # --frozen-lockfile 與 CE release.yml 一致；鎖檔與源碼同倉，不會漂。
+  pnpm install --frozen-lockfile
+  # bundle:desktop 內部依次跑 prepare:runtime-assets → build → electron-builder →
+  # 產物校驗 → 體積審計（別在它前面單獨再跑 build，會重複做十分鐘的資產準備）。
+  pnpm bundle:desktop --os linux --arch x64
+}
+
+package() {
+  cd "$pkgname"
+  # 取最新的 pacman 產物（dist 下可能有重試留下的多份，按 mtime 取新）。
+  local _artifact
+  _artifact=$(ls -t packages/desktop/dist/*.pkg.tar.zst | head -n1)
+  [ -n "$_artifact" ] || { echo "::error::dist 下沒有 .pkg.tar.zst 產物"; return 1; }
+  echo ">> 打包進 pkgdir 的產物：$_artifact"
+
+  tar -xf "$_artifact" -C "$pkgdir" \
+    --exclude=.PKGINFO --exclude=.INSTALL --exclude=.MTREE --exclude=.BUILDINFO
+
+  # 內層包的 .INSTALL 不隨內容複製（它是元數據），可執行入口由本檔補：
+  # CE 的安裝佈局是 /opt/ZCode-CE/zcode-ce（productName 目錄＋linuxExecutableName）。
+  local _app_bin="$pkgdir/opt/ZCode-CE/zcode-ce"
+  [ -e "$_app_bin" ] || { echo "::error::沒找到 /opt/ZCode-CE/zcode-ce（上游改佈局了？）"; return 1; }
+  install -d "$pkgdir/usr/bin"
+  ln -sf /opt/ZCode-CE/zcode-ce "$pkgdir/usr/bin/zcode-ce"
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

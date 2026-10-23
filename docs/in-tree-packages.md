@@ -1658,3 +1658,42 @@ count 用 `git rev-list --count HEAD`（實測 12573，全域單調）。
 用戶規則 71 那類「產物端收口」都寫在 package_*() 裡了，哪天 dev 分支自己跟上
 libclang 的新 soname、或上游真的加了「只造 shiboken」的開關（prepare() 那三道正向斷言
 會先紅給我看），就把 build() 的兩段式收掉、`_clang_abi` 隨 LLVM 換代抬字面值。
+
+## zcode-ce-git（2026-10-23；用戶點名「刪 ce-bin，官方最新＋CE 修補，ce-git 進倉庫」）
+
+### 為什麼從源碼建而不是繼續轉發二進位
+前一版 `zcode-ce-bin` 直接轉發 Zcode-CE 官方 Release 的 `.pkg.tar.zst`（其 aur/
+PKGBUILD 的做法）。用戶 2026-10-23 明確改方向：要「**下載官方的最新（源碼）然後
+用 CE 修補**」的 git 版。查證（qoder 會話 2026-10-23 收尾時定位＋本輪複核）：
+
+* 官方 ZCode 有開源倉 **zai-org/ZCode**（Apache-2.0）——CE README 明載「本倉庫的
+  上遊」，`git ls-remote --tags` 實測最新 tag **v3.15.1**；
+* **Zcode-CE 3.15.1-ce.1 就是官方 v3.15.1 的源碼級全量移植**＋CE 修補（遙測移除、
+  服務端重建等），逐條台账在其 docs/development/upstream-sync.md（v3.15.1 節）；
+* 所以「官方最新＋CE 修補」的實現＝構建 Zcode-CE git HEAD。CE 隨上游同步，這顆
+  包跟著 CE 的 commit 走（git pkgver），永遠是「官方開源最新＋CE 修補」的合成。
+  （注意：官方**閉源**發行線有 3.15.3+ 的版本號，開源倉沒有那些 tag——那是 CE
+  台账裡「有意不搬」的閉源組件，不是我們能構建的東西。）
+
+### 構建對齊 CE release.yml（照抄，不發明）
+* node（官方倉 nodejs≥24）＋pnpm（官方倉）＋`pnpm install --frozen-lockfile`＋
+  `pnpm bundle:desktop --os linux --arch x64`（bundle.mjs 內部：runtime-assets →
+  build → electron-builder → 產物校驗 → 體積審計）；
+* 環境變數四件：`ZCODE_ENV=production`、`ZCODE_CDN_BASE_URL=https://cdn.eidolonmachine.xyz`
+  （社區 CDN，`gh variable list -R Zcode-CE/Zcode-CE` 實測值；不設則 CE 版安裝包
+  指向官方 CDN 抓運行時資產→開箱連線失敗）、`ELECTRON_MIRROR`／
+  `ELECTRON_BUILDER_BINARIES_MIRROR` 蓋成 GitHub 官方點（bundle 默認 npmmirror 是
+  為本地國內網絡優化的，GH runner 訪問慢且不穩——CE 的 release.yml 同款覆蓋）。
+
+### 只建 pacman target
+上游對 linux 固定建 AppImage+deb+rpm+pacman 四份；rpm 要 rpmbuild（Arch 容器
+沒有）、AppImage/deb 純浪費。prepare() 裡 sed 成 `target: ["pacman"]`＋grep 回證。
+bundle.mjs 的產物驗證（findBuiltArtifact）按副檔名集合**任一命中**即過，砍三份
+不影響門禁（本輪讀碼確認，見其 378-412 行）。
+
+### 依賴宣告
+內層產物的 .PKGINFO 被剝掉（tar --exclude），運行時依賴由本檔 depends 逐字抄
+electron-builder.config.js 的 `PACMAN_RUNTIME_DEPENDENCIES`（gtk3/nss/libxss/
+libxtst/libnotify/alsa-lib/mesa/xdg-utils——CE 自己維護的「Arch 官方可解析的
+Electron 運行時閉包」）。chrome-sandbox 權限與桌面庫刷新走 zcode-ce-git.install
+（改寫自其 aur/zcode-ce-bin.install）。
