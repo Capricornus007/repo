@@ -49,8 +49,13 @@ sha256sums=('SKIP')
 pkgver() {
   cd "$pkgname"
   # package.json 的 version 形如 3.15.1-ce.1；pacman 的 pkgver 不準連字號，換點號。
+  # ⚠️ 不能用 node -p：plan 步在 base-devel 容器裡跑，那時 makedepends 還沒裝
+  #   （nodejs 是 makepkg 裝的）→ command not found → 每輪 skip、永遠不出包。
+  #   sed 取第一個 "version" 欄（root package.json 的頂層 version 在最前面，
+  #   dependencies 是 "pkg": "^x.y.z" 形，不會誤中）。
   local _v
-  _v=$(node -p 'require("./package.json").version' | tr '-' '.')
+  _v=$(sed -n 's/^[[:space:]]*"version": *"\([^"]*\)".*/\1/p' package.json | head -n1 | tr '-' '.')
+  [ -n "$_v" ] || { echo "::error::package.json 解不出 version"; return 1; }
   printf '%s.r%s.g%s' "$_v" "$(git rev-list --count HEAD)" "$(git rev-parse --short=8 HEAD)"
 }
 
