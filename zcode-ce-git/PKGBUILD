@@ -38,7 +38,11 @@ license=('Apache-2.0')
 # 與 electron-builder.config.js 的 PACMAN_RUNTIME_DEPENDENCIES 逐字一致（Arch 官方
 # 倉庫可解析的 Electron 運行時閉包；內層產物的 .PKGINFO 被剝掉，依賴由本檔宣告）。
 depends=('gtk3' 'nss' 'libxss' 'libxtst' 'libnotify' 'alsa-lib' 'mesa' 'xdg-utils')
-makedepends=('git' 'nodejs' 'pnpm' 'libarchive')
+# libxcrypt-compat：electron-builder 自帶的 fpm 是 ruby 打包（fpm@2.1.4-fpm-1.17.0-
+# ruby-3.4.3-linux-amd64），其 ruby 要 libcrypt.so.1——首建 run 39984189532 實測
+# `ruby: error while loading shared libraries: libcrypt.so.1`，fpm process failed 127。
+# 本機實查該檔由 libxcrypt-compat 提供（pacman -Qo）。
+makedepends=('git' 'nodejs' 'pnpm' 'libarchive' 'libxcrypt-compat')
 provides=('zcode-ce')
 conflicts=('zcode-ce' 'zcode-ce-bin')
 options=('!strip')
