@@ -46,6 +46,7 @@ runs:
               exit 1
             fi
             pkg=$(curl -fsSL \
+                    -H "Authorization: Bearer ${{ github.token }}" \
                     "https://api.github.com/repos/${{ inputs.repo }}/releases/latest" \
                   | jq -r '.assets[] | select(.name | startswith("go-git-"))
                            | .browser_download_url' | head -n1)
