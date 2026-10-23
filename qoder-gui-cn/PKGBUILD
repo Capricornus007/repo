@@ -38,7 +38,7 @@
 
 pkgname=qoder-gui-cn
 pkgver=0.4.9
-pkgrel=3
+pkgrel=4
 pkgdesc="Qoder - agent workbench for human and AI software teams (GUI, China build)"
 url="https://qoder.com.cn"
 arch=('x86_64')
@@ -117,10 +117,17 @@ package() {
     return 1
   fi
   oldname=$(basename "$cand")
-  echo "上游發布目錄：opt/$oldname → 統一改名為 opt/Qoder-CN"
-  # 目錄名中間帶空格的舊慣例對所有不打引號的腳本都是隱雷，且與本倉 -cn 命名系不一致，
-  # 所以不論上游叫什麼都收敍成無空格的 Qoder-CN，並重寫 desktop 裡的絕對路徑。
-  mv "$cand" "$pkgdir/opt/Qoder-CN" || return 1
+  # 0.4.9 起上游自己把 "Qoder CN"（帶空格）改成 "Qoder-CN" 了（run 39892010849 日誌實錄
+  # 「上游發布目錄：opt/Qoder-CN」）——這時再 mv 一次就是把自己搬到自己身上，mv 必紅。
+  # 所以只有「名字還帶空格／不是 Qoder-CN」才改名並重寫路徑；已是目標名就整段跳過。
+  local need_rename=1
+  [ "$oldname" = "Qoder-CN" ] && need_rename=0
+  if [ "$need_rename" = 1 ]; then
+    echo "上游發布目錄：opt/$oldname → 統一改名為 opt/Qoder-CN"
+    mv "$cand" "$pkgdir/opt/Qoder-CN" || return 1
+  else
+    echo "上游發布目錄已是 opt/Qoder-CN（0.4.9 起不再帶空格）→ 跳過改名與路徑重寫"
+  fi
   oldre=$(printf '%s' "$oldname" | sed -e 's/[][\.\^$*+?(){}|\/]/\\&/g')
 
   local dir="$pkgdir/opt/Qoder-CN"
@@ -139,18 +146,23 @@ package() {
   # 新路径；改写后再防呆一回，最后全樹掃殘留。
   local dsk="$pkgdir/usr/share/applications/qoder-cn.desktop"
   [ -f "$dsk" ] || { echo "错误：找不到 qoder-cn.desktop" >&2; return 1; }
-  grep -q "Exec=\"/opt/$oldname/qoder-cn\"" "$dsk" \
-    || { echo "错误：qoder-cn.desktop 的 Exec 不是 \"/opt/$oldname/qoder-cn\"，請人工確認上游改動" >&2; grep -E '^Exec' "$dsk" >&2; return 1; }
+  # 上游可能給帶引號的舊路徑（0.4.8 之前）或不帶引號的 Qoder-CN（0.4.9 起），兩種都算合法輸入。
+  grep -Eq "Exec=\"?/opt/$oldname/qoder-cn\"?( |$)" "$dsk" \
+    || { echo "错误：qoder-cn.desktop 的 Exec 不含 /opt/$oldname/qoder-cn，請人工確認上游改動" >&2; grep -E '^Exec' "$dsk" >&2; return 1; }
   # 改名後路徑無空格，引號按 freedesktop 慣例一併去掉（整段 "old" 換成 new，
   # 不能只換前綴否則會留下孤立的結尾引號）；其余同目錄的 desktop
   # （如哪天上游多出 url-handler）一起掃。第二條是無引號殘留的兜底。
   local f
-  for f in "$pkgdir"/usr/share/applications/*.desktop; do
-    [ -f "$f" ] || continue
-    sed -i -E "s|\"/opt/$oldre/([^\"]*)\"|/opt/Qoder-CN/\1|g; s|/opt/$oldre/|/opt/Qoder-CN/|g" "$f"
-  done
-  grep -q 'Exec=/opt/Qoder-CN/qoder-cn' "$dsk" \
-    || { echo "错误：desktop 的 Exec 改写后仍不是 /opt/Qoder-CN/qoder-cn" >&2; return 1; }
+  if [ "$need_rename" = 1 ]; then
+    for f in "$pkgdir"/usr/share/applications/*.desktop; do
+      [ -f "$f" ] || continue
+      sed -i -E "s|\"/opt/$oldre/([^\"]*)\"|/opt/Qoder-CN/\1|g; s|/opt/$oldre/|/opt/Qoder-CN/|g" "$f"
+    done
+  fi
+  # 收尾防呆：最終 Exec 必須指向 /opt/Qoder-CN/qoder-cn（引號有無都接受，
+  # 0.4.9 上游自己就不帶引號了）。
+  grep -Eq 'Exec="?/opt/Qoder-CN/qoder-cn"?( |$)' "$dsk" \
+    || { echo "错误：desktop 的 Exec 最終不是 /opt/Qoder-CN/qoder-cn" >&2; grep -E '^Exec' "$dsk" >&2; return 1; }
 
   # 0.3.3 實測包內另一處硬編碼舊絕對路徑：resources/apparmor-profile（上游
   # electron-builder 給 deb 系的 `profile "qoder-cn" "/opt/Qoder CN/qoder-cn"`，
