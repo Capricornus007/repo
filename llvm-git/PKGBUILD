@@ -121,8 +121,8 @@ pkgbase=llvm-git
 # ⚠️ 下面這個順序就是搶佔優先序（mv＋先搶者赢），調順序會改檔案歸屬。
 pkgname=(llvm-libs-git llvm-lit-git compiler-rt-git lld-git lldb-git clang-git
          llvm-git)
-pkgver=24.0.0_r0.g00000000000
-pkgrel=1
+pkgver=24.0.0_r604198.gcb4945e913a
+pkgrel=2
 # ── libLLVM 的 SONAME 後綴（實測本倉產物是 libLLVM.so.24.0git）
 # ⚠️ 必須寫在**頂層**、而且只能用「同一檔裡靜態聲明的 pkgver」推導，絕對不要
 #   在 package_*() 裡用執行期變數（例如 readlink $pkgdir/...）拼 provides：
@@ -374,8 +374,13 @@ _alias() {
 package_llvm-libs-git() {
   pkgdesc='LLVM runtime libraries (trunk)'
   depends=(gcc-libs zlib zstd libffi ncurses libxml2 curl sh)
-  provides=("llvm-libs=${pkgver%%_r*}" "llvm-libs-abi=$_llvm_soname" 'libLLVM.so' 'libLTO.so' 'libRemarks.so')
-  conflicts=(llvm-libs)
+  # clang-libs：Arch 2026-10-22 把 clang 拆出獨立 runtime 包（clang-libs 23.1.4，
+  # 內含 libclang.so 與 libclang-cpp.so）。本包持有 libclang-cpp.so*，clang-git
+  # 持有 libclang.so*，兩顆合起來才是官方 clang-libs 的內容；不宣告這個虛擬名，
+  # 新版 shiboken6-generator（depends clang-libs）就會去拉官方 23.1.4，
+  # 與自有 trunk 檔對撞（實測 /usr/lib/libclang-cpp.so 同時存在於兩包）。
+  provides=("llvm-libs=${pkgver%%_r*}" "llvm-libs-abi=$_llvm_soname" 'libLLVM.so' 'libLTO.so' 'libRemarks.so' 'clang-libs')
+  conflicts=(llvm-libs clang-libs)
   replaces=(llvm-libs)
   # 只拿共享庫（.so*）；靜態庫一律歸 llvm-git。
   # ⚠️ 2026-10-13 改回 Arch 那個切法：實查 gitlab.archlinux.org/.../llvm/-/raw/main/PKGBUILD
@@ -577,8 +582,10 @@ package_clang-git() {
   # （pactree -r clang-tools-extra／-r clang-analyzer 命中的五顆全部只依賴 `clang`）。
   # 下面 extra 相關的路徑樣式刻意**不删**：字面路徑缺檔時 _move 會印一行再跳過，
   # 哪天我們把 extra 加回來，那些行就是現成的清單、也會在日誌裡消失。
-  provides=("clang=${pkgver%%_r*}")
-  conflicts=(clang)
+  # clang-libs 的理由同 llvm-libs-git：本包持有 libclang.so*，是官方
+  # clang-libs 給 shiboken6-generator 等包用的那半邊；不宣告就會與官方包對撞。
+  provides=("clang=${pkgver%%_r*}" 'clang-libs')
+  conflicts=(clang clang-libs)
   replaces=(clang)
   _move 'usr/bin/clang' 'usr/bin/clang++' 'usr/bin/clang-*' 'usr/bin/cc' \
         'usr/bin/c++' 'usr/bin/scan-*' 'usr/bin/run-clang*' 'usr/bin/gen-*' \
