@@ -1476,3 +1476,32 @@ qt4-git/python2-git 兩顆都「成功」，`gh release view --json assets` 查�
 2. `pkgver()` 改成**一定回號**：`git describe` 拿不到標籤時退回 `r<總提交數>.g<sha>`，
    不讓「算不出版號」變成靜默跳過。
 判準記死：**驗 -git 包有沒有出貨，要查 release 資產與 feed db，不能看 job 顏色。**
+
+### expac-git（用戶 2026-10-23 點名：本機 expac 一跑就死）
+本機 `/usr/bin/expac`（Artix expac 10-13）實測回
+`expac: symbol lookup error: expac: undefined symbol: alpm_pkg_get_md5sum`——
+pacman 7（libalpm.so.16）把 `alpm_pkg_get_md5sum()` 整個移除，那顆是对著舊 libalpm 編的。
+影響面：本倉 `downgrade-git` 的 depends 有 `expac`。
+
+走 in-tree 的兩個必要理由（細節與逐條證據都在 `expac-git/PKGBUILD` 檔頭）：
+1. **上游 master 沒修**：實查預設分支是 `master`（不是 `main`，故
+   `raw.githubusercontent.com/.../{master,main}/src/expac.c` 兩條都 404——檔名也換了，
+   master 已重寫成 C++ 的 `src/expac.cc` + `src/package_formatter.cc`）。
+   `src/package_formatter.cc:323` 仍在呼叫 `alpm_pkg_get_md5sum(pkg)`；
+   tag 10 那版是同一條呼叫、檔名 `src/expac.c:485`，所以 Arch/Artix 的 10-13 全中招。
+   對本機 alpm.h 跑 `g++ -fsyntax-only` 得到的是「連編都編不過」
+   （`error: 'alpm_pkg_get_md5sum' was not declared in this scope`）
+   ⇒ 「expac-git 直接吃 master 就正常」這條路不存在，不打補丁做出來的只是另一顆紅的包。
+   上游也沒有修正分支/PR：branches 只有 `master` 與 `siglevel`，closed PR 沒一條沾 pacman 7／md5。
+2. **補丁是本倉自帶檔**：`pacman7-drop-md5sum.patch`（改 `src/package_formatter.cc` 的
+   `case 's'` 與 `tests/test_sync.py` 的期望值）。`%s` 改成「空欄位 + stderr 一次性提示」，
+   不是偷渡成 sha256——實查本地 DB `desc` 已無任何套件層級雜湊欄位，值本身不存在，
+   給假值比給空值更壞。另外 `arch-meson` 也進倉當本地檔（Artix 查無 devtools，
+   寫進 makedepends 會讓本機 `makepkg -s` 直接紅；`build()` 用 `"$srcdir/arch-meson"`
+   按路徑叫並在 `prepare()` 補 chmod，因為 in-tree 抓取是 curl 落盤、不帶 exec 位元）。
+
+矩陣標 `kind: aur`：一則借用「更新校验和并回推 PKGBUILD」那步 `matrix.kind != 'aur'`
+的條件自動跳過（in-tree 包沒有 `Capricornus007/expac-git.git` 那個獨立倉），
+二則那步對 aur 走 `--skipchecksums --nocheck`；我方 `sha256sums` 全 SKIP，
+`check()`（`meson test`，6 條整合測試）在本機 `/tmp` 隔離副本實跑全綠，
+不靠 CI 跳過才過得去。

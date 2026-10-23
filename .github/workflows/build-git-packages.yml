@@ -267,5 +267,6 @@ jobs:
           {"key": "pacman-git", "repo_name": "pacman-git", "variant": "none", "kind": "aur"},
           {"key": "meson-git", "repo_name": "meson-git", "variant": "none", "kind": "aur"},
           {"key": "python2-git", "repo_name": "python2-git", "variant": "none", "kind": "aur"},
-          {"key": "qt4-git", "repo_name": "qt4-git", "variant": "none", "kind": "aur"}
+          {"key": "qt4-git", "repo_name": "qt4-git", "variant": "none", "kind": "aur"},
+          {"key": "expac-git", "repo_name": "expac-git", "variant": "none", "kind": "aur"}
         ]
