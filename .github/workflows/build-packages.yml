@@ -3157,14 +3157,13 @@ jobs:
           llvm-config --version | grep -qE '^2[4-9]' \
             || { echo "::error::容器 llvm-config 不是 trunk：$(llvm-config --version)"; exit 1; }
           if [ "${{ matrix.repo_name }}" = "shiboken6-git" ]; then
-            # ── shiboken6-git：這顆只要**一條** libclang（實測 6.12.0-3 的
-            # /usr/bin/shiboken6 的 NEEDED 裡 LLVM 系只有 `libclang.so.23.1`，
-            # 既沒有 libclang-cpp 也沒有 libLLVM），上面的 `_pkgs` 已把 clang-git
-            # 帶進來，這裡只補一道「頂替真的生效」的硬驗，防止建完還是舊 soname。
-            # ⚠️ 問 SONAME 一律用 objdump 問 ELF，**不要用 readlink -f**：本倉 clang-git
-            #   的 libclang.so → .so.24.0git → .so.24.0.0git 是兩層連結，readlink -f 會解到
-            #   最後那段（24.0.0git），跟 NEEDED 裡的 DT_SONAME（24.0git）不是同一個字串
-            #   ——實測本機踩過，PKGBUILD 裡那道自證因此恆紅（逐包說明見 docs）。
+            # ── shiboken6-git：這顆只吃 libclang 的 C API（實測 6.12.0-3 的 NEEDED 裡
+            # LLVM 系只有 `libclang.so.23.1` 一條，沒有 libclang-cpp、也沒有 libLLVM），
+            # 上面 `_pkgs` 已把 clang-git 裝進來，這裡只補一道「頂替真的生效」的硬驗。
+            # ⚠️ 問 SONAME 一律 objdump 問 ELF，**不要用 readlink -f**：本倉 clang-git 的
+            #   libclang.so → .24.0git → .24.0.0git 是兩層連結，readlink -f 會解到最後那段
+            #   （24.0.0git）而 loader 比對的是 DT_SONAME（24.0git）⇒ 拿去比就恆紅
+            #   （實測踩過，細節見 docs/in-tree-packages.md 的 shiboken6-git 條目）。
             _sh_son=$(objdump -p /usr/lib/libclang.so 2>/dev/null | awk '/SONAME/{print $2; exit}')
             echo "容器 libclang SONAME=[${_sh_son}]"
             case "${_sh_son}" in
