@@ -122,7 +122,7 @@ pkgbase=llvm-git
 pkgname=(llvm-libs-git llvm-lit-git compiler-rt-git lld-git lldb-git clang-git
          llvm-git)
 pkgver=24.0.0_r604198.gcb4945e913a
-pkgrel=2
+pkgrel=3
 # ── libLLVM 的 SONAME 後綴（實測本倉產物是 libLLVM.so.24.0git）
 # ⚠️ 必須寫在**頂層**、而且只能用「同一檔裡靜態聲明的 pkgver」推導，絕對不要
 #   在 package_*() 裡用執行期變數（例如 readlink $pkgdir/...）拼 provides：
@@ -380,7 +380,12 @@ package_llvm-libs-git() {
   # 新版 shiboken6-generator（depends clang-libs）就會去拉官方 23.1.4，
   # 與自有 trunk 檔對撞（實測 /usr/lib/libclang-cpp.so 同時存在於兩包）。
   provides=("llvm-libs=${pkgver%%_r*}" "llvm-libs-abi=$_llvm_soname" 'libLLVM.so' 'libLTO.so' 'libRemarks.so' 'clang-libs')
-  conflicts=(llvm-libs clang-libs)
+  # ⚠️ conflicts **不得**帶 clang-libs（2026-10-23 run 39949228183 發佈後實測互撞）：
+  #   pacman 的 conflicts 會同時比對「包名」與「provides」——clang-git 與本包
+  #   都 provides clang-libs，任一顆 conflicts=clang-libs 就等於宣告跟對方衝突，
+  #   -Su 升級兩顆時直接「requst breaks conflict」紅掉。依賴需求由已裝的
+  #   provides 滿足即可，官方 23.1.4 根本不會再被選入，conflicts 是多餘且有害的。
+  conflicts=(llvm-libs)
   replaces=(llvm-libs)
   # 只拿共享庫（.so*）；靜態庫一律歸 llvm-git。
   # ⚠️ 2026-10-13 改回 Arch 那個切法：實查 gitlab.archlinux.org/.../llvm/-/raw/main/PKGBUILD
@@ -585,7 +590,9 @@ package_clang-git() {
   # clang-libs 的理由同 llvm-libs-git：本包持有 libclang.so*，是官方
   # clang-libs 給 shiboken6-generator 等包用的那半邊；不宣告就會與官方包對撞。
   provides=("clang=${pkgver%%_r*}" 'clang-libs')
-  conflicts=(clang clang-libs)
+  # 同 llvm-libs-git：conflicts 不得帶 clang-libs，否則跟另一顆 provides
+  # clang-libs 的 llvm-libs-git 互撞（2026-10-23 實測 -Su 被擋）。provides 留著。
+  conflicts=(clang)
   replaces=(clang)
   _move 'usr/bin/clang' 'usr/bin/clang++' 'usr/bin/clang-*' 'usr/bin/cc' \
         'usr/bin/c++' 'usr/bin/scan-*' 'usr/bin/run-clang*' 'usr/bin/gen-*' \

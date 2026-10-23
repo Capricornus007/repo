@@ -3184,7 +3184,13 @@ jobs:
             #   libclang.so → .24.0git → .24.0.0git 是兩層連結，readlink -f 會解到最後那段
             #   （24.0.0git）而 loader 比對的是 DT_SONAME（24.0git）⇒ 拿去比就恆紅
             #   （實測踩過，細節見 docs/in-tree-packages.md 的 shiboken6-git 條目）。
-            _sh_son=$(objdump -p /usr/lib/libclang.so 2>/dev/null | awk '/SONAME/{print $2; exit}')
+            # ⚠️ awk **不准帶 `; exit`**（run 39949228183 shiboken6-git job 實測又死 141）：
+            #   GH Actions 的 step 預設就是 `bash -e` 起跑，腳本裡 `set -uo pipefail`
+            #   疊上去後實際是 set -euo pipefail；awk 提前 exit → objdump 後續寫入吃
+            #   SIGPIPE → pipefail 讓賦值語句回 141 → errexit 直接殺 step（本機覆現：
+            #   PIPESTATUS=141 0，objdump 輸出才 4.6KB 也照殺）。跟下面 llvm-config
+            #   那條 grep -q 是同一族病：**管道裡任何人提前退場都不行**。
+            _sh_son=$(objdump -p /usr/lib/libclang.so 2>/dev/null | awk '/SONAME/{print $2}')
             echo "容器 libclang SONAME=[${_sh_son}]"
             case "${_sh_son}" in
               libclang.so.2[4-9]*) ;;

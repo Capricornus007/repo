@@ -38,6 +38,11 @@ pkgver() {
 build() {
   cd "node"
 
+  # Node 27 trunk（27.0.0-pre，2026-10-23 起）把 QUIC 收成顯式開關：
+  # configure 看到 --shared-nghttp3 而沒有 --experimental-quic 直接紅
+  # 「ERROR: --shared-nghttp3 requires --experimental-quic」（run 39949228183
+  # 的 nodejs-git job 實測）。ngtcp2/nghttp3 本來就是 QUIC 那套，depends
+  # 也列了 libngtcp2，開下去才是「用尖端 shared 庫」的完整語義。
   ./configure \
     --prefix="/usr" \
     --with-intl=system-icu \
@@ -46,6 +51,7 @@ build() {
     --shared-libuv \
     --shared-nghttp2 \
     --shared-nghttp3 \
+    --experimental-quic \
     --shared-ngtcp2 \
     --shared-openssl \
     --shared-sqlite \
