@@ -19,7 +19,7 @@
   "ci/workflows/build-git-packages.yml": "c277901e408f40280ab5e0aca5937cd1c2fbd3608915d20fe19f436c4d7e3d87",
   "ci/workflows/build-kernels.yml": "27c87e8dba28a2e12522d5a83dd592c15045c3be0434c9e501a6dbe9d7081a4b",
   "ci/workflows/build-one-package.yml": "dac687388bcc1f63814c8bbb7b1f298e9d24d3438b558dec944dd08d58129115",
-  "ci/workflows/build-packages.yml": "e3b427cf97773ab2492aab73507fa0c796c14510cad3a21fc826e6c88d915e48"
+  "ci/workflows/build-packages.yml": "8cf02ee7ad19d47ac0d72f47e678783eeb4300a6abf94db9ad9bab0fcfb76a16"
  },
  "date": "2026-10-23",
  "missing_aur": [
@@ -1341,7 +1341,7 @@
   },
   "qoder-gui-cn": {
    "files": {
-    "PKGBUILD": "bffc037576e2cf20ed266e7e95e9193ce4d7c76bbe31bdb245823c30ccc0b733"
+    "PKGBUILD": "edf3165dd2ebfade3877fee98527c3622df9a8f77a8e9534b4d82ec73f8c46d9"
    },
    "kind": "",
    "source": "in-tree"
