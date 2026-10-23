@@ -2241,12 +2241,21 @@ jobs:
           #   這裡改成帶捕獲組的精確形 `s/.*llvm-libs-abi=\([0-9A-Za-z._-]\{1,\}\).*/\1/p`，
           #   實測同一行兩側都回 `24.0git`、欄位不存在時回空（空值走上面那條 skip，不會誤判成不等）。
           #   只改本包這一段，mesa／translator 那兩條不动（不是我的包，且改它們要另開一輪驗）。
+          # ⚠️ 取值的**殼層**必須容錯，本段第一版就是死在這裡（run 39902369513 job 120246925189，
+          #   plan 步 `set -uo pipefail` ＋ shell `sh -e`）：`have_abi=$(pacman -Si … | sed | head)`
+          #   在「shiboken6-generator-git 還沒進 feed」時 pacman 回 1 → pipefail 把 1 傳給整條管線
+          #   → 赋值語句非零 → errexit 直接殺掉整個 plan 步（實測：本機
+          #   `sh -eu -o pipefail -c 'x=$(pacman -Si 不存在的包 2>/dev/null|sed|head -1)'` 回 1，
+          #   連下一行 echo 都不輸出，與 CI 日誌「目标版本」後立即 exit 1 完全同形）。
+          #   首發那一輪「包還不存在」是**常態**不是異常，正是要放行重建的條件。
+          #   修法：① 頭端 `|| true` 兜住 pacman 非零；② 末端改 `tail -n 1`（tail 讀完全部輸入，
+          #   不會像 `head -1` 那樣在 ≥2 筆命中時提前關管、讓 sed 吃 SIGPIPE=141 再被 pipefail 放大）。
           if [ "$PKGBASE" = "shiboken6-git" ]; then
-            want_abi=$(LC_ALL=C pacman -Si llvm-libs-git 2>/dev/null \
-                       | sed -n 's/.*llvm-libs-abi=\([0-9A-Za-z._-]\{1,\}\).*/\1/p' | head -1)
-            have_abi=$(LC_ALL=C pacman -Si shiboken6-generator-git 2>/dev/null \
-                       | sed -n 's/.*llvm-libs-abi=\([0-9A-Za-z._-]\{1,\}\).*/\1/p' | head -1)
-            echo "libclang ABI 對照：llvm-libs-git 發的=[$want_abi] ／ 已發布的 shiboken6-generator-git 吃的=[$have_abi]"
+            want_abi=$( { LC_ALL=C pacman -Si llvm-libs-git 2>/dev/null || true; } \
+                        | sed -n 's/.*llvm-libs-abi=\([0-9A-Za-z._-]\{1,\}\).*/\1/p' | tail -n 1)
+            have_abi=$( { LC_ALL=C pacman -Si shiboken6-generator-git 2>/dev/null || true; } \
+                        | sed -n 's/.*llvm-libs-abi=\([0-9A-Za-z._-]\{1,\}\).*/\1/p' | tail -n 1)
+            echo "libclang ABI 對照：llvm-libs-git 發的=[$want_abi] ／ 已發布的 shiboken6-generator-git 吃的=[$have_abi]（空＝尚未發布，首發要建）"
             if [ -z "$want_abi" ]; then
               # 查不到源裡那顆的 abi＝junlin03-aur 沒同步到或 llvm-*-git 還沒進 feed。
               # 這裡**不**放行：放行只會讓後面 `_extra_gate_deps` 那道閘白設——

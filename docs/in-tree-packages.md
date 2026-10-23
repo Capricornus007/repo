@@ -1635,6 +1635,25 @@ count 用 `git rev-list --count HEAD`（實測 12573，全域單調）。
      （同 mesa 那條的判據；查不到 want_abi 時 `skip` 等下輪，不放行也不紅）。
 4. 本檔。
 
+### plan 步那道 ABI 閘門的第一版會**自己殺掉整個 job**（run 39902369513 實測）
+症狀：job 52 秒就紅，日誌停在 `目标版本: 6.12.0.r12573.geb3b113c375-1` 之後一行
+`##[error]Process completed with exit code 1.`，連閘門自己的 `libclang ABI 對照：…`
+都沒來得及印。根因不在邏輯，在**殼層的 errexit**：
+
+* 那個 plan 步是 `set -uo pipefail` ＋ GitHub 的 `shell: sh -e {0}`，兩樣都開；
+* 首發那一輪 `shiboken6-generator-git` **還沒進 feed**，`pacman -Si` 回 1；
+* pipefail 把這個 1 傳給整條管線，`have_abi=$(… | sed | head -1)` 的**赋值語句**因此非零，
+  errexit 當場終止腳本——`2>/dev/null` 只嚥掉訊息，嚥不掉exit 碼；
+* 本機最小復現（不建任何包，纯 shell）：
+  `sh -eu -o pipefail -c 'x=$(pacman -Si 不存在 2>/dev/null|sed -n "s/.*x=//p"|head -1); echo 到這裡'`
+  → 不印「到這裡」、直接回 1。
+* 修法：管線頭端 `{ … || true; }` 兜住 pacman 非零，末端 `head -1` 換 `tail -n 1`
+  （`head` 在 ≥2 筆命中時會提前關管，讓 sed 吃 SIGPIPE=141，同一條 pipefail 又會放大一次）。
+  「包還沒發布」對首發是**常態**，正是要放行重建的条件，`have_abi` 空值自然不等於 `want_abi`。
+* ⚠️ 教訓一般化：往 plan 步（62382 bytes、無 `${{ }}` 模板，不受 21000 上限）加 `pacman -Si`
+  探針時，**一律要假設目標包不存在**；mesa 那條舊閘門目前沒踩到只是因為 `mesa-tkg-git`
+  早就在 feed 裡，本包這段不動它（改別人的包要另開一輪驗）。
+
 ### 退場方式
 用戶規則 71 那類「產物端收口」都寫在 package_*() 裡了，哪天 dev 分支自己跟上
 libclang 的新 soname、或上游真的加了「只造 shiboken」的開關（prepare() 那三道正向斷言
