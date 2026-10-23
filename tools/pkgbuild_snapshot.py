@@ -81,7 +81,14 @@ def aur_files(base, workdir):
                        capture_output=True, text=True, timeout=180)
     if r.returncode != 0:
         return None, (r.stderr or r.stdout).strip()[:160]
-    files = copy_tree(tgt, os.path.join(tgt, '.snapshot-out'), skip=('.git',))
+    # ⚠️ 輸出目錄**不能放在源碼目錄裡面**：舊版寫 `tgt/.snapshot-out`，而 copy_tree 會把
+    #    自己剛建出來的這個子目錄當成源的一部分再遞迴複製，於是撞 distutils 的
+    #    「Destination path ... already exists」——2026-10-22 的 run 39861036185 就是死在
+    #    `/tmp/snap/pkgbuild-snapshots/2026-10-22/android-ndk-27/.snapshot-out already exists`。
+    #    改成放在克隆目錄的**兄弟**位置，並在複製前清一次（冪等）。
+    snap_out = tgt + '.out'
+    shutil.rmtree(snap_out, ignore_errors=True)
+    files = copy_tree(tgt, snap_out, skip=('.git',))
     if not files:
         # AUR 的倉被刪／移為 orphan 時，git 會給一個**空的**成功克隆；
         # 這種「查無此包」必須如實記進 missing_aur，不能當快照成功。
@@ -121,7 +128,7 @@ def main():
             if files is None:
                 missing.append({'package': name, 'pkgbase': base, 'error': err})
                 continue
-            shutil.move(os.path.join(work, base, '.snapshot-out'), os.path.join(out, name))
+            shutil.move(os.path.join(work, base + '.out'), os.path.join(out, name))
             shutil.rmtree(os.path.join(work, base), ignore_errors=True)
             src = 'aur'
         manifest[name] = {'files': files, 'kind': kind, 'source': src}
