@@ -1,0 +1,676 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 本倉目錄版 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md，
+# **不要寫回 workflow** —— 那個 step 有 21000 字元表達式上限且註解也計入）。
+#
+# 動機：Artix world-goblins 的 DB 列了 lld-23.1.3-1（2026-10-11 複查仍在：
+# Repository world-goblins / Version 23.1.3-1），但實測 12 臺鏡像全部 404
+# （該倉目錄裡根本沒有 lld 檔，只有 lldb）→ 本機卡在「llvm/clang 23.1.3 ＋
+# lld 23.1.1」的不一致態，而且 lld 補不上會讓整條 -Syu 原子失敗。
+# 為啥不走 kind:aur：AUR llvm-git 停在 18.0.0_r484887（2024-04）、
+# llvm-minimal-git 停在 21.0.0_r537041（2025-05），照抄是「假尖端真降級」。
+#
+# 設計（用戶 2026-10-11 裁：以 trunk **取代**系統那套，mesa 一起重建）：
+#   · 裝進 /usr、與官方包同路徑，靠 provides/conflicts/replaces 頂替。
+#   · 分割不靠猜 CMake 的 install-* target（名字上游會改，而且 install-llvm
+#     本身也含函式庫 → 必然重疊）。改成 build() 裡一次性 cmake --install 到
+#     $_stage，各 package_*() 只按路徑搬。
+#   · **搬＝mv 不是 cp**：glob 表達不了「同目錄下誰不屬於我」——
+#     `usr/bin/llvm-*` 必然罩住 `usr/bin/llvm-lit`、`usr/lib/*.a` 必然罩住
+#     `libLLVM*.a`（options=staticlibs 會產一大堆 .a）。用 cp 時實測報出
+#     14 對交集；改成 mv 後歸屬由 **pkgname 的先後順序**決定（先搶者赢），
+#     所以「broad 樣式」一定排在被它罩住的「narrow 樣式」之後。
+#     順序：llvm-libs-git → llvm-lit-git → compiler-rt-git → lld-git →
+#     lldb-git → clang-git → llvm-git。
+#   · ⚠️ 由此得出一條硬規則：**每個 package_*() 都把 $_stage 當成自己獨立的
+#     root，絕對不能「先 _move 再 _drop」**——mv 過的檔頭已經離開 $_stage，
+#     _drop 就是把它刪除。上一版正是踩在這裡：clang-git 逐個 _drop
+#     ${_extra_tools[@]}，而說好接手它們的 package_clang-tools-extra-git
+#     **根本沒列進 pkgname**（makepkg 不會呼叫它）＝clangd／clang-tidy 等
+#     十幾支工具被 rm 掉後無人收，等于從產物裡消失。
+#     scripts/check-pkg-split-overlap.py 就是抓這件事的（它刻意不模擬 _drop）。
+#
+# ⚠️ 上線順序（未做，見任務 #157）：實測本機有 35 個 .so 直接 NEEDED
+# libLLVM.so.23.1。mesa-tkg-git 的 CI job 目前裝的是倉庫 llvm-libs 23.1.3，
+# 產物就鏈著 .23.1。必須先讓 mesa 那個 job「裝我們產出的 llvm-libs-git 再編」，
+# 否則這批一上線、裝下去 GL 直接黑。
+#
+#    ⏱ timeout：GitHub Actions 的 jobs.timeout-minutes 天花板是 360（feed 現值也是
+#    360，build-git-packages.yml:37，**調不上去**），所以必須裁：關
+#    tests/docs/benchmarks/examples、runtimes 只 compiler-rt 且只 host triple、
+#    polly/openmp/offload/libc++/libc++abi 全不進
+#    （本機 pacman -Qs 查實沒裝），並用 lld 當連結器＋限制併發連結數
+#    （linking 是 RAM 瓶頸不是 CPU 瓶頸）。
+#
+#    2026-10-11 第二次裁（用戶點名「六包」＋硬性要求 LLVM_ENABLE_PROJECTS=clang;lld;lldb、
+#    LLVM_TARGETS_TO_BUILD=X86;AMDGPU）：上一版多带了 clang-tools-extra 與 NVPTX。
+#    實測 run #443（job 114382764499）那一輪整包（clone＋configure＋編譯＋打包）
+#    2 時 31 分，沒撞 360，但 trunk 只會越長越久，照用戶點名的參數收。代價要寫明白：
+#      · clangd／clang-tidy／clang-format／clang-rename 等 extra 工具**不再產出**，
+#        本機 `pactree -r clang-tools-extra`／`-r clang-analyzer` 查實沒有任何已裝包
+#        依賴這兩個名字（依賴都寫在 `clang` 本體上：doxygen、lldb、rust-bindgen-git、
+#        shiboken6-generator、linux-cachyos-cjktty-headers），所以頂得住；
+#      · 因此 clang-git 的 provides 拿掉 clang-analyzer／clang-tools-extra 兩個虛名
+#        （產物裡沒有那些程式，留著就是讓 pacman 誤判依賴已滿足）；
+#      · NVPTX 移除後 `nvptx-arch` 也不會有了（mesa 用的 AMDGPU 與 llvmpipe 用的 X86 都留著）。
+#
+# ⚠️ 版本由 pkgver() 從上游 HEAD 現算 ⇒ 本檔要列進「回推校驗和」的排除清單。
+#
+# ─── 2026-10-12 覆核（任務 #157）：六顆的邊界與兩個「CI 全綠但產物是壞的」實測 ───
+# 「六顆」按**實際 feed/庫裡的包名**定案（expac 沒裝，改用 LC_ALL=C pacman -Si 逐條查，
+# 全部是本機 DB 與鏡像的實測輸出）：Artix world-goblins 的 llvm 系一共九個名字
+#   llvm / llvm-libs / llvm-lit / clang / compiler-rt / lld / lldb / openmp / polly
+# （`tar -xf /var/lib/pacman/sync/world-goblins.db` 解出來的條目，另有 rocm-llvm* 10.0
+#  那批與本線無關）。本機 `pacman -Qs` 查實**只裝了前七個**，openmp／polly 沒裝、
+# `pactree -r` 沒有任何已裝包依賴它們 → 不進 feed（要進也得用戶點頭，見 report 的
+# needs-decision）。所以「該進 feed 的六顆」＝用戶點名的
+#   llvm、llvm-libs、llvm-lit、clang、lld、lldb
+# 再加 clang 的**硬依賴** compiler-rt（`pacman -Si clang` 的 Depends 就有 compiler-rt，
+# 少了它這顆不是等值替換）＝本目錄實際切出的七顆 split。
+# 「mlir／polygeist」查過了、**不收**：`LC_ALL=C pacman -Si mlir` 只在 andontie-aur
+#  有（23.1.1-1，Artix world 系根本沒這顆）、`pacman -Si polygeist` 任何已啟用的庫都查無，
+#  本機也沒有裝、也沒有東西依賴 → 收進來等於憑空發明需求。
+#
+# 已發布狀態（不是「還沒上線」）：run #454（job 114714371131，2026-10-12 10:01 UTC+8）
+# 七顆全綠並已進 feed，實測 `gh api releases/tags/current-repo` 有 clang-git／
+# compiler-rt-git／lld-git／lldb-git／llvm-git／llvm-libs-git／llvm-lit-git，
+# DB 裡 llvm-libs-git 的 Provides 是 `llvm-libs=24 libLLVM.so=24.0git-64 …`。
+# 但**下載產物拆開看**才發現兩個 CI 綠燈蓋住的洞（本輪修掉）：
+#   ① 別名符號連結整批消失：`tar -tf lld-git-24_r13699…` 只有 **usr/bin/lld 一個**
+#      （缺 ld.lld／ld64.lld／lld-link／wasm-ld），`tar -tf clang-git-…` 有 clang／
+#      clang-24／clang-cl／clang-cpp 但**沒有 clang++／amdgpu-arch**。根因：上游那些
+#      別名是 CMake `install(CODE …create_symlink…)` 造的**相對符號連結**，安裝時
+#      一行 "-- Installing:" 都不印（日誌查實），而本體被 `_move` 的**第一條** pattern
+#      先搬走後，別名在 $_stage 裡就變成 dangling symlink，`[ -e ]` 對 dangling 一律回
+#      假 → 被当成「不存在」跳過；跳過之後還留在 stage 的它們又會被 llvm-git 那條
+#      `usr/bin/*` 兜底掃走，所以檔案「有發出去」，只是發到**錯的包**——只裝 clang-git
+#      的人（clang-git 不依賴 llvm-git）就徹底沒有 clang++。修法：`_move` 的存在性檢查
+#      改成 `-e` 或 `-L`，另加 `_alias` 兜底補相對連結，再給 lld／clang 各加一道
+#      「入口沒齊就紅」的收口（同 compiler-rt 的 asan 檢查）。
+#   ② llvm-lit 的 python 套件裝錯版本目錄：`site.getpkgdir()` 在 Arch/Artix 的 python
+#      上**不存在**（本機 python 3.14.8 實測 AttributeError），于是永遠落到寫死的
+#      `python3.13` → 產物把 lit 放進 /usr/lib/python3.13/site-packages，而系統 python
+#      是 3.14，`python -c 'import lit'` 實測 ModuleNotFoundError（連 Artix 自己的
+#      llvm-lit 23.1.3 在本機也是壞的）。改 sysconfig purelib、拿不到就硬紅，並補上
+#      官方同款 /usr/bin/lit 入口，最後用 PYTHONPATH 指到落點自我 import 一次才放行。
+#   ③ 順帶清掉我憑空發明的 lld 檔案名（lld-rc／lld-elf／lld-macho／lld-macho-new／
+#      invoked／nvptx-arch）——`pacman -Ql lld` 查實官方只有五個入口，NVPTX 也已在
+#      第二次裁參數時拿掉。
+# ⚠️ 裝機順序仍未做（這是任務 #157 剩下的最後一塊，不是本檔的問題）：本機 **98 個已安裝
+#   檔**帶 `libLLVM.so.23.1`／`libclang-cpp.so.23.1`／`libLLVMSPIRVLib.so.23.1` 的
+#   NEEDED，但 `pacman -Qo` 歸戶後真正的損壞面只剩兩顆：llvm 45／clang 28／lld 10／
+#   lldb 7／llvm-libs 3 這 93 個本來就在被取代的七顆裡（換代一起消失），剩下
+#   **mesa-tkg-git 4 個**（`libgallium-26.3.0-devel.so`、`libvulkan_radeon.so`、
+#   `libvulkan_lvp.so`、`libRusticlOpenCL.so.1.0.0`＝GL/Vulkan 全黑）＋
+#   **doxygen 1 個**（`/usr/bin/doxygen` 要 `libclang-cpp.so.23.1`，而它不在本 feed）。
+#   `-Syu` 不會自動換裝 llvm-libs-git（包名不同，pacman 只按同名升級），但**任何人裝
+#   llvm-git 那批的當下**，只要 mesa-tkg-git 那個 CI job 還照 `build-packages.yml:261`
+#   裝倉庫裡的 stable `llvm llvm-libs clang`，產物就仍鏈 `.23.1` → 裝下去 GL 直接黑。
+#   發包前必須先把那個 job 改成「裝我們的 llvm-libs-git 再編」，並讓它排在 llvm-git 之後
+#   （該 job 本就有 `.llvm-check` 探針在比「容器 llvm soname vs 產物 NEEDED」，改完自己會驗）。
+#   另有一枚**既有**孤檔：`pacman -Qo /usr/lib/libLLVMSPIRVLib.so.23.1` 查實沒有包擁有它，
+#   而 `libRusticlOpenCL.so` 照樣 NEEDED（不是這次造成的，換代時一併想清楚）。
+
+_pkgbase=llvm-project
+pkgbase=llvm-git
+# 七個，不是八個：實測 Artix 的 clang-tools-extra 不是獨立包
+# （`pacman -Qi clang-tools-extra` 解析到 clang、兩份 `pacman -Ql` 清單完全相同），
+# 官方是把 extra 的工具折進 clang、再 provides 一個 clang-tools-extra 名字
+# （查實：系統 clang 23.1.3-1.1 的 Provides 就是 clang-analyzer=23.1.3
+# clang-tools-extra=23.1.3，Conflicts 為那兩個名字）。自己發明一個 extra 分割包
+# ＝註定與 clang-git 搶同一批檔案。
+# ⚠️ 下面這個順序就是搶佔優先序（mv＋先搶者赢），調順序會改檔案歸屬。
+pkgname=(llvm-libs-git llvm-lit-git compiler-rt-git lld-git lldb-git clang-git
+         llvm-git)
+pkgver=24.0.0_r0.g00000000000
+pkgrel=1
+# ── libLLVM 的 SONAME 後綴（實測本倉產物是 libLLVM.so.24.0git）
+# ⚠️ 必須寫在**頂層**、而且只能用「同一檔裡靜態聲明的 pkgver」推導，絕對不要
+#   在 package_*() 裡用執行期變數（例如 readlink $pkgdir/...）拼 provides：
+#   makepkg 7.1 對分割包的 provides/depends 走 `extract_function_variable`
+#   ——**靜態抽字串再 eval**，那個上下文裡 $pkgdir／local 變數都不存在，
+#   `provides+=("llvm-libs-abi=$abi")` 會被抽成 `llvm-libs-abi=`（版本空），
+#   直接 `==> 錯誤： pkgver in provides 不可以空白`，而且是在 makepkg 起跑後
+#   4 秒就紅（run #462 的 llvm-git 實測）。頂層赋值沒這個問題：makepkg 在
+#   update_pkgver() 之後會**重新 source 一次 PKGBUILD**（/usr/bin/makepkg 189 行
+#   那條註解就是講這個），所以這裡拿到的永遠是真正的 pkgver。
+# trunk 的 LLVM_VERSION_SUFFIX 恆為 git（查實 cmake/Modules/LLVMVersion.cmake），
+# SOVERSION 形如 MAJOR.MINOR＋後綴 ⇒ 剝掉第三段再補 git。真到正式版這行會和實物
+# 不一致，但下游 mesa 的 soname 守門步是拿**容器實際 soname**比的，不會靜默放過。
+_llvm_soname="${pkgver%%_r*}"; _llvm_soname="${_llvm_soname%.*}git"
+arch=(x86_64)
+url="https://llvm.org/"
+license=('Apache-2.0 WITH LLVM-exception')
+makedepends=(cmake ninja git python swig perl libedit libffi ncurses zlib zstd
+             libxml2 python-psutil lld libelf curl xz lib32-gcc-libs)
+options=(staticlibs !emptydirs !lto)
+# ⚠️ `$_stage` 絕不能寫成頂層的 `_stage="$srcdir/stage"`（上一版就是這樣，紅在
+#   `mv: cannot stat '/stage/usr/include/llvm'`）：makepkg 是「先 source PKGBUILD、
+#   之後才算 srcdir」（本機 /usr/bin/makepkg 查實：source_safe "$BUILDFILE" 在 211 行、
+#   `srcdir=` 賦值在 1178/1181 行），頂層展開時 $srcdir 還是空字串 → `_stage` 變成
+#   `/stage`。之後 `rm -rf /stage` 與 `DESTDIR=/stage cmake --install` 全落在根目錄，
+#   各 package_*() 的 glob 因此一律不命中，而**沒有 glob 元字元的字面路徑**（如
+#   usr/include/llvm）不受 nullglob 約束、會原封不動送進 mv → 就是那句 cannot stat。
+#   所以改成函式內現算（_stage_init），且 _move 自己也會先確認。
+_stage=
+_stage_init() {
+  if [ -z "$srcdir" ]; then
+    echo "FATAL: srcdir 尚未由 makepkg 設定，$_stage 無從推得（不要在 PKGBUILD 頂層取用 \$srcdir）"
+    return 1
+  fi
+  _stage="$srcdir/stage"
+}
+_cmakeargs=(
+  # ⚠️ 必須顯式給 -G Ninja：本機 configure 實測漏它的時候，cmake 退回 Unix Makefiles
+  #   （build 目錄裡生出的是 Makefile、沒有 build.ninja），那樣 CI **不會紅**、只會
+  #   在連結階段 OOM —— 因為 -DLLVM_PARALLEL_LINK_JOBS 只有 Ninja 支援，用 Make 時
+  #   連結併發會退化成跟編譯一樣吃滿 nproc。這條是 Arch 那份有、我先前漏抄的。
+  -G Ninja
+  -DCMAKE_BUILD_TYPE=Release
+  # ⚠️ 這組裡「Arch 有而我之前沒抄」的幾條都是必須的，不是點綴：
+  #   RTTI → lldb 編不過；CLANG_LINK_CLANG_DYLIB → 沒有它就根本不會產
+  #   libclang-cpp.so（而分割清單假設它在）；LLVM_INSTALL_UTILS → FileCheck 等
+  #   工具不會被建；CMAKE_SKIP_INSTALL_RPATH → 少了它裝到 /usr 的執行檔會留
+  #   指向 build 目錄的 RPATH；LLD_BUILD_SHARED → prepare 裡那條 sed 就是為它。
+  -DCMAKE_INSTALL_DOCDIR=share/doc
+  -DCMAKE_SKIP_INSTALL_RPATH=ON
+  -DLLVM_ENABLE_ASSERTIONS=OFF
+  -DLLVM_ENABLE_TERMINFO=OFF
+  -DLLVM_ENABLE_ZLIB=ON
+  -DLLVM_ENABLE_ZSTD=ON
+  -DLLVM_ENABLE_CURL=ON
+  -DLLVM_ENABLE_FFI=ON
+  -DLLVM_ENABLE_RTTI=ON
+  -DLLVM_ENABLE_BINDINGS=OFF
+  -DLLVM_BINUTILS_INCDIR=/usr/include
+  -DLLVM_INCLUDE_TESTS=OFF
+  -DLLVM_INCLUDE_BENCHMARKS=OFF
+  -DLLVM_INCLUDE_EXAMPLES=OFF
+  -DLLVM_INCLUDE_DOCS=OFF
+  -DLLVM_INSTALL_UTILS=ON
+  # 2026-10-11 第二次裁：clang-tools-extra 與 NVPTX 拿掉（理由與代價見檔頭 ⏱ 段）。
+  -DLLVM_ENABLE_PROJECTS='clang;lld;lldb'
+  -DLLVM_ENABLE_RUNTIMES='compiler-rt'
+  -DLLVM_TARGETS_TO_BUILD='X86;AMDGPU'
+  # ⚠️ **不能**開 COMPILER_RT_DEFAULT_TARGET_ONLY：實測本機已裝的 compiler-rt-git
+  #   `pacman -Ql | grep -c i386` 回 **0**，而官方 extra 與 world-goblins 的
+  #   compiler-rt 都有 `libclang_rt.asan-i386.a`／`clang_rt.crtbegin-i386.o`
+  #   （解 /var/lib/pacman/sync/{extra,world-goblins}.files 點名查實）。那個旗標就是
+  #   「只建預設 target」，等於把 32 位元 sanitizer runtime 整條砍掉 → 用 clang
+  #   編 `-m32 -fsanitize=address` 直接找不到 runtime。Arch 那邊還特別為這件事
+  #   掛了 makedepends_x86_64=('lib32-gcc-libs')（llvm.PKGBUILD:17-18 的註解寫
+  #   “Build 32-bit compiler-rt libraries on x86_64 (FS#41911)”），照做。
+  #   （用戶 2026-10-13 點名的「rt 啥的呢？」就是這條。）
+  # ⚠️ 這裡**不能**給 -DBUILD_SHARED_LIBS=ON：run #437 實測 configure 直接被拒
+  #   「Cannot enable BUILD_SHARED_LIBS with LLVM_LINK_LLVM_DYLIB」（CMakeLists.txt:1005
+  #   的 message(FATAL_ERROR)），prepare() 就紅。Arch 也只給下面那兩條 dylib 開關。
+  -DLLVM_BUILD_LLVM_DYLIB=ON
+  -DLLVM_LINK_LLVM_DYLIB=ON
+  -DLLVM_DYLIB_COMPONENTS=all
+  -DLLVM_ENABLE_LLD=ON
+  -DLLVM_PARALLEL_LINK_JOBS=2
+  -DLLVM_VERSION_SUFFIX=git
+  -DCLANG_DEFAULT_PIE_ON_LINUX=ON
+  -DCLANG_LINK_CLANG_DYLIB=ON
+  -DCLANG_DEFAULT_LINKER=lld
+  -DLLD_BUILD_SHARED=ON
+  -DENABLE_LINKER_BUILD_ID=ON
+  -DLLDB_ENABLE_PYTHON=ON
+  -DLLDB_INCLUDE_TESTS=OFF
+)
+
+source=("git+https://github.com/llvm/llvm-project.git#branch=main")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd $_pkgbase
+  # 版本三段（MAJOR.MINOR.PATCH）一律從上游**權威檔** `cmake/Modules/LLVMVersion.cmake`
+  # 現算，不從 git tag 猜（AUR llvm-git 同款手法，查實其 pkgver 形如
+  # `19.0.0_r495959.9f3334e9932f`）。實測 trunk 那檔給的是 MAJOR=24 MINOR=0 PATCH=0
+  # SUFFIX=git，而 `/usr/lib/libLLVM.so.24.0git` 這個 SONAME（本倉產物實物）也對得上。
+  #
+  # ⚠️ 為什麼不能寫「光 24」：上游最新 tag 是 `llvmorg-24-init`（23.1.3 之後直接跳到
+  # 24-init），拿 tag 推基號會算成 `24_r13699…`，而實測
+  #   vercmp 24_r13699.g7159ce54c436 24.0.0  →  -1   （24.0.0 比較新）
+  # 兩個實際後果：
+  #   ①本檔標頭那顆佔位 `24.0.0_r0.g000…` 反而比實算值**新** → 一旦 pkgver() 出錯落回
+  #     佔位值，repo-add 先收假版本、下一輪真版本被判「不單調」拒收（kew-git 同一類坑，
+  #     那包當時靠 epoch=2 才爬出來）；
+  #   ②provides 變成 `llvm-libs=24`／`clang=24`，而對照實測官方 llvm-libs 的 provides 是
+  #     `libLLVM.so=23.1-64` 那種三段形 → world-goblins 出 24.0.0 之後，任何
+  #     `llvm-libs>=24.0.0` 的依賴都輪不到我們， pacman 會繞道去裝穩定版。
+  # count 用 `git rev-list --count HEAD`（全域單調），**不用 describe**：
+  # describe 在「HEAD 正好落在 tag 上」時回 `llvmorg-24.0.0-rc1` 這種**只有 tag 名**
+  # 的字串，由右往左剝兩段會把 `rc1` 當 sha、把 tag 名本身當 count，算出垃圾
+  # （而上一版用的 `rev-list --count llvmorg-24..HEAD` 更糟：那個 tag 根本不存在 →
+  # 落進 `|| echo 0` → 每輪恆 r0、只剩 hash 在變，hash 屬 alpha 段 ⇒ 不單調，
+  # kew-git／llvm-git 都這樣被 repo-add 拒收過）。
+  # 代價是 r 後面的數字會一次從「距 tag 的提交數」跳成「全歷史提交數」——
+  # vercmp 只比大小，跳大是**合法換代**，不是錯位。
+  local sha v
+  v=$(awk '
+        /^[[:space:]]*set\(LLVM_VERSION_MAJOR[[:space:]]/ {gsub(/[()]/, "", $2); maj=$2}
+        /^[[:space:]]*set\(LLVM_VERSION_MINOR[[:space:]]/ {gsub(/[()]/, "", $2); min=$2}
+        /^[[:space:]]*set\(LLVM_VERSION_PATCH[[:space:]]/ {gsub(/[()]/, "", $2); pat=$2}
+        END { if (maj == "") exit 1; printf "%s.%s.%s", maj, min, pat }' \
+        cmake/Modules/LLVMVersion.cmake) \
+    || { echo "pkgver: cmake/Modules/LLVMVersion.cmake 讀不到 LLVM_VERSION_MAJOR（上游改檔名或搬家，要人來看）" >&2; return 1; }
+  sha=$(git rev-parse --short=11 HEAD) || return 1
+  printf '%s_r%s.g%s\n' "$v" "$(git rev-list --count HEAD)" "${sha}"
+}
+
+prepare() {
+  cd $_pkgbase
+  # 內附的 Findzstd.cmake 與系統 zstd 不同步時會炸（Arch 同款）；
+  # trunk 若已删掉這檔，rm -f 安靜跳過。
+  rm -f llvm/cmake/modules/Findzstd.cmake
+  cd ..
+  cmake -S $_pkgbase/llvm -B build "${_cmakeargs[@]}" \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_C_FLAGS_RELEASE='-O2 -DNDEBUG' \
+    -DCMAKE_CXX_FLAGS_RELEASE='-O2 -DNDEBUG'
+}
+
+build() {
+  _stage_init || return 1
+  cmake --build build -j"$(nproc)"
+  rm -rf "$_stage"
+  DESTDIR="$_stage" cmake --install build
+  # 裝完一定要驗「暫存區真的有東西」： errexit 是 makepkg 在函式外套的
+  # （run_function_safe 的 shopt -o -s errexit errtrace），但它擋不住
+  # 「指令回 0 卻什麼都沒安裝」這種情況。上一版就是帶著一個空的 /stage 進
+  # package_*()，紅在搬檔那步、訊息還把真因（DESTDIR 跑掉）蓋掉。
+  [ -d "$_stage/usr/lib" ] || { echo "FATAL: cmake --install 沒有產出 $_stage/usr/lib"; return 1; }
+  echo ">> 暫存區就緒：$_stage（$(find "$_stage" -type f | wc -l) 個檔案）"
+}
+
+# 從暫存區**搬**進 $pkgdir（mv＝歸屬轉移，先搶者赢）。nullglob 讓沒命中的
+# 「含元字元的樣式」安靜跳過；但 nullglob 罩不住**字面路徑**（bash 不對無元字元的
+# word 做檔名展開），那種一律照原樣送進 mv，檔不在就是 `cannot stat`——
+# 所以字面路徑要自己判斷存在與否，缺了就印一行清楚的話再跳過：上游挪檔、或我們
+# 主動裁掉某個 LLVM_ENABLE_PROJECTS（如 clang-tools-extra）時，那些程式本來就不會
+# 存在，不該把整輪判紅，但也不能像 `|| true` 那樣把「真的缺檔」一起蓋掉。
+# 每個 package_*() 最後印的搬入計數就是「這顆包到底有沒有東西」的證據。
+_move() {
+  local pat h rel moved=0 skipped=0
+  _stage_init || return 1
+  [ -d "$_stage" ] || { echo "FATAL: 暫存區不存在：'$_stage'"; return 1; }
+  shopt -s nullglob
+  for pat in "$@"; do
+    case $pat in
+      # ⚠️ 這裡原本寫的是 `*[*]*|*?)`……實測那是錯的：case 裡的 `?` 是「任意單字元」，
+      # 所以 `*?*` 會匹配**所有**非空字串，導致每條路徑都被當成 glob、永遠跳過
+      # 存在檢查，後果是 CI 上 `mv: cannot stat 'usr/lib/baremetal'`（該目錄只在 clang
+      # 啟用 baremetal 工具鏈時才存在）。改成只把真正含 * ? [ 的樣式交給 nullglob。
+      *[*?]*|*[\[]*) ;;                # 含 glob 元字元（* ? [）：交給 nullglob 處置
+      *)
+        # ⚠️ 必須同時認 `-L`：上游那批「一個本體＋多個別名」的入口（lld 的
+        #   ld.lld/lld-link/wasm-ld/ld64.lld、clang 的 clang++/amdgpu-arch）是
+        #   CMake `install(CODE … create_symlink …)` 造的**相對符號連結**，這種
+        #   安裝一行 "-- Installing:" 都不印，而且本體一旦被前面的 _move 搬走，
+        #   連結就 dangling → `[ -e ]` 為假。實測 run #454（job 114714371131，
+        #   2026-10-12 10:00 UTC+8）：lld-git 日誌一口氣印
+        #   「跳過不存在的字面路徑 usr/bin/{ld.lld,lld-link,wasm-ld,ld64.lld,…}」、
+        #   clang-git 印「跳過 usr/bin/{clang++,amdgpu-arch,…}」，結果那兩顆
+        #   **只有本體、沒有別名**＝`-fuse-ld=lld`（找 ld.lld）與 `clang++`
+        #   （C++ 入口）裝下去直接失效。官方包的清單就是驗收標準：
+        #   `pacman -Ql lld` 的 /usr/bin 有 lld ld.lld ld64.lld lld-link wasm-ld，
+        #   `pacman -Ql clang` 有 clang clang++ clang-23 amdgpu-arch。
+        if [ ! -e "$_stage/$pat" ] && [ ! -L "$_stage/$pat" ]; then
+          echo ">> $pkgname: 跳過不存在的字面路徑 $pat"
+          skipped=$((skipped + 1))
+          continue
+        fi ;;
+    esac
+    for h in "$_stage"/$pat; do
+      rel=${h#"$_stage"/}
+      mkdir -p "$pkgdir/$(dirname "$rel")"
+      mv -f "$h" "$pkgdir/$rel"
+      moved=$((moved + 1))
+    done
+  done
+  shopt -u nullglob
+  echo ">> $pkgname: _move 搬入 $moved 個路徑、跳過 $skipped 個"
+}
+
+# 每顆都自帶 LICENSE（$_stage 已被前面的包搬過，所以這裡直接從源碼取）
+_license() {
+  install -Dm644 "$_pkgbase/$1/LICENSE.TXT" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
+
+# 兜底補符號連結：`_alias <本體> <別名…>`，只在「本體已在本包、別名缺席」時補。
+# 需要它的理由見上面 _move 的 ⚠️——上游的別名是 dangling symlink，本體一搬走就
+# 從 `cmake --install` 的輸出裡查不到、也通不過 `-e`。實測已發布的
+# lld-git-24_r13699 裡 **只有 usr/bin/lld 一個檔**（`tar -tf` 查實），
+# clang-git-24_r13699 裡有 clang／clang-24／clang-cl／clang-cpp 但
+# **沒有 clang++／amdgpu-arch**——那就是上一輪上線的實際損壞面：
+# `cc -fuse-ld=lld`（gcc／clang 都按 `ld.lld` 這個名字去 exec）與 `clang++`
+# 裝下去直接找不到程式。這裡照官方包的清單補齊（`pacman -Ql lld` 的
+# /usr/bin 是 lld、ld.lld、ld64.lld、lld-link、wasm-ld；
+# `pacman -Ql clang` 有 clang++、amdgpu-arch）。
+# ⚠️ 用**相對**連結（`ln -s lld ld.lld`），與上游一致，這樣包內自洽、
+#    也不會因為寫死絕對路徑而在別的前綴下失效。
+_alias() {
+  local target=$1 name made=0
+  # ⚠️ 寫成 `if` 而不是 `[ -e ] || [ -L ] || { … }`：makepkg 給函式套的是 errexit，
+  #   而「AND-OR 清單最後一条失敗」在 errexit 下會直接把整輪判紅（本倉 workflow
+  #   裡 dash 那段 `[ ] && { }` 的教訓是同一件事）。这里任何一種判定都該是「跳過」
+  #   而不是「失敗」。
+  if [ ! -e "$pkgdir/usr/bin/$target" ] && [ ! -L "$pkgdir/usr/bin/$target" ]; then
+    echo ">> $pkgname: _alias 跳過（本體 usr/bin/$target 不在本包）"
+    return 0
+  fi
+  for name in "${@:2}"; do
+    if [ -e "$pkgdir/usr/bin/$name" ] || [ -L "$pkgdir/usr/bin/$name" ]; then
+      continue                 # 別名已隨上游裝進來了，不覆寫
+    fi
+    ln -s "$target" "$pkgdir/usr/bin/$name"
+    made=$((made + 1))
+    echo ">> $pkgname: 補符號連結 usr/bin/$name -> $target"
+  done
+  echo ">> $pkgname: _alias（$target）補了 $made 條"
+}
+
+package_llvm-libs-git() {
+  pkgdesc='LLVM runtime libraries (trunk)'
+  depends=(gcc-libs zlib zstd libffi ncurses libxml2 curl sh)
+  provides=("llvm-libs=${pkgver%%_r*}" "llvm-libs-abi=$_llvm_soname" 'libLLVM.so' 'libLTO.so' 'libRemarks.so')
+  conflicts=(llvm-libs)
+  replaces=(llvm-libs)
+  # 只拿共享庫（.so*）；靜態庫一律歸 llvm-git。
+  # ⚠️ 2026-10-13 改回 Arch 那個切法：實查 gitlab.archlinux.org/.../llvm/-/raw/main/PKGBUILD
+  #   的 package_llvm()(458) 與 package_llvm-libs()(482)——llvm-libs 只從 $srcdir 還原
+  #   lib{LLVM,LTO,Remarks}*.so* ＋ LLVMgold.so ＋ bfd-plugins 符號鏈接，**標頭與
+  #   /usr/lib/cmake/llvm 留在 llvm**。我們先前把這兩樣收進 llvm-libs-git，等於跟 Arch
+  #   的邊界不一致（用戶裁定：「重編就重新編就是了，弄好不就好了」）。本檔的
+  #   package_llvm-git() 本來就有 'usr/include/*' 與 'usr/lib/cmake/*' 的 broad 兜底，
+  #   所以這裡只要**不搬**，它們就自然落回 llvm-git。
+  # libFuzzer* 是 .a＋.so 混合，其中共享部分留這邊、靜態部分由 *.a 落 llvm-git。
+  _move 'usr/lib/libLLVM.so*' 'usr/lib/libLLVM-*.so' 'usr/lib/libLTO.so*' \
+        'usr/lib/libRemarks.so*' 'usr/lib/libclang-cpp.so*' 'usr/lib/LLVMgold.so' \
+        'usr/lib/baremetal' 'usr/lib/libFuzzer.so*'
+  # Arch 同款：gold 外掛要用 bfd-plugins 那條鏈才找得到（https://bugs.archlinux.org/task/28479）。
+  install -d "$pkgdir/usr/lib/bfd-plugins"
+  ln -s ../LLVMgold.so "$pkgdir/usr/lib/bfd-plugins/LLVMgold.so"
+  _license llvm
+  # ABI 虛擬名 `llvm-libs-abi=$_llvm_soname` 已直接寫進上面的 provides（頂層推導，
+  # 見 _llvm_soname 那段的實測說明）。這裡只留一條**實物自證**：建出來的 soname
+  # 必須真的等於我們宣告的那個，不等就紅——因為下游 mesa 的依賴是照這個名字鎖的，
+  # 名字對了、檔不對，裝下去還是黑屏。
+  local abi
+  abi=$(basename "$(readlink -f "$pkgdir/usr/lib/libLLVM.so" 2>/dev/null)" 2>/dev/null \
+        | sed 's/^libLLVM\.so\.//')
+  if [ "$abi" != "$_llvm_soname" ]; then
+    echo "ERROR: 產物 libLLVM 的 soname=[$abi] 與本包宣告的 llvm-libs-abi=$_llvm_soname 不一致" >&2
+    echo "       （上游改了 SOVERSION 規則？改 _llvm_soname 那行的推導，別放過這條）" >&2
+    exit 1
+  fi
+  echo ">> $pkgname: 實物 soname=$abi 與 llvm-libs-abi 一致"
+
+}
+
+package_llvm-lit-git() {
+  pkgdesc='An LLVM testing tool (trunk)'
+  # 只依賴 python（Arch 同款）；寫 llvm-git 會無謂地把整套工具鏈拉進來
+  depends=(python)
+  provides=("llvm-lit=${pkgver%%_r*}")
+  conflicts=(llvm-lit)
+  replaces=(llvm-lit)
+  # 必須排在 llvm-git 之前：`usr/bin/llvm-*` 罩得住 llvm-lit
+  # ⚠️ `usr/bin/llvm-lit` 這一行注定落空（日誌會印「跳過不存在的字面路徑」）：
+  #   cmake 只在 LLVM_INCLUDE_TESTS=ON 時才造 llvm-lit，而本包為了趕 360 分天花板
+  #   把 tests 關了。官方 llvm-lit 的入口本來就叫 **/usr/bin/lit**（查實
+  #   `pacman -Ql llvm-lit` 的 /usr/bin 只有 FileCheck／count／not／split-file，
+  #   console script 是 /usr/bin/lit），所以下面自己生成一支，不靠 cmake。
+  _move 'usr/bin/llvm-lit' 'usr/bin/split-file' 'usr/bin/FileCheck' \
+        'usr/bin/count' 'usr/bin/not' 'usr/bin/ycd'
+  # ⚠️ 2026-10-12 修第二个真 bug：**站點目錄不能寫死、也不能用 site.getpkgdir()**。
+  #   上一版寫 `site=$(python -c 'import site;print(site.getpkgdir())')`，但本機
+  #   python 3.14.8 實測 `AttributeError: module 'site' has no attribute 'getpkgdir'`
+  #   （那是 Debian 系的補丁，Arch/Artix 的 python 沒有）→ 一定落進 `|| site=` 後面
+  #   那串**寫死的 python3.13**。結果 run #454 的產物 `tar -tf llvm-lit-git-…` 查實
+  #   整個套件被裝進 `/usr/lib/python3.13/site-packages/lit/`，而本機 `python -c
+  #   'import lit'` 回 ModuleNotFoundError（系統 python 已是 3.14，sysconfig 報
+  #   `/usr/lib/python3.14/site-packages`）＝裝了等於沒裝。
+  #   正解：向 sysconfig 要 purelib，再剝掉 /usr 前綴；要不到就硬紅，
+  #   绝不退回任何寫死的版本號（python 換代時這條會自己跟著走）。
+  local site purelib
+  purelib=$(python -c 'import sysconfig;print(sysconfig.get_path("purelib"))' 2>/dev/null) \
+    || purelib=
+  case $purelib in
+    /usr/*) site=${purelib#/usr/} ;;
+    *) echo "FATAL: 拿不到 sysconfig purelib（python 環境不對？），拒絕把 lit 裝進寫死的舊版本目錄"
+       return 1 ;;
+  esac
+  if [ -d "$_pkgbase/llvm/utils/lit/lit" ]; then
+    install -d "$pkgdir/usr/$site"
+    cp -a "$_pkgbase/llvm/utils/lit/lit" "$pkgdir/usr/$site/"
+    # console script：與官方 llvm-lit 的 /usr/bin/lit 同一個入口（照抄它的內容，
+    # 差別只有 shebang 用 /usr/bin/python 由系统解析）。
+    install -d "$pkgdir/usr/bin"     # _move 可能一個 bin 都沒搬進來，不能假設目錄已在
+    printf '%s\n' \
+      '#!/usr/bin/python' \
+      '# -*- coding: utf-8 -*-' \
+      'import re' \
+      'import sys' \
+      'from lit.main import main' \
+      'if __name__ == "__main__":' \
+      '    sys.argv[0] = re.sub(r"(-script\.pyw|\.exe)?$", "", sys.argv[0])' \
+      '    sys.exit(main())' > "$pkgdir/usr/bin/lit"
+    chmod 755 "$pkgdir/usr/bin/lit"
+    # 自證：裝完當場用**目標那個** site 目錄去 import 一次。上一版缺這道收口，
+    # 才会「CI 全綠、包裡有東西、但就是 import 不到」一路放到產物才看得见。
+    if PYTHONPATH="$pkgdir/usr/$site" python -c 'import lit, lit.main' 2>/dev/null; then
+      echo ">> llvm-lit-git: lit 套件落點 $site，import 自證通过"
+    else
+      echo "FATAL: llvm-lit-git 的 lit 套件在 $site 下 import 不成功（python 版本與 site 路徑不一致）"
+      return 1
+    fi
+  fi
+  _license llvm
+}
+
+package_compiler-rt-git() {
+  pkgdesc='Assorted runtime libraries for clang (sanitizers, profiling; trunk)'
+  # ⚠️ 這裡**不能**依賴 clang-git：上游那份 compiler-rt 的 depends 就只有
+  #   ('glibc' 'libgcc' 'libstdc++')，clang 對它是 **makedepends**；而 clang-git
+  #   反过来要依賴 compiler-rt-git（見 package_clang-git）。兩邊互指就是 pacman
+  #   裝不起來的依賴環（本機 `pactree -r compiler-rt` 查實系統裡只有 clang→compiler-rt
+  #   這一個方向）。
+  depends=(glibc libgcc libstdc++)
+  provides=("compiler-rt=${pkgver%%_r*}")
+  conflicts=(compiler-rt)
+  replaces=(compiler-rt)
+  # clang-git 拿 clang/*/include*（內建標頭），這裡只拿 lib／share／bin——
+  # 同一棵樹但清單必須互斥：連 include/x86 這種子目錄都不能寫進來，否則與
+  # include/* 是父子路徑、makepkg 直接判「同一檔案被兩個包聲有」。
+  _move 'usr/lib/clang/*/lib' 'usr/lib/clang/*/share' \
+        'usr/lib/clang/*/profiles' 'usr/lib/clang/*/bin'
+  # 「缺檔就紅」：用戶點名要 sanitizer，不能靜默出一顆沒有 asan 的 compiler-rt
+  find "$pkgdir/usr/lib/clang" -name 'libclang_rt.asan*' 2>/dev/null | grep -q . || {
+    echo 'FATAL: compiler-rt 裡沒有任何 libclang_rt.asan*（sanitizer 沒建出來）'
+    return 1
+  }
+  # ⚠️ 第二道：**i386 的 runtime 也必須在**。上一版帶著
+  #   -DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON 上線，實測裝機的 compiler-rt-git
+  #   `pacman -Ql | grep -c i386` 回 0，而官方 extra／world-goblins 的 compiler-rt
+  #   都有 `libclang_rt.asan-i386.a`／`clang_rt.crtbegin-i386.o`（解 .files 查實）
+  #   ——那就是「CI 全綠、包裡有東西、但 32 位元 sanitizer 整條是空的」。
+  #   ⚠️ 判據要打在**整條路徑**上，不能只打檔名：run #476（2026-10-13）實測
+  #   trunk 已把落點從 `lib/linux/libclang_rt.asan-i386.a` 換成
+  #   `lib/i386-unknown-linux-gnu/libclang_rt.asan.a`（建置日誌 16478 行起一整排
+  #   `-- Installing: …/lib/i386-unknown-linux-gnu/libclang_rt.*.a`，i386 的確建出來了），
+  #   而上一版寫 `find -name '*i386*'` 只看檔名 → 把正常產物誤殺成 FATAL。
+  #   `-path '*i386*' -name 'libclang_rt.asan*'` 這一條同時罩住新舊兩種佈局
+  #   （舊版的 i386 在檔名裡，也是 `-path` 的子字串），且仍要求「32 位元 asan 這顆
+  #   具體存在」，不會被目錄裡隨便一個 i386 檔案（如 ELFRelocs/i386.def）蒙過。
+  find "$pkgdir/usr/lib/clang" -path '*i386*' -name 'libclang_rt.asan*' 2>/dev/null | grep -q . || {
+    echo 'FATAL: compiler-rt 裡沒有 i386 的 libclang_rt.asan*（32 位元 sanitizer 缺席；'
+    echo '       查 COMPILER_RT_DEFAULT_TARGET_ONLY 是不是被加回來了、或容器缺 lib32-gcc-libs）'
+    return 1
+  }
+  _license compiler-rt
+}
+
+package_lld-git() {
+  pkgdesc='The LLVM Project linker (trunk)'
+  depends=("llvm-libs-git=$pkgver-$pkgrel" gcc-libs zlib zstd libstdc++)
+  provides=("lld=${pkgver%%_r*}")
+  conflicts=(lld)
+  replaces=(lld)
+  # 全部點名，不用 'usr/bin/lld*'：那會罩住 lldb 的 lldb-xxx（雖然 lldb 排在後面，
+  # 但靠順序撐的互斥是最脆的那種寫法）。
+  # ⚠️ 2026-10-12 核對官方清單把亂寫的三條拿掉：`pacman -Ql lld` 的 /usr/bin 只有
+  #   `lld ld.lld ld64.lld lld-link wasm-ld` 五個名字，**沒有** lld-rc／lld-elf／
+  #   lld-macho／lld-macho-new／invoked（那是我从 docs 目錄名抄來的想像物）。留著
+  #   不會紅（字面路徑缺檔只印一行），但會讓人以為包裡該有它們。
+  _move 'usr/bin/lld' 'usr/bin/ld.lld' 'usr/bin/lld-link' \
+        'usr/bin/wasm-ld' 'usr/bin/ld64.lld' \
+        'usr/lib/cmake/lld' 'usr/lib/liblld*' \
+        'usr/share/man/man1/lld.*' 'usr/share/man/man1/ld.lld.*' \
+        'usr/share/man/man1/wasm-ld.*' 'usr/share/man/man1/lld-link.*'
+  # 上游用 install(CODE …create_symlink) 造的四條別名在 cmake 輸出裡一行不印，
+  # 本體 lld 一被上面那條先搬走，牠們在 $_stage 裡就變成 dangling symlink、
+  # 通不過存在性檢查 → 上一輪的產物裡 `tar -tf lld-git-…` 查實**只有 usr/bin/lld**。
+  # 少了 ld.lld 等於整顆 lld 不能用（`-fuse-ld=lld` 是靠 exec "ld.lld" 找它的）。
+  _alias lld ld.lld ld64.lld lld-link wasm-ld
+  # 「缺入口就紅」（與 compiler-rt 的 asan 檢查同一手法）：這五個名字就是官方
+  # lld 的全部入口，少任何一個這顆都不能頂替 `lld`。上一輪就是這樣悄悄發出去、
+  # 直到有人要 `-fuse-ld=lld` 才發現。
+  for _e in lld ld.lld ld64.lld lld-link wasm-ld; do
+    if [ ! -e "$pkgdir/usr/bin/$_e" ] && [ ! -L "$pkgdir/usr/bin/$_e" ]; then
+      echo "FATAL: lld-git 少了 /usr/bin/$_e（官方 lld 必含的五個入口之一）"
+      return 1
+    fi
+  done
+  _license lld
+}
+
+package_lldb-git() {
+  pkgdesc='Next generation, high-performance debugger (trunk)'
+  depends=("llvm-libs-git=$pkgver-$pkgrel" "clang-git=$pkgver-$pkgrel"
+           python libedit ncurses swig python-psutil libxml2 zlib xz)
+  provides=("lldb=${pkgver%%_r*}")
+  conflicts=(lldb)
+  replaces=(lldb)
+  _move 'usr/bin/lldb' 'usr/bin/lldb-*' 'usr/lib/liblldb*' 'usr/share/lldb' \
+        'usr/lib/cmake/lldb' 'usr/include/lldb' 'usr/include/lldbAPI' \
+        'usr/include/swig' 'usr/lib/python3.*/site-packages/lldb' \
+        'usr/share/man/man1/lldb.*' 'usr/share/opt/lldb*' 'usr/libexec/lldb*'
+  _license lldb
+}
+
+package_clang-git() {
+  pkgdesc='C language family frontend for LLVM (trunk)'
+  # compiler-rt-git 是**硬依賴**，不是選項：上游那份 clang 的 depends 就寫了
+  # ('llvm-libs' 'gcc' 'compiler-rt' 'libgcc' 'libxml2')（docs/upstream-pkgbuilds/
+  # clang.PKGBUILD:11），本機 `pacman -Qi clang` 23.1.3-1.1 亦同。少了它這顆就不是
+  # 系統 clang 的等值替換（-fsanitize=address 之类的直連不到 runtime）。
+  depends=("llvm-libs-git=$pkgver-$pkgrel" "compiler-rt-git=$pkgver-$pkgrel"
+           gcc glibc libgcc libstdc++ libffi ncurses zlib zstd
+           python sh libxml2)
+  optdepends=('lld-git: faster linker')
+  # clang-analyzer／clang-tools-extra 這兩個名字**不再提供**（2026-10-11 第二次裁）：
+  # 系統 clang 確實靠 provides 頂著那兩個名字，但本輪 LLVM_ENABLE_PROJECTS 收了
+  # clang;lld;lldb，clangd／clang-tidy／scan-build 那批程式根本不會被建，
+  # 留著虛名只會讓 pacman 誤判依賴已滿足。查實本機沒有任何已裝包依賴那兩個名字
+  # （pactree -r clang-tools-extra／-r clang-analyzer 命中的五顆全部只依賴 `clang`）。
+  # 下面 extra 相關的路徑樣式刻意**不删**：字面路徑缺檔時 _move 會印一行再跳過，
+  # 哪天我們把 extra 加回來，那些行就是現成的清單、也會在日誌裡消失。
+  provides=("clang=${pkgver%%_r*}")
+  conflicts=(clang)
+  replaces=(clang)
+  _move 'usr/bin/clang' 'usr/bin/clang++' 'usr/bin/clang-*' 'usr/bin/cc' \
+        'usr/bin/c++' 'usr/bin/scan-*' 'usr/bin/run-clang*' 'usr/bin/gen-*' \
+        'usr/bin/hmaptool' 'usr/bin/diagtool' 'usr/bin/pp-trace' \
+        'usr/bin/modularize' 'usr/bin/find-all-symbols' 'usr/bin/c-index-test' \
+        'usr/bin/offload-arch' 'usr/bin/amdgpu-arch' \
+        'usr/lib/libclang.so*' 'usr/lib/libclangTransform*' \
+        'usr/lib/cmake/clang' 'usr/share/clang' 'usr/share/clang-format' \
+        'usr/share/clang-tidy' 'usr/lib/clang-tools-extra' \
+        'usr/lib/clang/*/include' 'usr/lib/clang/*/include-safe' \
+        'usr/lib/clang/*/include-x86' \
+        'usr/include/clang' 'usr/include/clang-c' \
+        'usr/libexec/clang*' 'usr/lib/libear' 'usr/lib/libscanbuild' \
+        'usr/share/man/man1/clang.*' 'usr/share/man/man1/clang-*' \
+        'usr/share/man/man1/scan-*' 'usr/share/scan-build' 'usr/share/scan-view'
+  # ⚠️ `nvptx-arch` 這一行 2026-10-12 拿掉了：LLVM_TARGETS_TO_BUILD 只有 X86;AMDGPU，
+  #   上游根本不會造它（run #454 日誌印「跳過 usr/bin/nvptx-arch」是真缺、不是 bug）。
+  # 同一個 dangling-symlink 問題（見 _move 與 _alias 的註解）：
+  #   `pacman -Ql clang` 有 /usr/bin/clang++ 與 /usr/bin/amdgpu-arch，上一輪的
+  #   clang-git-24_r13699 兩樣都不會出檔（tar -tf 查實），C++ 入口直接缺。
+  #   clang++ → clang；amdgpu-arch 在上游是指向 offload-arch 的別名。
+  _alias clang clang++
+  _alias offload-arch amdgpu-arch
+  # 「缺 C/C++ 入口就紅」：`pacman -Ql clang` 查實官方 clang 一定含
+  # /usr/bin/clang 與 /usr/bin/clang++（cc、c++ 是 gcc 的文件，本包不搶）。
+  for _e in clang clang++; do
+    if [ ! -e "$pkgdir/usr/bin/$_e" ] && [ ! -L "$pkgdir/usr/bin/$_e" ]; then
+      echo "FATAL: clang-git 少了 /usr/bin/$_e（頂替系統 clang 的必要入口）"
+      return 1
+    fi
+  done
+  _license clang
+}
+
+package_llvm-git() {
+  pkgdesc='LLVM compiler toolchain (trunk)'
+  depends=("llvm-libs-git=$pkgver-$pkgrel" zlib zstd libffi ncurses perl python sh
+           libedit curl libxml2)
+  optdepends=('lld-git: faster linker'
+              'llvm-lit-git: LLVM testing tool'
+              'clang-git: C family front-end')
+  provides=("llvm=${pkgver%%_r*}")
+  conflicts=(llvm)
+  replaces=(llvm)
+  # 最後一顆：broad 樣式放這裡才安全，前面各包已把属于自己的檔 mv 走。
+  # 'usr/bin/*' 是兜底（trunk 隨時會新增工具；宁可收進來也不要漏）。
+  _move 'usr/bin/llvm-*' 'usr/bin/llc' 'usr/bin/opt' 'usr/bin/bugpoint' \
+        'usr/bin/dsymutil' 'usr/bin/plitools' 'usr/bin/nmcm' 'usr/bin/*' \
+        'usr/lib/*.a' 'usr/lib/llvm*' 'usr/libexec/*' 'usr/lib/cmake/*' \
+        'usr/lib/pkgconfig' 'usr/include/*' \
+        'usr/share/llvm*' 'usr/share/clang*' 'usr/share/man/man*' \
+        'usr/share/filecheck' 'usr/share/vim-vinegar' 'usr/share/vim' \
+        'usr/share/emacs' 'usr/share/doc'
+  _license llvm
+  # 本顆是最後一個被呼叫的 package_*()，所以在這裡看 $_stage 的殘留等於看
+  # 「全部包都搬完之後還剩什麼」。刻意不做硬檢查（正常情況也有不打包的東東，
+  # 會把好建置判紅），但把統計印進 CI 日誌，讓漏打包一眼看得見。
+  echo '=== stage 殘留 top-30（除刻意不打包者，其餘都是漏了）==='
+  find "$_stage" -type f 2>/dev/null | sed "s|^$_stage/||" \
+    | cut -d/ -f1-3 | sort | uniq -c | sort -rn | head -30
+
+  # ── 硬檢查：CMake 導出的 imported target 引用的每個 lib，都必須真的被某一包帶走
+  # 動機是 2026-10-13 的實測紅：trunk 仍然建置 gold 插件（`llvm/tools/CMakeLists.txt`
+  # 第 32 行 `add_llvm_tool_subdirectory(gold)`），而我們的 `_move` 沒認領
+  # `usr/lib/LLVMgold.so`，於是裝出去的 llvm-libs-git 帶著一個引用了不存在檔案的
+  # LLVMExports-release.cmake；下游只要 `find_package(LLVM)` 就死在
+  #   The imported target "LLVMgold" references the file "/usr/lib/LLVMgold.so"
+  #   but this file does not exist. … The installation package was faulty
+  # （spirv-llvm-translator-git 的 CI job 與本機建置都是這樣紅的，而 llvm 那輪 badge 全綠）。
+  # 這比「stage 殘留統計」更準：殘留統計只是印出來給人在幾千行日誌裡找，這條是直接擋住。
+  local _exports p rel missing hit
+  _exports="$startdir/pkg/llvm-git/usr/lib/cmake/llvm/LLVMExports-release.cmake"
+  if [ -f "$_exports" ]; then
+    missing=0
+    for rel in $(grep -oE '\$\{_IMPORT_PREFIX\}/lib/[^"]+' "$_exports" \
+                   | sed 's|\$\{_IMPORT_PREFIX\}/||' | sort -u); do
+      hit=0
+      for p in "$startdir"/pkg/*/; do
+        [ -e "$p/usr/$rel" ] && { hit=1; break; }
+      done
+      if [ "$hit" = 0 ]; then
+        echo "  ✗ 沒有任何一包帶走 /usr/$rel（LLVMExports 引用了它）"
+        missing=$((missing + 1))
+      fi
+    done
+    if [ "$missing" != 0 ]; then
+      echo "ERROR: LLVMExports 引用的 lib 有 $missing 個沒進任何一包 → 下游 find_package(LLVM) 必紅。" >&2
+      echo "       把它加進對應 package_*() 的 _move 清單（官方 llvm-libs 是有帶的）。" >&2
+      exit 1
+    fi
+    echo '>> LLVMExports 引用的 lib 全部都有包帶走'
+  fi
+}
+
+# vim:set ts=2 sw=2 et:

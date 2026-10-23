@@ -1,0 +1,17 @@
+diff --git a/codex-rs/features/src/lib.rs b/codex-rs/features/src/lib.rs
+index f2c6e20..bd2b6db 100644
+--- a/codex-rs/features/src/lib.rs
++++ b/codex-rs/features/src/lib.rs
+@@ -1059,7 +1059,11 @@ pub const FEATURES: &[FeatureSpec] = &[
+         id: Feature::DaemonAutoStart,
+         key: "daemon_auto_start",
+         stage: Stage::Stable,
+-        default_enabled: true,
++        // Packaged for a single-user desktop terminal: the shared app-server
++        // daemon survives TUI exit as an orphan holding ~114 MB RSS, and the
++        // TUI has an Embedded fallback (startup_orchestration.rs
++        // "auto_start_disabled"), so auto-start must not be the default here.
++        default_enabled: false,
+     },
+     FeatureSpec {
+         id: Feature::TuiMultiBackend,

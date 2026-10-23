@@ -1,0 +1,33 @@
+# gst-editing-services: 拿掉 complex_effect_bin_desc 這一個 validate 場景
+#
+# 為什麼拿掉（2026-10-12 實測，gstreamer main = e1edc090bc07）：
+#   609 條測試裡這條穩定失敗：同一顆二進位、同一環境連跑三次全 FAIL，
+#   其中一次 killed by signal 11 SIGSEGV。崩的不是 GES 核心，是 gst-validate 的
+#   flow 比對——只有**第一幀** checksum 不同，後面每一幀都一致：
+#     - buffer: checksum=369888c2612267760fcfaa74e52fc53bd73e4d15, pts=0:00:00.000000000  (expected)
+#     + buffer: checksum=c263276524a6a191b48b65ceb7fb5a3bb6bd99cf, pts=0:00:00.000000000  (actual)
+#   「只差第一幀」排除了編譯旗號／SIMD 那類嫌疑（那種會全幀不同），形態是特效 bin
+#   還沒接好時第一張原始幀先漏出去。那顆 expectation 的 checksum 自 2024-01 的
+#   9377cacca5 ("compositor: Fix caps negotiation for messy downstream caps") 之後
+#   沒動過（該筆只幫 caps 那行加上 pixel-aspect-ratio=1/1，沒碰 checksum）。
+#   查過上游 issue 追蹤器：搜 complex_effect_bin_desc 零筆結果。
+#
+# ⚠️ 為什麼是「刪掉這一行」而不是「把 true 改成 false」（同一輪踩過的錯）：
+#   tests/check/meson.build 那張表的 value 是 **is_validatetest**（檔名是 .validatetest
+#   還是 .check），不是開關。實測把 'complex_effect_bin_desc' 改成 false 之後
+#   測試照樣跑、照樣紅（第十二次 603 OK／2 FAIL 就是這樣）。要讓它消失只能把整個
+#   entry 從 scenarios 字典裡拿掉——Arch 那支 0001-HACK 對其他壞測試也是這樣刪行的。
+# 影響面：只少這一條測試，libges 產物不受影響（紅的是測試比對，不是程式庫）。
+# 上游修好之後把這支 patch 刪掉。
+diff --git a/subprojects/gst-editing-services/tests/check/meson.build b/subprojects/gst-editing-services/tests/check/meson.build
+index 1a09f15217..56b634ab59 100644
+--- a/subprojects/gst-editing-services/tests/check/meson.build
++++ b/subprojects/gst-editing-services/tests/check/meson.build
+@@ -103,7 +103,6 @@ if gstvalidate_dep.found() and not get_option('tools').disabled()
+     'seek_with_stop': true,
+     'seek_with_stop.check_clock_sync': true,
+     'edit_while_seeked_with_stop': true,
+-    'complex_effect_bin_desc': true,
+     'check_keyframes_in_compositor_two_sources': true,
+     'check-clip-positioning': true,
+     'set-layer-on-command-line': true,

@@ -1,0 +1,272 @@
+name: Build Git Packages
+
+# VCS（-git）套件：跟着上游 HEAD 走，oh-my-pi-git 一天能蹦好几个小版本号，
+# 所以每小时查一次。绝大多数轮次里「检测目标版本并决定是否需要构建」发现
+# 版本没变，几分钟就整轮跳过，开销很小。
+#
+# 这些包单个只要几分钟到二十来分钟，跟内核分开跑就不会被内核堵在队列后面。
+# 因为不存在「跑到下一个整点还没编完」的情况，cancel-in-progress 可以放心
+# 开着：真撞上了，取消旧的换新的反而更合理。
+
+on:
+  push:
+    branches:
+      - master
+  schedule:
+    # 每 3 小時一次（用戶 2026-10-03 指示再延長；此前是 90 分鐘：兩條 cron 湊成
+    # 00:00/03:00/… 加 01:30/04:30/…）。實測一輪矩陣本身就要跑 50–95 分鐘
+    # （#331 用 50 分 55 秒、#330 用 1 時 3 分 27 秒），90 分鐘節拍等於幾乎無間隙連轉，
+    # 而且 openai-codex-git 單包 release 編譯就要 60 分鐘以上。
+    # 只留一條 cron，避免「兩條錯峰」又被解讀成 90 分鐘節拍。
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: build-git-packages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-packages.yml
+    permissions:
+      contents: write
+    # 可重用 workflow 默认拿不到调用方的 secrets，必须显式继承，
+    # 否则 PERSONAL_BUILD_TOKEN 为空、回推 PKGBUILD 会静默失败。
+    secrets: inherit
+    with:
+      timeout_minutes: 360
+      # glib2-git 與 linux-firmware-nfp-git 改由本倉源碼直出（用戶 2026-10-10 指定）：
+      # 這兩顆原本只從 chaotic-aur 拿，而 chaotic 那五台鏡像走 Cloudflare 的 IPv6 一律
+      # TLS 8 秒被斷（實測釘 IPv4 才 0.46 秒回 303），鏡像一抖就「無法取得」。AUR 兩顆
+      # 都在，所以 kind: aur 直接取 AUR 的 PKGBUILD 來編。
+      # 2026-10-10 更正：linux-firmware-nfp-git 不再取 AUR（AUR 那份在 CI 從沒建成功過，
+      # 用戶裁決改自己寫），PKGBUILD 維護在本倉 linux-firmware-nfp-git/ 目錄、由
+      # build-packages.yml 的 in-tree 分支攔截；矩陣仍留 kind:aur 只為借用 giant if 的
+      # `matrix.kind != 'aur'` 跳過回推校驗和（與 pnpm-git 同一手法，理由見
+      # docs/in-tree-packages.md）。
+      # ⚠️ packages 是 `packages: |` 的**純 JSON 字面塊**，下游用 fromJSON(inputs.packages)
+      # 解析——註解只能寫在這裡，寫進方括號裡面會讓整條矩陣（130+ job）一起解析失敗。
+      # （2026-10-11 真的踩過：llvm-git 那條的說明寫進方括號內，run #436 就只剩 deploy
+      #  一顆 job、build 矩陣整個沒跑。改動前後都用 python 把這塊 json.loads() 驗過。）
+      # llvm 那批（用戶 2026-10-11 點名「六個全部搬去 -git 自動構建」）：一個目錄產七顆
+      # split（llvm-libs／llvm／llvm-lit／compiler-rt／lld／lldb／clang），收集與 repo-add
+      # 兩步都是 `pkg_dir/*.pkg.tar.zst` 的 glob，所以 split 不需要額外接點。kind:aur 只為
+      # 借用回推那步的 `matrix.kind != 'aur'`（pkgver 由上游 HEAD 現算，回推校驗和無意義）；
+      # case 首命中即中，走本倉 llvm-git/PKGBUILD，不會去 clone AUR。逐包理由見
+      # docs/in-tree-packages.md。
+      # crave（2026-10-13）：不是 -git 包，但跟 u1s1-bin／jbr21／qoder-* 同一類「in-tree 維護＋
+      # 版號由外部端點驅動」，所以掛在本 workflow（3 小時節拍）。plan 只在「上游 tag ≠ PKGBUILD
+      # 的 _pkgver」時才下載算 sha（上游二進位 30MB×2、只發 md5 無簽名），平时无腦一個 API call。
+      # 它的 pkgver 是 ${_pkgver/-/.} 算出來的（連字號→點號，pacman 不準 pkgver 含 -），
+      # 而 source URL 裡是連字號版，所以 build-packages.yml 需要三個特例：plan 的 crave) case、
+      # 改寫步 sed _pkgver=、以及走 in-tree 回推而非 updpkgsums。
+      # 以下 packages 是純 JSON 塊，fromJSON 不會剝註解，所以說明只能寫在這裡：
+      # · fcitx5-qt 在 AUR 已拆成 qt5/qt6 兩顆（沒有單一的 fcitx5-qt-git），
+      # · 本機的 fcitx5-qt 由這兩顆取代。
+      # · chinese-addons / rime 鏈上的 AUR 依賴，必須先進矩陣，否則跟 afdko-git
+      # · 同一型失敗（容器裡 target not found → Could not resolve all dependencies）。
+      # · fcitx5-configtool-git 刻意**不**進矩陣：AUR 那份靜態 pkgver 停在 5.1.2.r1
+      # · （比倉庫的 5.1.16 還舊），而且 depends 列了倉庫已不存在 plasma-framework5，
+      # · 裝它等於降級 + 必然解析失敗。configtool 改吃倉庫版。
+      # · afdko-git 的兩個依賴都不在官方倉庫（本機是從 archlinuxcn / chaotic-aur 裝的），
+      # · 容器裡只有官方倉庫 → run #529 就是死在 `target not found: python-cu2qu`。
+      # · 必須先讓它們進 feed，順序上跟 afdko-git 同一輪就能解析到。
+      # · kvantum-qt4-git 刻意移出矩陣：它 depends `qt4`，而 qt4 不在任何官方倉庫
+      # · （本機那顆是從 andontie-aur / arch4edu 裝的），AUR 的 qt4 是 4.8.7 那個年代的東西，
+      # · 在 base-devel 容器裡構起來動輒數小時且多半過不了 toolchain。
+      # · run #529 的失敗就是 `target not found: qt4`。要這顆請直接從第三方倉庫裝，別走 feed。
+      packages: |
+        [
+          {"key": "dae-git", "repo_name": "dae-git", "variant": "none"},
+          {"key": "tar-git", "repo_name": "tar-git", "variant": "none"},
+          {"key": "make-git", "repo_name": "make-git", "variant": "none"},
+          {"key": "cmake-git", "repo_name": "cmake-git", "variant": "none"},
+          {"key": "jq-git", "repo_name": "jq-git", "variant": "none"},
+          {"key": "multitail-git", "repo_name": "multitail-git", "variant": "none"},
+          {"key": "xorg-xwayland-git", "repo_name": "xorg-xwayland-git", "variant": "none", "kind": "wayland"},
+          {"key": "xorg-server-git", "repo_name": "xorg-server-git", "variant": "none"},
+          {"key": "ffmpeg-full-git", "repo_name": "ffmpeg-full-git", "variant": "nonfree"},
+          {"key": "astc-encoder-git", "repo_name": "astc-encoder-git", "variant": "none"},
+          {"key": "kew-git", "repo_name": "kew-git", "variant": "none"},
+          {"key": "llvm-git", "repo_name": "llvm-git", "variant": "none", "kind": "aur"},
+          {"key": "librime-git", "repo_name": "librime-git", "variant": "none"},
+          {"key": "opencc-git", "repo_name": "opencc-git", "variant": "none"},
+          {"key": "ccache-git", "repo_name": "ccache-git", "variant": "none"},
+          {"key": "tcl-git", "repo_name": "tcl-git", "variant": "none"},
+          {"key": "tk-git", "repo_name": "tk-git", "variant": "none"},
+          {"key": "spirv-llvm-translator-git", "repo_name": "spirv-llvm-translator-git", "variant": "none"},
+          {"key": "spirv-headers-git", "repo_name": "spirv-headers-git", "variant": "none"},
+          {"key": "spirv-tools-git", "repo_name": "spirv-tools-git", "variant": "none"},
+          {"key": "doxygen-git", "repo_name": "doxygen-git", "variant": "none"},
+          {"key": "lib32-llvm-git", "repo_name": "lib32-llvm-git", "variant": "none", "kind": "multilib"},
+          {"key": "mpv-git", "repo_name": "mpv-git", "variant": "none"},
+          {"key": "oh-my-pi-git", "repo_name": "oh-my-pi-git", "variant": "none"},
+          {"key": "protonvpn-cli-community-git", "repo_name": "protonvpn-cli-community-git", "variant": "none"},
+          {"key": "pysolfc-git", "repo_name": "pysolfc-git", "variant": "none"},
+          {"key": "android-ndk-23", "repo_name": "android-ndk-23", "variant": "none"},
+          {"key": "android-ndk-27", "repo_name": "android-ndk-27", "variant": "none"},
+          {"key": "android-ndk-30", "repo_name": "android-ndk-30", "variant": "none"},
+          {"key": "u1s1-bin", "repo_name": "u1s1-bin", "variant": "none"},
+          {"key": "codex-desktop-git", "repo_name": "codex-desktop-git", "variant": "none"},
+          {"key": "element-desktop-nightly-bin", "repo_name": "element-desktop-nightly-bin", "variant": "none"},
+          {"key": "serein-git", "repo_name": "serein-git", "variant": "none"},
+          {"key": "nashira-git", "repo_name": "nashira-git", "variant": "none"},
+          {"key": "qoder-cli", "repo_name": "qoder-cli", "variant": "none"},
+          {"key": "qoder-cli-cn", "repo_name": "qoder-cli-cn", "variant": "none"},
+          {"key": "qoder-gui-bin", "repo_name": "qoder-gui-bin", "variant": "none"},
+          {"key": "qoder-gui-cn", "repo_name": "qoder-gui-cn", "variant": "none"},
+          {"key": "crave", "repo_name": "crave", "variant": "none"},
+          {"key": "unicode-emoji", "repo_name": "unicode-emoji", "variant": "none"},
+          {"key": "free-claude-code-git", "repo_name": "free-claude-code-git", "variant": "none"},
+          {"key": "bash-git", "repo_name": "bash-git", "variant": "none"},
+          {"key": "nodejs-better-sqlite3", "repo_name": "nodejs-better-sqlite3", "variant": "none"},
+          {"key": "nodejs-better-sqlite3-git", "repo_name": "nodejs-better-sqlite3-git", "variant": "none"},
+          {"key": "qalculate-gtk-git", "repo_name": "qalculate-gtk-git", "variant": "none"},
+          {"key": "adguardhome-git", "repo_name": "adguardhome-git", "variant": "none"},
+          {"key": "ttf-jetbrains-maple-mono-nf-xx-xx-xx", "repo_name": "ttf-jetbrains-maple-mono-nf-xx-xx-xx", "variant": "none"},
+          {"key": "openai-codex-git", "repo_name": "openai-codex-git", "variant": "none"},
+          {"key": "alacritty-sixel-git", "repo_name": "alacritty-sixel-git", "variant": "none"},
+          {"key": "mesa-tkg-git", "repo_name": "mesa-tkg-git", "variant": "none", "kind": "tkg"},
+          {"key": "extra-cmake-modules-git", "repo_name": "extra-cmake-modules-git", "variant": "none", "kind": "kde"},
+          {"key": "plasma-wayland-protocols-git", "repo_name": "plasma-wayland-protocols-git", "variant": "none", "kind": "kde"},
+          {"key": "attica-git", "repo_name": "attica-git", "variant": "none", "kind": "kde"},
+          {"key": "breeze-icons-git", "repo_name": "breeze-icons-git", "variant": "none", "kind": "kde"},
+          {"key": "karchive-git", "repo_name": "karchive-git", "variant": "none", "kind": "kde"},
+          {"key": "kcodecs-git", "repo_name": "kcodecs-git", "variant": "none", "kind": "kde"},
+          {"key": "kconfig-git", "repo_name": "kconfig-git", "variant": "none", "kind": "kde"},
+          {"key": "kcoreaddons-git", "repo_name": "kcoreaddons-git", "variant": "none", "kind": "kde"},
+          {"key": "kdbusaddons-git", "repo_name": "kdbusaddons-git", "variant": "none", "kind": "kde"},
+          {"key": "kdnssd-git", "repo_name": "kdnssd-git", "variant": "none", "kind": "kde"},
+          {"key": "kglobalaccel-git", "repo_name": "kglobalaccel-git", "variant": "none", "kind": "kde"},
+          {"key": "kguiaddons-git", "repo_name": "kguiaddons-git", "variant": "none", "kind": "kde"},
+          {"key": "ki18n-git", "repo_name": "ki18n-git", "variant": "none", "kind": "kde"},
+          {"key": "kitemviews-git", "repo_name": "kitemviews-git", "variant": "none", "kind": "kde"},
+          {"key": "kwidgetsaddons-git", "repo_name": "kwidgetsaddons-git", "variant": "none", "kind": "kde"},
+          {"key": "kcolorscheme-git", "repo_name": "kcolorscheme-git", "variant": "none", "kind": "kde"},
+          {"key": "kcompletion-git", "repo_name": "kcompletion-git", "variant": "none", "kind": "kde"},
+          {"key": "kcrash-git", "repo_name": "kcrash-git", "variant": "none", "kind": "kde"},
+          {"key": "kdoctools-git", "repo_name": "kdoctools-git", "variant": "none", "kind": "kde"},
+          {"key": "syndication-git", "repo_name": "syndication-git", "variant": "none", "kind": "kde"},
+          {"key": "kconfigwidgets-git", "repo_name": "kconfigwidgets-git", "variant": "none", "kind": "kde"},
+          {"key": "kiconthemes-git", "repo_name": "kiconthemes-git", "variant": "none", "kind": "kde"},
+          {"key": "kpackage-git", "repo_name": "kpackage-git", "variant": "none", "kind": "kde"},
+          {"key": "knewstuff-git", "repo_name": "knewstuff-git", "variant": "none", "kind": "kde"},
+          {"key": "kxmlgui-git", "repo_name": "kxmlgui-git", "variant": "none", "kind": "kde"},
+          {"key": "libkdegames-git", "repo_name": "libkdegames-git", "variant": "none", "kind": "kde"},
+          {"key": "i3-git", "repo_name": "i3-git", "variant": "none", "kind": "aur"},
+          {"key": "i3status-git", "repo_name": "i3status-git", "variant": "none", "kind": "aur"},
+          {"key": "i3blocks-git", "repo_name": "i3blocks-git", "variant": "none", "kind": "aur"},
+          {"key": "i3lock-color-git", "repo_name": "i3lock-color-git", "variant": "none", "kind": "aur"},
+          {"key": "glib2-git", "repo_name": "glib2-git", "variant": "none", "kind": "aur"},
+          {"key": "lib32-glib2-git", "repo_name": "lib32-glib2-git", "variant": "none", "kind": "aur"},
+          {"key": "linux-firmware-nfp-git", "repo_name": "linux-firmware-nfp-git", "variant": "none", "kind": "aur"},
+          {"key": "rofi-git", "repo_name": "rofi-git", "variant": "none", "kind": "aur"},
+          {"key": "helium-browser-bin", "repo_name": "helium-browser-bin", "variant": "none", "kind": "aur"},
+          {"key": "xf86-input-libinput-git", "repo_name": "xf86-input-libinput-git", "variant": "none", "kind": "aur"},
+          {"key": "feh-git", "repo_name": "feh-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-git", "repo_name": "fcitx5-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-qt-git", "repo_name": "fcitx5-qt-git", "variant": "none"},
+          {"key": "fcitx5-chinese-addons-git", "repo_name": "fcitx5-chinese-addons-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-rime-git", "repo_name": "fcitx5-rime-git", "variant": "none", "kind": "aur"},
+          {"key": "libime-git", "repo_name": "libime-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-lua-git", "repo_name": "fcitx5-lua-git", "variant": "none", "kind": "aur"},
+          {"key": "xcb-imdkit-git", "repo_name": "xcb-imdkit-git", "variant": "none", "kind": "aur"},
+          {"key": "iwgtk-git", "repo_name": "iwgtk-git", "variant": "none", "kind": "aur"},
+          {"key": "wl-clipboard-git", "repo_name": "wl-clipboard-git", "variant": "none", "kind": "aur"},
+          {"key": "rofi-bluetooth-git", "repo_name": "rofi-bluetooth-git", "variant": "none", "kind": "aur"},
+          {"key": "topgrade-git", "repo_name": "topgrade-git", "variant": "none", "kind": "aur"},
+          {"key": "linutil-git", "repo_name": "linutil-git", "variant": "none", "kind": "aur"},
+          {"key": "kbreakout-git", "repo_name": "kbreakout-git", "variant": "none", "kind": "kde"},
+          {"key": "aom-git", "repo_name": "aom-git", "variant": "none", "kind": "aur"},
+          {"key": "brotli-git", "repo_name": "brotli-git", "variant": "none"},
+          {"key": "espeak-ng-git", "repo_name": "espeak-ng-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-skin-ori-git", "repo_name": "fcitx5-skin-ori-git", "variant": "none", "kind": "aur"},
+          {"key": "fd-git", "repo_name": "fd-git", "variant": "none", "kind": "aur"},
+          {"key": "fontforge-git", "repo_name": "fontforge-git", "variant": "none", "kind": "aur"},
+          {"key": "fzf-git", "repo_name": "fzf-git", "variant": "none", "kind": "aur"},
+          {"key": "iwd-nosystemd-git", "repo_name": "iwd-nosystemd-git", "variant": "none", "kind": "aur"},
+          {"key": "libgnome-keyring", "repo_name": "libgnome-keyring", "variant": "none", "kind": "aur"},
+          {"key": "libheif-git", "repo_name": "libheif-git", "variant": "none", "kind": "aur"},
+          {"key": "libqalculate-git", "repo_name": "libqalculate-git", "variant": "none", "kind": "aur"},
+          {"key": "libsixel-git", "repo_name": "libsixel-git", "variant": "none", "kind": "aur"},
+          {"key": "mpeghdec-git", "repo_name": "mpeghdec-git", "variant": "none", "kind": "aur"},
+          {"key": "multitail", "repo_name": "multitail", "variant": "none", "kind": "aur"},
+          {"key": "nano-syntax-highlighting-git", "repo_name": "nano-syntax-highlighting-git", "variant": "none", "kind": "aur"},
+          {"key": "pi-coding-agent-git", "repo_name": "pi-coding-agent-git", "variant": "none", "kind": "aur"},
+          {"key": "ps_mem", "repo_name": "ps_mem", "variant": "none", "kind": "aur"},
+          {"key": "psautohint", "repo_name": "psautohint", "variant": "none", "kind": "aur"},
+          {"key": "python-pythondialog", "repo_name": "python-pythondialog", "variant": "none", "kind": "aur"},
+          {"key": "quirc-git", "repo_name": "quirc-git", "variant": "none", "kind": "aur"},
+          {"key": "rust-bindgen-git", "repo_name": "rust-bindgen-git", "variant": "none", "kind": "aur"},
+          {"key": "scenefx0.5", "repo_name": "scenefx0.5", "variant": "none", "kind": "aur"},
+          {"key": "smem", "repo_name": "smem", "variant": "none", "kind": "aur"},
+          {"key": "starship-git", "repo_name": "starship-git", "variant": "none", "kind": "aur"},
+          {"key": "sutils-git", "repo_name": "sutils-git", "variant": "none", "kind": "aur"},
+          {"key": "svt-jpeg-xs-git", "repo_name": "svt-jpeg-xs-git", "variant": "none", "kind": "aur"},
+          {"key": "tty-solitaire-git", "repo_name": "tty-solitaire-git", "variant": "none"},
+          {"key": "uchardet-git", "repo_name": "uchardet-git", "variant": "none", "kind": "aur"},
+          {"key": "warp-plus", "repo_name": "warp-plus", "variant": "none", "kind": "aur"},
+          {"key": "xdg-desktop-portal-gtk-git", "repo_name": "xdg-desktop-portal-gtk-git", "variant": "none", "kind": "aur"},
+          {"key": "yelp-git", "repo_name": "yelp-git", "variant": "none", "kind": "aur"},
+          {"key": "zstd-git", "repo_name": "zstd-git", "variant": "none", "kind": "aur"},
+          {"key": "actionlint-git", "repo_name": "actionlint-git", "variant": "none", "kind": "aur"},
+          {"key": "bash-completion-git", "repo_name": "bash-completion-git", "variant": "none", "kind": "aur"},
+          {"key": "chafa-git", "repo_name": "chafa-git", "variant": "none"},
+          {"key": "gd-git", "repo_name": "gd-git", "variant": "none", "kind": "aur"},
+          {"key": "git-lfs-git", "repo_name": "git-lfs-git", "variant": "none", "kind": "aur"},
+          {"key": "hiredis-git", "repo_name": "hiredis-git", "variant": "none", "kind": "aur"},
+          {"key": "htop-git", "repo_name": "htop-git", "variant": "none"},
+          {"key": "jadx-git", "repo_name": "jadx-git", "variant": "none", "kind": "aur"},
+          {"key": "libaec-git", "repo_name": "libaec-git", "variant": "none", "kind": "aur"},
+          {"key": "libconfig-git", "repo_name": "libconfig-git", "variant": "none", "kind": "aur"},
+          {"key": "libliftoff-git", "repo_name": "libliftoff-git", "variant": "none", "kind": "aur"},
+          {"key": "libmtp-git", "repo_name": "libmtp-git", "variant": "none", "kind": "aur"},
+          {"key": "libsonic-git", "repo_name": "libsonic-git", "variant": "none", "kind": "aur"},
+          {"key": "libxcvt-git", "repo_name": "libxcvt-git", "variant": "none", "kind": "aur"},
+          {"key": "mousepad-git", "repo_name": "mousepad-git", "variant": "none", "kind": "aur"},
+          {"key": "nlohmann-json-git", "repo_name": "nlohmann-json-git", "variant": "none", "kind": "aur"},
+          {"key": "oniguruma-git", "repo_name": "oniguruma-git", "variant": "none", "kind": "aur"},
+          {"key": "opusfile-git", "repo_name": "opusfile-git", "variant": "none", "kind": "aur"},
+          {"key": "python-fontpens-git", "repo_name": "python-fontpens-git", "variant": "none", "kind": "aur"},
+          {"key": "python-magic-git", "repo_name": "python-magic-git", "variant": "none", "kind": "aur"},
+          {"key": "ripgrep-git", "repo_name": "ripgrep-git", "variant": "none", "kind": "aur"},
+          {"key": "taglib-git", "repo_name": "taglib-git", "variant": "none", "kind": "aur"},
+          {"key": "amd-debug-tools-git", "repo_name": "amd-debug-tools-git", "variant": "none"},
+          {"key": "nano-git", "repo_name": "nano-git", "variant": "none", "kind": "aur"},
+          {"key": "xapp-symbolic-icons-git", "repo_name": "xapp-symbolic-icons-git", "variant": "none", "kind": "aur"},
+          {"key": "fsearch-git", "repo_name": "fsearch-git", "variant": "none"},
+          {"key": "lmdb-git", "repo_name": "lmdb-git", "variant": "none"},
+          {"key": "jbr21", "repo_name": "jbr21", "variant": "none"},
+          {"key": "jbr25", "repo_name": "jbr25", "variant": "none"},
+          {"key": "qt6ct-git", "repo_name": "qt6ct-git", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
+          {"key": "nodejs-git", "repo_name": "nodejs-git", "variant": "none"},
+          {"key": "npm-git", "repo_name": "npm-git", "variant": "none"},
+          {"key": "pnpm-git", "repo_name": "pnpm-git", "variant": "none", "kind": "aur"},
+          {"key": "go-git", "repo_name": "go-git", "variant": "none"},
+          {"key": "gdu-git", "repo_name": "gdu-git", "variant": "none"},
+          {"key": "gh-git", "repo_name": "gh-git", "variant": "none"},
+          {"key": "glab-git", "repo_name": "glab-git", "variant": "none"},
+          {"key": "warp-plus-git", "repo_name": "warp-plus-git", "variant": "none"},
+          {"key": "nwg-look-git", "repo_name": "nwg-look-git", "variant": "none"},
+          {"key": "gstreamer-git", "repo_name": "gstreamer-git", "variant": "none"},
+          {"key": "lib32-gstreamer-git", "repo_name": "lib32-gstreamer-git", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
+          {"key": "lib32-glib2", "repo_name": "lib32-glib2", "variant": "none", "kind": "multilib"},
+          {"key": "python-cu2qu", "repo_name": "python-cu2qu", "variant": "none", "kind": "aur"},
+          {"key": "python-ufonormalizer", "repo_name": "python-ufonormalizer", "variant": "none", "kind": "aur"},
+          {"key": "afdko-git", "repo_name": "afdko-git", "variant": "none", "kind": "aur"},
+          {"key": "dav1d-git", "repo_name": "dav1d-git", "variant": "none", "kind": "aur"},
+          {"key": "duf-git", "repo_name": "duf-git", "variant": "none", "kind": "aur"},
+          {"key": "dust-git", "repo_name": "dust-git", "variant": "none", "kind": "aur"},
+          {"key": "ffnvcodec-headers-git", "repo_name": "ffnvcodec-headers-git", "variant": "none", "kind": "aur"},
+          {"key": "lsix-git", "repo_name": "lsix-git", "variant": "none", "kind": "aur"},
+          {"key": "pacman-contrib-git", "repo_name": "pacman-contrib-git", "variant": "none", "kind": "aur"},
+          {"key": "qalculate-qt-git", "repo_name": "qalculate-qt-git", "variant": "none", "kind": "aur"},
+          {"key": "ripgrep-all-git", "repo_name": "ripgrep-all-git", "variant": "none", "kind": "aur"},
+          {"key": "xtitle-git", "repo_name": "xtitle-git", "variant": "none", "kind": "aur"},
+          {"key": "downgrade-git", "repo_name": "downgrade-git", "variant": "none", "kind": "aur"},
+          {"key": "pacman-git", "repo_name": "pacman-git", "variant": "none", "kind": "aur"},
+          {"key": "meson-git", "repo_name": "meson-git", "variant": "none", "kind": "aur"},
+          {"key": "python2-git", "repo_name": "python2-git", "variant": "none", "kind": "aur"},
+          {"key": "qt4-git", "repo_name": "qt4-git", "variant": "none", "kind": "aur"},
+          {"key": "expac-git", "repo_name": "expac-git", "variant": "none", "kind": "aur"}
+        ]

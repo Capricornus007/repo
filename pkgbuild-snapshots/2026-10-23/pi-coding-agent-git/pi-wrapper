@@ -1,0 +1,3 @@
+#!/bin/sh
+export PI_PACKAGE_DIR="${PI_PACKAGE_DIR:-/usr/lib/node_modules/pi-coding-agent}"
+exec node "$PI_PACKAGE_DIR/dist/bundle/cli.js" "$@"

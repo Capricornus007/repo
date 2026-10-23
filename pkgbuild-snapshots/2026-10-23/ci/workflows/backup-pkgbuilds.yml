@@ -1,0 +1,79 @@
+name: Backup PKGBUILD Snapshots
+
+# 每天把「全部包的打包檔 ＋ CI 定義檔」快照一份推到孤兒分支 pkgbuild-snapshots。
+# 動機（用戶 2026-10-21，AUR 投毒報導 iThome 179783 之後）：AUR 那半數包的 PKGBUILD
+# 本倉 master 沒存，AUR 一被下架／投毒就查不到「我們当初到底建的是哪一份」；
+# 而 .github/workflows 這層只有 master 一份，被 force-push 或亂手改壞就沒有第二份。
+# 手動快照會腐敗，所以改成排程自動跑。
+on:
+  schedule:
+    - cron: '40 18 * * *'
+  workflow_dispatch:
+    inputs:
+      date:
+        description: '快照目錄名（留空＝今天 UTC，格式 2026-10-22）'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pkgbuild-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 掛出快照分支（不存在就建）
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin pkgbuild-snapshots >/dev/null 2>&1; then
+            git fetch -q origin pkgbuild-snapshots
+            git worktree add -q --detach /tmp/snap FETCH_HEAD
+          else
+            git worktree add -q --orphan -b pkgbuild-snapshots /tmp/snap
+          fi
+          find /tmp/snap -maxdepth 1 | sed -n '2,4p'
+
+      - name: 產生快照
+        env:
+          # ⚠️ 事件輸入一律走 env，不直接插值進 shell（GitHub 官方對 workflow 的
+          #   injection 告警就是這一類）；下面再白名單校驗一次，順便擋 `../` 路徑穿越。
+          INPUT_DATE: ${{ inputs.date }}
+        run: |
+          set -euo pipefail
+          D="$INPUT_DATE"
+          [ -n "$D" ] || D=$(date -u +%F)
+          case "$D" in
+            ''|*[!0-9A-Za-z._-]*) echo "::error::快照目錄名不合法（只准數字字母 . _ -）：$D"; exit 1 ;;
+          esac
+          export SNAP_DATE="$D"
+          python3 tools/pkgbuild_snapshot.py --repo "$GITHUB_WORKSPACE" \
+            --out "/tmp/snap/pkgbuild-snapshots/$D" | tee /tmp/snap-summary.txt
+          echo "DIR=pkgbuild-snapshots/$D" >> "$GITHUB_ENV"
+
+      - name: 推到快照分支
+        run: |
+          set -euo pipefail
+          cd /tmp/snap
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A "$DIR"
+          if git diff --cached --quiet; then
+            echo ">> $DIR 與上次快照完全相同，不提交"
+            exit 0
+          fi
+          n=$(git diff --cached --name-only | wc -l)
+          git commit -q -m "snapshot: $DIR 每日自動快照（$n 檔）[skip ci]"
+          git push -q origin HEAD:refs/heads/pkgbuild-snapshots
+          echo ">> 已推 $DIR（$n 檔變更）"
+
+      - name: 摘要
+        if: always()
+        run: cat /tmp/snap-summary.txt 2>/dev/null || true
