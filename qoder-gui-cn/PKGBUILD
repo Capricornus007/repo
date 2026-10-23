@@ -38,7 +38,7 @@
 
 pkgname=qoder-gui-cn
 pkgver=0.4.9
-pkgrel=2
+pkgrel=3
 pkgdesc="Qoder - agent workbench for human and AI software teams (GUI, China build)"
 url="https://qoder.com.cn"
 arch=('x86_64')
@@ -100,9 +100,28 @@ package() {
   # 整個發布目錄改名成無空格的 /opt/Qoder-CN/，並重寫 desktop 裡的絕對路徑。
   bsdtar -xf "$srcdir/$rpm" -C "$pkgdir" || return 1
 
-  [ -d "$pkgdir/opt/Qoder CN" ] \
-    || { echo "错误：解包后找不到 \"opt/Qoder CN\" 目錄，請人工確認上游佈局" >&2; return 1; }
-  mv "$pkgdir/opt/Qoder CN" "$pkgdir/opt/Qoder-CN" || return 1
+  # ⚠️ 0.4.9 起上游換了發布目錄名（舊版寫死 "opt/Qoder CN"，run 39857119088 就是紅在
+  #    「解包后找不到 \"opt/Qoder CN\"」）。改成**自己找**：opt/ 底下那個含主程式檔或
+  #    resources/app(.asar) 的目錄就是發布目錄；找不到或找到多個都算異常，並且把 RPM 的
+  #    頂層佈局直接印到日誌上，讓人一眼看到上游改成什麼樣，而不是只丟一句「請人工確認」。
+  local cand="" n=0 d oldname oldre
+  for d in "$pkgdir"/opt/*/; do
+    [ -d "$d" ] || continue
+    if [ -f "${d}qoder-cn" ] || [ -d "${d}resources/app" ] || [ -f "${d}resources/app.asar" ]; then
+      cand="$d"; n=$((n+1))
+    fi
+  done
+  if [ "$n" -ne 1 ]; then
+    echo "错误：opt/ 底下找到 $n 個候選發布目錄（預期恰好 1 個）。RPM 頂層佈局：" >&2
+    bsdtar -tf "$srcdir/$rpm" 2>/dev/null | cut -d/ -f1-2 | sort -u | head -25 >&2
+    return 1
+  fi
+  oldname=$(basename "$cand")
+  echo "上游發布目錄：opt/$oldname → 統一改名為 opt/Qoder-CN"
+  # 目錄名中間帶空格的舊慣例對所有不打引號的腳本都是隱雷，且與本倉 -cn 命名系不一致，
+  # 所以不論上游叫什麼都收敍成無空格的 Qoder-CN，並重寫 desktop 裡的絕對路徑。
+  mv "$cand" "$pkgdir/opt/Qoder-CN" || return 1
+  oldre=$(printf '%s' "$oldname" | sed -e 's/[][\.\^$*+?(){}|\/]/\\&/g')
 
   local dir="$pkgdir/opt/Qoder-CN"
   [ -x "$dir/qoder-cn" ] || { echo "错误：改名后找不到 /opt/Qoder-CN/qoder-cn" >&2; return 1; }
@@ -120,15 +139,15 @@ package() {
   # 新路径；改写后再防呆一回，最后全樹掃殘留。
   local dsk="$pkgdir/usr/share/applications/qoder-cn.desktop"
   [ -f "$dsk" ] || { echo "错误：找不到 qoder-cn.desktop" >&2; return 1; }
-  grep -q 'Exec="/opt/Qoder CN/qoder-cn"' "$dsk" \
-    || { echo "错误：qoder-cn.desktop 的 Exec 不再是預期絕對路徑，請人工確認上游改動" >&2; return 1; }
+  grep -q "Exec=\"/opt/$oldname/qoder-cn\"" "$dsk" \
+    || { echo "错误：qoder-cn.desktop 的 Exec 不是 \"/opt/$oldname/qoder-cn\"，請人工確認上游改動" >&2; grep -E '^Exec' "$dsk" >&2; return 1; }
   # 改名後路徑無空格，引號按 freedesktop 慣例一併去掉（整段 "old" 換成 new，
   # 不能只換前綴否則會留下孤立的結尾引號）；其余同目錄的 desktop
   # （如哪天上游多出 url-handler）一起掃。第二條是無引號殘留的兜底。
   local f
   for f in "$pkgdir"/usr/share/applications/*.desktop; do
     [ -f "$f" ] || continue
-    sed -i -E 's|"/opt/Qoder CN/([^"]*)"|/opt/Qoder-CN/\1|g; s|/opt/Qoder CN/|/opt/Qoder-CN/|g' "$f"
+    sed -i -E "s|\"/opt/$oldre/([^\"]*)\"|/opt/Qoder-CN/\1|g; s|/opt/$oldre/|/opt/Qoder-CN/|g" "$f"
   done
   grep -q 'Exec=/opt/Qoder-CN/qoder-cn' "$dsk" \
     || { echo "错误：desktop 的 Exec 改写后仍不是 /opt/Qoder-CN/qoder-cn" >&2; return 1; }
