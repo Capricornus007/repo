@@ -33,7 +33,12 @@ checkdepends=(
   python
 )
 optdepends=('perl-locale-gettext: translation support in makepkg-template')
-provides=('pacman' 'libalpm.so')
+# ⚠️ provides 一定要帶版本號：yay-git 的依賴寫的是 `pacman>6.1`，而 alpm 對「不帶版本的
+#    provides」不會拿去滿足**帶版本的依賴**——實測症狀就是整輪 -Syu 直接紅：
+#    `正在安裝的 pacman-git (7.1.0.r18.ga6f7467-1) 破壞了 yay-git 需要的依賴關係「pacman>6.1」`。
+#    Arch 官方包不需要這行是因為它包名就叫 pacman；AUR 那顆寫的是 ${pkgver%.*.*}，
+#    對上我們 r18.ga6f7467 這種多段版號會切錯，所以用 %%.首個.r 之前的写法。
+provides=("pacman=${pkgver%%.r*}" 'libalpm.so')
 conflicts=('pacman')
 backup=(etc/pacman.conf
         etc/makepkg.conf
@@ -43,8 +48,10 @@ source=("git+https://gitlab.archlinux.org/pacman/pacman.git"
         pacman.conf
         makepkg.conf
         fortran.conf
-        rust.conf)
+        rust.conf
+        fancy-progress.patch)
 sha256sums=('SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
@@ -75,7 +82,8 @@ sha256sums=('SKIP'
 #    · Arch 的 0001/0002 兩條 patch 是 7.1.0 發佈線的 backport，master 已含（子代理實查
 #      commit 已在 master），重打會衝突。
 #    · CachyOS 的 PrettyProgressBar 需要往 /etc/pacman.conf 加一行才生效（使用者條件排除），
-#      pacman-fancy 的 progress.patch 是純視覺且硬編 TERM 白名單，都不帶。
+#      pacman-fancy 的 progress.patch 是純視覺、且把開關硬綁在 TERM 白名單 ⇒ 原樣帶進來沒意義；
+#      本倉改用「去掉白名單、預設開啟、PACMAN_PLAIN_BAR=1 可關」的改寫版（見 prepare()）。
 #    · options 不含 debug：本機沒有任何 -debug 包在用。
 
 pkgver() {
@@ -84,6 +92,18 @@ pkgver() {
   #    否則 makepkg 本機跑會 `cd: pacman-git: 沒有此一檔案或目錄`（實測踩到）。
   cd pacman
   git describe --abbrev=7 --match 'v*' | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd pacman
+  # 進度條改用 Powerline 的 U+EE01..EE05 長條字元。來源是 AUR pacman-fancy-git 的
+  # progress.patch，但那條把開關硬綁在 TERM ∈ {xterm-kitty, st-256color} 的白名單上，
+  # 本機 xfce4-terminal 不在清單裡 ⇒ 永遠退回 [###---]。這裡把白名單拿掉、改成預設開啟，
+  # 想關掉用 `PACMAN_PLAIN_BAR=1 pacman -Syu`（不進 /etc）。
+  # 字型要有 U+EE03 才不會顯示成方框：實測 `fc-list :charset=ee03` 有 28 條，
+  # 且 `fc-match monospace` → JetBrains Maple Mono（本機預設字型）在清單內 ⇒ 可用。
+  patch -p1 -N --quiet -i ../fancy-progress.patch \
+    || { echo "::error::fancy-progress.patch 套不上（上游 callback.c 的 fill_progress 變了）"; exit 1; }
 }
 
 build() {
