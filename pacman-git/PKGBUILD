@@ -1,8 +1,14 @@
 # Maintainer: Capricornus007 <Capricornus007 at gmail dot com>
 
 pkgname=pacman-git
-pkgver=7.1.0.r9.g54d9411
-pkgrel=1
+# ⚠️ 靜態 pkgver 必須寫成 pkgver() 實際會算出的值，pkgrel 才抬得動：
+#    makepkg 只在「pkgver() 的結果 ≠ 檔內靜態 pkgver」時才把 pkgrel 重置為 1。
+#    上一版修 provides 後 CI 全綠卻**沒換檔**（plan 的「產物檔名已在 release 裡」命中，
+#    實測 feed 那顆的 .PKGINFO 仍是舊的 `provides = pacman`），原因就是檔名一個字沒變。
+#    scripts/bump-pkgrel 對有 pkgver() 的包會拒絕抬 pkgrel（說抬了無效），那是指
+#    「只抬 pkgrel、靜態 pkgver 不動」這種半套；兩處一起改就有效。
+pkgver=7.1.0.r18.ga6f7467
+pkgrel=2
 pkgdesc="A library-based package manager with dependency support (upstream git, built for Artix)"
 arch=('x86_64')
 url="https://www.archlinux.org/pacman/"
