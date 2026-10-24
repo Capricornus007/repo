@@ -90,7 +90,11 @@ _cmakeargs=(
   # 只 clang：lld／lldb 在 32 位元**沒有對應的官方包**（查實 multilib 與 lib32 兩庫
   # 都沒有 lib32-lld／lib32-lldb），多建只會白燒兩小時還得解釋為什麼包裡有東西沒人用。
   -DLLVM_ENABLE_PROJECTS='clang'
-  -DLLVM_TARGETS_TO_BUILD='X86;AMDGPU'
+  # 2026-10-25 補 BPF：32 位元 mesa 的 `mesa_clc`（-m32 鏈 /usr/lib32/libLLVM-24git）
+  # 要 LLVMInitializeBPF* 符號，本行原本只有 X86;AMDGPU → lib32-mesa 連結炸
+  # 「undefined symbol: LLVMInitializeBPFTarget」（run 40111886779 實測）。與 64 位元
+  # llvm-git 的 'X86;AMDGPU;BPF'（2026-10-24 補）對齊。
+  -DLLVM_TARGETS_TO_BUILD='X86;AMDGPU;BPF'
   -DLLVM_BUILD_LLVM_DYLIB=ON
   -DLLVM_LINK_LLVM_DYLIB=ON
   -DLLVM_DYLIB_COMPONENTS=all
