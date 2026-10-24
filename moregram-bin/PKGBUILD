@@ -1,0 +1,69 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+#
+# moregram 桌面端（官方 tdesktop 復刻＋64Gram 功能移植；https://github.com/Capricornus007/moregram）
+# 的 feed 分發包。構建在 moregram 倉自己的 CI（Rocky Linux 8 容器，tdesktop 全量構建，
+# 2 小時級），本包只做「取件＋落地」：
+#   · 上游 CI 的 actions artifact 只留 1 天、下載要 token → feed 夠不着；
+#     linux.yml 加了 release job：構建完成即發 rolling release
+#     `moregram-linux-dev`，asset 名 `moregram-desktop-<sha8>.zip`（覆蓋式更新）。
+#   · 本包 source 指向該 release，版號＝commit 短 sha（plan 步從 release API 讀
+#     asset 名現算，crave／jbr21 同型的「版號由外部端點驅動」：原料 `_pkgver=`，
+#     改寫步 sed 的是 `_pkgver=` 那行）。
+#   · 產物是 tdesktop 式裸二進制（Telegram＋Updater），沒有安裝包接縫：
+#     /opt 佈局＋/usr/bin 入口＋自寫 .desktop（模板取 lib/xdg/org.telegram.desktop.desktop
+#     同 commit 原件改寫）＋hicolor 圖標（Telegram/Resources/art/icon256@2x.png）。
+#
+# Updater 是 tdesktop 自帶的增量更新器；本包由 pacman 管更新，package() 不裝它、
+# 也不寫任何讓它自動跑起來的配置，避免與 pacman 打架（zcode-ce-git 的同款考量）。
+#
+# ⚠️ 版號由 plan 步驅動 ⇒ 本檔在「回推校驗和」排除清單（kind: aur 借道跳過，crave 同型）。
+
+pkgname=moregram-bin
+_pkgver=00000000
+pkgver="$_pkgver"
+pkgrel=1
+pkgdesc="moregram 桌面端——官方 tdesktop 復刻＋64Gram 功能移植（CI 滾動構建）"
+arch=('x86_64')
+url="https://github.com/Capricornus007/moregram"
+license=('GPL3')
+depends=('gtk3' 'hicolor-icon-theme' 'xdg-utils')
+optdepends=('libnotify: 桌面通知')
+provides=('moregram' 'telegram-desktop')
+# 只與「提供 telegram-desktop 的實包」互斥（64gram-desktop-bin 等）；
+# 不把自家的 moregram provides 寫進 conflicts，免得 pacman 的自我提供判斷打架。
+conflicts=('telegram-desktop')
+options=('!strip')
+source=("moregram-desktop-${_pkgver}.zip::https://github.com/Capricornus007/moregram/releases/download/moregram-linux-dev/moregram-desktop-${_pkgver}.zip"
+        "icon256.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/Telegram/Resources/art/icon256.png"
+        "icon256@2x.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/Telegram/Resources/art/icon256@2x.png"
+        "moregram.desktop::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/lib/xdg/org.telegram.desktop.desktop")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+# 上游 zip 裡是裸二進制（Telegram／Updater，無目錄層）
+package() {
+    install -d "$pkgdir/opt/moregram"
+    install -Dm755 "$srcdir/Telegram" "$pkgdir/opt/moregram/Telegram"
+
+    install -d "$pkgdir/usr/bin"
+    ln -sf /opt/moregram/Telegram "$pkgdir/usr/bin/moregram"
+
+    # .desktop：模板是 tdesktop 官方條目，逐鍵改成本包身份（Exec／Icon／Name）。
+    install -Dm644 "$srcdir/moregram.desktop" \
+        "$pkgdir/usr/share/applications/moregram.desktop"
+    sed -i -e 's|^Exec=.*|Exec=/usr/bin/moregram -- %u|' \
+        -e 's|^Icon=.*|Icon=moregram|' \
+        -e 's|^Name=.*|Name=moregram|' \
+        -e 's|^TryExec=.*|TryExec=/usr/bin/moregram|' \
+        "$pkgdir/usr/share/applications/moregram.desktop"
+    grep -q '^Exec=/usr/bin/moregram' \
+        "$pkgdir/usr/share/applications/moregram.desktop" || {
+        echo "::error::.desktop 改寫沒落地（上游模板鍵名變了？）"
+        return 1
+    }
+
+    # 圖標：上游 art/ 的 256 兩檔（@2x 是 512 實物）掛 hicolor
+    install -Dm644 "$srcdir/icon256.png" \
+        "$pkgdir/usr/share/icons/hicolor/256x256/apps/moregram.png"
+    install -Dm644 "$srcdir/icon256@2x.png" \
+        "$pkgdir/usr/share/icons/hicolor/512x512/apps/moregram.png"
+}

@@ -718,6 +718,13 @@ jobs:
                 curl -sfL "$base/$f" -o "pkg_dir/$f"
               done
               chmod +x pkg_dir/element-desktop-nightly.sh ;;
+            moregram-bin)
+              # moregram 桌面端（tdesktop 復刻＋64Gram 移植）的 feed 包：
+              # in-tree 維護在本倉 moregram-bin/，只有 PKGBUILD 一個檔。
+              # 產物取自 moregram 倉 CI 發的 rolling release（moregram-linux-dev）。
+              mkdir pkg_dir
+              curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/moregram-bin/PKGBUILD" \
+                -o pkg_dir/PKGBUILD ;;
             nashira-git)
               # 從本倉庫獲取 PKGBUILD（in-tree 模式）；源是 Nashira 主倉
               # master HEAD，build 時 gradle 從源碼構建桌面 app image
@@ -1780,6 +1787,22 @@ jobs:
                 TARGET_PKGVER="$CUR_PKGVER"
               fi
               ;;
+            moregram-bin)
+              # 版號＝commit 短 sha。moregram 倉 CI 構建完成後把產物發到固定
+              # tag 的 rolling release（moregram-linux-dev），asset 名是
+              # moregram-desktop-<sha8>.zip——直接讀 asset 名，不猜版本。
+              _mgasset=$(gh_api "https://api.github.com/repos/Capricornus007/moregram/releases/tags/moregram-linux-dev" \
+                | jq -r '.assets[]?.name' 2>/dev/null \
+                | grep -oE '^moregram-desktop-[0-9a-f]{8}\.zip$' | head -1 || true)
+              [ -n "$_mgasset" ] || skip "moregram-linux-dev 尚無 asset（上游構建未完成或 release job 未推）"
+              latest="${_mgasset#moregram-desktop-}"
+              latest="${latest%.zip}"
+              case "$latest" in
+                ""|*[!0-9a-f]*) skip "moregram asset 名裡的 sha 不合法（=$latest）" ;;
+              esac
+              echo "moregram rolling asset=$_mgasset → pkgver=$latest"
+              TARGET_PKGVER="$latest"
+              ;;
             serein)
               # Serein 的 nightly tag 有兩套命名並存：舊式 `v1.0.0-nightly.10.1` 與
               # 日期式 `v1.0.0-nightly.20261001.53`（實測 28 顆 tag 裡 6 顆舊式、22 顆日期式）。
@@ -2635,6 +2658,18 @@ jobs:
               # PKGBUILD source URL 使用 ${pkgver} 模板，直接更新 pkgver 即可。
               sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
               grep -n '^pkgver=' PKGBUILD
+              ;;
+            moregram-bin)
+              # pkgver 是 "${_pkgver}" 展開的，source 四條 URL 也都吃 ${_pkgver}
+              # → 只改 _pkgver= 那行；去 sed ^pkgver= 只會改到展開式本身。
+              sed -i "s/^_pkgver=.*/_pkgver=$NEW_PKGVER/" PKGBUILD
+              grep -nE '^(_pkgver|pkgver)=' PKGBUILD
+              # 自證：source URL 展開後必須帶新的 sha8（規則 71 的同款防線）。
+              _mg_url=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "${source[0]#*::}"')
+              case "$_mg_url" in
+                *"$NEW_PKGVER"*) ;;
+                *) echo "::error::moregram-bin source URL 沒換到 $NEW_PKGVER（展開=$_mg_url）"; exit 1 ;;
+              esac
               ;;
             serein)
               # ⚠️ 這包的 pkgver 是 `${_upver/-/pre.}` 展開出來的，source 的 `#tag=v$_upver`
