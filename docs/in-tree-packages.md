@@ -1697,3 +1697,32 @@ electron-builder.config.js 的 `PACMAN_RUNTIME_DEPENDENCIES`（gtk3/nss/libxss/
 libxtst/libnotify/alsa-lib/mesa/xdg-utils——CE 自己維護的「Arch 官方可解析的
 Electron 運行時閉包」）。chrome-sandbox 權限與桌面庫刷新走 zcode-ce-git.install
 （改寫自其 aur/zcode-ce-bin.install）。
+
+## moregram-bin（2026-10-24；用戶點名「moregram 就是桌面版，直接 -bin」）
+
+### 命名先立規矩
+`moregram`＝**桌面版**（tdesktop 復刻＋64Gram 功能移植，Capricornus007/moregram）；
+`moregramX`（帶 X）＝**手機版**（mgx，Android）。兩者不是同一個倉、也不是同一個包。
+
+### 為什麼轉發而不是在 feed 裡源碼建
+tdesktop 全量構建（Rocky Linux 8 容器＋Docker Buildx＋ccache）單輪約 2 小時，
+moregram 倉自己的 CI 已經在做這件事。feed 只做「取件＋落地」：
+* moregram 的 `linux.yml` 在構建成功後把 `out/Debug/artifact/`（Telegram＋Updater
+  兩支裸二進制）打成 `moregram-desktop-<sha8>.zip`，發到固定 tag 的 rolling
+  release `moregram-linux-dev`（覆蓋式更新，舊 asset 隨本版刪）；
+* actions artifact 只留 1 天、下載要 token，feed 的 PKGBUILD 夠不着——所以需要
+  這個 release 取件點。
+
+### 四接點（CI 契約）
+矩陣 `{"key":"moregram-bin",...,"kind":"aur"}`；取得步 in-tree 從本倉 master 抓
+`moregram-bin/PKGBUILD`；plan 步讀 rolling release 的 asset 名取 sha8 當 pkgver
+（不猜版本）；改寫步 `sed _pkgver=`（source 四條 URL 都吃它）並自證 URL 真的換了。
+本檔在「回推校驗和」清單外（sha256 全 SKIP，crave 同型）。
+
+### 落地佈局
+`/opt/moregram/Telegram` ＋ `/usr/bin/moregram` 軟鏈；`.desktop` 由同 commit 的
+`lib/xdg/org.telegram.desktop.desktop` 改寫（Exec/Icon/Name/TryExec）；圖標取
+`Telegram/Resources/art/icon256(@2x).png` 掛 hicolor。**Updater 不裝**：更新由
+pacman 管，裝了會與 pacman 打架（zcode-ce-git 的同款考量）。provides 帶
+`telegram-desktop`、conflicts 只寫 `telegram-desktop`（頂替 64gram-desktop-bin
+等實包，不把自家 provides 寫進 conflicts）。
