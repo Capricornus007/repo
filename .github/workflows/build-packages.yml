@@ -1201,8 +1201,21 @@ jobs:
           cp i3lock-color-git/i3lock-fancy pkg_dir/i3lock-fancy \
             || { echo "::error::拿不到 i3lock-color-git/i3lock-fancy 包裝腳本"; exit 1; }
           chmod +x pkg_dir/i3lock-fancy
-          sed -i '/^source+=/a source+=("i3lock-fancy")' pkg_dir/PKGBUILD
-          sed -i '/^md5sums+=/a md5sums+=("SKIP")' pkg_dir/PKGBUILD
+          # AUR 現版是 `source=("git+…")`／`md5sums=('SKIP')`（不是 += 形態）；
+          # 錨點寫成 source+= 會靜默不匹配、包裝腳本不入 source → makepkg 在
+          # $srcdir 找不到它（run 40063287819 實測）。兩種形態都吃。
+          if grep -qE '^source\+=' pkg_dir/PKGBUILD; then
+            sed -i '/^source+=/a source+=("i3lock-fancy")' pkg_dir/PKGBUILD
+          else
+            sed -i '/^source=/a source+=("i3lock-fancy")' pkg_dir/PKGBUILD
+          fi
+          if grep -qE '^md5sums\+=' pkg_dir/PKGBUILD; then
+            sed -i '/^md5sums+=/a md5sums+=("SKIP")' pkg_dir/PKGBUILD
+          else
+            sed -i '/^md5sums=/a md5sums+=("SKIP")' pkg_dir/PKGBUILD
+          fi
+          grep -q '^source+=("i3lock-fancy")' pkg_dir/PKGBUILD \
+            || { echo "::error::i3lock-fancy 沒進 source 清單（AUR 版格式變了？）"; exit 1; }
           sed -i 's/^conflicts=.*/conflicts=("i3lock" "i3lock-fancy" "i3lock-fancy-git")/' pkg_dir/PKGBUILD
           sed -i 's/^provides=.*/provides=("i3lock" "i3lock-fancy" "i3lock-fancy-git")/' pkg_dir/PKGBUILD
           # package() 尾部補安裝包裝腳本（AUR 版的 package() 以 make install 收尾）
