@@ -3183,6 +3183,16 @@ jobs:
             echo "::error::自有 llvm-*-git 只裝上 $_ok 顆（需 ≥4）——不退回去用穩定版 llvm"
             exit 1
           fi
+          if [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ] \
+             && ! pacman -Q spirv-llvm-translator-git >/dev/null 2>&1; then
+            # mesa RustiCL 直接 NEEDED libLLVMSPIRVLib，必須是配自有 llvm-*-git 24 的那顆 translator。
+            # 若上迴圈沒裝上（多為發佈時序 race：translator-git 還沒進 junlin03-aur），容器會留著
+            # Arch 穩定 spirv-llvm-translator(23.1)，mesa 拖到 meson configure 才炸「LLVMSPIRVLib
+            # >=24 found 23.1」（run 40109578679 實測：mesa job 16:00:50 起跑、translator-git r470
+            # 16:02 才發佈，裝不到）。寧可這裡紅一輪講清楚，也不要帶 23.1 编到 configure 噴看不懂錯。
+            echo "::error::自有 spirv-llvm-translator-git 未裝進容器（尚未發佈或源未同步）——mesa 需它提供 LLVMSPIRVLib 24，等它進 feed 後重跑"
+            exit 1
+          fi
           if [ "${{ matrix.repo_name }}" = "spirv-llvm-translator-git" ] \
              && ! pacman -Q spirv-headers-git >/dev/null 2>&1; then
             # 源碼直出的標頭還沒進 feed → 寧可紅一輪，也不退回吃 extra 那顆釘 tag 的
