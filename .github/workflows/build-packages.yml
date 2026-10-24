@@ -1090,27 +1090,7 @@ jobs:
               awk '/^prepare\(\) \{$/ {print; print "    cd \"${srcdir}/${_gitname}\""; print "    patch -p1 -N --quiet -i \"$srcdir/screenshot-option.patch\" || { echo \"::error::screenshot 補丁套用失敗（上游動過 i3lock.c）\"; exit 1; }"; next} {print}' \
                 pkg_dir/PKGBUILD > pkg_dir/PKGBUILD.t && mv pkg_dir/PKGBUILD.t pkg_dir/PKGBUILD
               grep -q 'screenshot-option.patch' pkg_dir/PKGBUILD \
-                || { echo "::error::screenshot 補丁沒注入進 PKGBUILD（source= 或 prepare() 錨點不見了）"; exit 1; }
-              # ── fancy×color 合一（用戶 2026-10-24 裁定）：本包同時出貨 i3lock-fancy
-              #    相容包裝腳本——fancy 的截圖+模糊底圖 i3lock-color 已原生支持
-              #    （--screenshot 補丁＋--blur），包裝層只做預設翻譯與參數透傳，
-              #    原本綁 i3lock-fancy 的 i3 綁定零改動遷移。provides/conflicts
-              #    讓它可以直接替換 i3lock-fancy(-git)。
-              # in-tree 取件：容器 checkout 本來就有 i3lock-color-git/（_it_list 全量拉），cp 即可，
-              # 不用 raw URL（測試顯示帶 ${{ }} 的行疑似讓 GitHub 的驗證器誤判，見 32b2e09 bisect）
-              cp i3lock-color-git/i3lock-fancy pkg_dir/i3lock-fancy \
-                || { echo "::error::拿不到 i3lock-color-git/i3lock-fancy 包裝腳本"; exit 1; }
-              chmod +x pkg_dir/i3lock-fancy
-              sed -i "/^source+=/a source+=(\"i3lock-fancy\")" pkg_dir/PKGBUILD
-              sed -i "/^md5sums+=/a md5sums+=(\"SKIP\")" pkg_dir/PKGBUILD
-              sed -i "s/^conflicts=.*/conflicts=(\"i3lock\" \"i3lock-fancy\" \"i3lock-fancy-git\")/" pkg_dir/PKGBUILD
-              sed -i "s/^provides=.*/provides=(\"i3lock\" \"i3lock-fancy\" \"i3lock-fancy-git\")/" pkg_dir/PKGBUILD
-              # package() 尾部補安裝包裝腳本（AUR 版的 package() 以 make install 收尾）
-              printf '%s\n' '  install -Dm755 "$srcdir/i3lock-fancy" "$pkgdir/usr/bin/i3lock-fancy"' >> pkg_dir/PKGBUILD
-              grep -q 'usr/bin/i3lock-fancy' pkg_dir/PKGBUILD \
-                || { echo "::error::i3lock-fancy 包裝腳本沒注入進 PKGBUILD"; exit 1; }
-              grep -q 'provides=(\"i3lock\" \"i3lock-fancy\"' pkg_dir/PKGBUILD \
-                || { echo "::error::provides 行沒改寫成功（AUR 版格式變了？）——不要靜默發一顆替換不了 fancy 的包"; exit 1; } ;;
+                || { echo "::error::screenshot 補丁沒注入進 PKGBUILD（source= 或 prepare() 錨點不見了）"; exit 1; } ;;
                         
             fd-git)
               # AUR 那份沒有 build()，package() 直接 cargo install 打預設 features，
@@ -1200,6 +1180,31 @@ jobs:
 
             *) : ;;
           esac
+      - name: i3lock-color-git 的 fancy×color 合一（獨立 step——大 step 已貼著 21000 表達式上限）
+        if: matrix.repo_name == 'i3lock-color-git'
+        run: |
+          set -euo pipefail
+          # 用戶 2026-10-24 裁定：本包同時出貨 i3lock-fancy 相容包裝——fancy 的截圖+模糊
+          # 底圖 i3lock-color 已原生支持（--screenshot 補丁＋--blur），包裝層只做預設翻譯
+          # 與參數透傳，原本綁 i3lock-fancy 的 i3 綁定零改動遷移；provides/conflicts 宣告
+          # 讓它直接替換 i3lock-fancy(-git)。
+          # 為什麼是獨立 step：上面的「逐包修正」run 塊已貼著 GitHub「max expression length
+          # 21000」上限（run #231 與本輪 40056692991 兩次實測：多 20 行＝整個 workflow 無效、
+          # 零 job 起跑），再塞任何內容都會炸，所以這裡自成一個 step。
+          cp i3lock-color-git/i3lock-fancy pkg_dir/i3lock-fancy \
+            || { echo "::error::拿不到 i3lock-color-git/i3lock-fancy 包裝腳本"; exit 1; }
+          chmod +x pkg_dir/i3lock-fancy
+          sed -i '/^source+=/a source+=("i3lock-fancy")' pkg_dir/PKGBUILD
+          sed -i '/^md5sums+=/a md5sums+=("SKIP")' pkg_dir/PKGBUILD
+          sed -i 's/^conflicts=.*/conflicts=("i3lock" "i3lock-fancy" "i3lock-fancy-git")/' pkg_dir/PKGBUILD
+          sed -i 's/^provides=.*/provides=("i3lock" "i3lock-fancy" "i3lock-fancy-git")/' pkg_dir/PKGBUILD
+          # package() 尾部補安裝包裝腳本（AUR 版的 package() 以 make install 收尾）
+          printf '%s\n' '  install -Dm755 "$srcdir/i3lock-fancy" "$pkgdir/usr/bin/i3lock-fancy"' >> pkg_dir/PKGBUILD
+          grep -q 'usr/bin/i3lock-fancy' pkg_dir/PKGBUILD \
+            || { echo "::error::i3lock-fancy 包裝腳本沒注入進 PKGBUILD"; exit 1; }
+          grep -q 'i3lock-fancy' pkg_dir/PKGBUILD \
+            || { echo "::error::provides 行沒改寫成功（AUR 版格式變了？）"; exit 1; }
+
       - name: 检测 ffmpeg-full-git 上游版本
         if: matrix.repo_name == 'ffmpeg-full-git'
         id: ffmpeg_plan
