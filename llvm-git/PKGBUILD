@@ -263,6 +263,20 @@ prepare() {
   # 內附的 Findzstd.cmake 與系統 zstd 不同步時會炸（Arch 同款）；
   # trunk 若已删掉這檔，rm -f 安靜跳過。
   rm -f llvm/cmake/modules/Findzstd.cmake
+  # mlir 的 FlatLinearValueConstraints.cpp 用 SmallVector(n, {})——LLVM trunk
+  # 2026-10-23 起 SmallVector 新增 initializer_list 建構子後，這寫法與容器
+  # 編譯器產生「overloaded ... is ambiguous」（run 39990427151/40025570124
+  # 的 llvm-git job 實測死在 1544/1546 行；實查上游 main 至 2026-10-24 仍未修）。
+  # 顯式給值型別消歧義。上游哪天把這兩行改了，下面的 grep 會先紅出來提醒刪補丁。
+  _mlirfix=mlir/lib/Analysis/FlatLinearValueConstraints.cpp
+  sed -i \
+    -e 's|SmallVector<AffineExpr> dimReplacements(map.getNumDims(), {});|SmallVector<AffineExpr> dimReplacements(map.getNumDims(), AffineExpr());|' \
+    -e 's|SmallVector<AffineExpr> symReplacements(map.getNumSymbols(), {});|SmallVector<AffineExpr> symReplacements(map.getNumSymbols(), AffineExpr());|' \
+    "$_mlirfix"
+  if ! grep -q 'AffineExpr());' "$_mlirfix" || grep -q 'getNumDims(), {});' "$_mlirfix"; then
+    echo "mlir SmallVector 補丁沒落地（上游改了這段？）——確認後刪補丁或改 sed" >&2
+    return 1
+  fi
   cd ..
   cmake -S $_pkgbase/llvm -B build "${_cmakeargs[@]}" \
     -DCMAKE_INSTALL_PREFIX=/usr \

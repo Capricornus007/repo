@@ -128,7 +128,15 @@ def main():
             if files is None:
                 missing.append({'package': name, 'pkgbase': base, 'error': err})
                 continue
-            shutil.move(os.path.join(work, base + '.out'), os.path.join(out, name))
+            # 冪等：上一輪半途而廢時可能已留下同名目錄/檔案（run 40028409928 實測
+            # shutil.move 把 .out 搬進舊目錄後撞 'Destination path already exists'），
+            # 重跑前先清掉目標，快照本來就該是「以本輪爲準」的全量覆寫。
+            dest = os.path.join(out, name)
+            if os.path.isdir(dest):
+                shutil.rmtree(dest, ignore_errors=True)
+            elif os.path.exists(dest):
+                os.remove(dest)
+            shutil.move(os.path.join(work, base + '.out'), dest)
             shutil.rmtree(os.path.join(work, base), ignore_errors=True)
             src = 'aur'
         manifest[name] = {'files': files, 'kind': kind, 'source': src}
