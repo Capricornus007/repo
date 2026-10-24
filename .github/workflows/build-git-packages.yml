@@ -103,6 +103,7 @@ jobs:
           {"key": "llvm-git", "repo_name": "llvm-git", "variant": "none", "kind": "aur"},
           {"key": "shiboken6-git", "repo_name": "shiboken6-git", "variant": "none", "kind": "aur"},
           {"key": "zcode-ce-git", "repo_name": "zcode-ce-git", "variant": "none", "kind": "aur"},
+          {"key": "okular-git", "repo_name": "okular-git", "variant": "none", "kind": "aur"},
           {"key": "librime-git", "repo_name": "librime-git", "variant": "none"},
           {"key": "opencc-git", "repo_name": "opencc-git", "variant": "none"},
           {"key": "ccache-git", "repo_name": "ccache-git", "variant": "none"},
