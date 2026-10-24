@@ -1198,7 +1198,12 @@ jobs:
           # 為什麼是獨立 step：上面的「逐包修正」run 塊已貼著 GitHub「max expression length
           # 21000」上限（run #231 與本輪 40056692991 兩次實測：多 20 行＝整個 workflow 無效、
           # 零 job 起跑），再塞任何內容都會炸，所以這裡自成一個 step。
-          cp i3lock-color-git/i3lock-fancy pkg_dir/i3lock-fancy \
+          # 本 workflow 沒有 checkout step（其他包一律 clone／curl raw 取得，line 690 同訓）：
+          # 自有倉的 i3lock-color-git/i3lock-fancy 不在工作區，cp 必 `No such file`
+          # （run 40093454739 實測）。比照 screenshot-option.patch（上一 step 用 curl 抓）、
+          # kew/llvm/dae/mpv 等 in-tree 檔的同一手法，從 master raw 抓進 pkg_dir。
+          curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/i3lock-color-git/i3lock-fancy" \
+            -o pkg_dir/i3lock-fancy \
             || { echo "::error::拿不到 i3lock-color-git/i3lock-fancy 包裝腳本"; exit 1; }
           chmod +x pkg_dir/i3lock-fancy
           # AUR 現版是 `source=("git+…")`／`md5sums=('SKIP')`（不是 += 形態）；
