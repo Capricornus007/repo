@@ -73,6 +73,17 @@ prepare() {
     echo "::error::electron-builder 的 linux target 改寫沒落地（上游改了 config 寫法？）"
     return 1
   }
+  # 打包完畢後 electron-builder 會照 publish 配置往 GitHub Release 上傳，
+  # 容器沒有（也不該有）GH_TOKEN → 「GitHub Personal Access Token is not set」
+  # 直接紅（run 39984189532/40044092974 實測；產物其實已經建好）。本包只產包
+  # 不發佈（發佈是 feed repo-add 的事），publish 拔成 null。app-update.yml 在
+  # packaging 階段就寫進資源目錄，不依賴 publish 步驟，更新配置不受影響。
+  sed -i '/^  publish: {$/,/^  },$/c\  publish: null,' \
+    packages/desktop/electron-builder.config.js
+  grep -q 'publish: null' packages/desktop/electron-builder.config.js || {
+    echo "::error::publish 配置沒拔掉（上游改了 config 佈局？）——沒 token 的容器必然死在發佈步驟"
+    return 1
+  }
 }
 
 build() {
