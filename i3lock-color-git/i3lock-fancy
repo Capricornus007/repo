@@ -1,0 +1,29 @@
+#!/bin/sh
+# i3lock-fancy 相容包裝（fancy×color 合一包的一部分）
+#
+# i3lock-fancy 的行爲＝截當前畫面→模糊/像素化當鎖屏底圖→鎖屏。i3lock-color
+# 自帶 --screenshot（本倉補丁）＋--blur/--blur-radius 原生就有同樣能力，
+# 不再需要 scrot/convert 那條外部管道。本腳本只做預設值翻譯，其餘參數
+# 原封透傳，讓原本綁 i3lock-fancy 的 i3 config / 腳本零改動遷移。
+#
+# 對照表（fancy 預設 → color 參數）：
+#   截圖底圖          → --screenshot
+#   fancy 的模糊底    → --blur --blur-radius 12（視覺接近 fancy 預設）
+#   fancy 的 --logout/... 等選項 → 不屬於鎖屏本身，拒絕並提示（避免靜默錯行爲）
+
+first=true
+has_image=false
+for a in "$@"; do
+    case "$a" in
+        -i|--image) has_image=true ;;
+        --logout|--no-lock|--logout-command|--logout-icon)
+            echo "i3lock-fancy(相容層): 不支持 $a——這是 fancy 腳本自己的選項，請改用系統的 logout 綁定" >&2
+            exit 1 ;;
+    esac
+done
+
+if $has_image; then
+    # 用戶自帶底圖就尊重，不強加截圖
+    exec /usr/bin/i3lock "$@"
+fi
+exec /usr/bin/i3lock --screenshot --blur --blur-radius 12 "$@"
