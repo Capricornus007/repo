@@ -21,7 +21,7 @@
 pkgname=moregram-bin
 _pkgver=00000000
 pkgver="$_pkgver"
-pkgrel=1
+pkgrel=2
 pkgdesc="moregram 桌面端——官方 tdesktop 復刻＋64Gram 功能移植（CI 滾動構建）"
 arch=('x86_64')
 url="https://github.com/Capricornus007/moregram"
@@ -42,7 +42,7 @@ sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
 # 上游 zip 裡是裸二進制（Telegram／Updater，無目錄層）
 package() {
     install -d "$pkgdir/opt/moregram"
-    install -Dm755 "$srcdir/Telegram" "$pkgdir/opt/moregram/Telegram"
+    install -Dm755 "$srcdir/artifact/Telegram" "$pkgdir/opt/moregram/Telegram"
 
     install -d "$pkgdir/usr/bin"
     ln -sf /opt/moregram/Telegram "$pkgdir/usr/bin/moregram"
