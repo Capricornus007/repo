@@ -1,0 +1,11 @@
+post_install() {
+  echo ">>> android-ndk-30 裝在 /opt/android-sdk/ndk/30.0.16248370"
+  echo ">>> 與 android-ndk-23／-27 並存（side-by-side），不互斥。"
+  echo ">>> PATH 由 /etc/profile.d/android-ndk-30.sh 提供（重新登入或 source 才生效）。"
+  echo ">>> 安裝即表示接受 Android SDK Terms of Service："
+  echo ">>>   https://developer.android.com/studio/terms"
+}
+
+post_upgrade() {
+  post_install
+}

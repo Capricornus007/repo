@@ -1,0 +1,45 @@
+# 來源：用戶本地 ~/.cache/yay/nodejs-better-sqlite3/PKGBUILD（已與 AUR 現行版
+# orphan 11.10.0-1 逐字比對過，完全相同）。打包手法（npm i -g --prefix、去 _where、
+# noextract、arch=any）原樣保留，但**版本與兩處 metadata 非改不可**，理由都是實測：
+#   1. 11.10.0 在本機（nodejs 26.8.2 / npm 12.0.2，與 CI 容器同版本）產出的是**空包**：
+#      npm 12 預設攔下 install 腳本（日誌 "install-scripts … blocked"），
+#      better-sqlite3 11.x 靠 `prebuild-install || node-gyp rebuild` 才會產出
+#      better_sqlite3.node，被擋之後包裡完全沒有 native 模組；放開腳本後 node-gyp
+#      也編不過（src/util/binder.lzz:40 error: class v8::Object has no member
+#      GetPrototype；Context::GetIsolate / PropertyCallbackInfo::This 同樣被移除），
+#      即 11.x 與 node 26 的 V8 ABI 不相容。
+#   2. 改吃 13.0.3（npm dist-tags latest，engines node>=22）：tarball 自帶各平台
+#      prebuilds/*.node（N-API，跨 node 版本），無 install 腳本 → 不再受 npm 12
+#      腳本閘門影響，pkgver=13.0.3 原樣 makepkg 即產出可用包，實測
+#      require('better-sqlite3') + :memory: 建表查詢回傳 OK。
+#      校驗和 77e0513d… 由本機 tgz 算出，並與官方 dist.integrity 的 sha512（base64）
+#      逐字比對一致。
+#   3. depends=() → depends=('nodejs')：Node 模組包不宣告 nodejs 依賴屬明顯漏宣告，
+#      yay/pacman 裝它時不會把 runtime 帶進來。
+#   4. 把 pkgver/pkgrel 移到 noextract 之前：原順序下 noextract 展開時 pkgver 尚未設定，
+#      變成 "better-sqlite3-.tgz"，對不上實際檔名 → makepkg 照舊解壓（實測日誌
+#      "正在解壓縮 better-sqlite3-11.10.0.tgz"），繞過了 noextract 的原意。
+# 固定版本包（源是 npmjs tarball、無 pkgver()）：CI 的 plan 步需走
+# TARGET_PKGVER="$CUR_PKGVER" 的「固定版本」分支（android-ndk-23 / u1s1-bin 模式），
+# 否則預設分支拿 source 裡的 https URL 去 git clone 必失敗、整輪被跳過。
+# Maintainer: Kimiblock Moe
+
+pkgname=nodejs-better-sqlite3
+_pkgname=${pkgname#nodejs-}
+pkgver=13.0.3
+pkgrel=1
+pkgdesc="The fastest and simplest library for SQLite3 in Node.js."
+url="https://github.com/WiseLibs/better-sqlite3"
+license=(MIT)
+depends=('nodejs')
+makedepends=('npm')
+noextract=("${_pkgname}-${pkgver}.tgz")
+sha256sums=('77e0513dc1a469fb3bceec4c7fb5ad3f403109787eda05be047ec17fd56868cb')
+arch=(any)
+source=(
+	"${_pkgname}-${pkgver}.tgz"::"https://registry.npmjs.org/${_pkgname}/-/${_pkgname}-${pkgver}.tgz"
+)
+function package() {
+	npm i -g --prefix "${pkgdir}/usr" "${srcdir}/${_pkgname}-${pkgver}.tgz"
+	find "${pkgdir}" -name package.json -print0 | xargs -r -0 sed -i '/_where/d'
+}

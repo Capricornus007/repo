@@ -1,0 +1,296 @@
+# Based on the AUR openai-codex-git package maintained by Jack Mahoney.
+# The AUR recipe currently forces the newest stable Rust and builds every
+# workspace member. Codex pins its release compiler in rust-toolchain.toml,
+# and its release workflow builds named binaries only. Following both avoids
+# compiling unrelated internal crates with an unsupported compiler.
+#
+# 2026-09-24 改版：裝完跑 `codex` 會報
+#   "this CLI has no complete local package; install a packaged Codex CLI or
+#    use the standalone installer"
+# 因為上游的 app-server-daemon 要先把自己那套「完整套件」裝進 ~/.codex 才開機，
+# 而它判別「本機有沒有完整套件」只看執行檔所在目錄的形狀（codex-rs/install-context）：
+#   <package_dir>/codex-package.json
+#   <package_dir>/bin/codex
+#   <package_dir>/bin/codex-code-mode-host
+#   <package_dir>/codex-path/rg
+#   <package_dir>/codex-resources/bwrap        （Linux 必須）
+# 我們以前只把三個 binary 直接丟 /usr/bin，沒有 codex-package.json，而且 in-tree
+# 版沿用工作區 Cargo.toml 的 0.0.0（上游 release 才會填真版號），所以
+# `codex --version` 顯示 codex-cli 0.0.0、`stable_version()` 也拒收 0.0.0 → 永遠走
+# 不到 daemon 模式。現在改用上游自己的打包腳本
+# `scripts/build_codex_package.py`（just assemble-codex-package 是同一条）產出正式
+# 套件目錄，/usr/bin 那三個只留符號連結。
+
+pkgname=openai-codex-git
+pkgver=0.156.1.r3546.g7dae8c53d9
+pkgrel=3
+pkgdesc="Lightweight coding agent that runs in your terminal"
+arch=('x86_64' 'aarch64')
+url="https://github.com/openai/codex"
+license=('Apache-2.0')
+provides=('openai-codex')
+conflicts=('openai-codex')
+# bubblewrap 是執行期依賴：實測 build 出來的 codex 二進位會 exec 系統的 bwrap 來做
+# Linux 沙箱（strings 命中 "bwrap"），缺它則 codex 的沙箱模式不能用。AUR 那份沒列。
+depends=('bubblewrap')
+# python：跑 build_codex_package.py；ripgrep/bubblewrap：套件的 codex-path/rg 與
+# codex-resources/bwrap 直接用發行版二进制，不去抓上游的預構建檔。
+makedepends=('rustup' 'git' 'python' 'ripgrep' 'bubblewrap')
+optdepends=(
+  'git: for working with git repositories'
+  'ripgrep: accelerated large-repo search'
+)
+options=('!lto')
+source=("${pkgname%-git}::git+${url}.git" "exec-bin-recursion-limit.patch"
+        "no-daemon-by-default.patch")
+b2sums=('SKIP' 'SKIP' 'SKIP')
+
+pkgver() {
+  cd "${pkgname%-git}"
+  # 上游 tag 形如 rust-v0.156.1；工作區 Cargo.toml 的 version 是 0.0.0（只有 release
+  # 流程會填），所以版號必須從 tag 取，不能用 read_workspace_version()。
+  local _base _n _h
+  # 只要穩定 tag：`git describe --abbrev=0` 會挑到 rust-v0.143.0-alpha.10 這種預釋版，
+  # 而 pkgver 不準含連字號（run #230 實測「pkgver is not allowed to contain … hyphens」，
+  # 生成的是 0.143.0-alpha.10.r3546.g…）。按版本序取最新無後綴的那個。
+  _base=$(git tag -l 'rust-v*' --sort=-v:refname | grep -E '^rust-v[0-9]+\.[0-9]+\.[0-9]+$' | head -n1 | sed 's/^rust-v//')
+  _h=$(git rev-parse --short HEAD)
+  [ -n "$_base" ] || { printf "0.0.0.r%s.g%s" "$(git rev-list --count HEAD)" "$_h"; return; }
+  _n=$(git rev-list --count "rust-v${_base}..HEAD")
+  if [ "$_n" = "0" ]; then
+    printf "%s" "$_base"
+  else
+    printf "%s.r%s.g%s" "$_base" "$_n" "$_h"
+  fi
+}
+
+_upstream_toolchain() {
+  sed -nE 's/^channel = "([^"]+)"/\1/p' \
+    "${srcdir}/${pkgname%-git}/codex-rs/rust-toolchain.toml"
+}
+
+# 給版號蓋入與 build_codex_package.py --package-version 共用的 semver。
+#
+# 不能直接用 $pkgver：實測 run #240 日誌 —— plan 步驟 08:31:43 算出目標 r214、
+# 成品檔名也是 r214，但 08:32:44 的 prepare() 裡 $pkgver 仍是 PKGBUILD 寫死的
+# r3546（跑出來的二進制自報 0.156.1+3546.g7dae8c53d9，與套件名不一致）。也就是
+# makepkg 把 pkgver() 新值套上去的時機晚於 prepare()/build()。所以這裡自己呼叫
+# pkgver()：prepare() 時 source 已完整克隆、tags 在，算出的才是最終值。
+#
+# pkgver() 拿不到穩定 tag 時回退成 0.0.0.rN.gH（淺克隆無 tag 實測過），那種值是
+# 垃圾、不該蓋進 Cargo，故這種情況與呼叫失敗時退回 $pkgver。
+#
+# 形勢：AUR 的 0.156.1.r3546.g7dae8c53d9，semver 不允許 patch 後再掛點分段，所以
+# 把第一個 .r 換成 build metadata 的 + → 0.156.1+r3546.g7dae8c53d9；commit 數與短
+# hash 全留，且 build metadata 不參與優先序比較（用 -r3546 會被當成比 0.156.1 更
+# 舊的前釋版）。剛好落在 tag 上時沒有 .r，原樣返回。
+_pkg_semver() {
+  local v
+  v=$(cd "$srcdir" 2>/dev/null && pkgver 2>/dev/null) || v=""
+  case "$v" in
+    0.0.0.* | "") v="$pkgver" ;;
+  esac
+  printf '%s' "${v/.r/+}"
+}
+
+prepare() {
+  cd "${pkgname%-git}"
+
+  # 上游只在 codex-rs/exec/src/lib.rs 設了 #![recursion_limit = "256"]，但 bin 目標
+  # （codex-exec 的 main.rs，crate 名同為 codex_exec）仍是預設的 128，於是 CI 編那個
+  # bin 時炸「error: queries overflow the depth limit!」（2026-09-23 run #223 實測，
+  # 推導 codex_app_server 那個 async fn 的佈局就多吃 130 層）。
+  # 哪天上游自己補上，patch -N 會回報已套用：這時只要確認屬性存在就放過，別判紅。
+  if ! patch -p1 -N --quiet -i "$srcdir/exec-bin-recursion-limit.patch"; then
+    grep -q 'recursion_limit' codex-rs/exec/src/main.rs || {
+      echo "::error::無法套用 recursion_limit 補丁，上游也沒有該屬性"
+      return 1
+    }
+  fi
+
+  # 用戶 2026-10-22 要求「跟官方一樣打開直接就是界面，不要那鬼服務器」。
+  # 0.163 起 tui_app_server 已被標 removed，TUI 一律改走「共用 app-server daemon」，
+  # 而 daemon_auto_start 的出廠預設是 true（codex-rs/features/src/lib.rs:1062）。
+  # 實測（同一臺、同一版，只差這條開關）：
+  #   開  → codex 生出 `codex app-server --listen unix:// --managed-daemon`，
+  #         RSS 114 MB；TUI 結束後該程序 PPID 變 1（被 init 收養）、不會自己退。
+  #   關  → 整棵樹只有 1 顆 codex，退出 0 殘留。
+  # 關掉的路徑在上游是現成的：startup_orchestration.rs 的
+  #   (AppServerTarget::Embedded, None) => "auto_start_disabled"
+  # 也就是「TUI 內嵌 app server」，不是把功能砍掉、只是不讓它去拉常駐 daemon。
+  # 代价：`codex agents`（跨會話瀏覽共用 daemon 上的 session）這類功能用不了。
+  # 與 ~/.codex/config.toml 的 [features] daemon_auto_start=false 等價；兩邊都做
+  # 是為了「換機器／清 config 也不用再寫設定檔」。上游若改成預設 false，
+  # patch -N 會回報已套用，這時確認那行已是 false 就放過，別判紅。
+  if ! patch -p1 -N --quiet -i "$srcdir/no-daemon-by-default.patch"; then
+    grep -A4 'key: "daemon_auto_start"' codex-rs/features/src/lib.rs \
+      | grep -q 'default_enabled: false' || {
+      echo "::error::無法套用 no-daemon 補丁，上游也沒有把 daemon_auto_start 預設關掉"
+      return 1
+    }
+  fi
+
+  cd codex-rs
+
+  # 上游工作區的 version 是 0.0.0（只有發版流程會填真值），而 TUI 標題列讀的是
+  # 編譯期 CARGO_PKG_VERSION（codex-rs/tui/src/version.rs: env!("CARGO_PKG_VERSION")），
+  # 所以直接從 git 裝出來的 codex 會顯示「OpenAI Codex (v0.0.0)」。上游自己的
+  # codex-rs/default.nix 就是 sed 掉它（postPatch），這裡照做；但我們 build() 用
+  # --frozen，Cargo.lock 裡 157 個成員區塊也是 0.0.0，只改 toml 會「lock 過時」直接
+  # 失敗，所以兩邊一起改。實測這 157 個全是本倉成員（155 個 codex* 加
+  # app_test_support、core_test_support），無第三方同值，整批替換安全。
+  local _semver
+  _semver=$(_pkg_semver)
+  if [ -n "$_semver" ] && [ "$_semver" != "0.0.0" ]; then
+    find . -name Cargo.toml -exec sed -i "s/^version = \"0\.0\.0\"\$/version = \"$_semver\"/" {} +
+    sed -i "s/^version = \"0\.0\.0\"\$/version = \"$_semver\"/" Cargo.lock
+    grep -q "^version = \"$_semver\"\$" Cargo.toml || {
+      echo "::error::版號蓋入失敗（Cargo.toml 的 [workspace.package] version 不是 0.0.0？上游改了寫法）"
+      return 1
+    }
+    if grep -q '^version = "0\.0\.0"$' Cargo.lock; then
+      echo "::error::Cargo.lock 仍殘留 0.0.0 成員，蓋入不完整"
+      return 1
+    fi
+  fi
+
+  local _toolchain
+  _toolchain=$(_upstream_toolchain)
+  [[ -n "$_toolchain" ]] || return 1
+  rustup toolchain install "$_toolchain" --profile minimal
+
+  _v8_fetch "$_toolchain"
+  RUSTUP_TOOLCHAIN="$_toolchain" cargo fetch --locked \
+    --target "$(RUSTUP_TOOLCHAIN="$_toolchain" rustc -vV | sed -n 's/host: //p')"
+}
+
+# rusty_v8 上游只發布 release／ptrcomp／simdutf 三種預構建靜態檔，沒有 `v8` crate
+# 在 codex 鎖定組合下要的 `ptrcomp_sandbox`（實測 denoland 的 v150.4.0 release 72 個
+# 資產裡 0 個含 sandbox → build.rs 直接 404 panic）。OpenAI 自己編好放在
+# `rusty-v8-v<crate版號>` 這個 release，上游 CI 走的就是它
+# （.github/actions/setup-rusty-v8），照抄：抓 .a.gz 與 src binding，校完和再寫成
+# build() 要 source 的 env 檔。
+_v8_fetch() {
+  local _toolchain="$1"
+  local _host _ver _prof _dir _base _sum _trusted
+  _host=$(RUSTUP_TOOLCHAIN="$_toolchain" rustc -vV | sed -n 's/^host: //p')
+  [[ -n "$_host" ]] || { echo "::error::問不到 rustc host triple"; return 1; }
+  _ver=$(awk '/^name = "v8"$/{getline; sub(/^version = "/, ""); sub(/"$/, ""); print; exit}' Cargo.lock)
+  [[ -n "$_ver" ]] || { echo "::error::Cargo.lock 裡找不到 v8 版號"; return 1; }
+  _prof="ptrcomp_sandbox_release"
+  _dir="${srcdir}/rusty_v8"
+  _base="https://github.com/openai/codex/releases/download/rusty-v8-v${_ver}"
+  _sum="rusty_v8_${_prof}_${_host}.sha256"
+  mkdir -p "$_dir" || return 1
+
+  if ! curl -fsSL "${_base}/${_sum}" -o "${_dir}/${_sum}"; then
+    echo "::error::抓不到 ${_base}/${_sum}（上游換檔名或 release 被移？）"
+    return 1
+  fi
+
+  # 倉庫內附的信任清單：先比對剛抓到的 sha256 Manifest 本身，避免拿到被替換的清單。
+  _trusted="third_party/v8/rusty_v8_${_ver//./_}_release_manifests.sha256"
+  if [ -f "$_trusted" ]; then
+    local _want _got
+    _want=$(grep -F "  ${_sum}" "$_trusted" | cut -d ' ' -f 1)
+    _got=$(sha256sum "${_dir}/${_sum}" | cut -d ' ' -f 1)
+    if [ -z "$_want" ] || [ "$_want" != "$_got" ]; then
+      echo "::error::${_sum} 與 ${_trusted} 不符（上游 V8 清單換版了）"
+      return 1
+    fi
+  else
+    echo "::warning::倉庫沒有 ${_trusted}，跳過信任清單比對（只驗資產自身的 sha256）"
+  fi
+
+  local _art
+  for _art in "librusty_v8_${_prof}_${_host}.a.gz" "src_binding_${_prof}_${_host}.rs"; do
+    if ! curl -fsSL "${_base}/${_art}" -o "${_dir}/${_art}"; then
+      echo "::error::抓不到 ${_base}/${_art}"
+      return 1
+    fi
+  done
+
+  if ! ( cd "$_dir" && tr -d '\r' < "${_sum}" | sha256sum --check - ); then
+    echo "::error::V8 預構建檔校验失敗"
+    return 1
+  fi
+
+  {
+    printf 'export RUSTY_V8_ARCHIVE=%q\n' "${_dir}/librusty_v8_${_prof}_${_host}.a.gz"
+    printf 'export RUSTY_V8_SRC_BINDING_PATH=%q\n' "${_dir}/src_binding_${_prof}_${_host}.rs"
+  } > "${_dir}/env.sh"
+}
+
+build() {
+  cd "${pkgname%-git}/codex-rs"
+
+  local _toolchain
+  _toolchain=$(_upstream_toolchain)
+  [[ -n "$_toolchain" ]] || return 1
+  export CARGO_TARGET_DIR=target
+  # prepare() 抓好的 V8 預構建檔位置（缺檔就讓 cargo 自己去問，錯誤資訊比較直觀）
+  [ -f "${srcdir}/rusty_v8/env.sh" ] && source "${srcdir}/rusty_v8/env.sh"
+  # codex-code-mode-host 是「完整套件」的必須檔（validate_package 會查），
+  # 少了它裝上去一樣報 no complete local package。
+  RUSTUP_TOOLCHAIN="$_toolchain" cargo build --release --frozen \
+    --bin codex \
+    --bin codex-code-mode-host \
+    --bin codex-exec \
+    --bin codex-linux-sandbox
+}
+
+package() {
+  local _src="${srcdir}/${pkgname%-git}"
+  local _bin="$_src/codex-rs/target/release"
+  local _pkgdir_root="${pkgdir}/usr/lib/codex"
+
+  # 用上游自己的腳本組出正式套件目錄（含 codex-package.json）。
+  # --target 明確給 gnu：默認值是 musl（跟上游 release 檔對齊），我們是 glibc 系統。
+  # rg/bwrap 餵發行版二进制，避免腳本去抓預構建檔；zsh 不傳 → 套件裡不帶 bundled zsh
+  # （layout 的必須檔清單裡沒有它，跳過不會讓校驗失敗）。
+  local _semver
+  _semver=$(_pkg_semver)
+  # 目標 triple 用實際 host，且沿用上游鎖定的 toolchain 去問（容器裡 rustc 是 rustup
+  # 的 shim，沒 RUSTUP_TOOLCHAIN 時默認 toolchain 未必存在）。問不到就退回 gnu。
+  local _toolchain _host
+  _toolchain=$(_upstream_toolchain)
+  _host=$(RUSTUP_TOOLCHAIN="$_toolchain" rustc -vV 2>/dev/null | sed -n 's/^host: //p')
+  [ -n "$_host" ] || _host="$(uname -m)-unknown-linux-gnu"
+  cd "$_src"
+  # build_codex_package.py 要靠 CODEX_REPO_ROOT 找倉庫根（上游 justfile 就是
+  # export CODEX_REPO_ROOT := justfile_directory()）；沒這隻變量腳本直接 RuntimeError。
+  export CODEX_REPO_ROOT="$_src"
+  python3 scripts/build_codex_package.py \
+    --variant codex \
+    --target "$_host" \
+    --package-version "$_semver" \
+    --package-dir "$_pkgdir_root" \
+    --entrypoint-bin "$_bin/codex" \
+    --code-mode-host-bin "$_bin/codex-code-mode-host" \
+    --rg-bin /usr/bin/rg \
+    --bwrap-bin /usr/bin/bwrap \
+    --force
+
+  # 上游腳本只認「bin 目錄的上一層有 codex-package.json」，所以 /usr/bin 這三個
+  # 一律做成符號連結；current_exe() 會解析連結，才認得出這是完整套件。
+  # 先建目錄：改用上游組裝腳本後，$pkgdir 裡除了 /usr/lib/codex 就只剩 licenses，
+  # 沒有任何步驟會順手造出 /usr/bin，ln 直接「No such file or directory」（run
+  # 35968328540 實測：package() 已印出 Built Codex package directory 才死在這裡）。
+  install -Dm755 "$_bin/codex-exec" "${_pkgdir_root}/bin/codex-exec"
+  install -Dm755 "$_bin/codex-linux-sandbox" "${_pkgdir_root}/bin/codex-linux-sandbox"
+  install -d -m755 "${pkgdir}/usr/bin"
+  for _b in codex codex-exec codex-linux-sandbox; do
+    ln -s "../lib/codex/bin/${_b}" "${pkgdir}/usr/bin/${_b}"
+  done
+
+  # 上游根目錄的授權檔（檔名哪天換掉也不該把整個包判紅）。
+  # 必須寫成 if/then/fi：實測倉根只有 LICENSE、沒有 LICENSE.md，而
+  # `[ -f x ] && install …` 在條件假時整個 for 迴圈回傳 1，package() 是函式最後
+  # 一句的回傳值決定成敗 → 會像 ln 那次一樣判紅（本地實測回傳 1 確認）。
+  local _lic
+  for _lic in LICENSE LICENSE.md; do
+    if [ -f "$_src/$_lic" ]; then
+      install -Dm644 "$_src/$_lic" "${pkgdir}/usr/share/licenses/${pkgname}/$_lic"
+    fi
+  done
+}
