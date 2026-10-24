@@ -190,7 +190,11 @@ _cmakeargs=(
   # 2026-10-11 第二次裁：clang-tools-extra 與 NVPTX 拿掉（理由與代價見檔頭 ⏱ 段）。
   -DLLVM_ENABLE_PROJECTS='clang;lld;lldb'
   -DLLVM_ENABLE_RUNTIMES='compiler-rt'
-  -DLLVM_TARGETS_TO_BUILD='X86;AMDGPU'
+  # 2026-10-24 補 BPF：X86;AMDGPU 二目標的 clang 編 eBPF 直接「No available
+  # targets are compatible with triple bpfel」——本機所有 eBPF 項目（dae、
+  # wireguard 系）全被卡死，實測 make ebpf（dae kdae 合併輪）。BPF 後端構建
+  # 成本很小（無獨立 runtime），補回；NVPTX 維持不編（原裁定不變）。
+  -DLLVM_TARGETS_TO_BUILD='X86;AMDGPU;BPF'
   # ⚠️ **不能**開 COMPILER_RT_DEFAULT_TARGET_ONLY：實測本機已裝的 compiler-rt-git
   #   `pacman -Ql | grep -c i386` 回 **0**，而官方 extra 與 world-goblins 的
   #   compiler-rt 都有 `libclang_rt.asan-i386.a`／`clang_rt.crtbegin-i386.o`
