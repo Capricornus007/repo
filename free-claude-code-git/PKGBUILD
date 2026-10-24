@@ -78,6 +78,9 @@ pkgver() {
 
 build() {
   cd "$srcdir/free-claude-code"
+  # 上游 pyproject 釘死 requires-python = "==3.14.9"（2026-10-24 實測：容器 3.14.8
+  # → uv 解析直接拒絕）。放寬成 >=3.14 才能裝；本地源碼改寫，不是改上游倉。
+  sed -i 's/^requires-python = "==3.14.9"$/requires-python = ">=3.14"/' pyproject.toml
   uv venv --python /usr/bin/python3 --python-preference only-system "$srcdir/venv"
   source "$srcdir/venv/bin/activate"
   uv pip install .
