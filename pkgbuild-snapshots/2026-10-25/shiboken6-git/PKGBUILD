@@ -1,0 +1,366 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 本倉目錄版 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md，
+# **不要寫回 workflow** —— 那個 step 有 21000 字元表達式上限且註解也計入）。
+#
+# 為什麼存在（用戶 2026-10-23 點名：本機那支 shiboken6 一跑就死）：
+#   實測 `objdump -p /usr/bin/shiboken6 | grep NEEDED` 的 LLVM 系只有**一條**
+#     libclang.so.23.1            （C API；**沒有** libclang-cpp.so.23.1）
+#   而本機 clang 已被本倉 `clang-git 24.0.0_r604130.g70e1f7cffa8-1` 頂替，
+#   /usr/lib 下只有 libclang.so → libclang.so.24.0git → libclang.so.24.0.0git
+#   （`pacman -Qo` 查實三條都歸 clang-git），系統裡**不存在** libclang.so.23.1 ⇒
+#   官方 shiboken6-generator 6.12.0-1 執行時直接
+#     error while loading shared libraries: libclang.so.23.1
+#   （doxygen 是同一种病，見 doxygen-git/PKGBUILD 檔頭。）
+#
+# ⚠️ 不准用「做一顆 libclang.so.23.1 軟連結去騙 loader」——用戶明確否決，
+#   mesa（2026-10-12 黑屏）與 doxygen 兩場的裁決都是同一句：
+#   **不相容就把整條鏈重built 到同一個版本**。
+#   重built 必成的實測依據：把 libclang.so.23.1 暫時軟鏈到 24.0git 後跑
+#   `shiboken6 --output-directory=… sample.h sample.typesystem`
+#   → `CLANG v23/0.64`、`Generated class model (1) [OK]` 全流程通过
+#   ⇒ LLVM 24 的 libclang 與 shiboken 6.12 功能相容，缺的只是「拿 24 重編一顆」。
+#
+# 官方那顆還有一個依賴面的坑（本檔順手治掉）：Artix 的 `shiboken6-generator`
+#   `depend = clang-libs`，而實查本機與 Arch 2026-10-21 之後**沒有任何套件提供
+#   `clang-libs`**（workflow「初始化容器環境」那段就為這件事加了 --assume-installed
+#   libclang）→ 照抄官方依賴清單會讓這顆在 -Syu 裡解不開。本包改成點名
+#   `clang-git`＋`llvm-libs-abi=<soname>`（見下方 depends 那段的理由）。
+#
+# 為什麼是 in-tree 自己寫、不走 AUR：AUR 那顆 `pyside6-git`/`shiboken6-git` 是整包
+#   Qt for Python（makedepends 拖 24 顆 qt6 模組），而我們要的只是 shiboken 那兩棵。
+#   被頂替者的權威配方已存檔：`docs/upstream-pkgbuilds/pyside6.PKGBUILD`（Arch 現檔 179 行，
+#   本檔的 cmake 旗標、分割邊界、egg_info 那幾行都是照它逐條對過來的）。
+#
+# ⚠️ 「-DBUILD_PYSIDE=NO 就只造 shiboken」這條捷徑**查過、不存在**（證據寫在 build()
+#   上方，勿憑記憶重抄進本檔）。
+#
+# 版本由 pkgver() 從上游 HEAD 現算 ⇒ 本檔要列進「回推校驗和」的排除清單
+#   （矩陣標 kind: aur 借用 `matrix.kind != 'aur'` 自動跳過那步）。
+
+_pkgbase=pyside-setup
+pkgbase=shiboken6-git
+# 順序即歸屬先後（兩棵 cmake install 各自獨立，不重疊，但保持 lib→tool 讀起來順）。
+pkgname=(shiboken6-git shiboken6-generator-git)
+# ⚠️ 這顆靜態 pkgver 是**陳舊佔位值**（契約：-git 包必须有 pkgver()，否則產物版號永不變；
+#   寫成佔位是照本倉慣例：llvm-git 用 `24.0.0_r0.g000…`、translator 用 `0.r0.g000…`、
+#   doxygen-git 用 `1.18.0.r0.g000…`）。pkgver() 實算現值 = 6.12.0.r12573.geb3b113c375
+#   （2026-10-23 對 dev HEAD 現測），佔位 r0 ⇒ 實算恒新 ⇒ makepkg 每輪都把 pkgrel
+#   重置成 1，而 plan 步的資產比對也是按 `-1-` 拼的（契約見 build-packages.yml 那段
+#   「所以這裡要預測 makepkg 會做什麼」）。落回佔位時 repo-add 仍收得下。
+pkgver=6.12.0.r0.g00000000000
+pkgrel=1
+# ── 頂替用虛名的版本（**寫死**，不是 pkgver 推導）────────────────────────────
+# 這是「 pacman 拿去和依賴比大小的那個數字」，权威來源是**發行版倉庫裡那兩顆官方包**
+# 的現值（實查 2026-10-23：`pacman -Si shiboken6`＝6.12.0-3、
+# `pacman -Si shiboken6-generator`＝6.12.0-3，都在 world-gremlins）。
+# 刻意不用 ${pkgver%%.r*} 推：dev 的 .cmake.conf 遲早抬到 6.13.0，那时
+# `provides shiboken6=6.13.0` 對「只要 >=6.12 的人」沒差，但對
+# **寫了上限**（例如 `shiboken6<6.13`）的依賴就會突然不滿足而繞道去裝官方那顆
+# ——頂替虛名要跟著的是發行版的包，不是上游的 dev 線。官方抬版時改這一行。
+_official_ver=6.12.0
+# ── libclang 的 SONAME 世代（頂替鏈的另一半，理由見 package_*() 的自證）──────
+# 寫成頂層**字面量**而不是執行期 readlink 拼字：makepkg 7.1 對分割包的
+# provides/depends 走 extract_function_variable（靜態抽字串再 eval），那個上下文裡
+# $pkgdir／local 變數都不存在，`depends+=("llvm-libs-abi=$abi")` 會被抽成
+# `llvm-libs-abi=`（空版本）→ makepkg 起跑 4 秒就
+# 「pkgver in provides/depends 不可以空白」（run #462 的 llvm-git 實測、
+# spirv-llvm-translator-git 同坑二次）。LLVM 換大版時改這個字面量，
+# package_*() 裡那道「與容器實際 soname 比對、不對就紅」會兜住，不會靜默錯。
+_clang_abi=24.0git
+arch=(x86_64)
+url='https://www.qt.io'
+# 四個 id 與 Artix/Arch 官方那份 pyside6 的 license= 完全同名，且 upstream 的
+# LICENSES/ 目錄裡四個檔案都在（實查 dev HEAD：GPL-3.0-only.txt、
+# LGPL-3.0-only.txt、LicenseRef-Qt-Commercial.txt、Qt-GPL-exception-1.0.txt），
+# 所以 package_*() 直接把那四個檔裝進 /usr/share/licenses/$pkgname。
+license=('GPL-3.0-only' 'LGPL-3.0-only' 'LicenseRef-Qt-Commercial' 'Qt-GPL-exception-1.0')
+# ⚠️ `clang`／`llvm` 寫裸名是**刻意的**，與 spirv-llvm-translator-git 同一手法：
+#   依賴由 build-packages.yml「把容器 LLVM 換成自有 llvm-*-git 尖端」那步先裝成
+#   我方 trunk（--ask=20 頂掉官方那組），裸名才解得到 24 的 libclang；
+#   而 package_*() 會 objdump 問**產物實際的 NEEDED**，不是 24.0git 就紅，
+#   所以「不小心建到舊 clang」不可能靜默過關。
+# ⚠️ 只拖 shiboken 需要的這一級，不是整個 Qt for Python：qt6-base（Core）＋
+#   libxml2/libxslt（ApiExtractor 的 find_package）＋ python/numpy/setuptools（egg-info）。
+#   python-numpy 只是 `numpy-config --cflags` 給 NUMPY_INCLUDE_DIR 用（頂替官方行為）。
+makedepends=(clang cmake git libxml2 libxslt llvm ninja python python-numpy
+             python-setuptools qt6-base)
+# 沒有 check()：上游的 shiboken 測試樹要 -DBUILD_TESTS=ON 才存在，而 Artix/Arch 那顆
+# 官方包就是 OFF 發的（實查 /var/cache/pacman/pkg/shiboken6-generator-6.12.0-3 的
+# .PKGINFO 與產物清單裡沒有任何測試檔）⇒ 本包維持「與被頂替者相同的功能面」，
+# 不是拿「跳測試」換綠燈；真正的驗收寫在兩個 package_*() 的實物自證裡
+# （NEEDED 必須是 libclang.so.$_clang_abi、/usr/bin/shiboken6 必須在、
+#  libshiboken*.so* 與 Shiboken6Config.cmake 必須在），紅在打包步而不是紅在裝完之後。
+source=("git+https://code.qt.io/pyside/pyside-setup#branch=dev")
+b2sums=('SKIP')
+
+pkgver() {
+  cd $_pkgbase
+  # 版號基號的權威來源是上游 `sources/shiboken6/.cmake.conf`（實查 dev HEAD
+  # eb3b113c375 那檔：shiboken_MAJOR_VERSION "6" / MINOR "12" / MICRO "0"），
+  # **不用 git describe**：上游 tag 形如 v6.12.0（實查 `git ls-remote --tags --refs`
+  # 最新一筆就是 v6.12.0），但 dev 這條線的**歷史走不到那些 tag**——
+  # 實測 `git describe --tags --match 'v*' HEAD` 在 dev HEAD 回
+  #   v5.11.2-6679-geb3b113c3
+  # 拿它當基號會算成 5.11.2，比官方 6.12.0 **舊**，頂替虛名就跟著降版
+  # （契約：provides 必须帶版本才顶得住帶版本的依賴）。
+  # count 用 `git rev-list --count HEAD`（全域單調 12573，實測），理由同 llvm-git：
+  # describe 的 count 在「HEAD 正好落在 tag 上」時會把 tag 名本身當數字。
+  local base count
+  base=$(awk '
+        /^[[:space:]]*set\(shiboken_MAJOR_VERSION/ {gsub(/[^0-9]/, "", $2); maj=$2}
+        /^[[:space:]]*set\(shiboken_MINOR_VERSION/ {gsub(/[^0-9]/, "", $2); min=$2}
+        /^[[:space:]]*set\(shiboken_MICRO_VERSION/ {gsub(/[^0-9]/, "", $2); pat=$2}
+        END { if (maj == "") exit 1; printf "%s.%s.%s", maj, min, pat }' \
+        sources/shiboken6/.cmake.conf)
+  if [ -z "$base" ]; then
+    # 這裡**不准**回空字串：plan 步拿不到版號是 `skip "跑 pkgver() 失敗"` →
+    # job 照綠、release 裡卻一個資產都沒有（本倉 2026-10-23 為 qt4-git／python2-git
+    # 踩過兩次，見 docs/in-tree-packages.md「克隆目錄名 ≠ pkgname 派生名」）。
+    # 退回標頭佔位值的基號段，至少 r<count> 還在單調走。
+    echo "WARNING: sources/shiboken6/.cmake.conf 讀不到 shiboken_*_VERSION（上游搬家了？要人來看）——退回標頭基號" >&2
+    base="${pkgver%%.r*}"
+  fi
+  count=$(git rev-list --count HEAD) || return 1
+  printf '%s.r%s.g%s\n' "$base" "$count" "$(git rev-parse --short=11 HEAD)"
+}
+
+prepare() {
+  cd $_pkgbase
+  # 三道**正向斷言**：本包的打包方式（兩棵子專案各自 configure）押在三個上游事实上，
+  # 哪天上游改結構，讓這裡講明白紅在哪，而不是留一條難懂的 cmake 訊息。
+  # ① 頂層沒有「只造 shiboken」的開關 ⇒ 才會走下面 build() 的兩段式；
+  #    真出現這種開關（上游加了）也不該悄悄變行為，所以先點名查一次。
+  if grep -qE 'option\(BUILD_(PYSIDE|SHIBOKEN)' CMakeLists.txt; then
+    echo "ERROR: 上游新增了 BUILD_PYSIDE／BUILD_SHIBOKEN 開關——build() 的兩段式可以收掉，" >&2
+    echo "       請改回單次 configure 並同步更新本檔與 docs/in-tree-packages.md" >&2
+    return 1
+  fi
+  # ② shibokenmodule 仍要用 generator 產碼（這是「必须先造 generator」的全部理由）。
+  grep -q 'Shiboken6::shiboken6' sources/shiboken6/shibokenmodule/CMakeLists.txt \
+    || { echo "ERROR: sources/shiboken6/shibokenmodule/CMakeLists.txt 不再引用 Shiboken6::shiboken6（上游改了生成方式？本包的兩段式順序要重新看）" >&2; return 1; }
+  # ③ generator 要導出 Shiboken6Tools 的 CMake package（第二階段的 find_package 靠它）。
+  [ -f sources/shiboken6_generator/data/Shiboken6ToolsConfig.cmake.in ] \
+    || { echo "ERROR: 找不到 Shiboken6ToolsConfig.cmake.in——第二階段無法取得 Shiboken6::shiboken6 匯入目標" >&2; return 1; }
+  echo "正向斷言通過：頂層無 BUILD_PYSIDE/BUILD_SHIBOKEN 開關、shibokenmodule 需要 generator、Shiboken6Tools 有導出"
+}
+
+# ── 為什麼是「兩次 configure」而不是「一次 super-build 加個開關」───────────────
+# ⚠️ 上游**沒有** BUILD_SHIBOKEN／BUILD_PYSIDE 這種開關（實查 dev HEAD eb3b113c375）：
+#   · 頂層 CMakeLists.txt 只有 29 行，第 18/19/24/26 行是四條**無條件**的
+#     add_subdirectory(sources/shiboken6_generator / shiboken6 / pyside6 / pyside-tools)；
+#   · 全 tree `grep -rn 'BUILD_PYSIDE\|BUILD_SHIBOKEN'` 唯一命中是
+#     sources/pyside6/tests/pysidetest/CMakeLists.txt:138 的
+#     `DEFINE_SYMBOL BUILD_PYSIDETEST`——那是 C++ 巨集名，不是 CMake 選項。
+#   ⇒ 拿 super-build 只裝 shiboken 那兩棵（官方 package_*() 的裝法）行不通：
+#     configure 階段就會去 find_package 那 24 顆 qt6 模組，makedepends 縮不起來。
+# 正解是走**子專案各自 standalone configure**，而且那正是上游自己的做法：
+#   · sources/shiboken6/CMakeLists.txt:10 `project(shiboken6)`、
+#     sources/shiboken6_generator/CMakeLists.txt:7 `project(shiboken_generator)`
+#     ——兩棵各有自己的 project()，本來就能單獨 configure；
+#   · 上游 wheel 管線就是按棵造的：build_scripts/main.py:439-445 依
+#     internal-build-type 只認其中一棵，testing/command.py:148
+#     `all_projects = ["shiboken6_generator", "shiboken6", "pyside6"]`；
+#   · `sources/shiboken6/cmake/ShibokenSetup.cmake:19` 呼叫
+#     `shiboken_internal_find_host_shiboken_tools()`，而那個函式（ShibokenHelpers.cmake:530）
+#     找的就是**已安裝的** Shiboken6Tools package——即官方支援「generator 先裝好、
+#     shiboken6 再吃它」這條路（build_scripts/main.py:827 的
+#     `-DQFP_SHIBOKEN_HOST_PATH=` 是同一路徑的另一個入口，但那個入口會把
+#     SHIBOKEN_IS_CROSS_BUILD 判成 TRUE、順手改掉 embedding 的 .pyc 行為，
+#     所以這裡用直白的 `-DShiboken6Tools_DIR=` 而不是它）。
+# 順序為什麼是 generator → shiboken6：`sources/shiboken6/shibokenmodule/CMakeLists.txt:18`
+# 的 add_custom_command 要用 `$<TARGET_FILE:Shiboken6::shiboken6>` 產
+# `shiboken_module_wrapper.cpp`，那個目標在 super-build 裡是前一棵 add_subdirectory
+# 定義的；standalone 時必须由 Shiboken6Tools 的匯入目標提供。
+build() {
+  cd $_pkgbase
+  # 第一階段的**中間安裝**位置：只給第二階段的 find_package 用，不是最終包。
+  # 為什麼非裝不可：CMake 的匯出目標（Shiboken6ToolsTargets.cmake）落在 build 樹裡
+  # 時，IMPORTED_LOCATION 指的是 build 目錄的檔，而那檔的 RPATH 是 build 路徑；
+  # install -tree 那份才是帶 `$ORIGIN/:/usr/lib` 的可用執行檔
+  # （實測官方產物 /usr/bin/shiboken6 的 RUNPATH 就是 `$ORIGIN/:/usr/lib`）。
+  local _stage="$srcdir/host"
+  local -a _common=(
+    -G Ninja
+    -W no-dev
+    # CMAKE_BUILD_TYPE=None 照官方（Arch 那份就是 None）：交給 makepkg 的 CFLAGS
+    # 決定最佳化，不让 cmake 再疊一層 -O3。
+    -DCMAKE_BUILD_TYPE=None
+    -DCMAKE_INSTALL_PREFIX=/usr
+    # 測試樹 OFF：與被頂替的官方包一致（理由見上面 check() 那段）。
+    -DBUILD_TESTS=OFF
+    # 不鎖 Python limited API，同官方 `-DFORCE_LIMITED_API=no`。
+    -DFORCE_LIMITED_API=no
+    # 頂層 super-build 會 `set(is_pyside6_superproject_build 1)`（CMakeLists.txt:16），
+    # 而 standalone 時 generator/CMakeLists.txt:70 與 libshiboken/CMakeLists.txt:240
+    # 會多跑一段 **wheel 專用**安裝（把執行檔再裝進 $prefix/shiboken6_generator/、
+    # $prefix/shiboken6/，還導一份 $prefix/lib/wheels/cmake/…）。官方包裡沒有那些路徑
+    # （實查 6.12.0-3 的清單：只有 bin/、lib/cmake/、lib/pkgconfig/、
+    #  lib/python3.*/site-packages/、include/），所以這裡把那個旗標照 super-build 設起來，
+    # 讓 standalone 的產物清單與官方**逐檔相同**；package_*() 另外還有一道防呆。
+    -Dis_pyside6_superproject_build=1
+  )
+
+  cmake -S sources/shiboken6_generator -B build-generator "${_common[@]}"
+  cmake --build build-generator
+  # prefix=/usr ＋ DESTDIR=$srcdir/host ⇒ 實際落在 .pkgdir 之外、路徑仍算得對
+  # （_IMPORT_PREFIX 由 config 檔位置反推 → $_stage/usr）。
+  DESTDIR="$_stage" cmake --install build-generator
+
+  cmake -S sources/shiboken6 -B build-lib "${_common[@]}" \
+    -DNUMPY_INCLUDE_DIR="$(numpy-config --cflags | sed -e 's|-I||')" \
+    -DShiboken6Tools_DIR="$_stage/usr/lib/cmake/Shiboken6Tools"
+  cmake --build build-lib
+}
+
+# 兩顆分割共用的收尾防呆：standalone 安裝不該留下 wheel 專用路徑。
+# 上面 build() 已經把 is_pyside6_superproject_build 設成 1（super-build 的值），
+# 那兩段 wheel 安裝（generator/CMakeLists.txt:70、libshiboken/CMakeLists.txt:240）
+# 理論上不會跑；這一刀是防「上游哪天把那個旗標改名，產物就悄悄多出
+# /usr/lib/wheels/cmake/… 與 /usr/shiboken6_generator/shiboken6」——那些路徑官方包裡
+# 沒有（實查 6.12.0-3 的清單），留著就是兩顆包搶同一支執行檔。
+# ⚠️ 一律用 if 結尾、不用 `[ -d x ] && rm` 那種寫法：最後一條判斷為假會讓整個
+#   函式回非零，makepkg 就把 package_*() 判成失敗（而且 `[ ] && …` 在 dash 的
+#   errexit 下另有坑，本倉「初始化容器環境」那步的註解寫過這件事）。
+_prune_wheel_junk() {
+  if [ -d "$pkgdir/usr/lib/wheels" ]; then
+    echo ">> $pkgname: 清掉 wheel 專用 cmake 目錄 usr/lib/wheels（is_pyside6_superproject_build 沒擋住？）"
+    rm -rf "$pkgdir/usr/lib/wheels"
+  fi
+  if [ -d "$pkgdir/usr/shiboken6_generator" ]; then
+    echo ">> $pkgname: 清掉 wheel 專用目錄 usr/shiboken6_generator"
+    rm -rf "$pkgdir/usr/shiboken6_generator"
+  fi
+  if [ -d "$pkgdir/usr/shiboken6" ]; then
+    echo ">> $pkgname: 清掉 wheel 專用目錄 usr/shiboken6（site-packages 那份在 usr/lib 下，不在這裡）"
+    rm -rf "$pkgdir/usr/shiboken6"
+  fi
+  return 0
+}
+
+# 容器此刻真正的 libclang **DT_SONAME**（查不到回空字串，由呼叫端判紅）。
+# ⚠️ 這裡不能用 `readlink -f /usr/lib/libclang.so`：本倉 clang-git 的實物是
+#   libclang.so → libclang.so.24.0git → libclang.so.24.0.0git **兩層**軟連結，
+#   `readlink -f` 一路解到最後那段，剝出來是 `24.0.0git`，而執行檔 NEEDED 裡寫的是
+#   DT_SONAME 那段 `24.0git`（實測本機 `objdump -p /usr/bin/shiboken6` 對照
+#   `ls -l /usr/lib/libclang.so*`）⇒ 拿它跟 _clang_abi 比會**恆紅**。
+#   （spirv-llvm-translator-git 那边的 `readlink -f /usr/lib/libLLVM.so` 沒踩到，
+#    純粹是 libLLVM 只有一層連結。）
+# 正解就是問 ELF 自己：`objdump -p` 的 SONAME 行，那才是 loader 匹配 NEEDED 用的字串。
+_clang_soname() {
+  local so
+  so=$(objdump -p /usr/lib/libclang.so 2>/dev/null | awk '/SONAME/{print $2; exit}')
+  case $so in
+    ''|libclang.so) printf '' ;;
+    *) printf '%s' "${so#libclang.so.}" ;;
+  esac
+}
+
+package_shiboken6-git() {
+  pkgdesc='Python/C++ bindings helper module (git, 配自有 LLVM trunk)'
+  # 依賴清單照 Artix 官方 `shiboken6` 6.12.0-3 的 .PKGINFO（實查該包 depend =
+  # glibc libgcc libstdc++ python 四條；實測包內 libshiboken*.so 的 NEEDED
+  # = libpython3.14.so.1.0 + libstdc++ + libgcc_s + libc，**不碰 libclang、不碰 Qt**）
+  # ⇒ 這一顆不是被 LLVM 換代弄壞的那半邊，但頂替官方包就要把「裝得上」條件湊齊。
+  depends=(glibc libgcc libstdc++ python)
+  provides=("shiboken6=${_official_ver}")
+  conflicts=(shiboken6)
+  replaces=(shiboken6)
+  cd $_pkgbase
+  DESTDIR="$pkgdir" cmake --install build-lib
+  # egg-info：官方那顆確實帶了 site-packages/shiboken6.egg-info（實查 6.12.0-3 清單），
+  # 來源是 setup.py；命令與 Arch 那份逐字相同（--build-type 的值查實由
+  # build_scripts/config.py:58 `f"{SHIBOKEN}-generator"`/同檔 SHIBOKEN="shiboken6" 接受）。
+  # PATH 要先帶 /usr/lib/qt6/bin：setup.py 那側需要 qtpaths（build_scripts/options.py:113
+  # 的 no_qtpaths_commands 清單裡沒有 egg_info），qt6-base 擁有那個檔（實測本機
+  # /usr/lib/qt6/bin/qtpaths 歸 qt6-base 6.12.0-3）。
+  export PATH="/usr/lib/qt6/bin:$PATH"
+  python setup.py egg_info --build-type=shiboken6
+  local _pythonpath
+  _pythonpath=$(python -c "from sysconfig import get_path; print(get_path('platlib'))")
+  cp -r shiboken6.egg-info "$pkgdir$_pythonpath"
+  install -Dm644 LICENSES/GPL-3.0-only.txt LICENSES/LGPL-3.0-only.txt \
+                LICENSES/LicenseRef-Qt-Commercial.txt LICENSES/Qt-GPL-exception-1.0.txt \
+                -t "$pkgdir/usr/share/licenses/$pkgname"
+  _prune_wheel_junk
+  # ── 實物自證（不認 build 綠、只認產物裡真的有東西）
+  [ -f "$pkgdir/usr/lib/cmake/Shiboken6/Shiboken6Config.cmake" ] \
+    || { echo "ERROR: $pkgname 沒有 /usr/lib/cmake/Shiboken6/Shiboken6Config.cmake——本倉 KDE 那批 job 的 find_package(Shiboken6) 全靠它" >&2; return 1; }
+  # 實測官方檔名是 `libshiboken6.cpython-314-x86_64-linux-gnu.so{,.6.12,.6.12.0}`
+  # （拆開 extra/os/x86_64 的 shiboken6-6.12.0-3 直接看的清單），
+  # 名字帶 Python ABI 字串 ⇒ 這裡用 glob 點名，不寫死 python3.14（換 Python 就誤判）。
+  ls "$pkgdir"/usr/lib/libshiboken6*.so.6.* >/dev/null 2>&1 \
+    || { echo "ERROR: $pkgname 沒有 /usr/lib/libshiboken6*.so.<version>（libshiboken 那半邊沒裝進來？）" >&2; return 1; }
+  ls "$pkgdir$_pythonpath"/shiboken6/Shiboken*.so >/dev/null 2>&1 \
+    || { echo "ERROR: $pkgname 沒有 site-packages/shiboken6/Shiboken*.so（shibokenmodule 沒生成？）" >&2; return 1; }
+  echo ">> $pkgname: Shiboken6Config.cmake／libshiboken6*.so／Shiboken*.so 三樣都在"
+}
+
+package_shiboken6-generator-git() {
+  pkgdesc='Python/C++ bindings generator (git, 配自有 LLVM trunk)'
+  # 官方這顆的 depend 是 glibc **clang-libs** libgcc libstdc++ libxml2 libxslt
+  # **llvm** python qt6-base（實查 6.12.0-3 的 .PKGINFO）。兩處要改：
+  #  · `clang-libs` 在本機與 Arch 2026-10-21 之後**沒有任何套件提供**
+  #    （workflow 初始化那段就是為它加 --assume-installed libclang）→ 留著等於
+  #    把「-Syu 解不開」原封不動搬進 feed。真正給執行檔的是 clang 本體的
+  #    /usr/lib/libclang.so.24.0git，所以點名 `clang-git`。
+  #  · `llvm` 裸名換成 `llvm-libs-abi=<soname>`：這是整條鏈的**防靜默閘**。
+  #    只有本倉 llvm-libs-git 發這個虛名（實查本機 llvm-libs-git 的 Provides：
+  #    `llvm-libs=24.0.0 llvm-libs-abi=24.0git libLLVM.so=24.0git-64 …`），
+  #    LLVM 換大版（24.0git→25.0git）時 pacman 會**拒絕升級**而不是裝完才
+  #    「libclang.so.24.0git => not found」——2026-10-12 GL 黑屏與 doxygen 那兩場
+  #    的共同病灶就是「依賴宣告比實物寬」。
+  #    ⚠️ 版本段不能帶連字號：實測 makepkg 7.1 拒收 `libLLVM.so=24.0git-64` 那種形
+  #    （「pkgver in depends 不能有 ; 斜線、- 連字號或空白」），所以用不帶 -64 的
+  #    虛擬名，同 spirv-llvm-translator-git 的決定。
+  #  · qt6-base／libxml2／libxslt／python 照官方留（實測 /usr/bin/shiboken6 的
+  #    NEEDED 真的有 libQt6Core.so.6、libxslt.so.1、libxml2.so.16）。
+  depends=(glibc libgcc libstdc++ libxml2 libxslt python qt6-base
+           clang-git llvm-libs-git "llvm-libs-abi=$_clang_abi")
+  provides=("shiboken6-generator=${_official_ver}")
+  conflicts=(shiboken6-generator)
+  replaces=(shiboken6-generator)
+  cd $_pkgbase
+  DESTDIR="$pkgdir" cmake --install build-generator
+  export PATH="/usr/lib/qt6/bin:$PATH"
+  python setup.py egg_info --build-type=shiboken6-generator
+  local _pythonpath
+  _pythonpath=$(python -c "from sysconfig import get_path; print(get_path('platlib'))")
+  cp -r shiboken6_generator.egg-info "$pkgdir$_pythonpath"
+  install -Dm644 LICENSES/GPL-3.0-only.txt LICENSES/LGPL-3.0-only.txt \
+                LICENSES/LicenseRef-Qt-Commercial.txt LICENSES/Qt-GPL-exception-1.0.txt \
+                -t "$pkgdir/usr/share/licenses/$pkgname"
+  _prune_wheel_junk
+  # ── 實物自證：這顆包存在的全部意義就是「那支程式要能載入本機那套 libclang」。
+  # 只看 makepkg 綠是不夠的——本倉的教訓是「CI 全綠、包也裝上了，但 NEEDED 指向一個
+  # 沒有的 soname」（doxygen／mesa 兩場都是這樣）。
+  local soname need
+  [ -x "$pkgdir/usr/bin/shiboken6" ] \
+    || { echo "ERROR: $pkgname 沒有 /usr/bin/shiboken6" >&2; return 1; }
+  soname=$(_clang_soname)
+  if [ -z "$soname" ]; then
+    echo "ERROR: 容器查不到 /usr/lib/libclang.so 的 soname——本包必須建在自有 clang-git 之上" >&2
+    return 1
+  fi
+  if [ "$soname" != "$_clang_abi" ]; then
+    echo "ERROR: 容器 libclang soname=[$soname] 與本包鎖定的 _clang_abi=$_clang_abi 不一致" >&2
+    echo "       （LLVM 換大版了：改本檔 _clang_abi 那行，別放過這條）" >&2
+    return 1
+  fi
+  need=$(objdump -p "$pkgdir/usr/bin/shiboken6" 2>/dev/null | awk '/NEEDED.*libclang/{printf "%s ", $2}')
+  echo ">> $pkgname: /usr/bin/shiboken6 的 NEEDED libclang 系 = [$need]（容器 soname=$soname）"
+  case " $need" in
+    *" libclang.so.$_clang_abi "*) ;;
+    *) echo "ERROR: NEEDED 裡沒有 libclang.so.$_clang_abi —— 這顆是拿舊 clang 建的，裝到目標機一樣 not found" >&2
+       return 1 ;;
+  esac
+  # 反向防呆：產物裡絕不該再出現 23.1（那正是要治的病，出現就是建錯鏈）。
+  case " $need" in
+    *" libclang.so.23.1 "*) echo "ERROR: NEEDED 又變回 libclang.so.23.1" >&2; return 1 ;;
+  esac
+  # ⚠️ 刻意**不**在這裡 provides `shiboken6=`：那個虛名是上面那顆（庫）的。
+  # 同一個虛擬名由兩顆包發，依賴它的人會被 pacman 隨機指派到位元寬度／內容錯的那邊
+  # （spirv-llvm-translator-git 的 lib32 那半邊就是照這條寫的）。
+  echo ">> $pkgname: 入口與 libclang ABI 自證通過（鎖 llvm-libs-abi=$_clang_abi）"
+}
+
+# vim:set sw=2 sts=-1 et:

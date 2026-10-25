@@ -1,0 +1,137 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 本倉目錄版 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md，
+# **不要寫回 workflow** —— 那個 step 有 21000 字元表達式上限且註解也計入）。
+#
+# 為什麼存在（用戶 2026-10-13 裁定：「你加就是了？」＋「順帶記得給我裝上」）：
+#   本倉 llvm-*-git 換代到 trunk（24.0.0_r602112）之後，系統那顆穩定版 doxygen 直接壞：
+#     ldd /usr/bin/doxygen → libclang.so.23.1 => not found
+#                        → libclang-cpp.so.23.1 => not found
+#   doxygen 是 `use_libclang=ON` 建的（Arch 同款），它在執行期載入 libclang，
+#   而我們的 clang-git 發的是 `clang=24.0.0`／`libclang-cpp.so`（無版本虛擬名），
+#   **不會** satisfy 穩定版 doxygen 那條寫死 `.so.23.1` 的 NEEDED。
+#   查實本機 `pactree -r doxygen` 只有它自己（沒有別的包依賴它）、`doxygen-docs` 沒裝，
+#   所以這顆只要頂替 `doxygen` 一個名字就夠，不擅自加 docs 分割。
+#
+# ⚠️ 為什麼不「放一顆 libclang-cpp.so.23.1 橋接檔了事」：那正是 2026-10-12 GL 黑屏的
+#   同款做法同款下場——裝得上、看起來能跑、哪天換代就靜默炸。要修就重建吃 24 的產物。
+#
+# 版本由 pkgver() 從上游 HEAD 現算 ⇒ 本檔要列進「回推校驗和」的排除清單。
+
+_pkgbase=doxygen
+pkgbase=doxygen-git
+pkgname=(doxygen-git)
+pkgver=1.18.0.r0.g000000000
+pkgrel=1
+pkgdesc='Documentation system for C, C++, Objective-C, Java and more (git, 配自有 LLVM trunk)'
+arch=(x86_64)
+url='https://www.doxygen.nl'
+license=('GPL-2.0-or-later')
+# 與官方 libclang 那條鏈一致：clang 是 makedep（編 docparser 用的標頭／libclang），
+# 執行期要 clang＋llvm-libs 兩個名字——**由本倉 clang-git／llvm-libs-git 的 provides 滿足**。
+# ⚠️ 刻意**不**把 `doxygen` 列進 makedepends：官方 build() 裡 `--target docs` 要先有
+#   一支 doxygen 才能生成自己的文件（那是一個自我依賴的循環），而本機實查
+#   `pacman -Q doxygen-docs` 未裝、`pactree -r doxygen` 也只有它自己 →
+#   文件那半邊不是「該進產物」，所以 build() 用 `-Dbuild_doc=OFF` 明確關掉，
+#   而不是假裝建了、其實產物裡沒有。
+makedepends=(clang cmake flex fmt git libxslt python qt6-base qt6-svg sqlite spdlog)
+# ⚠️ `012_cite` 那條測試會真的跑 **latex → bibtex → latex** 整條引用鏈。本機逐層查證：
+#   ① 完全沒有 TeX 時 → `error: Problems running bibtex … Exit code: 2`；
+#   ② 只補 texlive-bin（有 bibtex、沒 latex）時 → 測試仍紅，而且換一種紅法：
+#      `\cite command to 'knuth79' does not have an associated number` ＋產出的 XML
+#      與 expected 不符（.bbl 根本沒生成，所以引用全部沒編號）。
+#   ③ 再補 texlive-basic＋texlive-latex → 實測 `1/1 Test #12: 012_cite Passed`。
+# 這是**缺環境**，不是上游缺陷，也不是可以過濾掉的測試：三顆都列進 checkdepends，
+# check() 照舊全跑、不准 `-E` 排掉。體積實查（下載）：texlive-bin 12.5 MiB／
+# texlive-basic 6.7 MiB／texlive-latex 1.4 MiB，裝完約 100 MiB，不是整套 texlive。
+# Arch 那邊 doxygen 的 makedepends 也帶 texlive-*，同一件事。
+checkdepends=(texlive-bin texlive-basic texlive-latex)
+depends=(clang fmt libfmt.so glibc libgcc libstdc++ llvm-libs spdlog libspdlog.so sqlite
+         libsqlite3.so)
+optdepends=('graphviz: for caller/callee graph generation'
+            'qt6-base: for doxywizard'
+            'qt6-svg: for doxywizard')
+provides=("doxygen=${pkgver%%.r*}")
+conflicts=(doxygen)
+replaces=(doxygen)
+source=("git+https://github.com/doxygen/doxygen#branch=master")
+b2sums=('SKIP')
+
+pkgver() {
+  cd $_pkgbase
+  # 上游 tag 形如 `Release_1_18_0`（實查 `git ls-remote --tags` 末五筆：
+  # Release_1_15_0 … Release_1_18_0），所以 describe 要先剝 `Release_` 再把底換成點。
+  # ⚠️ 與本倉其他 -git 包同一個防呆：HEAD 正好落在 tag 上時 describe 只回 tag 名
+  #   （沒有 -N-gsha 尾巴），由右往左剝段會把 tag 名本身當成 count → 算出垃圾，
+  #   而 repo-add 因不單調直接拒收（kew-git／llvm-git 都踩過）。查無可達 tag 時
+  #   退回 `0.r<總數>.g<sha>`。
+  local raw base count
+  raw=$(git describe --tags --match 'Release_*' HEAD 2>/dev/null)
+  if [ -n "$raw" ]; then
+    count=${raw##*-}
+    if [ "$count" = "$raw" ]; then
+      count=0; base=$raw
+    else
+      raw=${raw%-*}
+      count=${raw##*-}
+      base=${raw%-*}
+    fi
+    base=${base#Release_}
+    base=${base//_/.}
+  else
+    base=0; count=$(git rev-list --count HEAD)
+  fi
+  printf '%s.r%s.g%s\n' "$base" "$count" "$(git rev-parse --short=9 HEAD)"
+}
+
+build() {
+  cd $_pkgbase
+  # cmake 選項照 Arch 那份（docs/upstream-pkgbuilds/doxygen.PKGBUILD 的 build()），
+  # 關鍵是 `use_libclang=ON`——這顆包存在的意義就是「用我們那套 24 的 libclang 建」。
+  # 少了它，產物不載入 libclang，C++ 解析走內建那條路，裝上去也不會壞，
+  # 但那就等於悄悄換了行為，不是等值頂替。
+  cmake -S . -B build -W no-dev \
+    -DCMAKE_BUILD_TYPE:STRING=None \
+    -DCMAKE_INSTALL_PREFIX:PATH=/usr \
+    -DDOC_INSTALL_DIR:PATH=share/doc/doxygen \
+    -Dbuild_doc:BOOL=OFF \
+    -Dbuild_wizard:BOOL=ON \
+    -Duse_sys_spdlog:BOOL=ON \
+    -Duse_sys_sqlite3:BOOL=ON \
+    -Duse_sys_fmt:BOOL=ON \
+    -Duse_libclang:BOOL=ON
+  cmake --build build
+}
+
+check() {
+  cd $_pkgbase
+  # 上游那組 ctest 就是回歸測試（含 libclang 解析器），**不准**加 --nocheck 繞過去。
+  ctest --test-dir build --output-on-failure
+}
+
+package_doxygen-git() {
+  cd $_pkgbase
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+  # 實物自證：這顆必須真的鏈到 24 的 libclang，而且依賴名字要能被本倉那套 satisfy。
+  # 只看「build 綠」是不夠的——本輪的教訓正是「CI 全綠、包也裝上了，但 NEEDED 指向一個
+  # 沒有的 soname」，所以這裡直接 objdump 問產物。
+  local abi need
+  abi=$(basename "$(readlink -f /usr/lib/libLLVM.so 2>/dev/null)" 2>/dev/null | sed 's/^libLLVM\.so\.//')
+  if [ -z "$abi" ] || [ "$abi" = "libLLVM.so" ]; then
+    echo "ERROR: 容器查不到 /usr/lib/libLLVM.so 的 soname——本包必須建在自有 llvm-*-git 之上" >&2
+    exit 1
+  fi
+  need=$(objdump -p "$pkgdir/usr/bin/doxygen" 2>/dev/null | awk '/NEEDED.*libclang/{printf "%s ", $2}')
+  echo ">> $pkgname: doxygen 的 NEEDED libclang 系 = [$need]（容器 LLVM soname=$abi）"
+  case " $need" in
+    *" libclang-cpp.so.$abi "*) ;;
+    *) echo "ERROR: NEEDED 裡沒有 libclang-cpp.so.$abi —— 這顆是拿舊 LLVM 建的，裝到目標機一樣 not found" >&2
+       exit 1 ;;
+  esac
+  # 入口要在：doxygen 這顆包的全部意義就是那支程式。
+  [ -x "$pkgdir/usr/bin/doxygen" ] || {
+    echo "ERROR: 產物沒有 /usr/bin/doxygen" >&2; exit 1; }
+  echo ">> $pkgname: 入口與 libclang ABI 自證通過"
+}
+
+# vim:set ts=2 sw=2 et:

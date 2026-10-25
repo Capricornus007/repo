@@ -1,0 +1,87 @@
+# Maintainer: Capricornus007 <Capricornus007 at gmail dot com>
+# Author: Patrick Brisbin <pbrisbin@gmail.com>
+
+# shellcheck disable=SC2034
+# shellcheck disable=SC2154
+_pkgname=downgrade
+pkgname="${_pkgname}-git"
+pkgver=12.0.4.r0.gd6e499e
+pkgrel=1
+pkgdesc="Bash script for downgrading one or more packages to a version in your cache or the A.L.A."
+arch=('any')
+url="https://github.com/archlinux-downgrade/${_pkgname}"
+license=('GPL-3.0-or-later')
+depends=('bash' 'pacman-contrib' 'expac')
+makedepends=('git' 'gettext')
+optdepends=('fzf: 互動式選版本'
+            'sudo: 用 sudo 安裝')
+provides=("${_pkgname}")
+conflicts=("${_pkgname}")
+backup=(etc/xdg/downgrade/downgrade.conf)
+options=('!strip')
+source=("${_pkgname}::git+${url}.git")
+sha256sums=('SKIP')
+
+# 為什麼收進本倉 in-tree（2026-10-23）：原本那顆來自 [linuxrepos]，而該倉唯一的鏡像
+# https://archlinux.repo.063240.xyz 從本機 TLS 連線直接失敗（實測 HTTP 000）；該倉跟我們
+# 有关的只剩 downgrade／xtitle 兩顆 ⇒ 收編後 [linuxrepos] 整段可刪。
+#
+# ⚠️ 兩件必做的事，AUR 非 -git 那份不需要、-git 這份一定要（都是本機實測抓出來的）：
+#  1) **不用 make**：AUR 那份的 source 是 release tarball，tarball 裡才有頂層 Makefile；
+#     git 倉的 Makefile 只在 dist/（佈局用），build 走 justfile（`just dist <version>`），
+#     而 just 不在官方倉。照抄 `make` 必然紅。
+#  2) **自己代跑 just 的兩個動作**（`justfile` 的 dist-bin / dist-locale）：
+#     · src/downgrade 第 643 行是 `DOWNGRADE_VERSION="__VERSION__"`，佔位符要 sed 掉。
+#       不處理的實測症狀：`downgrade --version` 直接印出 `__VERSION__`（裝完後實測到）。
+#     · locale/<腳本>/*.po 要 msgfmt 成 <locale>/LC_MESSAGES/<腳本>.mo，否則多語系訊息全滅。
+#     man page 不用 mandoc：doc/ 裡是現成的 mandoc 源檔，上游 Makefile 也是直接安裝，
+#     連 style.css 都跳過——所以這裡照單全收（downgrade.8／pacignore.8／downgrade.conf.5）。
+
+pkgver() {
+  cd "${_pkgname}"
+  _t=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//')
+  printf '%s.r%s.g%s' "${_t:-0}" "$(git rev-list --count "v${_t}..HEAD" 2>/dev/null || git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "${_pkgname}"
+  # pkgver 形如 12.0.4.r0.gd6e499e → 取第一段當 upstream release 版號
+  local _rel="${pkgver%%.r*}"
+  sed "s|__VERSION__|${_rel}|g" src/downgrade > downgrade
+  chmod +x downgrade
+  local _l _s
+  for po in locale/*/*.po; do
+    _l=$(basename "${po%.po}")
+    _s=$(basename "$(dirname "$po")")
+    mkdir -p "mo/${_l}/LC_MESSAGES"
+    msgfmt -o "mo/${_l}/LC_MESSAGES/${_s}.mo" "$po" || return 1
+  done
+}
+
+package() {
+  cd "${_pkgname}"
+
+  install -Dm755 downgrade        "${pkgdir}/usr/bin/downgrade"
+  install -Dm755 src/pacignore    "${pkgdir}/usr/bin/pacignore"
+
+  install -Dm644 dist/conf/downgrade.conf "${pkgdir}/etc/xdg/downgrade/downgrade.conf"
+
+  install -Dm644 doc/downgrade.8      "${pkgdir}/usr/share/man/man8/downgrade.8"
+  install -Dm644 doc/pacignore.8      "${pkgdir}/usr/share/man/man8/pacignore.8"
+  install -Dm644 doc/downgrade.conf.5 "${pkgdir}/usr/share/man/man5/downgrade.conf.5"
+
+  local _cmd _d
+  for _d in dist/completion/*/; do
+    _cmd=$(basename "$_d")
+    [ -f "$_d/bash" ] && install -Dm644 "$_d/bash" "${pkgdir}/usr/share/bash-completion/completions/${_cmd}"
+    [ -f "$_d/fish" ] && install -Dm644 "$_d/fish" "${pkgdir}/usr/share/fish/vendor_completions.d/${_cmd}.fish"
+    [ -f "$_d/zsh" ]  && install -Dm644 "$_d/zsh"  "${pkgdir}/usr/share/zsh/site-functions/_${_cmd}"
+  done
+
+  local _mo
+  while IFS= read -r _mo; do
+    install -Dm644 "$_mo" "${pkgdir}/usr/share/locale/${_mo#mo/}"
+  done < <(find mo -type f -name '*.mo' 2>/dev/null)
+
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

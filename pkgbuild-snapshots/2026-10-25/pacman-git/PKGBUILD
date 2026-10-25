@@ -1,0 +1,146 @@
+# Maintainer: Capricornus007 <Capricornus007 at gmail dot com>
+
+pkgname=pacman-git
+# ⚠️ 靜態 pkgver 必須寫成 pkgver() 實際會算出的值，pkgrel 才抬得動：
+#    makepkg 只在「pkgver() 的結果 ≠ 檔內靜態 pkgver」時才把 pkgrel 重置為 1。
+#    上一版修 provides 後 CI 全綠卻**沒換檔**（plan 的「產物檔名已在 release 裡」命中，
+#    實測 feed 那顆的 .PKGINFO 仍是舊的 `provides = pacman`），原因就是檔名一個字沒變。
+#    scripts/bump-pkgrel 對有 pkgver() 的包會拒絕抬 pkgrel（說抬了無效），那是指
+#    「只抬 pkgrel、靜態 pkgver 不動」這種半套；兩處一起改就有效。
+pkgver=7.1.0.r18.ga6f7467
+pkgrel=2
+pkgdesc="A library-based package manager with dependency support (upstream git, built for Artix)"
+arch=('x86_64')
+url="https://www.archlinux.org/pacman/"
+license=('GPL-2.0-or-later')
+depends=(
+  bash
+  coreutils
+  curl libcurl.so
+  gawk
+  gettext
+  glibc
+  gnupg
+  gpgme libgpgme.so
+  grep
+  libarchive libarchive.so
+  openssl libcrypto.so
+  pacman-mirrorlist
+  libmakepkg-dropins
+)
+makedepends=(
+  asciidoc
+  doxygen
+  git
+  meson
+)
+checkdepends=(
+  fakechroot
+  python
+)
+optdepends=('perl-locale-gettext: translation support in makepkg-template')
+# ⚠️ provides 一定要帶版本號：yay-git 的依賴寫的是 `pacman>6.1`，而 alpm 對「不帶版本的
+#    provides」不會拿去滿足**帶版本的依賴**——實測症狀就是整輪 -Syu 直接紅：
+#    `正在安裝的 pacman-git (7.1.0.r18.ga6f7467-1) 破壞了 yay-git 需要的依賴關係「pacman>6.1」`。
+#    Arch 官方包不需要這行是因為它包名就叫 pacman；AUR 那顆寫的是 ${pkgver%.*.*}，
+#    對上我們 r18.ga6f7467 這種多段版號會切錯，所以用 %%.首個.r 之前的写法。
+provides=("pacman=${pkgver%%.r*}" 'libalpm.so')
+conflicts=('pacman')
+backup=(etc/pacman.conf
+        etc/makepkg.conf
+        etc/makepkg.conf.d/fortran.conf
+        etc/makepkg.conf.d/rust.conf)
+source=("git+https://gitlab.archlinux.org/pacman/pacman.git"
+        pacman.conf
+        makepkg.conf
+        fortran.conf
+        rust.conf
+        fancy-progress.patch)
+sha256sums=('SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP'
+            'SKIP')
+
+# ── 為什麼收進本倉 in-tree（2026-10-23）────────────────────────────────────
+# 1. 本機那顆 pacman-git 來自 andontie-aur／chaotic-aur（AUR 鏡像），而 AUR 那份的
+#    PKGBUILD 基準停在 pacman 6.1.0（實查 aur.archlinux.org 現值），要跟著 pacman
+#    master 走只能自己維護。基準改用 Arch 官方打包倉
+#    gitlab.archlinux.org/archlinux/packaging/packages/pacman（實查 7.1.0.r9.g54d9411）。
+# 2. **Artix 適配**（這就是「順带的補丁」，而且是必須的，不是裝飾）：
+#    · Arch 官方那份 depends 有 `systemd`，package() 會把 dirmngr/gpg-agent/keyboxd
+#      五個 socket 的符號鏈接塞進 /usr/lib/systemd/system/sockets.target.wants/，
+#      另外裝 /usr/lib/sysusers.d/alpm.conf。本機實查 `pacman -Si systemd` → **任何已配置的
+#      倉都沒有 systemd**（Artix 用 OpenRC/elogind），所以照抄 Arch 那份會直接
+#      `target not found: systemd` 建不起來；就算建起來，那些 unit 與 sysusers.d 在這臺機器
+#      上永遠不會被讀。⇒ 這裡把 wantsdir 迴圈與 alpm.sysusers 整段拿掉、depends 去掉 systemd。
+#    · 鏡像清單依賴**保留寫 `pacman-mirrorlist`**（這條我一度改成 artix-mirrorlist，
+#      結果 CI 紅在 `target not found: artix-mirrorlist`——容器是 Arch 基座。實查
+#      artix-mirrorlist 的 Provides 就是 `pacman-mirrorlist`（且 Conflicts/Replaces 同名），
+#      所以照抄上游那個名字兩邊都成立：容器裡拿到 Arch 實體包，本機由 artix-mirrorlist
+#      頂上（`pacman -Q pacman-mirrorlist` → artix-mirrorlist 實測）。
+#      附帶把隨包的 /etc/pacman.conf 預設段名改成
+#      Artix 的 [system]/[world]（Arch 是 [core]/[extra]），否則新裝機還原預設值時
+#      會得到一個指向不存在倉庫的配置檔。
+#    · `libmakepkg-dropins` 保留（實查在 [system]，Artix 官方 pacman 也依賴它）。
+# 3. 沒帶過來的東西，逐條理由：
+#    · Arch 的 0001/0002 兩條 patch 是 7.1.0 發佈線的 backport，master 已含（子代理實查
+#      commit 已在 master），重打會衝突。
+#    · CachyOS 的 PrettyProgressBar 需要往 /etc/pacman.conf 加一行才生效（使用者條件排除），
+#      pacman-fancy 的 progress.patch 是純視覺、且把開關硬綁在 TERM 白名單 ⇒ 原樣帶進來沒意義；
+#      本倉改用「去掉白名單、預設開啟、PACMAN_PLAIN_BAR=1 可關」的改寫版（見 prepare()）。
+#    · options 不含 debug：本機沒有任何 -debug 包在用。
+
+pkgver() {
+  # ⚠️ 目錄名是 source 抓下來的 `pacman`，不是 $pkgname（這裡的 $pkgname 是 pacman-git）。
+  #    Arch 官方那份 pkgname=pacman 才能直接 cd "$pkgname"，改做成 -git 時這行必跟著改，
+  #    否則 makepkg 本機跑會 `cd: pacman-git: 沒有此一檔案或目錄`（實測踩到）。
+  cd pacman
+  git describe --abbrev=7 --match 'v*' | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd pacman
+  # 進度條改用 Powerline 的 U+EE01..EE05 長條字元。來源是 AUR pacman-fancy-git 的
+  # progress.patch，但那條把開關硬綁在 TERM ∈ {xterm-kitty, st-256color} 的白名單上，
+  # 本機 xfce4-terminal 不在清單裡 ⇒ 永遠退回 [###---]。這裡把白名單拿掉、改成預設開啟，
+  # 想關掉用 `PACMAN_PLAIN_BAR=1 pacman -Syu`（不進 /etc）。
+  # 字型要有 U+EE03 才不會顯示成方框：實測 `fc-list :charset=ee03` 有 28 條，
+  # 且 `fc-match monospace` → JetBrains Maple Mono（本機預設字型）在清單內 ⇒ 可用。
+  patch -p1 -N --quiet -i ../fancy-progress.patch \
+    || { echo "::error::fancy-progress.patch 套不上（上游 callback.c 的 fill_progress 變了）"; exit 1; }
+}
+
+build() {
+  cd pacman
+
+  meson setup \
+        --prefix=/usr \
+        --buildtype=plain \
+        -Ddoc=enabled \
+        -Ddoxygen=enabled \
+        -Dscriptlet-shell=/usr/bin/bash \
+        -Dldconfig=/usr/bin/ldconfig \
+        build
+
+  meson compile -C build
+}
+
+check() {
+  cd pacman/build
+
+  meson test
+}
+
+package() {
+  cd pacman
+
+  DESTDIR="$pkgdir" meson install -C build
+
+  install -dm755 "$pkgdir/etc"
+  install -m644 "$srcdir/pacman.conf" "$pkgdir/etc"
+  install -m644 "$srcdir/makepkg.conf" "$pkgdir/etc"
+  install -m644 "$srcdir/fortran.conf" "$pkgdir/etc/makepkg.conf.d"
+  install -m644 "$srcdir/rust.conf" "$pkgdir/etc/makepkg.conf.d"
+}
