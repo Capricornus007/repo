@@ -25,15 +25,34 @@
 #     bundle 腳本的默認值是 npmmirror（國內 CDN，為本地開發優化），GitHub runner
 #     訪問它慢且不穩，CE 的 release.yml 也是這樣蓋的。
 #
+# ⚠️ 版號來源目前是**用戶自己的 fork**，不是 CE 上游（用戶 2026-10-25 指示：「把
+#   zcode-ce 弄去 3.16.x」）：
+#   · 實查三條線各停在哪裡：官方開源倉 zai-org/ZCode main = `3c5b2276`（package.json
+#     3.16.2，2026-10-20 推）；CE 上游 Zcode-CE/Zcode-CE main = `7fc3bfe2`（3.15.1-ce.1，
+#     2026-10-14 之後沒再動）；官方**閉源**已發 3.16.3（CDN latest.yml releaseDate
+#     2026-10-23T03:02Z），但開源倉還沒推 3.16.3 的 sync 提交。
+#   · 所以「CE 替我們合併」這個前提現在暫時不成立，本包改吃 fork 的同步線；
+#     **CE 上游自己推上 3.16.x 的當天就把 `_giturl`／`_branch` 改回 Zcode-CE/Zcode-CE
+#     的 main**（不要讓 fork 變成長期平行分叉）。
+#   · fork 的同步線是怎麼做的（可複現，不是手工擺平）：以 CE 自己裁決過的
+#     `refs/pull/5/head`（3.16.1 整版合併、typecheck 0 錯誤、141 件衝突有台賬）當 oracle，
+#     對「上游 3.15.1→3.16.2」的 4579 顆變動檔逐檔做二段三方合併，零衝突的機械採用、
+#     有衝突的按台賬裁決人工解；並把 CE 政策不帶的上游測試／文件／雲端件（10401 檔）剪掉。
+#
 # ⚠️ 版本由 pkgver() 從 package.json＋git 現算 ⇒ 本檔列進「回推校驗和」排除清單
 #   （靠矩陣 kind:aur，與 llvm-git 同一手法）。
+
+# 上游 CE 自己跟上 3.16.x 後，把 _giturl 改回 'https://github.com/Zcode-CE/Zcode-CE'
+# （_branch 兩個都是 main，不用動）。
+_giturl='https://github.com/Capricornus007/Zcode-CE'
+_branch='sync/v3162-pr5'
 
 pkgname=zcode-ce-git
 pkgver=3.15.1.ce.1.r1.g7fc3bfe
 pkgrel=1
-pkgdesc="ZCode 的開源社區版（官方 zai-org/ZCode v3.15.1 開源上游＋CE 修補），從源碼構建"
+pkgdesc="ZCode 的開源社區版（官方 zai-org/ZCode 開源上游＋CE 修補），從源碼構建"
 arch=('x86_64')
-url="https://github.com/Zcode-CE/Zcode-CE"
+url="https://github.com/Capricornus007/Zcode-CE"
 license=('Apache-2.0')
 # 與 electron-builder.config.js 的 PACMAN_RUNTIME_DEPENDENCIES 逐字一致（Arch 官方
 # 倉庫可解析的 Electron 運行時閉包；內層產物的 .PKGINFO 被剝掉，依賴由本檔宣告）。
@@ -47,7 +66,7 @@ provides=('zcode-ce')
 conflicts=('zcode-ce' 'zcode-ce-bin')
 options=('!strip')
 install=zcode-ce-git.install
-source=("$pkgname::git+https://github.com/Zcode-CE/Zcode-CE.git")
+source=("$pkgname::git+${_giturl}.git#branch=${_branch}")
 sha256sums=('SKIP')
 
 pkgver() {
