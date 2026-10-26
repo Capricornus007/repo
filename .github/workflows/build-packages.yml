@@ -718,12 +718,12 @@ jobs:
                 curl -sfL "$base/$f" -o "pkg_dir/$f"
               done
               chmod +x pkg_dir/element-desktop-nightly.sh ;;
-            moregram-bin)
+            moregram-git)
               # moregram 桌面端（tdesktop 復刻＋64Gram 移植）的 feed 包：
-              # in-tree 維護在本倉 moregram-bin/，只有 PKGBUILD 一個檔。
+              # in-tree 維護在本倉 moregram-git/，只有 PKGBUILD 一個檔。
               # 產物取自 moregram 倉 CI 發的 rolling release（moregram-linux-dev）。
               mkdir pkg_dir
-              curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/moregram-bin/PKGBUILD" \
+              curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/moregram-git/PKGBUILD" \
                 -o pkg_dir/PKGBUILD ;;
             nashira-git)
               # 從本倉庫獲取 PKGBUILD（in-tree 模式）；源是 Nashira 主倉
@@ -1805,7 +1805,7 @@ jobs:
                 TARGET_PKGVER="$CUR_PKGVER"
               fi
               ;;
-            moregram-bin)
+            moregram-git)
               # 版號＝commit 短 sha。moregram 倉 CI 構建完成後把產物發到固定
               # tag 的 rolling release（moregram-linux-dev），asset 名是
               # moregram-desktop-<sha8>.zip——直接讀 asset 名，不猜版本。
@@ -2677,7 +2677,7 @@ jobs:
               sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
               grep -n '^pkgver=' PKGBUILD
               ;;
-            moregram-bin)
+            moregram-git)
               # pkgver 是 "${_pkgver}" 展開的，source 四條 URL 也都吃 ${_pkgver}
               # → 只改 _pkgver= 那行；去 sed ^pkgver= 只會改到展開式本身。
               sed -i "s/^_pkgver=.*/_pkgver=$NEW_PKGVER/" PKGBUILD
@@ -2686,7 +2686,7 @@ jobs:
               _mg_url=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "${source[0]#*::}"')
               case "$_mg_url" in
                 *"$NEW_PKGVER"*) ;;
-                *) echo "::error::moregram-bin source URL 沒換到 $NEW_PKGVER（展開=$_mg_url）"; exit 1 ;;
+                *) echo "::error::moregram-git source URL 沒換到 $NEW_PKGVER（展開=$_mg_url）"; exit 1 ;;
               esac
               ;;
             serein)
