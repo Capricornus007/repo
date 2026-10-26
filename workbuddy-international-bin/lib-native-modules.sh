@@ -394,6 +394,12 @@ install_linux_platform_packages() {
     refresh_npm_package "$app_dir" "@vscode/ripgrep"
     refresh_npm_package "$app_dir" "@parcel/watcher"
 
+    # The DMG's unpacked koffi ships darwin builds only (the vendor prebuilt
+    # tarball does not prune, the macOS packager did). The npm tarball carries
+    # build/koffi/<platform>/ prebuilts for every platform, so a same-version
+    # refresh drops linux_x64/koffi.node in place without compiling.
+    refresh_npm_package "$app_dir" "koffi"
+
     # Install @lydell/node-pty Linux package in node_modules
     install_lydell_node_pty_linux "$app_dir"
 
