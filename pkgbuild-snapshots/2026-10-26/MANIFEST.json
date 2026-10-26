@@ -1,0 +1,1803 @@
+{
+ "ci": {
+  "ci/docs/in-tree-packages.md": "a2a79704d5dde19e29c92c7abcc96b02ce130e9a453c4d94e2c2654637d7fdea",
+  "ci/docs/upstream-pkgbuilds/clang.PKGBUILD": "3b569b3f056c6a857c285f7a6c2415ab8bdf9bdd40f4a46e4de2c76b273c7875",
+  "ci/docs/upstream-pkgbuilds/compiler-rt.PKGBUILD": "825464ccac403e26ef5a35b06029c59809605beb751abfa832c6cff3ee9515b5",
+  "ci/docs/upstream-pkgbuilds/doxygen.PKGBUILD": "cd7c1369450dd9b7de316d2b48644e1b90fea22542fd376bf048fab3826740e0",
+  "ci/docs/upstream-pkgbuilds/lib32-clang.PKGBUILD": "dd49dd7651fa98ee6cc2aa95f47ed2100630ce108cfd8fee66d2f8eb6381c4bc",
+  "ci/docs/upstream-pkgbuilds/lib32-llvm.PKGBUILD": "c56860a8081bfdc263a51aa8cb06f10fcba37ad7e32e77b844020293a86388c1",
+  "ci/docs/upstream-pkgbuilds/lldb.PKGBUILD": "bcc89177034356805da6610ed070d9e493b5f0694347335a76bdf05e0839e169",
+  "ci/docs/upstream-pkgbuilds/llvm.PKGBUILD": "14818377c2cdd06fe1ef26014b647c99ce38a4ff96eeb2974ca69c7d35aa5e7b",
+  "ci/docs/upstream-pkgbuilds/pyside6.PKGBUILD": "c8600f2d1c737fb8ac71a64cf51e289bd6ce128f9ede36154c4be69a58935140",
+  "ci/scripts/bump-pkgrel": "a7499e9b5b5accba271768c31d9c606dd62939b6044568a2ca9cd5d7d886f396",
+  "ci/scripts/check-pkg-split-overlap.py": "f0927c32787dc6a1a9d8b14befe0c6b1f248604eb1bc78fa639db11ed2ba6b0e",
+  "ci/scripts/install-git-hooks.sh": "8892f9348ed57943d1dc92c4f34749cb2be1022bcae7bd8f2672f0b5f8216768",
+  "ci/scripts/workflow-step-budget.py": "10953b06cc1c58a3869e2a8bb90c15a7c6775d28358dec874fcd8571aed88daf",
+  "ci/tools/aur_update.py": "5f00b6fdf97669e0b96183c8d6a3bb795412bc184990f3e46611eda44d604538",
+  "ci/tools/pkgbuild_snapshot.py": "a4f03b4517ef0d42494c207f692d3096ea7dacedd273107f8db5e6159762279b",
+  "ci/workflows/aur-update.yml": "6ccbb4b070b86a9ee7baf5eccebe55a2370761f1861feacb8f194874414386f7",
+  "ci/workflows/backup-pkgbuilds.yml": "16c27306ebfb272acbc4c44176b52094fe79e857cdcdc047084b1bfb2d6e4136",
+  "ci/workflows/build-git-packages.yml": "70eca4a34deed87e643678f19764cd9092be99e48881e93e11c5ada0567c814d",
+  "ci/workflows/build-kernels.yml": "27c87e8dba28a2e12522d5a83dd592c15045c3be0434c9e501a6dbe9d7081a4b",
+  "ci/workflows/build-one-package.yml": "dac687388bcc1f63814c8bbb7b1f298e9d24d3438b558dec944dd08d58129115",
+  "ci/workflows/build-packages.yml": "56b8f82b144dbb28e7024108fb8d9781cf22404d306e815f3e5bca7d49ba2d21"
+ },
+ "date": "2026-10-26",
+ "missing_aur": [
+  {
+   "error": "AUR 倉是空的（已下架或成 orphan）",
+   "package": "linux-ltscjk",
+   "pkgbase": "linux-ltscjk"
+  },
+  {
+   "error": "AUR 倉是空的（已下架或成 orphan）",
+   "package": "mesa-tkg-git",
+   "pkgbase": "mesa-tkg-git"
+  },
+  {
+   "error": "AUR 倉是空的（已下架或成 orphan）",
+   "package": "u1s1-bin",
+   "pkgbase": "u1s1-bin"
+  }
+ ],
+ "note": "每日自動快照：in-tree 包取 master 現檔，AUR 包取 AUR 現檔，外加 CI 定義檔。缺的 AUR 包列在 missing_aur（幽靈／改名包）。",
+ "packages": {
+  "actionlint-git": {
+   "files": {
+    "PKGBUILD": "3ab83b15816a94f2816062e63dedab9cc120d2f2f11eda2e699b50d2f796df7f"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "adguardhome-git": {
+   "files": {
+    "PKGBUILD": "2e86601fa1d6baf4c4304c034bf1cce5e496e1866acbfe74742dd1810699968b",
+    "adguardhome.service": "b3763af1dae4d32645f3489cde5f07c919c7de9c76495a87268410347c67b873",
+    "adguardhome.sysusers": "cdbb882eb167461418ea7ea5cca65d32fd018a231ac1a8bb7f3e7140345c8cf1"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "afdko-git": {
+   "files": {
+    "PKGBUILD": "8555642753cf5a7a44f093c3bfb57c9dc744f13ae456f9209f3da71ef2abbe13"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "alacritty-sixel-git": {
+   "files": {
+    "PKGBUILD": "8c86d4d2296767b2bb62d7f0feba31681a86ae42a662212e4c4c3b2f1238ceae"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "amd-debug-tools-git": {
+   "files": {
+    "PKGBUILD": "d92b9b526e8f8e0eff39604c4115016ba3d721258c281c24553e3f14196e7d66"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "android-apktool-bin": {
+   "files": {
+    "PKGBUILD": "8af7a33f1ef54fcc1fa680ee1a3053ad7863ede0a5f59b71f761686bcdf34e91",
+    "apktool": "48a5c9d664c88c8beac4a85461e84437d104a42dac6334322a3bafca12b63bae"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "android-ndk-27": {
+   "files": {
+    ".SRCINFO": "efbfe9f1882923d6aba02e7cd51f25e08ed11516e0645b4181a5e6899819c5e4",
+    "PKGBUILD": "6275867dbe8bfdbd218fc5c8683b991702a3dab0f641e949745fce350f7a9eee",
+    "android-ndk-27.install": "064079bf92bb131a8265bccd36d5ffc2c9c4da6ee23177f1d2ce040637881b1a",
+    "android-ndk.sh": "2050ff500443f6cfa4567c02248cb3ec6ccbc67ce81b32d8dda79383c5103db2"
+   },
+   "kind": "",
+   "source": "aur"
+  },
+  "android-ndk-30": {
+   "files": {
+    "PKGBUILD": "7005eb1b9defa5aa5c18af4674fb6db1a45b334f282daafe04f5209e3faa56e4",
+    "android-ndk-30.install": "0d855b769fe049edb715d0fb96acfd12145bf0e2887990de0e38ed6ed3a08d67",
+    "android-ndk-30.sh": "4e796e2fef06a5f6b8c1a3bf6aff924524fc1c50770c615a95b6d9f851a28267"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "android-sdk-cmake-3.22": {
+   "files": {
+    "PKGBUILD": "2a995ccdd635053678113c71ab1f771c9a6594205c83581d2e65fddf26092539",
+    "android-sdk-cmake.install": "5c3dc205c41436bf4d303c36b5c4279018bd2d48fc9df50a9e841a3c877747df",
+    "package.xml": "21a03b14215ac376b74df1b3f94974a3d7cd2885fa00d1ca81a2c80cb7a71530"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "aom-git": {
+   "files": {
+    ".SRCINFO": "e1b6c12d5e1dbea45dc738be0b062daa5385b8768d0f8cfc29794ba541f30046",
+    "PKGBUILD": "6f8f742c143cbd19472f99f562cda1c972ac89f5ab606fc2814786ee99c750d1"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "astc-encoder-git": {
+   "files": {
+    ".SRCINFO": "7a921026220eded834d71c54bc768fcd70b06a6b72b613568321468859564eb6",
+    "PKGBUILD": "718ce13e88c6c0775d4ed9c39a5aecfeaf9ca450c7843de37cba41ca315fba2f"
+   },
+   "kind": "",
+   "source": "aur"
+  },
+  "attica-git": {
+   "files": {
+    ".SRCINFO": "74f1cc1607a1b07b9879a13542f5e23ff1aca3698f29484aef87a19044f3f474",
+    "PKGBUILD": "53c9905da4b16774e1bd9fd1b5c530a07f8a8cb37af077ce7376ae8ed59c9404"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "bash-completion-git": {
+   "files": {
+    ".SRCINFO": "82af4a8ed475c6aa6e1f4161ea9489debb5a430c1fb9afa179b985b325d96688",
+    "PKGBUILD": "78c60866dd1d8ea3fba656f8b0de819827a1f75b2c1ff92240001e5feff0dd29"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "bash-git": {
+   "files": {
+    "PKGBUILD": "b7604d0e91c95d31ed07dfb5d692b5433f9be218ab430048ebe607140d6d548e",
+    "dot.bash_logout": "4330edf340394d0dae50afb04ac2a621f106fe67fb634ec81c4bfb98be2a1eb5",
+    "dot.bash_profile": "e149407c2bee17779caec70a7edd3d0000d172e7e4347429b80cb4d55bcec9c2",
+    "dot.bashrc": "3e22bf86ae6708df7a6bceb88c67a00118275f9c0b5268f453dd388af7c43b53",
+    "system.bash_logout": "025bccfb374a3edce0ff8154d990689f30976b78f7a932dc9a6fcef81821811e",
+    "system.bashrc": "5fdc20c44bc9058f728d11111327f4dbb5598fec4d948dd5265211598667f9f0"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "breeze-icons-git": {
+   "files": {
+    ".SRCINFO": "cfb4590b83d70ba7f34b9852bbace77ac4f946e92e83b7a305d36cabe8c462ce",
+    ".gitignore": "c0099a5dc3c52c255a3439b0160c6685580efc988a945ac3fe30fe0d90a2a50f",
+    "PKGBUILD": "35fc1fff4bbe7737d1e01487bd369dd893ad8265a22a3d7c462578216c088858"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "brotli-git": {
+   "files": {
+    ".SRCINFO": "631b2b3931c1309a160c164ea3557260ea38f4f3d6a9bdc2c031262aab3a4022",
+    "PKGBUILD": "0a53694b1d1381a79c06b75f596b912ce556cd20a4dbc40d4da54ce4aaa4262d"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "ccache-git": {
+   "files": {
+    "PKGBUILD": "3b9b31e881804696ffbd8260106a2fbb8e7558a9b8170c771bb180ad809b6c8b"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "chafa-git": {
+   "files": {
+    "PKGBUILD": "c196865fa9586cbb36ee64309740a3f50613d3ceb751db8d6489c8f354b6a737"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "cmake-git": {
+   "files": {
+    "PKGBUILD": "c6a640dd4d410124edcd9d4bbe6ab1c9e2680525d88ace3bf326651a8083f81e"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "codex-desktop-git": {
+   "files": {
+    "LicenseRef-OpenAI-Terms": "7abd10bce8b40b17ff0902c0fa0750fcea831fd5afe67f8b4c02e4aeb8505ed3",
+    "PKGBUILD": "4ea924d0ff2b47452b8ee0b2dcd7ea5b7b882761e37a01316f5022a960aaafba",
+    "codex-desktop-git.install": "189df2e0e65d36e6d7c715ac364476cb755a621801cc46bc6b640a03db7d4f7c"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "crave": {
+   "files": {
+    "PKGBUILD": "10fb5c548dc55ecf5f256b6048c69b5bb687eafb544322c0fc5059bbedef08c4"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "dae-git": {
+   "files": {
+    "PKGBUILD": "d0251dffe1a65056f93d73936f6bc4411a800693b2695e46410499451178cb7f",
+    "dae.install": "8aef492bfa1e05bafe3140eeabbd9ca6ec120b7f60e97aa10d42febac40b3307"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "dav1d-git": {
+   "files": {
+    ".SRCINFO": "73cd272031e7fefeb96cf5cd2ffa2afa6b2a4c74f70eaea2f6f53912a05d8909",
+    ".gitignore": "879fbe8fe204489682bfb1e8b93ebf95e6b3a8e97a3ba96acf61d07acd54a4a0",
+    "PKGBUILD": "59797203ab4e985e738da8e86212eb902cc6f77a859a5344d7e665a15214273c"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "dex2jar": {
+   "files": {
+    "PKGBUILD": "6ca704e6435d571b221205d7fe799dcf5fdb58a20dcfd53ab03cfbf27dee8c90"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "downgrade-git": {
+   "files": {
+    "PKGBUILD": "c3ce02b49ca35bfcf89dc32989d6c4c4b31f8783e4f50a85ed4735a3b497bfec"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "doxygen-git": {
+   "files": {
+    "PKGBUILD": "c3a8bc35583222a188e47ec029b49163a4e720a455b80dc896a78094f3e4526d"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "duf-git": {
+   "files": {
+    ".SRCINFO": "8c7494e5a129032849298b4704426f8360b8a1a46fc8cee3484cdd7eadf54ce3",
+    "PKGBUILD": "3ed843aafce0605db18122dfa805bf916e88a6f31a66e599560b403b98b426af"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "dust-git": {
+   "files": {
+    ".SRCINFO": "78140400a018b943da3adeffc4bc1741c29c9fcfc79f4933402e0725f5c8633c",
+    ".nvchecker.toml": "8c581e40f6a9cb692866c6ddc95fd1ee575b9f11bb00b8480a1dde06b67dc672",
+    "PKGBUILD": "c46ce471f5c112e42889a5495b42ecc8f396b66753d4471fae85381a22319dd7"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "element-desktop-nightly-bin": {
+   "files": {
+    "PKGBUILD": "3668bb1495871d542ce571e3edd8282b575d77468b15f74d739d2aefc5d887de",
+    "element-desktop-nightly.sh": "eec30e5b0e549f7fa9c9c66fd3edb60bc8e0d9d0a77b79d8659cc06deced588d"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "espeak-ng-git": {
+   "files": {
+    ".SRCINFO": "ef97aa9e437c055d12ecaad81b0292a1bf0caeb37822c867aadb741dd7b9e84d",
+    ".gitignore": "8382b4506ca3744a9690f806400c09bba54f3f1ae81a8623d7370cdba7c97bf6",
+    "PKGBUILD": "949244a194e3bdccebb32413460f0118fb9238ea45059d53227755bedfe29666"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "expac-git": {
+   "files": {
+    "PKGBUILD": "dedd17f517515008d7ea120b2210e5fee3e499fcce10b6be4d350f2d14e892e4",
+    "arch-meson": "d9a391a47570bd2a0e122f29569318ed1285c5425b68d6e5d6710324a17f8dcd",
+    "pacman7-drop-md5sum.patch": "86275df2ebae42c04f6a60f16f4b5e8aeba2ab1d6fe63974811defe8f9168a83"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "extra-cmake-modules-git": {
+   "files": {
+    ".SRCINFO": "8b433b7210858d0d24280be88dae654f2e39900170e1fdc033da8d6ede0935e2",
+    ".gitignore": "879fbe8fe204489682bfb1e8b93ebf95e6b3a8e97a3ba96acf61d07acd54a4a0",
+    "PKGBUILD": "1b881f9bbf0bce86f8cb93b3b7fa8b458fc270d4601c02312039b1ed0a50353d"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "fcitx5-chinese-addons-git": {
+   "files": {
+    ".SRCINFO": "2d68225d70ecc613b2be6a8142ce1037f07cc71ba6c903bc0c2f6ad4869ee42a",
+    "PKGBUILD": "20fca503856f4c1b6c3deb03b55ca551cae07e824d7552a3c019985de68a0538"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "fcitx5-configtool": {
+   "files": {
+    "PKGBUILD": "c37605064e89ed5db673555c9ce2ddf2f3b0fa1e04e4a4dba3ec57f6b2f8d7dc"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "fcitx5-git": {
+   "files": {
+    "PKGBUILD": "7e926a3b2726d42be2d7c4331b87deaeef29cdb50c29236dc3f369a7899fc758"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "fcitx5-gtk": {
+   "files": {
+    "PKGBUILD": "559ca752a3fd43c020fe70c38a21fd4310a61c7822c70a2d328a534255e9e2d0"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "fcitx5-lua-git": {
+   "files": {
+    ".SRCINFO": "e3ae32ed6eb05f4cc1bc5cdc04a4db490ffd3cc9831e263337120e76c2e39b4a",
+    "PKGBUILD": "54c9859e41267f8306010b6e2ec7a5e41fa99c0cca22d823b0b5d5ef148b794f"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "fcitx5-qt-git": {
+   "files": {
+    "PKGBUILD": "d5871dc058409511e0b4032faa6098ad82c394cf0e7698939ce1974ee175c537"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "fcitx5-rime-git": {
+   "files": {
+    ".SRCINFO": "4eeaa3e4d40c3ef9afd302777f7e6e91a57fff9b403fbfc82990482bf2cbb2ae",
+    ".gitignore": "7ac2c3824e7c8dac87d7650ec58dda89362a15bf897861ce4c23222c83c39866",
+    "PKGBUILD": "5b420bd43c5e33d1f2e6a0e0de2901bd17152b7644f2a8dafe71b794a9e04fd0"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "fcitx5-skin-ori-git": {
+   "files": {
+    ".SRCINFO": "c3336f52beb3b4d3a9d63d543f7d59188057b8223ef5447a80e08e7f38800fca",
+    "PKGBUILD": "2041db986fda4a7793940f77660c797ecf04f8766bb0df384ae952c638e81f89"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "fd-git": {
+   "files": {
+    ".SRCINFO": "2869cd8c4cafc5808bc4e730dfea99f5c786fbada76a4a47d9df4c1ad953ecb1",
+    "PKGBUILD": "a1177b016e22138bd2246d551475aa46961271c4685bb13339487e260707923c"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "feh-git": {
+   "files": {
+    ".SRCINFO": "7ac65a7f1902287fd62f761e0a02ec56b9a6d39253aa70a920960c92d39dd396",
+    "PKGBUILD": "63bd9086d1ebdf32c55d8b547dfdab7de72d0d46a9ce5ad68ea5518da12b5942"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "ffmpeg-full-git": {
+   "files": {
+    ".SRCINFO": "776ac98126537c997de9ce9f116c2f11e4f59faa2a7b81d64e1f2c9e30f7a8e8",
+    "010-ffmpeg-add-svt-hevc.patch": "13132f22a475acd811a5610ffab08d6156d992b40dad0ddcacd8a76a9e8cdd74",
+    "030-ffmpeg-add-svt-vp9.patch": "bb16c7022349600f672f42e60c1133ce9a5956ef25dd81273f9ff1444c0eb7e7",
+    "040-ffmpeg-add-av_stream_get_first_dts-for-chromium.patch": "141981e5596b6f7031825f117036fe152121c255ea3be7b3baf8871a87f64599",
+    "050-ffmpeg-fix-cuda-nvcc-with-gcc14.patch": "d8c3e8b8d107eda4ef7c921bc20a9250d8c9aed47e4602c1d57e479bffb25bd2",
+    "060-ffmpeg-lensfun-fix-pkgconfig.patch": "c39addf190d25d1182c5c5658677f77ee7c1ae542969b2004441c62a425d324b",
+    "070-ffmpeg-whisper.cpp-fix-pkgconfig.patch": "2c846c629ad129ae8ce50791de4f1d390714db6d6420a35406b83b9b44999d4a",
+    "LICENSE": "04a7176400907fd7db0d69116b99de49e582a6e176b3bfb36a03e50a4cb26a36",
+    "PKGBUILD": "2e7ed5a260021d7a870bb473fea6ec4fce7974ed79b6dd9161135cefa92a02ce"
+   },
+   "kind": "",
+   "source": "aur"
+  },
+  "ffnvcodec-headers-git": {
+   "files": {
+    ".SRCINFO": "3c11f06420354144d7c5975900c803a6ea9edce474fd4104eab98d769b3606c7",
+    "PKGBUILD": "867cc48a614f1cd865f200d89c71547dcbc1a3989de21a9f9fa0fd8483dd20f5"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "flameshot-git": {
+   "files": {
+    ".SRCINFO": "933113f115109934114e1b321956fa99d2e0ca9fcfe7bba38c6cf4be2474c47e",
+    ".gitignore": "f75e0279c473712ea9dadd7cac355db0ed9affd8246a785ed4254ef07e732c64",
+    "Makefile": "751e4fa785f7efc4fbed8e615bf2065cf4f1f2874ff89e3ff984c5c45dffbb6a",
+    "PKGBUILD": "3467ab11063a46b46230bbca4a5524d8bcba7d503b1fdb0462ccfd79512415cf"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "fontforge-git": {
+   "files": {
+    ".SRCINFO": "5946e502f5710de9c374c0a435739322d3e820ab77acfe125c23c83b8e34a665",
+    "PKGBUILD": "9c87acdc238c2ef1351123c8d52dd1402e04d0f49dc06eb6350b85040b8c644c"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "free-claude-code-git": {
+   "files": {
+    "PKGBUILD": "fc7eed3650786e2728bf1a3bceac2acd85c4687c80328592c9b9d279d5c7ea75",
+    "free-claude-code-git.install": "164903cb142ec587f5f895f614a9380cc056867574d524393a61a504fca7b29a"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "fsearch-git": {
+   "files": {
+    "PKGBUILD": "02dbcfdfff4d1862b3e220db7e609805cc232d0f86f14eeafba3136f8814440b"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "fzf-git": {
+   "files": {
+    "PKGBUILD": "bb9032d8ead3aa0850500b9982fbdf98a582d1952a6b84dfeac4539efd0e5ed6",
+    "fzf.install": "ed54c59598914e982f1c41712fe4ff7c1ccad7cc27ff51148438d72903f459a2"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "gd-git": {
+   "files": {
+    ".SRCINFO": "6c7b7038d969603dc2036106a0fe4221c1e0112cd5bec9add7f6c23f2b856a5f",
+    "PKGBUILD": "edd6bd01e412e6776dc3883b8aac2b87c0cce3a880352bcb3c9154ab108e0874"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "gdu-git": {
+   "files": {
+    "PKGBUILD": "3ad560f523403f7875ddeb16f38cfeb6d0517c0c2b06434f90c75617ba908f0f"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "gh-git": {
+   "files": {
+    "PKGBUILD": "9cf378f7629618f54951a0b577b3c6506fadb4509ab3c8956c20f8256a590524"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "git-lfs-git": {
+   "files": {
+    "PKGBUILD": "6c348c5a4a57eb4fa194f03cafd29bda07f933e7031b33f374be2275c0b5f8be"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "glab-git": {
+   "files": {
+    "PKGBUILD": "6107929330d8b891d51e88232e5941bd7d5a6599a914cdf08b8e55076052fe3d"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "glib2-git": {
+   "files": {
+    ".SRCINFO": "96a6c352f1d6bd454b9eecc0904524917a65e903d34b75ac517788bc681f58bc",
+    ".gitignore": "0a3c4150aa3587cbe6bce1da2793ae74303c25c2079f82089dceac67e1d9a15a",
+    "0001-noisy-glib-compile-schemas.patch": "380ff0a41e2efac4ee76e37bfb7bd17551b879dd29b653f59dbc9d38dcdc18b7",
+    "0002-gdesktopappinfo-Add-more-known-terminals.patch": "324b923491c4030e4ca4ae2c3903004fbe026c558e1c0b2671cfadda06c82e87",
+    "PKGBUILD": "3b92b587d269194d28d5fdf1a55f2a4ad645a7f9800d7067bd3a3c7c8b7ad240",
+    "gio-querymodules.hook": "557c88177f011ced17bdeac1af3f882b2ca33b386a866fdf900b35f927a2bbe8",
+    "gio-remove-module-cache.hook": "60e546b2017b38ca4cf0776b2e1313143f6f2ede05363f67b63b35fa53e3d1b2",
+    "glib-compile-schemas.hook": "fe31399eb057d24a37062bcae6f88ca0778a91b85737f8110a03baa8bfc64fec",
+    "glib-remove-compiled-schemas.hook": "374925e9437427ae5e4b3186a4061b2287020604fd5866de0eaa24aeb59a4efd"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "go-git": {
+   "files": {
+    "PKGBUILD": "6e7a3ee3579ba58c93b9ba0a7fb40c44b134e7ce784b1c6635eceafa071cef50"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "grub-theme-poly-dark-git": {
+   "files": {
+    "PKGBUILD": "98027bbde5cf3780148a826f8c610af8f6b5b2cf033ff9209eaa7be345ae3ee3"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "gstreamer-git": {
+   "files": {
+    "0001-HACK-meson-Disable-broken-tests.patch": "1e4e6624d78dd79a7e57a24f3d6fdb3a58f14241f779cff0d6447f0ab13bb2c2",
+    "0002-faac-support-faac-2.0-faac_-API.patch": "a7ca7bc1b9d22296991f993d45a10b0789cb26ed0809a4f9c32c80f044fc83b8",
+    "0003-ges-disable-regressed-complex_effect_bin_desc.patch": "5b7f0a95c3f5b8ff70d6540d7215f4e49b9406b9ae3be2ad5fc6dcff2c186fdd",
+    "0004-devicemonitor-post-started-before-completion.patch": "ce0191be925ec1f2086024b2751bfa4b67aa191d9f966cd859e3506da6c92437",
+    "PKGBUILD": "6fdc6fb88a7554d22fb7d7337cd8abebb775d144fafc2780a744f473929f4a70",
+    "gstreamer.install": "cc4bd2b6784dc31c3a0d9b86c2a80a3f8294b5bd0106e49899f6cb17d81d9729"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "helium-browser-bin": {
+   "files": {
+    ".SRCINFO": "f3bc832a1a8f0d6d3372a5c7b41dd4d9d76394d078849dbaed5e24677e3333a7",
+    ".gitignore": "3adb5246d7cee2396834d2c8c939477be54b23c8963bad242f06344a24aefa4f",
+    "0001-update-wrapper-arch.patch": "3846be557da5202267fc4d8a45572f4cedcd95e82d4e62e998c4486fed311314",
+    "0002-align-desktop-entry.patch": "b1253d30764b6586b05161b793b728ffee442cebf875e2074eedf2da5140036f",
+    "LICENSE": "d1ed44b8400a12b8500ac509f4ea05cf14aceaf56e073a8a3f0a2d98005d068e",
+    "PKGBUILD": "02db628aa5809f458e1b323c88c1d25bf038a2a2959471af76e76ec3ab4b940f"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "hiredis-git": {
+   "files": {
+    ".SRCINFO": "431f48eef401845e4526e66e86fcd6c5e89dfb6bbe8f9700ad543089217fad46",
+    "PKGBUILD": "e8b0428d111643350cdfcf25bed890f31e344f101025b7944e80313952ed26f9"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "htop-git": {
+   "files": {
+    "PKGBUILD": "6263a5831c2a677e28c57098992ac52b0ba6658199b03d600aacf0796e82ab02"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "i3-git": {
+   "files": {
+    ".SRCINFO": "55cbe535b0dd5ccb6a15ad5b85628fc5f1a36178fe68f99767d4d3f09f573dfa",
+    ".gitignore": "ae47f80330435a9042a8fbf2a8f7d07335c07f0119fdd362a4e995e8dee53314",
+    "PKGBUILD": "e539e225b86639dde8a4d393bd4335319355d6d06a5ea146b4342786b7e7408d"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "i3blocks-git": {
+   "files": {
+    ".SRCINFO": "facee4127cdb161a40179e81c2226bfe18d01f100c11802e4d7889893b56c513",
+    "PKGBUILD": "5cf94c6504697c6eac6fb8e399c2ec0da79ae4fb8ceb0d7e3889dc6b393c0b44"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "i3lock-color-git": {
+   "files": {
+    ".SRCINFO": "9964f978cdd41810108291df6fd62c42a34a9a6d2cbfcec1db8d5cb60e8f8d48",
+    "PKGBUILD": "ae830acf70d932a40c22f132c0e973815db44b46d062db8a5a7135105f341947"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "i3status-git": {
+   "files": {
+    ".SRCINFO": "18c23483315e66aa9d0b215bb7ffc70809913526427405fc3dc5355216a85014",
+    ".gitignore": "330e0d84b6be4908c8f9d73ff32127801143d245028458cc44445aa11df57e50",
+    "PKGBUILD": "ccff8d9701da732207f024fc8058f7d7f555e47fd63e6b77fcfb32787cfa483a"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "iwd-nosystemd-git": {
+   "files": {
+    ".SRCINFO": "7aa9ab8f42847607fe25d651d79acbdd222b78b83258963a10b6171b4c0b2a48",
+    "PKGBUILD": "ce695a0d508ad5be7edc256cbcf0658030122d2539bca4ad844acaed71a3fb7b"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "iwgtk-git": {
+   "files": {
+    "PKGBUILD": "127689aa85bf99833be59cd16d68307286f1814697c816fa57a6e8e590c6ffeb"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "jadx-git": {
+   "files": {
+    ".SRCINFO": "9791a565fce7fcffc962a0fdfada27466864833f47201a0d90c014988ffe894e",
+    ".gitignore": "07360a89f268b9b211c3191eeb222295a68a1baf1adc87db16e6066dc672ce44",
+    "PKGBUILD": "47f7b3e72b48a71bd75378c05e8ec04f89a36307ba54ccccb0b6b5c84c335671"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "jbr21": {
+   "files": {
+    "PKGBUILD": "5bfec848088a646430feb67e360135ebc50d6a33f321be4e60505e0aae91e26f"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "jbr25": {
+   "files": {
+    "PKGBUILD": "65a9a880c1bb69404de89920f7ba2431eb48c8c58b0acfd1a7e8bef4a3a1f99d"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "jq-git": {
+   "files": {
+    "PKGBUILD": "a5c0d534e0dcc71ac4d9a341c84d6820fb16926a13c3e6a1fefbea32687c5340"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "karchive-git": {
+   "files": {
+    ".SRCINFO": "61254364f2ca9c6a3061dff69c539a1f85011af2688dd0c9b24b3828c17ad4f2",
+    "PKGBUILD": "3a432dfbd1803dedd8028acc87e162ffac82a4b79f5f44f2bbc224665298e23f"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kbreakout-git": {
+   "files": {
+    ".SRCINFO": "4ec1e6232915512865cf87d124355bb17e510d1d5650fd1f2d9bfe92bd5491bb",
+    "PKGBUILD": "b669233a69ad31b6d24d101218bdf259aa909199ca3ac33a6df5a0379288ac35"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kcodecs-git": {
+   "files": {
+    ".SRCINFO": "3eee76f87977bdd30af781d0f38ca9ea5a0bb6354a0445c2ee08122bf04fe59e",
+    ".gitignore": "9bfad454071ca528e4abd0baa5eab149c4313da46f8b9d9d1e86837c5d954016",
+    "PKGBUILD": "93ec5490a4ed0ce38049049b9e5c2dc5b24ff33ec33731b867a26b9b2f370ae7"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kcolorscheme-git": {
+   "files": {
+    ".SRCINFO": "5ac3cc4390dd84025fa30924e9736bc3237ac5f1d9cbea9c6e3fecb13d44e611",
+    "PKGBUILD": "d63aada2c8f90f490badbcc1efec1600203e3b1cea0b7148c68f54963d970e73"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kcompletion-git": {
+   "files": {
+    ".SRCINFO": "c3b8ed76f8bd7bf7f00a4b5fd57f24b31f53ae08f5a1d0c2495cdde9c5a8bff0",
+    "PKGBUILD": "2f3fbf9eeb4a36d1e57403c17439da82e9a738948b9127c2f7f89320ca405129"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kconfig-git": {
+   "files": {
+    ".SRCINFO": "ef919ab08aecdd67054a095b065e958effba4e11ab7ed79a5f5059a1ddbbb87f",
+    "PKGBUILD": "d6e2bc590d7432ae93c9fcf1af458d05d4ad182e13522bd30d875e0ad228aa15"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kconfigwidgets-git": {
+   "files": {
+    ".SRCINFO": "8dfda0f21d93fedd273fda61c0678a505ee57473d480d86f0d4f677d22b84fc6",
+    "PKGBUILD": "2d5d59b3db6bb850cb1365e94e91bbacb22334c558054e954e180f40caf99489"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kcoreaddons-git": {
+   "files": {
+    ".SRCINFO": "451b9c3a8f2658fa44438079da8a446927df8f188f1897734c1dd53859e0ce29",
+    "PKGBUILD": "e5824f8084fe58eb1198b3eacfa28afde5ff61a83057d06d5352ea676eebd7d5"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kcrash-git": {
+   "files": {
+    ".SRCINFO": "3114289e7cf1dc27b96ae5dfbb64a0958030da0ffa4bf45a32f7228b1648b1f9",
+    "PKGBUILD": "f0493fea0b297033c4fd00cc40ecb0807a1b5c7b319f1b99946230382600b557"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kdbusaddons-git": {
+   "files": {
+    ".SRCINFO": "42f484c4ee69c56969683241974fd88d019136c25d3355a10d7f57d4f5762dad",
+    "PKGBUILD": "47a207bac7f58a37e70d0ead9b5014af3b50bd1b9e76f08d81e383cc7758268a"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kdnssd-git": {
+   "files": {
+    ".SRCINFO": "621e8570c86b30d6ff03943ee78119f0e4bfc24fa4b45578ed92553b71330d89",
+    "PKGBUILD": "a1047d25322ffd6b0e6060b29394ee98388678288a7b6234a775ed3557a32083"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kdoctools-git": {
+   "files": {
+    ".SRCINFO": "8b74955ec1ccae9069534940444cacbf58e226e235df917cb7a8eb10104171b1",
+    "PKGBUILD": "2238b26c2dae9e937b6aef3af3e826596effff60b8a82e936817597a0298092a"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kew-git": {
+   "files": {
+    "PKGBUILD": "b254abf5d317f3566611a9b6fc34661ed1dcd2ab80aa05f712b830d49e07db5a"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "kglobalaccel-git": {
+   "files": {
+    ".SRCINFO": "bc489b8910eaf6eb7cfcc8a64bb294c3b668eb4e47e7d65fe04b0bcf4d7f2a8c",
+    "PKGBUILD": "cdae4c8156542ee9cb3ea7663ceb327137d8b99b849e744b19861a36f55062ec"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kguiaddons-git": {
+   "files": {
+    ".SRCINFO": "716aba2b9f599312570516e79a083b92a62270fa07f19adda4ae5f5ff5060dbc",
+    "PKGBUILD": "1841a634be267c25b94b9ebaac50ae7fd0655e100181f24d5dc46a9d22d82aa8"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "ki18n-git": {
+   "files": {
+    ".SRCINFO": "e1b29d6bfb153464d3f7e419cf040c5b260128553547d71b9fa9f549f7f0ea58",
+    "PKGBUILD": "9c8d34b1485d25e284b7b40af433617886e7a1617b4f091e09e9a2dddf4e591b"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kiconthemes-git": {
+   "files": {
+    ".SRCINFO": "46264a26ce9bc453505c178964c511d6a77d5bdbafac187317a8193f0fc2e074",
+    "PKGBUILD": "afdcb79fd05418a9545799dfc1b28696fa4a4b13821b6d3704bf298a0b158235"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kitemviews-git": {
+   "files": {
+    ".SRCINFO": "5ace8a400026dedf2409c1834896c7b9a8fdcedb06289665f22565cb751b3903",
+    "PKGBUILD": "5d5508462f4ff5c116c801121e6bcda300dd8f2b52ee8639a1b1d3cf3659afff"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "knewstuff-git": {
+   "files": {
+    ".SRCINFO": "aa0a3726358728d1c9db4e51f503bffe924e57ae28be0aa3b5c46a7fa2fc07d3",
+    "PKGBUILD": "7a3641527d225408a2f9e10f8787a5079c0df811c8c91dae3106fffceb8bc988"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kpackage-git": {
+   "files": {
+    ".SRCINFO": "f29bbe7c32d46818f02fc8df0482917e9a80661ccf622c634dce931bc9ee853c",
+    "PKGBUILD": "ee309252cd236d65495e0c35b3bf075b4ade2582230f2336580588fbb224d961"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kwidgetsaddons-git": {
+   "files": {
+    ".SRCINFO": "9cb3fabc79845019ac52468af89d85f370bd0f776cc2dbf7d5a882232d1cfc52",
+    "PKGBUILD": "4eca8a9cdb256d0e502c06494043090821011b201485fd3c330e0965d68f4d06"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "kxmlgui-git": {
+   "files": {
+    ".SRCINFO": "b26cb3a70d40c4d79f912f096c36abb89c77e77f418ec5a701d007ca8cf68b3d",
+    "PKGBUILD": "dc40bb672a1a165f89cab6d7b4b101f10f6e5f3248938b069bba430ef405c23c"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "lib32-glib2": {
+   "files": {
+    "0001-glib-compile-schemas-Remove-noisy-deprecation-warnin.patch": "380ff0a41e2efac4ee76e37bfb7bd17551b879dd29b653f59dbc9d38dcdc18b7",
+    "0002-gdesktopappinfo-Add-more-known-terminals.patch": "bd132b1bcac4f03681013919bfd2a15fbe27a3eb597729d72871f07996ec694d",
+    "0003-build-Mark-timer-test-as-flaky-on-x86.patch": "ab367f6fadac3b54b910b9d3c59441ab4a4cb1387e91e7b5792ff04d3ca17f7d",
+    "PKGBUILD": "d1f34827cd976166eb0973a0b27cc585b5a1a917f3032cddbb9fc7126948e717",
+    "gio-querymodules-32.hook": "c37b2777d6c7b9d2eb6003d8bdb72175f889013bc4d582b3f7a12fc7419a2d6d",
+    "gio-remove-module-cache-32.hook": "845b727f2fe7ebe4afe73c910a17b326053f2f49eb2bcad75fc0b9245baf43a4"
+   },
+   "kind": "multilib",
+   "source": "in-tree"
+  },
+  "lib32-glib2-git": {
+   "files": {
+    ".SRCINFO": "372e1711249a0b3f30bc6dd43f5dbee5c1697d774f7096430c29e55ddd2b5cb3",
+    "PKGBUILD": "3ceb9dfaf19b5fe1cda898d8bb4ef36b5afe61e85f0b446c4d3a492a23777024",
+    "gio-querymodules-32.hook": "c37b2777d6c7b9d2eb6003d8bdb72175f889013bc4d582b3f7a12fc7419a2d6d",
+    "multilib.diff": "2611ec4c97346c3c4eea61786ee20c801207135a9d52a771f5f340b41bf69fbc"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "lib32-gstreamer-git": {
+   "files": {
+    "PKGBUILD": "0b304479ed4dd1a4803aba89a476ab0d60e3022f7e55aa82c978bbd613184d83",
+    "lib32-gstreamer-git.install": "c80ab7967498bd18d07e49d982d693b987e0e6ac0858434551f2c4751dc7f75c"
+   },
+   "kind": "artix",
+   "source": "in-tree"
+  },
+  "lib32-llvm-git": {
+   "files": {
+    "PKGBUILD": "ceb7866318aa2b6a84845bdf09606330ec8e5d5cface5e4da90eb5ddaf2c1186"
+   },
+   "kind": "multilib",
+   "source": "in-tree"
+  },
+  "libaec-git": {
+   "files": {
+    ".SRCINFO": "085f9c7a29133586eb2822dc5a0f2b95d975bfa113d892371fdbd05d07b55244",
+    "PKGBUILD": "8cc20a46bda11399855ee487f24d2513bd823fd98fc0e9c51e4c33c4acd309b4"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "libconfig-git": {
+   "files": {
+    ".SRCINFO": "2fc04a9dd89f48ad5d30385c4ca4b56568e35c9368c8bb15461a921828d3d23b",
+    "PKGBUILD": "f1b6a51b9a9ba78e94501b656dc5364c565e04fe95dd10b191ea824a69225171"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "libgnome-keyring": {
+   "files": {
+    ".SRCINFO": "d4ebe9db7fe83a766fbd80f2174bba841f96e724459edfa59fd8d32fb628deb1",
+    ".nvchecker.toml": "d3d804e0fdb83ee534d6e9e5b1bb6e97fdfb82b907e213f6d8dbac3a6b7384dc",
+    "LICENSE": "7056c04df17a4e0f0bac9f787f347c9cd892cee6323d1c89528090afd0b934a3",
+    "LICENSES/0BSD.txt": "7056c04df17a4e0f0bac9f787f347c9cd892cee6323d1c89528090afd0b934a3",
+    "PKGBUILD": "152de28e087bec4e5b2fd883593c9d3708278b19a46959122265264d24e87e52",
+    "REUSE.toml": "e8a26e1b7d867311586d77986415f73b70e8aa3760d24591d61e88d024ee37d4"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "libheif-git": {
+   "files": {
+    ".SRCINFO": "bfeb0fa0418d8966fca19ae2a0955df735648d586b01ceac68c196af9a58f828",
+    "PKGBUILD": "5f8228587743eee06bd2f1abcf37f36078a26a2c332578f2aacb5c40de0281bd"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "libime-git": {
+   "files": {
+    ".SRCINFO": "ec7518654db122ef45a8b87e5702df1196de1891e761e4d3bdb146e235376083",
+    "PKGBUILD": "8482aecaf92bd31a231cf06871d3af8ef183fecbfee4283c7cd8de890c3eaa66"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "libkdegames-git": {
+   "files": {
+    ".SRCINFO": "559de9485d51363c223d0cf50aaa40ee9e175efcca6f7b47845db767a54ddebe",
+    "PKGBUILD": "15542752809fb462310566babe236c97b2c045fb213f133dbd77f0460da7661f"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "libliftoff-git": {
+   "files": {
+    ".SRCINFO": "af46238e6f2a6d0bd0e5830e9d413ee56031ee37bdeb1c1eb7cf32190e5e82ba",
+    "PKGBUILD": "5c7dae279718d377a7e2bd9f2de8a3ac538617249446ae5cfcd434bc6c004a62"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "libmtp-git": {
+   "files": {
+    ".SRCINFO": "836b29ae6c3e48d09fb4d1a29a58d49dceb5053e7225c265eb1dc1cc40c4eae3",
+    "PKGBUILD": "5d97f9f5940d2b17a232f65d6e0083cf5c54113ae1445af147fc4bd62d71f556"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "libqalculate-git": {
+   "files": {
+    ".SRCINFO": "4ba0b58702edd3288a6cbab20190359b9e4dd77c8575c3376874c7fffcd18808",
+    ".gitignore": "75ca2fa133bcdc58ef7458a30426db4de8d369e45406ab0215403c3203f847fc",
+    "PKGBUILD": "faddfa7e19cd112a74439aa9ffdcef52bcfa67d4bbb747e4fe68ba86f7ba83aa"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "librime-git": {
+   "files": {
+    "PKGBUILD": "d48e0a71195e9d17f0b66dfad8c518d2eb8cbedaff76927a84435a3a994b5f59",
+    "cxx20-for-capnp-2.patch": "ca103ece3886adc99f2c918e430fafb34a682dbeb22671110cb8fcd1c29e5ca7",
+    "lua-u8string-cxx20.patch": "cc3c76e85b95147bdb1202f122cd17dfdc3762a59cbe73c32504c49eb6493947",
+    "opencc-empty-conversion-chain.patch": "ef4ef7407ad9a75cc5f9e550c92d863afb8395033c6832f6b5b0289f75b4c5e2",
+    "proto-capnp-2-text-reader.patch": "8e3d8f1fa2bb09f23eb5b3d8d165df881d99cbfd571c4cb846074361965daab2"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "libsixel-git": {
+   "files": {
+    ".SRCINFO": "df1b1353afd923a142e8d5309b6eb0f58b07b37d36ca2fedb2915420216269f7",
+    "PKGBUILD": "a929b6a73be252500e97463bd3f5d8f7234beb933399da71917aadedadb39386"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "libsonic-git": {
+   "files": {
+    ".SRCINFO": "fa34ae93b43c7b1008cb5ada6e0a68d31dfdc1a11957d06e05fbd17b49506819",
+    "PKGBUILD": "81d2ed655ffcbefc5abd3073c9fbacbc5d9d3ca5e5dde9b652ffb4382d3bc7f5"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "libxcvt-git": {
+   "files": {
+    ".SRCINFO": "93307af3d4a86f549b41ff82e86f3bb430f8c477b1224e0b216cef32895966eb",
+    "PKGBUILD": "b62e373f1124a32660b9ed3c3098f830cf3d5fc7cce188356241c075b941ba39"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "linutil-git": {
+   "files": {
+    ".SRCINFO": "4aac59bf66c53eda903aa9266ce9b82b27b1b35a7f48029285e27a94379bcae0",
+    ".gitignore": "c4eeaf1174c1d0c77d2b16655abafa2d3b65abe173710ba254c2b55b919662c8",
+    "PKGBUILD": "54cf3e1a8c9042d363d6f38513e64154038e0f4b19bfbfc70d6cf4f764e6de0b"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "linux-cachyos-cjktty": {
+   "files": {
+    ".SRCINFO": "282158866aa7f6ec04138fad48a04ca98d7322bda1d9ce501c3f6999e341747c",
+    ".gitignore": "c91ab7ebcc18553fe93892e31ec41688c4477c29994cd343b6db59741d5ec6c7",
+    "LICENSE": "d1ed44b8400a12b8500ac509f4ea05cf14aceaf56e073a8a3f0a2d98005d068e",
+    "LICENSES/0BSD.txt": "d1ed44b8400a12b8500ac509f4ea05cf14aceaf56e073a8a3f0a2d98005d068e",
+    "PKGBUILD": "edbf6cd72fabc7e2517fc80df5b335b8abca751a7ef553baf1176583e9725e1a",
+    "REUSE.toml": "1fa34b031d2f54f45499903272207f2a202053910172eef9734534165519c5a9",
+    "config": "70a755e054368c4fe804b79c6afbf00ee78e345883444bd2c6f1465ab40f48fd"
+   },
+   "kind": "",
+   "source": "aur"
+  },
+  "linux-firmware-nfp-git": {
+   "files": {
+    "PKGBUILD": "632277b74c59ad0ae01976794c0bf7a10a31a7fb82161da2e6c83b223e73b2dc"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "linux-zencjk": {
+   "files": {
+    ".SRCINFO": "8331989c5fcc3916a40fce1037ee579933cddcb1cb65a353c983a155c3ae0b7d",
+    ".gitignore": "416362d171fbd84c0ec2f3c04a00b8786bf1edb2b5fae14412b174a02a9c7921",
+    "PKGBUILD": "0a98a711235779d185c3aabe2d434b2ca4eb34a882f5de989f4d6a1297bbcf6d",
+    "config": "f9be7d01ba92cef1522660994d2e0ccd53c1e1013107d1be421a9df5d53ae750"
+   },
+   "kind": "",
+   "source": "aur"
+  },
+  "linuxqq": {
+   "files": {
+    "PKGBUILD": "dce577350d4276503368db2446d540799300ab5f86aa958460b5aded6cdc357b",
+    "linuxqq.sh": "f95064dbc9eef0ce247cebca24ac95b8795edfd6855b14276f387a47a410e950"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "llvm-git": {
+   "files": {
+    "PKGBUILD": "6b6c4a455f1ca65a7311aa30e1f10ec37d073f3982f9ebe000740cc30bc1fe70"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "lmdb-git": {
+   "files": {
+    "PKGBUILD": "4fd0c6bfd08b6f7a2e5b36af870cac22087609e7768254101f83f6dc3b06121e"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "lsix-git": {
+   "files": {
+    ".SRCINFO": "4420abb64ac0bc7eb63e953905b84ca89475604fe0aad7a4a2f17a9886372ada",
+    "PKGBUILD": "69c0b2639337f8e9d868f4244440819f9913f86c6331ebbbd82ba066b8f1240e"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "make-git": {
+   "files": {
+    "PKGBUILD": "c95eb26598faa72d2fbb0da8d02d27773e3951589522b9a922149f4db0e9c7aa"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "meson-git": {
+   "files": {
+    "PKGBUILD": "4fd202d428842038a34ebdc2e7fb7712c2a570042f7057a150c0f88b66bdebf4",
+    "arch-meson": "d9a391a47570bd2a0e122f29569318ed1285c5425b68d6e5d6710324a17f8dcd"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "moregram-git": {
+   "files": {
+    "PKGBUILD": "93500d02c2d818e1aa6e06c6aabc047179723fe89a7ec404fb31f79f9b54831c"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "mousepad-git": {
+   "files": {
+    ".SRCINFO": "071d6fc18cd2a0ca291a8c4c6e609cba078c204169b1b0bbe2d26431ff05ac4e",
+    "PKGBUILD": "d9be8a172c7dcc9c69ef25e20254c6fa287f8c3bad28f522a3ce55639ac3383d"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "mpeghdec-git": {
+   "files": {
+    ".SRCINFO": "aad9a5096cf0b24d5ab03a0834eca21bc390ad04f2bdd20b500f2a7ccd2cacbc",
+    "PKGBUILD": "054d9c184013b83fa9312945c21a668974e772b331748008ff8d183b0d449b4e"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "mpv-git": {
+   "files": {
+    "PKGBUILD": "f77729fa3142d23037a0707dea44a32dab4023d553dffe2e80b390bb9e5512ba",
+    "find-deps.py": "0d2d5ada966b85ec111eef268aa24acd9f0ec3c8d6a1474250badd435f5ab0de",
+    "mpv.install": "e7fc66febbb7b2b796e8459b5610ecea1ab1e02cf12f870061ba92017c710ad9"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "multitail": {
+   "files": {
+    ".SRCINFO": "bcefbcaefff852ed5632a683ff889ff294a7fd5a2d8c8a3c3329f41d4d7036a2",
+    ".gitignore": "7acecfb4cb3a161ba25d9e5b7bd4b7333d7500ddb189c3324c12cf70b8af1e30",
+    "PKGBUILD": "c2ae343c5784d1ebcad0b7defe5636dee3d989bcc6fa6092de19cdbdc117f607"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "multitail-git": {
+   "files": {
+    "PKGBUILD": "75dc5f0718f31bbf5d8f6ded0be74f87b576622850146c7a8612e98c377dff23"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "nano-git": {
+   "files": {
+    "PKGBUILD": "ca478402833d2a318916492c0ad4ce7d7277a1c03321b76e1d2c74db5a8f187d"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "nano-syntax-highlighting-git": {
+   "files": {
+    ".SRCINFO": "ad63c6e2565a94ab553ad4df6dcd3f166333d200a70c9802748fb4bc996fd91a",
+    "PKGBUILD": "cb9efe1b4a75589ef3b3795143b6b077c64b51a301d2cb3a5e2a04657602fc1d",
+    "nano-syntax-highlighting.install": "c6846a7bca924352fec6d9a69b0c00b7194138b6bb7046ac069d368751a6d63f"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "nashira-git": {
+   "files": {
+    "PKGBUILD": "175f3f2a257d6a8ad7293c18baa73037b1a0f7f27836ea5508d5813a2bc2019d"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "nlohmann-json-git": {
+   "files": {
+    ".SRCINFO": "ad86f0376a0f26182a72dcc5d22e2284eb1bcfa4abde6a8fce384f7b5db835ab",
+    "PKGBUILD": "4d366b5891d830a507f28bf7ab0438b023e31d124e984c69cf1fe618423734a4"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "nodejs-better-sqlite3": {
+   "files": {
+    "PKGBUILD": "412139e757e1d279a19ccd2b5a6a1cac9ab1409958c7a09c1e0b9efc83b6ed80"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "nodejs-better-sqlite3-git": {
+   "files": {
+    ".SRCINFO": "6b62e3fb0159c47436fc39af542ac0703d0bee43db336ebcb252eb108ea59f82",
+    "PKGBUILD": "d1c0200bc92086ffa982cc567c0c29f4e411d7dbff6ac0e346fb5cbda23152d3"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "nodejs-git": {
+   "files": {
+    ".SRCINFO": "93846448014b10f8a56ac9eaf0bcd224855969121a8f31bc5a7f8adf993f083b",
+    "PKGBUILD": "038d8977fe98718381a0ccafadde38ef9ce1afdc420a1e19a8a953b53423855f"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "npm-git": {
+   "files": {
+    "PKGBUILD": "c0e293679a4922efbf3c8ca75f7b78460a8281a2e7df7a209f3ffd54952881ea"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "nvidia-beta-dkms": {
+   "files": {
+    ".SRCINFO": "06567937ea270b6c0d7c4760b423853f5c2811793dcdba2862de89d4588aa607",
+    "110-nvidia-change-dkms-conf.patch": "673dc16f8b2e962c8f2081fa57b4a4b2774f783205e6eb20120f3d0d1a42317e",
+    "120-nvidia-linux-rt-gift.patch": "291bc6568e18496a4c2e732fd8616f6d536d8e9f3ab51f1959e3fc08f0de126b",
+    "PKGBUILD": "ca8c425545fbb5317d3149b41434f6284b61ea1314477c185cc8ea09b6c63e82"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "nvidia-utils-beta": {
+   "files": {
+    ".SRCINFO": "a3d355b6733b92639e541f8c7e7e530d5f38d01f4bb9ce481d6a4903b92e8c52",
+    "10-gsk.conf": "05af96f86b7b3b40b93160fdcb702572401579f8756c0831b5de5f8e9afebeba",
+    "120-nvidia-settings-change-desktop-paths.patch": "6f0f4a23706241e9e37e0fe30a09bd30ca29bb446d8fe7861cb4959f0a010ef4",
+    "PKGBUILD": "cdb40a90b6a7094c150e87a1336bdad6c7434814b53f5441a0b0620747d3774a",
+    "gsk-renderer.sh": "67eac203e7de4cf979b82c1e43439ac0e7c951d8901ebd9e4555c5d186a1b2ec",
+    "nvidia-drm-outputclass.conf": "be99ff3def641bb900c2486cce96530394c5dc60548fc4642f19d3a4c784134d",
+    "nvidia-utils.conf": "8ed91802c2a2d5b46c0692c624caf01dcde62a885dc617dda6694f4666de4c8e",
+    "nvidia-utils.install": "829d7400dfed3c2a08b3af369af6c82caaf934e6876d7765ff37c8466cf7989d",
+    "nvidia-utils.sysusers": "f77a5247a3ba63e9fad3a3b2822d0fcfa51e0f79b5a90bd79bf08ea34b64ab07",
+    "nvidia.rules": "e30714f9b473d810c28763d067e0b85c75f86f23618d968b49b9d1fced9a1dd6",
+    "systemd-homed-override.conf": "c5aa7b8abe69e72bfdc6b9ee8afbfd350bcc557e894558f2e6e4087fa9aa0dd8",
+    "systemd-suspend-override.conf": "1d053c5078387021338cfc3a732bed61be1a20a549775573788e9134775c8149"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "nvidia-utils-openrc": {
+   "files": {
+    "90-nvidia-sleep": "2b850e25d9bfe0f98a0cd188d58b78baba66e9e85f97e89e405e297b6d90a5dc",
+    "PKGBUILD": "5330fd01d2358c706459ec4769b5670415cd509e511612148531754150c6ae40",
+    "nvidia-persistenced.confd": "347437868119e8ae12852a574597936e855f534a9ad290fef3f62b4083a38516",
+    "nvidia-persistenced.initd": "b672a70260d1370f462d3f0f9e027708118bb46e087c2be63890e97260dd2686"
+   },
+   "kind": "artix",
+   "source": "in-tree"
+  },
+  "nwg-look-git": {
+   "files": {
+    "PKGBUILD": "aa4edbeb310a60963d3afdf2a973233fd5e11db572b27e8e381bd85084e432ea"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "oh-my-pi-git": {
+   "files": {
+    "PKGBUILD": "a4ff5783201f57ab37e3a3261cd972eb2279c492f7d6ba03192112cbb55f578e"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "okular-git": {
+   "files": {
+    ".SRCINFO": "6a1ab2dba9d9081921afb1e9f518b40f177b55cbc3e7f73cc8ebdcfa5de58ffa",
+    "PKGBUILD": "75859042cb6912fe05547a73809179fa8070247acd8f26877a8f7a4c26f85cfc"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "oniguruma-git": {
+   "files": {
+    ".SRCINFO": "59523341ee3a36f84b34a886ef516ff4bb5103e6246464cb7607925513201dd1",
+    "PKGBUILD": "6d506bf5805b2408d87a33e155d5bb9dde1f2fb4d9e3ee8946740566e0030bbd"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "openai-codex-git": {
+   "files": {
+    "PKGBUILD": "88b6fb4b4670c51804a5013bb2b5b8385aafb2cc03a493e92f45d7b08a88cdb7",
+    "exec-bin-recursion-limit.patch": "3c7d272ec410a7bec6132ffdb68f354ad3f5aafd0f333becf261d59e6e385890",
+    "no-daemon-by-default.patch": "514b21d13bff7901e26a967b1f3f2bfdac3f4ce5d25ecacd211cfb501646f134"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "opencc-git": {
+   "files": {
+    "PKGBUILD": "de569ed5d93b390009d8b5cda25dbfee7ec74b9dd408695dc6894dff002d2b75"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "opusfile-git": {
+   "files": {
+    ".SRCINFO": "b25216265d3b9050daf0acdb62cf32a7a7babea5966e5243134ed38cc195678b",
+    "PKGBUILD": "d6880919c58cb72de993f14ab9e5e038a71b2ba99c09b443f8dfdd116d2eaf6b"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "pacman-contrib-git": {
+   "files": {
+    ".SRCINFO": "0b035d6368be9a639d6cad30e9068a8542cb8510410ceac3edcfd7457e9d5ce3",
+    "PKGBUILD": "55a739b917b8ef02b6aadba7b89f5a79c84e2b09511af05d031786773122f59e"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "pacman-git": {
+   "files": {
+    "PKGBUILD": "cadefcd90f6c9f04d4e816b25965a66a17d8c0ffdabdfa19787386c76cbc2b6b",
+    "fancy-progress.patch": "e6b57512bbc8e4cd1a5a01ced534eb355517f26c8b90df12486b853e4e2a32df",
+    "fortran.conf": "933b0b878fa611bf24b92f655040a3bcb4a1b67841d929013802abbb09b2ccf4",
+    "makepkg.conf": "20497c90cbb678a9ca1a71eca66cf2a1d0c991c3e695f7b7d10fb68fc0ac4f12",
+    "pacman.conf": "ba39d13cffca07b3766b02684cc56db9b7869d6080e1ec06e24e5b0f2e58e685",
+    "rust.conf": "6fe03e6ea3f69d99d59a48847a8ae97c2160fca847c7aedf7b89d05e4aa9386d"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "pi-coding-agent-git": {
+   "files": {
+    "APPEND_SYSTEM.md.example": "51a1fc0229a9530773417b55dcfcc490a42350094f8e6713115a2c023b52e5d2",
+    "PKGBUILD": "a98b718cc465757cb6d79554eecf64f7402d92d1a890f10ae2c0fe82eba6596f",
+    "pi-coding-agent-git.install": "dc2f88be6ffad974bb592996333b96eac281a37c95b6995d8e5a8296d43b6b4e",
+    "pi-wrapper": "13a511a77c9c99ecd51811172f3c17bd69420f9ae82dcb15ffe3fee4661c3d21"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "plasma-wayland-protocols-git": {
+   "files": {
+    ".SRCINFO": "88f36b19dc4bf587d2313a01561c229a2f9f178ad7e4fe0d2be37c57b71c2a2d",
+    "LICENSE-note": "c9f30ac052b54e028db04665da01831bb2ea2633c015a8cb83427dc37e2ef14b",
+    "PKGBUILD": "9bfe597b630899f2c387bbcbf4458df446fc3e97978121d9db50a95adc9569da"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "pnpm-git": {
+   "files": {
+    "PKGBUILD": "b9b35802d679f39feda10fe4bd69a521b6263bb6b8c05914dfe9959176d752a3"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "protonvpn-cli-community-git": {
+   "files": {
+    "PKGBUILD": "fd75b384d1d17042a6b26784966075896c450666393bff5efb9c3e3d7f61ef14"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "ps_mem": {
+   "files": {
+    ".SRCINFO": "f4cac967df9e431506d9a1edc20829b2a138bfd84ecde6a678acaea5d2c71854",
+    "PKGBUILD": "fba8c5f03da5e394ae5a747ada8dec5b5375dec7b64cb94488b0c96debb80126"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "psautohint": {
+   "files": {
+    ".SRCINFO": "d313b4bee70a3da3b362a6b7d2973af906f0d5f15a0adf3b473ac1e4083ac50e",
+    ".nvchecker.toml": "341749cc16290ff24e6ebbf201278e1c19db302740e22c07d20010fb5db1632d",
+    "PKGBUILD": "d19881062ad49363726a26460769867ee16677d1ecfc6a14b4726f29e42dc2c5"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "pysolfc-git": {
+   "files": {
+    "PKGBUILD": "f357a178c6575da37c2444b62610233e1fc66767548ae568847d58504518238e",
+    "fix-quit-while-busy.patch": "8db340eb9125b076d615f9e0b0406d8cbb69237d9fac350104832a0b0a06194a",
+    "follow-desktop-theme.patch": "c0450baf13afb0fcea679ab29c0ecfe8f4c34c5eadf71082e7adac4b6f24f62f",
+    "localize-help.py": "aac7bc6e0c7b6af263b3edf576b15304c36b28473636afd0cd717e85231c71ff",
+    "localized-help.patch": "b7b72c793bd19cc7f29b90cd51d03545a6f8639685cfd4d5b6a695a2673664cd",
+    "systemtheme.py": "27cf87bfc4c9d2af508f565688e4b7d81e06b9616c08dff5e54b5b118eeec16e",
+    "zh_CN_games.po": "fb170f3360e3712ac4b5f8ad9ea6fd45a91955ead4b5f7f8dcb501319c42b47c",
+    "zh_CN_help.po": "7366b8d5303e0798509a58e2b19b55a4b846b5515e26c3a355db11e32ecbd6f6",
+    "zh_CN_pysol.po": "c0ce43b306398611891568a6b40f4624398faf21d2b64e4ccabb0a28335cbb32",
+    "zh_TW_games.po": "c4ca872416704f82e408ddb00de11fbf2ded2844dd9d408e0f918c18262770ca",
+    "zh_TW_help.po": "57b58add5ca546f7130dad9278c7eff68a094bf3e5386240c53c9a12b672f48f",
+    "zh_TW_pysol.po": "ef5c8412e6ece7d0e19f4badef699add4d4b0a68b5b94d54b545d8bbb99bdb54"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "python-cu2qu": {
+   "files": {
+    "PKGBUILD": "7d6ab730e92af8582800beee68dd8583b9dd6b2c92055c6a1c7e2a06a9abe7d8"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "python-fontpens-git": {
+   "files": {
+    ".SRCINFO": "1a9c6aab4bc0d89b6e68a2e4005417f2f47edfb89ae25b706611e4fb79c17d76",
+    "PKGBUILD": "d6185861bac57f2bf5ed55e10c96a5532fea228e87ba3b723d725ad0b387d1d2"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "python-magic-git": {
+   "files": {
+    ".SRCINFO": "8439a82f4e85b7c3fccdae7489a12cdb3ec582444a829ef126dbb9e9ba7dd0e6",
+    ".gitignore": "1a57140178af67ceb4d73d7ddf73cedfca2bc2e3d8ca360f73d1fdd63ad9e99a",
+    "PKGBUILD": "ea64a208d11c41b34925ecd25f852b7ede3f28f7d01ee0323f1109523db3edef"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "python-pythondialog": {
+   "files": {
+    ".SRCINFO": "558bb99e73107d145a91a219ae571da9e4ed8c51ff7ae4931be388df2595186b",
+    "PKGBUILD": "1147b74b50f43ab4f61c4853ecc1587bc97e0e1bf4aa2f1d5cc699ae79b8e0fc",
+    "keys/pgp/125B5A0FDB788FDD0EF41A9DC785B90B5053A3A2.asc": "a20f4b5b07f366b6dc86193c4849d37c1336956c8bf64a23bb3dbfffb8be0b7d"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "python-ufonormalizer": {
+   "files": {
+    ".SRCINFO": "19bf9b58d04d36d7c17d6f354fb692474839f6b33db72ac61998afd01a88a0d6",
+    ".nvchecker.toml": "d3dacf8e150ba33ee38c51f61a85f1d83585671f283b3eb0570c7e16db6dc6a1",
+    "PKGBUILD": "f9fb15fb263621a02951d837096b173af4cbd8a62a8f79433d630fc6cb3131c7"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "python2-git": {
+   "files": {
+    "PKGBUILD": "3c9798e0b84ccb33f60ddc40cf74acf1f5c600a8c4ac492896a7ccca650e6a2f",
+    "mtime-workaround.patch": "430afcd1f581aef0e1017694c3d0849890c819f2a9fd84e891838d9c0957701b"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "qalculate-gtk-git": {
+   "files": {
+    "PKGBUILD": "71a5a5b94b38c7ca694a66a4b2bd6d8f2ab737c9860f188c183e87fea9f41858"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "qalculate-qt-git": {
+   "files": {
+    ".SRCINFO": "a00bc1b3b6ae56cfc1113230240be7d2624eea77913f70397cb17e2fd1f04933",
+    "PKGBUILD": "14950618465b85fbb934b57c8824f27fdd260dcfaa75229b2fdc0966cfbe8ade"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "qoder-cli": {
+   "files": {
+    "PKGBUILD": "499546c9a304d1165333c24d311aff4dd4920db57706138f37e79442f20e2792"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "qoder-cli-cn": {
+   "files": {
+    "PKGBUILD": "642b81da8bf2a754a543a2111f2c5a7b3b379f568932909c68608650c2982172"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "qoder-gui-bin": {
+   "files": {
+    "PKGBUILD": "31257ac47944c877f98eb6f6e5cb5adfd08e1c7caf6e7759a0ae06e265b38c3e"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "qoder-gui-cn": {
+   "files": {
+    "PKGBUILD": "9173ea5c6fb36a82fcaba8438f1008c4af0fe66779b2fe0f66e600d7ea9986b4"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "qt4-git": {
+   "files": {
+    "PKGBUILD": "964a10b089060f46be70808f72a71e5667143ea57861dabc2032beeee1445a65",
+    "assistant-qt4.desktop": "d63f22858174489068c30a12b9115d1b4e23ade00c31c117513212e9a225c1ce",
+    "designer-qt4.desktop": "c154de65da1b81564fa68f29c773b5f1751e0ee821e858ee8f0684b8d027da58",
+    "disable-sslv3.patch": "829b02ba10f208c2beba8e8a0110b6d10c63932612dabc08d536f099b9f66101",
+    "fix_jit.patch": "b02fafdc35751b4c0b9e1057925ba0e8a8f442ea8e7adc5bb7035d0bfa089b11",
+    "glib-honor-ExcludeSocketNotifiers-flag.diff": "e7f8d1c906640b836454e8202a48602352609d8e44a33a3de05dc1d20f5b1a8a",
+    "improve-cups-support.patch": "3ccfefb432015e4a4ea967b030c51b10dcdfb1f63445557908ddae5e75012d33",
+    "kde4-settings.patch": "ce97da195445f145d9f82df8f8e5d8716128e869ec6632db66c7125be663d813",
+    "kubuntu_14_systemtrayicon.diff": "9fad22674c5eec835613a7f16c11b865aa793b448e90974c0f804105284a548b",
+    "l-qclipboard_delay.patch": "af3648ddb2372333b0e428788fd2ffbcfe571653fb46f898a55ae5a202f7e242",
+    "l-qclipboard_fix_recursive.patch": "5db36cbb0686b8a503941779c821febc4a0330dc260e51d603f7aa1e4d8860ad",
+    "linguist-qt4.desktop": "22bd69ee3ba986448a63e41f529a7d28d0f2e6d83d6114e763eba761db302e01",
+    "moc-boost-workaround.patch": "876c681ef8fbcc25f28cd4ad6c697abf8a4165d540bae37433bc40256dbf9d62",
+    "qdbusviewer-qt4.desktop": "915a1cb0f7328840cac742c03f5121dc6e19498952c082b46c0bf7263bf6676d",
+    "qt4-gcc11.patch": "ce710612c89b47fc4a070bcce355855f899349b995e2654f342c88ec4c515ee4",
+    "qt4-gcc6.patch": "51da49e41edac66559d3ec8dd0a152995a51a53e5d1f63f09fa089a8af7e3112",
+    "qt4-gcc8.patch": "0497411e54a0461f76ffa204236f5146a2ed0d272ae66afcfabd74090459208b",
+    "qt4-gcc9.patch": "8d6104d7bc3b050ec87e82b9df245154cd1d80e03eb3bbe633084d6b3c079d5e",
+    "qt4-glibc-2.25.patch": "e6555f4a681227447e94e9f14e11626d50b7e5108aad06088311e87063bc0347",
+    "qt4-icu59.patch": "61d6bf45649c728dec5f8d22be5b496ed9d40f52c2c70102696d07133cd1750d",
+    "qt4-openssl-1.1.patch": "ff3ddb5428cd2ff243558dc0c75b35f470077e9204bbc989ddcba04c866c1b68",
+    "qtconfig-qt4.desktop": "157eb47865f0b43e4717819783823c569127a2e9fc48309982ca0f2b753517a1"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "qt6ct-git": {
+   "files": {
+    "PKGBUILD": "03b0082d1c1efe8115097826a5412a3bd98f5407a4dacde71cac1bc831bd0d1b"
+   },
+   "kind": "artix",
+   "source": "in-tree"
+  },
+  "quirc-git": {
+   "files": {
+    ".SRCINFO": "6fe8d5aaacf942ef6c7ef3e0f00c7c14d35553520369da56010c5a36e851996f",
+    "PKGBUILD": "240022efc7c7d0e2cb9bcde50e9ddeeed668d40b5fab578676a5cb71f3e07b23"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "ripgrep-all-git": {
+   "files": {
+    ".SRCINFO": "7e2f969cb75ca1e4c819c3b6e5f34bd8f3137287f7739d33ccc836ce634eec16",
+    "PKGBUILD": "cedd80c3e286dc14b3a84a438caddf06fb5523f717a1a18fb0bfb7269e68668a"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "ripgrep-git": {
+   "files": {
+    ".SRCINFO": "94b5a68b1a58fae44054881b81b800b694245be07c5ad0012e70fca5f104156b",
+    "PKGBUILD": "f22fab34f6c7d7b98df2485b094c2081ed58f162fc9d8a591f654c9aecc3f991"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "rofi-bluetooth-git": {
+   "files": {
+    ".SRCINFO": "b862d010f787a23e0564132a56065c5569f2098fd5d493b8d7f8c974f692e900",
+    ".gitignore": "30da8b165434fa47ad70c301e86f0b55f867c45a90f37b7c8e9a931068c245f6",
+    "PKGBUILD": "49e4a523e1636c6e3c7d587b62d75492a783399b04b3f5a87213901db7c35c11"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "rofi-git": {
+   "files": {
+    ".SRCINFO": "6186dfe51cca7ab28090ae00a5134d9c711a14690800fb253ec2ed9001f7b854",
+    ".gitignore": "190d00864a69b7f2fcea118323f60b152b8ae30c80f280ed654219587542061c",
+    "PKGBUILD": "9e77765b6ad4a57f47544d92ecd2320da40c46291ca7260e9f79b3ca3d00477a"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "rust-bindgen-git": {
+   "files": {
+    ".SRCINFO": "514d72ef92cf20bc489178aacb950c4ab815743e11ee2bdfe9d29391a26ae464",
+    "PKGBUILD": "b00fdcece60f41b13f3a0ba902d33dc3f10427c9c00e00df8209cee41a278515"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "scenefx0.5": {
+   "files": {
+    ".SRCINFO": "0e2ea2c09607dfa1be25fe3ac063d6948dd117289b859f658aa13f067b5f7e72",
+    "PKGBUILD": "d4b9fec7d518d0a1f9e87ac7ebfa301764309e6d2487f8b3e1beceea3ae4b9fb"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "serein-git": {
+   "files": {
+    "PKGBUILD": "c59f3ad432c8ee5c66656016aba2cf27121bf61ad88a8681165617da858dfcdd"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "shiboken6-git": {
+   "files": {
+    "PKGBUILD": "4e7aea157a7ec0f43a420eee82aec3cd49246dff197142ebbe79621a816f36f8"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "smem": {
+   "files": {
+    ".SRCINFO": "b898bcadf68c0fdaf82ede9c2c57f3a7cdea9ec1a2d899caa37e12bebf1a74f6",
+    "0001-Fix-xrange-in-Python-3.patch": "efa7c105a60d0a345aec981c534d79c8c1e35988d527bd3a8e28a728c5de8ea8",
+    "PKGBUILD": "ee1614ca363f734759014fbd109d8143ad730fb4a43b450430d91504bc5c36c8"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "snd-pcsp-dkms": {
+   "files": {
+    ".SRCINFO": "2686302b1625d28bcdab0c3cacf0d8eec193a8de88e983440eb3db4751afef14",
+    "PKGBUILD": "fb1ecba73bf27ade635610f3f96daa56140f4ca722a8e621f80ec0524e5fb12b",
+    "dkms.conf": "d63cc99b5a4d2392504bcfc0a3cc173447e514d27bc42de67cec18be8dea31d1"
+   },
+   "kind": "",
+   "source": "aur"
+  },
+  "spirv-headers-git": {
+   "files": {
+    "PKGBUILD": "96771a15e8b1089381720238a8b9727344f08a325c1dfbde99f0f2cd41ca6e38"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "spirv-llvm-translator-git": {
+   "files": {
+    "PKGBUILD": "b791b826a4bebfbb5ce291c903d7e68e2a81b72b1963b26fadb440f7c082d2ea",
+    "passbuilder-llvm-context.patch": "791a63c320567b54da769f2a036665923035f8c31f2c0f30f0eba68b5cbca771"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "spirv-tools-git": {
+   "files": {
+    "PKGBUILD": "93f252021d2d6c3a38a16d38916db5c75701634d53bb112587ca0b67fcef376d"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "starship-git": {
+   "files": {
+    ".SRCINFO": "97e8cb4afc8dab6fd6796fe69b997980b6b8356b0daa7a8f96a7d71618c47018",
+    "PKGBUILD": "c4d61bd7e38cca124a8b45c3ead4b9f91a111ca049f62c7dced3346e9b992604"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "sutils-git": {
+   "files": {
+    ".SRCINFO": "b8ae00698ab4951feab1d61e05b6417a58afe40244ce8cba514f102c2cd071f7",
+    "PKGBUILD": "cc850fd5570fa79cc49b92e51629f38bbf237f92283e13a041ede2642f7ded92"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "svt-jpeg-xs-git": {
+   "files": {
+    ".SRCINFO": "1332e9bd08abe732eff198b97da3c0ac381b2c731cbbb11f87156927ae852758",
+    "010-svt-jpeg-xs-remove-werror.patch": "27e8899b11dc3466d9b060571b51d38524e1cfc89f7552e7c8ada3d1a3035dbc",
+    "PKGBUILD": "5752e2b527075f237fb224353b580734a2b6949e582759b5c8217f0a511f64f0"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "syndication-git": {
+   "files": {
+    ".SRCINFO": "b6d16b1209f0de19e06c1654a6f648bf1920c77862d4b495188fd19dd86ce28d",
+    "PKGBUILD": "c04a510a39a099296447031f7ad8b9596e41a1686e3a9597803f25be5e0b9acf"
+   },
+   "kind": "kde",
+   "source": "aur"
+  },
+  "taglib-git": {
+   "files": {
+    ".SRCINFO": "cda4aeece26f38435cce0f804732c7a6effda1b372069bed1c96d50b9fb2cded",
+    ".gitignore": "e8307406eef9675e4b755571d73550c76d5a5e5d3e0251f9bd0e24dcaabe8119",
+    "PKGBUILD": "a3e2cc62a595354ed0cc400011c5792ebd381034df67614c160fed99dea71103"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "tar-git": {
+   "files": {
+    "PKGBUILD": "e07cf99171ba54aed7a9185928643c8e43c5e109360c5bfaf989219c79765460"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "tcl-git": {
+   "files": {
+    "PKGBUILD": "551b7d346d7bb58f4a8f25bcc1f39a10437ce7fa705e9eeae62e820e8af24dc1"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "tk-git": {
+   "files": {
+    "PKGBUILD": "9b4a6647df345d9dcd2a8c4e993a21ae98e67e2686d83e30087ee4d4b392c85a"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "topgrade-git": {
+   "files": {
+    "0001-fix-sudo-emulate-preserve_env_list-for-doas.patch": "5cb61c6dfb0508b9c178b29dbca6df55502fb8c3a9eb874fb4d64062a22691ea",
+    "PKGBUILD": "73bbd2db394c822a582915bb703c91ad675592ce251972a1c801f5becda750aa"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "ttf-jetbrains-maple-mono-nf-xx-xx-xx": {
+   "files": {
+    "PKGBUILD": "3f0b9f00bbfbc578dc69ac9377a32a66395899b0528376a8f9821447b09880fc"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "tty-solitaire-git": {
+   "files": {
+    "PKGBUILD": "6f277ef09a93d803bd3a04328e8039fe3038b88f27998a5f4ba50d3024f02823",
+    "ghost-card-repaint.patch": "54d3a5db0680e0029c9d55ce79e7694caa599df1c32524c8c4603090acceca36"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "uchardet-git": {
+   "files": {
+    ".SRCINFO": "2e4aaa3f031c756257b565c02fadd529f43645b565940b4c91d3f2455226d233",
+    "PKGBUILD": "635ae8b00c4a2147b03684dcb7cdf4561d83f32064f881329fb963cf09b7c68f"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "unicode-emoji": {
+   "files": {
+    "PKGBUILD": "f5b3f7ba373eccc85dbdf4150e04785ba4846a99abf2b039f6f654283db27665",
+    "license-from-upstream": "22afb7cd85b74a197cb96af709e2da5a814235331c52d866b3208dbdda6807df"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "warp-plus": {
+   "files": {
+    ".SRCINFO": "9fa0c626e0c514513b9c5f9b0db58cb7798fdf0e42c1d4b5e3b1d21b18f6ed41",
+    ".nvchecker.toml": "9bac588ee21b09e78a080de0acc6d49d6e010a5785b073bd1aa4b92121dac9e6",
+    "PKGBUILD": "fb7f1b1d263a72a2f8a1d029b8109bf174f36666ba542097b6cc938403855759"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "warp-plus-git": {
+   "files": {
+    "PKGBUILD": "652a2535349ce681d990d8f5930dc61499ccd28ae36ce87a18ffbab8d0d86f18"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "wechat-bin": {
+   "files": {
+    "PKGBUILD": "95ca25d7b48c156c51e38266dea53289281c382eecb13ab7ff670a92f2d27e27"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "wl-clipboard-git": {
+   "files": {
+    ".SRCINFO": "a24eba5e5cf5c446ddfc709520204199edd801e158364fffd0ef53b219d15faf",
+    ".gitignore": "c3b65fb5f341dd1149ae92f29979d7c2d6e3ae17875f22c48a273465523446bd",
+    "PKGBUILD": "8df9e8e262191d219814c3aea30aec328260d4271abfe077dcb4e3fa80516e8a"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "workbuddy-international-bin": {
+   "files": {
+    ".SRCINFO": "93b07bc42e2102611247692a34565f6bfd1afdaaf7dba67e1725d1f09ed9c57b",
+    "DISCLAIMER": "2ee438702c36b98ba5aecb113b2f6e7c11912a4d2d9abf6ea184d31ff9c7c12b",
+    "LICENSE.port-tool": "43164499524650222076bae69b7cb21d3e3e4a954c7c56426474267a554a2f33",
+    "PKGBUILD": "5c6165fa26d73c4e41898c2d683b53ab501ab112e016138adfab81f43604ea2b",
+    "install.sh": "6e8c6154b013e26cb2f8f2c3646b206a135cd0060e67f86298c1d2b23c10a1c3",
+    "lib-apply-linux-patches.js": "dee02e98c4f3fd49e6991de74c40f96c0e7aedf5c81493f37c6a02f5af59d7a5",
+    "lib-common.sh": "33aeab4b44329127ce747cc3048df98db9873cb511685e666d81332d9c219c73",
+    "lib-dmg.sh": "f263ea88a81ceb8be3b59c458fd7be15daf0dbbd2b625fc143f772ad300742fd",
+    "lib-electron.sh": "f207ee01cc207532c3c804ba6ff6ab4209adab06a1903d9b9f38b8d96d90d50c",
+    "lib-linux-patches.sh": "e2c715973e9e720008bb6507f3fe31563772907eb236a6ecb804186b539485c2",
+    "lib-native-modules.sh": "4910e3d6f780a9dd5ca018c009e5eea6facb022f34d8c667ab05067155144cb9",
+    "workbuddy-international.desktop": "6fcbfa4cba8e730e603b68fcca484c7963aacdaf56a3f6c5c47ff320a5189e85"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "xapp-symbolic-icons-git": {
+   "files": {
+    ".SRCINFO": "e198579201a714637319f96b04f7496b94b6ef3d82dee10c7a184f8cd5f032d4",
+    ".gitignore": "0bbd83a54a9be428104dbe9c9f55a93566c1a801f9bbbbd7bb3ecb40ea75f94e",
+    "PKGBUILD": "5c9e631742300bb3b80c5c66dfc254f3537994ec4346e1128b4954ecce362c0e"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "xcb-imdkit-git": {
+   "files": {
+    ".SRCINFO": "95df466355333ce6ddc00fdc38680830d33d947dc877c13e461da59aec6bead0",
+    "PKGBUILD": "c72f9b068a476fe91eae394961a5adec2f9d1054bf1d5801c419392d902c7363"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "xdg-desktop-portal-gtk-git": {
+   "files": {
+    ".SRCINFO": "3c70ab18d4c0170bc90c0c0b8e5921bbc82f9a0c3dafce0c86482e83c9a38b20",
+    ".gitignore": "4ac519781ff05817046aa03444dc14c7e580a13d67b5fd419856fc1f6f37058c",
+    "PKGBUILD": "ade1387163a66fe57e0257621341af892d6475a110a7e3181e272589079d936f"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "xf86-input-libinput-git": {
+   "files": {
+    ".SRCINFO": "fb64a65393be86ece022b9acdaea39c6753011dbaa4fb1175c9a6fc09fe81af7",
+    ".gitignore": "52dca27a5edda7b79c524044d5e41a9d5c7c4c9e8732e5f33e170ea6306e0142",
+    "PKGBUILD": "ce1736e55db914bceb1eeb2a62153121404544fa5878a2870c00274e95c25067"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "xorg-server-git": {
+   "files": {
+    "PKGBUILD": "1f8526d2b6fd63feab15d78903f1e24f4e09f9f2ee0b043dae7c51d3eae5be00"
+   },
+   "kind": "",
+   "source": "in-tree"
+  },
+  "xorg-xwayland-git": {
+   "files": {
+    "PKGBUILD": "a975d97f5656991203ad7f957620a2d4186af3837818821b8f6f2eba3dba486d",
+    "hidpi.patch": "8b0d2f15e9bb42620a7b396c3e1d6904d193890e59614b699d520f77b31bc722"
+   },
+   "kind": "wayland",
+   "source": "in-tree"
+  },
+  "xtitle-git": {
+   "files": {
+    "PKGBUILD": "4559a66689380472caf9e925e8cb0e161b40b46c870aaf6d345dd0307ddb1fdf"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "yelp-git": {
+   "files": {
+    ".SRCINFO": "116bebc3a1fff30841f6e10327b7ed1d97d6504d1bb22f11d4a0c78869ff1e73",
+    "PKGBUILD": "ea30f72aa77b8e96a1ca03438f0f2ae71b984015ef060583c34885b61b9ceb12"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
+  "zcode-ce-git": {
+   "files": {
+    "PKGBUILD": "1b4d51559cb2b06fe0a7bf29f7acb53ae4f2789f3946a72b1d57dcae649ab7ed",
+    "zcode-ce-git.install": "4eb90eedf90a9246257f5c496a7ee97a166e188d38bcf54ce98e3f070cd912a5"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "zstd-git": {
+   "files": {
+    ".SRCINFO": "c8ef8e731de8b6a4eb66e445e86b1d4f32b4223e91ac080f04a99b365d61fb36",
+    ".gitignore": "834ede6ed05f4077abbd2402673f61d9b90dabd84f60853d308e989cb22ea816",
+    "PKGBUILD": "d83dbab0ed7b4d7394eb0ce2d8dd5b55ed2e28ae5df6af2c4c008ae4efceb27f"
+   },
+   "kind": "aur",
+   "source": "aur"
+  }
+ }
+}
