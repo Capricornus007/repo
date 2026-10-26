@@ -92,7 +92,6 @@ jobs:
           {"key": "linuxqq", "repo_name": "linuxqq", "variant": "none"},
           {"key": "wechat-bin", "repo_name": "wechat-bin", "variant": "none"},
           {"key": "workbuddy-international-bin", "repo_name": "workbuddy-international-bin", "variant": "none"},
-          {"key": "64gram-desktop-bin", "repo_name": "64gram-desktop-bin", "variant": "none"},
           {"key": "android-apktool-bin", "repo_name": "android-apktool-bin", "variant": "none"},
           {"key": "android-sdk-cmake-3.22", "repo_name": "android-sdk-cmake-3.22", "variant": "none"},
           {"key": "dex2jar", "repo_name": "dex2jar", "variant": "none"},
