@@ -3336,32 +3336,39 @@ jobs:
                 echo "::error::想把 _lib32 關掉卻改不動 customization.cfg（上游改了鍵名？）——不要讓它帶著 true 繼續跑"; exit 1; }
             fi
             # ── mesa 鏈 LLVM 24 的必要補丁（不是點綴，少了它 build 直接死）
-            # 實測根因（2026-10-13 本機 makepkg，ninja 1451/4170）：LLVM 24 trunk 把
-            # `llvm-c/TargetMachine.h` 裡的 `#include "llvm-c/Target.h"` 拿掉了
-            # （比對實物：llvm19 那份第 23 行有、24.0git 那份沒有，24 裡只剩
-            #  llvm-c/ExecutionEngine.h 還 include 它）。mesa 的 src/amd/llvm/ac_llvm_util.h
-            # 只吃 TargetMachine.h → `LLVMInitializeAMDGPUTargetInfo()` 等 6 支 C-API
-            # **宣告**跟著消失（符號本身還在 libLLVM.so.24.0git，`nm -D` 實測 7 筆命中），
-            # 而 mesa 帶 `-Werror=implicit-function-declaration` → 6 個 error。
-            # mesa main（tip 76b9372c4e5，committer date 2026-10-12）還沒有這行 include。
+            # 根因（2026-10-13 實測）：LLVM 24 trunk 把 `llvm-c/TargetMachine.h` 裡的
+            # `#include "llvm-c/Target.h"` 拿掉了。mesa 側吃 TargetMachine.h 的檔案，
+            # `LLVMInitializeAMDGPUTargetInfo()` 等 C-API **宣告**跟著消失（符號仍在
+            # libLLVM.so.24.0git），mesa 帶 -Werror=implicit-function-declaration → 直接紅。
+            # 2026-10-27 重審三個目標檔的 main 現狀（API raw 實抓）：
+            #   · src/amd/vulkan/radv_physical_device.c      已自修（#if AMD_LLVM_AVAILABLE 內有 Target.h）
+            #   · src/gallium/drivers/radeonsi/gfx/si_gfx_screen.c  已自修（第 20 行）
+            #   · src/amd/llvm/ac_llvm_util.h                仍未修（12 行只有 TargetMachine.h）
+            # 原「三 hunk 固定補丁」在 #636 紅：hunk 2/3 的上下文已被上游自修佔位、
+            # patch 找不到 `#include <llvm-c/TargetMachine.h>` 緊跟在 `#if` 後的原文 → FAILED。
+            # 改為「單 hunk + 構建當刻動態判定」：對著 gitlab main 此刻的 ac_llvm_util.h
+            # 查有没有 Target.h——上游哪天把最後一處也修了，這段自動不生成補丁、
+            # 不再擋構建（免等上游發版、也免補丁碎在 already-applied）。
             # 走 mesa-tkg 自己的 userpatches 機制（`mesa-userpatches/*.mymesapatch`，
             # 由 prepare() 的 `patch -Np1` 套），不是手改工作區——工作區每輪都被
             # `git reset --hard && git clean -xdf` 清掉，手改必丟。
             # ⚠️ 同時要把 `_user_patches_no_confirm` 打開：預設 false 時 user_patcher() 會
             #   `read -rp` 等人在鍵盤前答 y，CI 沒 tty → 補丁靜默不套、下一輪又死同一個地方。
             mkdir -p mesa-userpatches
-            cat > mesa-userpatches/llvm24-ac-llvm-util-h.mymesapatch <<'MYPATCH'
-          ac/llvm, radeonsi, radv: include llvm-c/Target.h explicitly (LLVM 24 dropped the transitive include)
-          
+            _ac_llvm_util_main="$(curl -sfL "https://gitlab.freedesktop.org/api/v4/projects/mesa%2Fmesa/repository/files/src%2Famd%2Fllvm%2Fac_llvm_util.h/raw?ref=main" || true)"
+            if [ -n "$_ac_llvm_util_main" ] && ! printf '%s\n' "$_ac_llvm_util_main" | grep -q 'llvm-c/Target.h'; then
+              cat > mesa-userpatches/llvm24-ac-llvm-util-h.mymesapatch <<'MYPATCH'
+          ac/llvm: include llvm-c/Target.h explicitly (LLVM 24 dropped the transitive include)
+
           LLVM 24 trunk removed `#include "llvm-c/Target.h"` from llvm-c/TargetMachine.h
-          (verified on this box: llvm19 TargetMachine.h line 23 has it, 24.0git does not;
-          only llvm-c/ExecutionEngine.h still pulls it). The three AMD users below only include
-          TargetMachine.h, so the LLVMInitializeAMDGPU* C-API declarations vanish while the
-          symbols remain exported by libLLVM.so.24.0git (nm -D: 7 hits), and mesa builds with
-          -Werror=implicit-function-declaration. Generated with `git diff` against mesa main
-          76b9372c4e5 (committer date 2026-10-12), which does not have these includes yet.
+          (llvm19 TargetMachine.h line 23 has it, 24.0git does not; only llvm-c/ExecutionEngine.h
+          still pulls it). ac_llvm_util.h only includes TargetMachine.h, so the
+          LLVMInitializeAMDGPU* C-API declarations vanish while the symbols remain exported by
+          libLLVM.so.24.0git, and mesa builds with -Werror=implicit-function-declaration.
+          radv_physical_device.c and radeonsi/gfx/si_gfx_screen.c were fixed on mesa main
+          already (2026-10 下旬)；this is the last remaining site. Context verified verbatim
+          against main's ac_llvm_util.h as of 2026-10-27.
           diff --git a/src/amd/llvm/ac_llvm_util.h b/src/amd/llvm/ac_llvm_util.h
-          index 20634736fdd..1f3468f6348 100644
           --- a/src/amd/llvm/ac_llvm_util.h
           +++ b/src/amd/llvm/ac_llvm_util.h
           @@ -9,6 +9,7 @@
@@ -3372,31 +3379,11 @@ jobs:
            #include <llvm-c/TargetMachine.h>
            #include <llvm/Config/llvm-config.h>
            
-          diff --git a/src/amd/vulkan/radv_physical_device.c b/src/amd/vulkan/radv_physical_device.c
-          index fe738085ada..5f88c5e2575 100644
-          --- a/src/amd/vulkan/radv_physical_device.c
-          +++ b/src/amd/vulkan/radv_physical_device.c
-          @@ -44,6 +44,7 @@ typedef void *drmDevicePtr;
-           #include "git_sha1.h"
-           
-           #if AMD_LLVM_AVAILABLE
-          +#include <llvm-c/Target.h>
-           #include <llvm-c/TargetMachine.h>
-           #endif
-           
-          diff --git a/src/gallium/drivers/radeonsi/gfx/si_gfx_screen.c b/src/gallium/drivers/radeonsi/gfx/si_gfx_screen.c
-          index 5c55f31494b..b1103f8230f 100644
-          --- a/src/gallium/drivers/radeonsi/gfx/si_gfx_screen.c
-          +++ b/src/gallium/drivers/radeonsi/gfx/si_gfx_screen.c
-          @@ -17,6 +17,7 @@
-           #include <sys/utsname.h>
-           
-           #if AMD_LLVM_AVAILABLE
-          +#include <llvm-c/Target.h>
-           #include <llvm-c/TargetMachine.h>
-           #endif
-           
           MYPATCH
+              echo "已放好 mesa 的 LLVM 24 userpatch（僅剩 ac_llvm_util.h 一處）：$(ls mesa-userpatches/)"
+            else
+              echo "上游 main 已自修 ac_llvm_util.h（或 gitlab 抓取失敗），不生成補丁、靠上游"
+            fi
             sed -i 's/^_user_patches_no_confirm="false"/_user_patches_no_confirm="true"/' customization.cfg
             grep -q '^_user_patches_no_confirm="true"' customization.cfg || {
               echo "::error::補丁要靠 userpatches 套，但 _user_patches_no_confirm 沒被打開（CI 沒 tty 會靜默不套）"; exit 1; }
