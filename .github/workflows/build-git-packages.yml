@@ -89,6 +89,14 @@ jobs:
       # · run #529 的失敗就是 `target not found: qt4`。要這顆請直接從第三方倉庫裝，別走 feed。
       packages: |
         [
+          {"key": "linuxqq", "repo_name": "linuxqq", "variant": "none"},
+          {"key": "wechat-bin", "repo_name": "wechat-bin", "variant": "none"},
+          {"key": "workbuddy-international-bin", "repo_name": "workbuddy-international-bin", "variant": "none"},
+          {"key": "64gram-desktop-bin", "repo_name": "64gram-desktop-bin", "variant": "none"},
+          {"key": "android-apktool-bin", "repo_name": "android-apktool-bin", "variant": "none"},
+          {"key": "android-sdk-cmake-3.22", "repo_name": "android-sdk-cmake-3.22", "variant": "none"},
+          {"key": "dex2jar", "repo_name": "dex2jar", "variant": "none"},
+          {"key": "grub-theme-poly-dark-git", "repo_name": "grub-theme-poly-dark-git", "variant": "none"},
           {"key": "dae-git", "repo_name": "dae-git", "variant": "none"},
           {"key": "tar-git", "repo_name": "tar-git", "variant": "none"},
           {"key": "make-git", "repo_name": "make-git", "variant": "none"},
