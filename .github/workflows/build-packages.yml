@@ -820,6 +820,13 @@ jobs:
               curl -sfL "$base/PKGBUILD"                -o "pkg_dir/PKGBUILD"
               curl -sfL "$base/android-ndk-30.sh"       -o "pkg_dir/android-ndk-30.sh"
               curl -sfL "$base/android-ndk-30.install"  -o "pkg_dir/android-ndk-30.install" ;;
+            fcitx5-configtool|fcitx5-gtk|python-cu2qu)
+              # 2026-10-27 收編：官方源/archlinuxcn 的穩定版包 + epoch=1，蓋掉本機
+              # ALHP／lilac 的高 pkgrel 版（消「local is newer」警告）。in-tree 維護，
+              # 版本跟官方源同步（plan 對靜態 PKGBUILD 以 release 資產存在與否判斷）。
+              mkdir pkg_dir
+              base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
+              curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
             xorg-xwayland-git)
               # 本倉 in-tree 維護（比照 wlroots-git）：xserver 的 xwayland-24.1 分支
               # + MR !733 HiDPI xprop 縮放補丁（燒成 hidpi.patch），並用

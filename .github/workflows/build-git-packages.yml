@@ -178,6 +178,9 @@ jobs:
           {"key": "i3-git", "repo_name": "i3-git", "variant": "none", "kind": "aur"},
           {"key": "i3status-git", "repo_name": "i3status-git", "variant": "none", "kind": "aur"},
           {"key": "flameshot-git", "repo_name": "flameshot-git", "variant": "none", "kind": "aur"},
+          {"key": "fcitx5-configtool", "repo_name": "fcitx5-configtool", "variant": "none"},
+          {"key": "fcitx5-gtk", "repo_name": "fcitx5-gtk", "variant": "none"},
+          {"key": "python-cu2qu", "repo_name": "python-cu2qu", "variant": "none"},
 
           {"key": "i3blocks-git", "repo_name": "i3blocks-git", "variant": "none", "kind": "aur"},
           {"key": "i3lock-color-git", "repo_name": "i3lock-color-git", "variant": "none", "kind": "aur"},
