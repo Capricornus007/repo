@@ -18,7 +18,7 @@ pkgver=7.1.0.r18.ga6f7467
 # 抬到 4.1.0-1（只 provides =4-64）⇒ 那顆 -2 在本機只能靠過渡包 openssl-3 頂著才裝得上去。
 # 抬 pkgrel 是因為**檔名必須變**：CI 的跳過判據是「產物檔名已在 release 裡」，
 # 不抬號就不會重出檔（見上面那段 ⚠️）。
-pkgrel=3
+pkgrel=4
 pkgdesc="A library-based package manager with dependency support (upstream git, built for Artix)"
 arch=('x86_64')
 url="https://www.archlinux.org/pacman/"
