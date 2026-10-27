@@ -535,6 +535,34 @@ jobs:
             pacman -Q qt6-base 2>/dev/null || echo "（qt6-base 尚未安裝，屬預期；由 PKGBUILD 的 depends 帶入）"
           fi
 
+          # ── ossl4 三顆：Arch 容器也要拿到 system-goblins 的 openssl 4（2026-10-27 二次修）
+          # 上一版把 goblins 插入寫在 kind='tkg' 的分支裡（那是 mesa-tkg 專用），
+          # 而這三顆的 kind 不是 tkg → 整段被跳過（run 40479596546 實測：插入＋同步只花
+          # 0.38 秒就跳到早檢，openssl 照樣是 [core] 的 3.6.5-1）。
+          # 這裡獨立一段、只對這三顆生效，避免把 openssl 4 帶給其他 130+ 包。
+          # SigLevel = Never 逐段寫：Arch 容器沒有 Artix 的 GPG key，不關驗證會同步失敗。
+          if [ "${{ matrix.kind }}" != 'artix' ] && [ "${{ matrix.kind }}" != 'tkg' ]; then
+            case '${{ matrix.repo_name }}' in
+              openvpn|tcpdump|pacman-git)
+                _gob=''
+                for _r in system-goblins system-gremlins; do
+                  _gob="${_gob}\n[${_r}]\nSigLevel = Never\nServer = https://mirror.nju.edu.cn/artixlinux/${_r}/os/\$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/${_r}/os/\$arch\nServer = https://artix.wheaton.edu/repos/${_r}/os/\$arch\n"
+                done
+                awk -v blk="$_gob" '/^\[core/ && !d {d=1; printf "%s", blk} {print}' \
+                  /etc/pacman.conf > /etc/pacman.conf.gob && mv /etc/pacman.conf.gob /etc/pacman.conf
+                _lg=$(grep -n '^\[system-goblins\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
+                _lc=$(grep -n '^\[core\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
+                { [ -n "$_lg" ] && [ "$_lg" -lt "$_lc" ]; } || { echo "::error::goblins 倉沒插到 [core] 之前（$_lg vs $_lc）"; exit 1; }
+                if ! pacman -Sy --noconfirm > /tmp/pacman-ossl4.log 2>&1; then
+                  cat /tmp/pacman-ossl4.log
+                  echo "::error::ossl4 的 goblins 源同步失敗"
+                  exit 1
+                fi
+                LC_ALL=C pacman -Si openssl 2>/dev/null | grep -aE '^(Repository|Version)' || true
+                ;;
+            esac
+          fi
+
           # ── ossl4 三顆的早檢（2026-10-27）─────────────────────────────────
           # 目標機（Artix）的 openssl 是 system-goblins 的 4.1.0-1，provides 的只有
           # libcrypto.so=4-64／libssl.so=4-64。容器若解析到穩定線的 3.6.5-1，編出來的
