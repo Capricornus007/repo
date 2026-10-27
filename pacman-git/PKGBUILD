@@ -8,7 +8,17 @@ pkgname=pacman-git
 #    scripts/bump-pkgrel 對有 pkgver() 的包會拒絕抬 pkgrel（說抬了無效），那是指
 #    「只抬 pkgrel、靜態 pkgver 不動」這種半套；兩處一起改就有效。
 pkgver=7.1.0.r18.ga6f7467
-pkgrel=2
+# 2. → 3.（2026-10-27）：這一次抬號**不是**上游動了（pacman master HEAD 實查仍是
+# a6f7467d8c7c → pkgver() 算出同一個 7.1.0.r18.ga6f7467），改的是「依賴怎麼寫」：
+# CI 對本包關掉 makepkg 的 autodeps（見 build-packages.yml「對 openssl-4 相容的三顆
+# 關閉 autodeps」步驟），產物的 soname 依賴與 provides 會從帶版本的
+# （libcurl.so=4-64／libcrypto.so=3-64／libalpm.so=16-64）變成不帶版本的
+# （libcurl.so／libcrypto.so／libalpm.so）。實拆已發布的 -2 資產查證：它的
+# depends 有 `libcrypto.so=3-64`，而目標機的 openssl 已從 Artix [system-goblins]
+# 抬到 4.1.0-1（只 provides =4-64）⇒ 那顆 -2 在本機只能靠過渡包 openssl-3 頂著才裝得上去。
+# 抬 pkgrel 是因為**檔名必須變**：CI 的跳過判據是「產物檔名已在 release 裡」，
+# 不抬號就不會重出檔（見上面那段 ⚠️）。
+pkgrel=3
 pkgdesc="A library-based package manager with dependency support (upstream git, built for Artix)"
 arch=('x86_64')
 url="https://www.archlinux.org/pacman/"
@@ -91,6 +101,19 @@ sha256sums=('SKIP'
 #      pacman-fancy 的 progress.patch 是純視覺、且把開關硬綁在 TERM 白名單 ⇒ 原樣帶進來沒意義；
 #      本倉改用「去掉白名單、預設開啟、PACMAN_PLAIN_BAR=1 可關」的改寫版（見 prepare()）。
 #    · options 不含 debug：本機沒有任何 -debug 包在用。
+# 4. 2026-10-27 兩件事（抬到 -3 的全部內容，上游一個字沒動）：
+#    · 構建基座從 Arch 容器換成 Artix 容器（矩陣 kind: aur → artix＋image 覆寫）。
+#      目標機的 openssl 已經由 Artix [system-goblins] 抬到 4.1.0-1，用 Arch 容器會鏈出
+#      NEEDED libcrypto.so.3、等於逼這臺機器永遠留著過渡包 openssl-3；換基座後鏈的是
+#      .so.4，與本機臨時倉那顆 -3 同態。依賴清單在這邊不用改：上面鏡像清單那段已核過
+#      `pacman-mirrorlist` 兩邊都成立，asciidoc／doxygen／meson／fakechroot 實查 Artix
+#      [world] 全部有。
+#    · CI 對本包關掉 makepkg 的 autodeps（見 build-packages.yml 的「對 openssl-4 相容的
+#      三顆關閉 autodeps」步驟）。⚠️ 這件事**不能**寫成 PKGBUILD 的 `options=(!autodeps)`：
+#      實測 makepkg 7.1.0 的 lint_options 只認 tidy/*＋buildenv/* 註冊進 packaging_options/
+#      build_options 的選項，autodeps 沒被註冊 ⇒ 直接
+#      「錯誤： options 陣列包含未知選項『!autodeps』」。所以只能走 /etc/makepkg.conf 的
+#      OPTIONS（lint_config 的 known_option 裡有 autodeps），由 CI 針對性地追加。
 
 pkgver() {
   # ⚠️ 目錄名是 source 抓下來的 `pacman`，不是 $pkgname（這裡的 $pkgname 是 pacman-git）。

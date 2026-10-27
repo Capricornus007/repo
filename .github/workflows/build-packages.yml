@@ -545,6 +545,40 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: 對 openssl-4 相容的三顆關閉 makepkg 的 autodeps
+        # ── 為什麼要這一步（2026-10-27，ossl4 臨時倉收編）────────────────────
+        # 目標機（Artix）的 openssl 已從 [system-goblins] 抬到 4.1.0-1，它提供的只有
+        # `libcrypto.so=4-64`／`libssl.so=4-64`。而 makepkg 7.1 的 autodeps 會把抽出來的
+        # soname 依賴寫成**帶版本**的形（libcrypto.so=3-64 之類，版本取自建置容器裡那顆
+        # openssl），實拆本倉已發布的 pacman-git-7.1.0.r18.ga6f7467-2 資產查證：depends 有
+        # `libcurl.so=4-64`／`libcrypto.so=3-64`、provides 有 `libalpm.so=16-64`。那種包裝到
+        # 目標機上只能靠過渡包 openssl-3 頂著才解得開——openssl-3 哪天被移除就變成
+        # 「裝得上、解不開依賴」的死結，而 HoldPkg 的是 pacman 自己。
+        # 關掉 autodeps 後，產物的 .so 依賴就是 PKGBUILD 手寫的不帶版本形（三顆的 PKGBUILD
+        # 都已把 libcrypto.so／libssl.so／libcurl.so… 逐條列好），openssl 3 與 4 兩邊通吃；
+        # 這也正是 Artix 自己的慣例（world.db 全倉 %DEPENDS% 裡 `-64` 結尾的條目數 = 0）。
+        # ⚠️ 這件事**只能**在 /etc/makepkg.conf 的 OPTIONS 上做，不能寫進 PKGBUILD 的
+        #   options=()：實測 makepkg 7.1.0 的 lint_options 只認 tidy/*＋buildenv/* 註冊進
+        #   packaging_options／build_options 的選項，autodeps 沒被註冊，寫進去直接
+        #   「錯誤： options 陣列包含未知選項『!autodeps』」把整個 job 打死。
+        # ⚠️ 刻意只點名這三顆，不全域關：帶版本的 soname 依賴是 ABI 換代時的保護網，
+        #   2026-10-12 那次 GL 黑屏（mesa 只依賴 llvm-libs>=8.0.0、找不到 libLLVM.so.23.1）
+        #   就是沒有它才發生的。全域關等於把 130+ 顆包的保護網一起拆掉。
+        # 產物側的收口在後面「驗產物：ossl4 三顆的 soname 依賴不得帶版本」那一步——
+        # 配置寫了不等於套得上（逐包證據見 docs/in-tree-packages.md 的 ossl4 三顆節）。
+        if: matrix.repo_name != 'ffmpeg-full-git'
+        run: |
+          set -euo pipefail
+          _pkg='${{ matrix.repo_name }}'
+          case "$_pkg" in
+            openvpn|tcpdump|pacman-git)
+              echo 'OPTIONS+=(!autodeps)' >> /etc/makepkg.conf
+              grep -q '^OPTIONS+=(.*!autodeps' /etc/makepkg.conf \
+                || { echo "::error::/etc/makepkg.conf 沒吃到 !autodeps"; exit 1; }
+              echo ">> $_pkg: 已對本包關閉 autodeps（產物應是不帶版本的 soname 依賴）"
+              ;;
+          esac
+
       - name: 還原 bwrap 權限設定並留證據（gstreamer-git 专用）
         if: matrix.repo_name == 'gstreamer-git'
         run: |
@@ -731,7 +765,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|brotli-git|nodejs-git|nodejs-better-sqlite3-git|npm-git|pnpm-git|fcitx5-chinese-addons-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git|htop-git|chafa-git|xtitle-git|downgrade-git|pacman-git|meson-git|python2-git|qt4-git|expac-git|shiboken6-git|zcode-ce-git)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|brotli-git|nodejs-git|nodejs-better-sqlite3-git|npm-git|pnpm-git|fcitx5-chinese-addons-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git|htop-git|chafa-git|xtitle-git|downgrade-git|pacman-git|meson-git|python2-git|qt4-git|expac-git|shiboken6-git|zcode-ce-git|openvpn|tcpdump)
               # 這批包為什麼走本倉目錄版（逐包理由）：見 docs/in-tree-packages.md。
               # 那個 step 的表達式有 21000 字元上限、註解也計入，加包只加清單、
               # 說明寫進該檔，別寫回這裡。
@@ -3685,6 +3719,47 @@ jobs:
               ;;
             esac
           done
+      - name: 驗產物：ossl4 三顆的 soname 依賴不得帶版本
+        # 「配置寫了不等於套得上」——前面那步把 !autodeps 追加進 /etc/makepkg.conf，
+        # 這一步驗的是**產物本身**：這三顆的 .PKGINFO 裡任何 `.so` 依賴／provides 若還帶
+        # `=N-64`，裝到目標機（openssl 4.1.0-1 只 provides =4-64）就只能靠過渡包 openssl-3
+        # 頂著，等於白編。順帶把二進位實際 NEEDED 到的 libcrypto/libssl 版本印出來留證據
+        # （期望：與目標機同態的 .so.4；若印出 .so.3 說明容器基座跑偏，要回頭查 kind）。
+        # 紅掉比出貨一個裝不上的包好：deploy 步在後面，這裡 exit 1 就不會上架。
+        # 這道閘門已在本機拿反例驗過：餵「本倉現行的 pacman-git-…-2」⇒ 判紅（列出
+        # libcrypto.so=3-64／libalpm.so=16-64、NEEDED libcrypto.so.3）；餵「臨時倉那三顆」
+        # ⇒ 全綠並印出 libcrypto.so.4／libssl.so.4。
+        if: (matrix.repo_name == 'openvpn' || matrix.repo_name == 'tcpdump' || matrix.repo_name == 'pacman-git') && steps.plan.outputs.build == 'true'
+        run: |
+          set -uo pipefail
+          cd pkg_dir
+          bad=0
+          for f in *.pkg.tar.zst; do
+            [ -e "$f" ] || continue
+            echo "=== $f ==="
+            if ! tar -xOf "$f" .PKGINFO > /tmp/verify-PKGINFO; then
+              echo "::error::讀不到 $f 的 .PKGINFO"
+              bad=1
+              continue
+            fi
+            if grep -qE '^(depend|provides) = [^ ]*\.so=[0-9]' /tmp/verify-PKGINFO; then
+              echo "::error::$f 的 soname 條目仍帶版本（autodeps 沒關掉）"
+              bad=1
+            fi
+            grep -E '^(depend|provides) = [^ ]*\.so' /tmp/verify-PKGINFO | sed 's/^/    /'
+            rm -rf /tmp/verify-x && mkdir -p /tmp/verify-x
+            tar -xf "$f" -C /tmp/verify-x
+            echo "    —— 實際鏈接（NEEDED libcrypto/libssl）——"
+            find /tmp/verify-x -type f -print0 \
+              | xargs -0 -I{} sh -c 'n=$(objdump -p "{}" 2>/dev/null | sed -nr "s/^ +NEEDED +lib(crypto|ssl)\.so\.([0-9]+)/lib\1.so.\2/p" | sort -u); if [ -n "$n" ]; then echo "      $(printf "%s" "$n" | tr "\n" " ") <- {}"; fi' \
+              | sed 's|/tmp/verify-x/||g' | sort -u
+          done
+          if [ "$bad" != 0 ]; then
+            echo "::error::產物不合格，拒絕上架（見上方 ::error::）"
+            exit 1
+          fi
+          echo ">> 產物驗證通過：soname 依賴不帶版本"
+
       - name: 上传产物到 artifact
         id: upload1
         continue-on-error: true

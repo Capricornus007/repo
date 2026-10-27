@@ -87,6 +87,27 @@ jobs:
       # · （本機那顆是從 andontie-aur / arch4edu 裝的），AUR 的 qt4 是 4.8.7 那個年代的東西，
       # · 在 base-devel 容器裡構起來動輒數小時且多半過不了 toolchain。
       # · run #529 的失敗就是 `target not found: qt4`。要這顆請直接從第三方倉庫裝，別走 feed。
+      #
+      # 2026-10-27「ossl4 臨時倉收編」三顆（openvpn／tcpdump／pacman-git）：
+      # · 共同原因：目標機的 openssl 已由 Artix [system-goblins] 抬到 4.1.0-1（provides
+      #   libcrypto.so=4-64／libssl.so=4-64），而官方現成包抽出來的是**帶版本**的 soname
+      #   依賴（Artix [world] openvpn 2.7.8-1 → libcrypto.so=3-64；[galaxy] tcpdump
+      #   4.99.7-1 → 同；本倉已發布的 pacman-git …-2 資產 → 也同）。那種形在本機只能靠
+      #   過渡包 openssl-3 頂著才裝得上。三顆都改成「手寫不帶版本的 .so 依賴＋CI 對它們
+      #   關掉 makepkg 的 autodeps」，並改用 Artix 容器（kind: artix）讓鏈接物件與目標機
+      #   同為 openssl 4。逐包實查證據見 docs/in-tree-packages.md 與各自 PKGBUILD 頭部。
+      # · openvpn／tcpdump 是**靜態版本包**（無 pkgver()）：plan 走「靜態版本包」分支，
+      #   上游出新版要手動抬 PKGBUILD，跟 fcitx5-configtool／python-cu2qu 同一套做法。
+      # · pacman-git 從 kind: aur 改成 kind: artix，三個副作用都已核過：
+      #     (1) kind: aur 原本借的是「跳過 updpkgsums 回推」，kind: artix 同樣在回推步的
+      #         giant if 裡被排除（`matrix.kind != 'artix'`）⇒ 不會再把本倉 PKGBUILD 撕掉重算；
+      #     (2) 少了 `--skipchecksums`：本包 sha256sums 六條全是 SKIP ⇒ 等價；
+      #     (3) 少了「掛 junlin03-aur 源」：本包不依賴任何兄弟包（實查 depends 全在 Artix
+      #         [system]/[world]，pacman-mirrorlist 由 artix-mirrorlist 提供）⇒ 不需要。
+      #   ⚠️ 這三顆的 autodeps 開關**不能**寫進 PKGBUILD 的 options=()：實測 makepkg 7.1.0
+      #   的 lint_options 會回「options 陣列包含未知選項『!autodeps』」（autodeps 沒註冊進
+      #   packaging_options/build_options），所以由 build-packages.yml 的專用步驟追加到
+      #   /etc/makepkg.conf 的 OPTIONS。
       packages: |
         [
           {"key": "linuxqq", "repo_name": "linuxqq", "variant": "none"},
@@ -291,9 +312,11 @@ jobs:
           {"key": "ripgrep-all-git", "repo_name": "ripgrep-all-git", "variant": "none", "kind": "aur"},
           {"key": "xtitle-git", "repo_name": "xtitle-git", "variant": "none", "kind": "aur"},
           {"key": "downgrade-git", "repo_name": "downgrade-git", "variant": "none", "kind": "aur"},
-          {"key": "pacman-git", "repo_name": "pacman-git", "variant": "none", "kind": "aur"},
+          {"key": "pacman-git", "repo_name": "pacman-git", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
           {"key": "meson-git", "repo_name": "meson-git", "variant": "none", "kind": "aur"},
           {"key": "python2-git", "repo_name": "python2-git", "variant": "none", "kind": "aur"},
           {"key": "qt4-git", "repo_name": "qt4-git", "variant": "none", "kind": "aur"},
-          {"key": "expac-git", "repo_name": "expac-git", "variant": "none", "kind": "aur"}
+          {"key": "expac-git", "repo_name": "expac-git", "variant": "none", "kind": "aur"},
+          {"key": "openvpn", "repo_name": "openvpn", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
+          {"key": "tcpdump", "repo_name": "tcpdump", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"}
         ]

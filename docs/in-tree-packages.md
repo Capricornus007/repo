@@ -1726,3 +1726,87 @@ moregram 倉自己的 CI 已經在做這件事。feed 只做「取件＋落地�
 pacman 管，裝了會與 pacman 打架（zcode-ce-git 的同款考量）。provides 帶
 `telegram-desktop`、conflicts 只寫 `telegram-desktop`（頂替 64gram-desktop-bin
 等實包，不把自家 provides 寫進 conflicts）。
+
+## openvpn / tcpdump / pacman-git -3（2026-10-27；ossl4 臨時倉收編）
+
+**這三顆是同一種病：依賴被抽成「帶版本的 soname 形」，而目標機的 openssl 已經換代。**
+本機 `/etc/pacman.conf` 裡那個 `[ossl4-local]`（`file:///srv/ossl4-repo`，10-26 09:58 建的
+臨時倉）就是為了繞開這個病臨時造的；本節把它們收進 feed，讓那個倉可以拆掉。
+
+實查（2026-10-27 現抓各倉 DB，逐條拆 `%DEPENDS%`，不是查網頁）：
+
+| 來源 | 版號 | openssl 系依賴 | 結論 |
+|---|---|---|---|
+| Artix `[world]` openvpn | 2.7.8-1 | `libcrypto.so=3-64`、`libssl.so=3-64` | 本機 openssl 是 4.1.0-1（只 provides `=4-64`）⇒ 只能靠過渡包 `openssl-3` 頂著 |
+| Artix `[world]` tcpdump | — | — | **查無此包**（Artix 把它放 `[galaxy]`） |
+| Artix `[galaxy]` tcpdump | 4.99.7-1 | `libpcap.so=1-64`、`libcap-ng.so=0-64`、`libcrypto.so=3-64` | 同上 |
+| Artix `[world-goblins]`／`[world-gremlins]` | — | — | openvpn／tcpdump **都還沒有** openssl-4 重建（查無此包） |
+| Arch `[extra]` openvpn／tcpdump | 2.7.8-1／4.99.7-1 | `=3-64`，openvpn 另 depends `systemd-libs`、`libsystemd.so=0-64` | Artix 機沒有 `libsystemd.so.0` ⇒ 裝了就是 run 時 `error while loading shared libraries`（fcitx5-git 那場同型） |
+| Arch `[extra-staging]` openvpn／tcpdump | 2.7.8-2／4.99.7-2 | `libcrypto.so=4-64`（配 **Arch** core-staging 的 openssl 4），openvpn 仍帶 systemd | 基座與本機不同源，且 systemd 那條仍無解 |
+| AUR RPC（`v=5&type=search`） | — | — | openvpn／tcpdump **查無**（穩定版本來就在官方倉，不在 AUR）；`pacman-git` 有，但停在 `6.1.0.r15.g01e64e8b-1` |
+
+⇒ 三顆都不是「官方倉已有、只是本機 DB 過舊」那一類，必須自建；`pacman-git` 更是本倉
+in-tree 維護（見上面 2026-10-23 那節），這次只抬號。
+
+### 病根：autodeps 會把手寫的 `.so` 依賴換成帶版本的形
+Arch/Artix 上游的 PKGBUILD **本來就把 soname 依賴寫成不帶版本**（Arch 的 openvpn 依賴清單
+是 `'openssl' 'libcrypto.so' 'libssl.so'`；tcpdump 在 `package()` 裡 `depends+=(libpcap
+libpcap.so … openssl libcrypto.so)`），是 makepkg 7.1 的 `autodeps` 在建置時把它們改寫成
+`=3-64` 那種、版本取自**建置容器裡**那顆 openssl。實拆本倉已發布的
+`pacman-git-7.1.0.r18.ga6f7467-2` 資產查證：
+
+    depend = libcurl.so=4-64 / libcrypto.so=3-64 / libarchive.so=13-64
+    provides = libalpm.so=16-64
+    objdump -p usr/lib/libalpm.so.16.0.1 → NEEDED libcrypto.so.3
+
+目標機 `openssl 4.1.0-1` 只 provides `libcrypto.so=4-64`／`libssl.so=4-64`；本機能裝那顆 -2
+純粹是因為也裝了 `openssl-3 3.5.9-1`（它 provides `=3-64` 且把 `/usr/lib/libcrypto.so.3`
+放在預設路徑）。那是過渡包，留著它等於讓 feed 的包永遠退不回 openssl 4——而 HoldPkg 的是
+pacman 自己。
+
+### 修法（兩件事必須一起做）
+1. **關掉 autodeps**：`build-packages.yml` 新增步驟「對 openssl-4 相容的三顆關閉 makepkg 的
+   autodeps」，對 openvpn／tcpdump／pacman-git 追加 `OPTIONS+=(!autodeps)` 到
+   `/etc/makepkg.conf`。⚠️ 不能寫進 PKGBUILD 的 `options=()`：實測 makepkg 7.1.0 的
+   `lint_options` 只認 tidy/*＋buildenv/* 註冊進 `packaging_options`／`build_options` 的選項，
+   `autodeps` 沒被註冊，本機實跑直接
+   `==> 錯誤： options 陣列包含未知選項「!autodeps」`（`lint_config` 那侧才有 autodeps，
+   所以只有 makepkg.conf 寫得進去）。刻意**只點名這三顆**：帶版本的 soname 依賴是 ABI
+   換代時的保護網，2026-10-12 那次 GL 黑屏（mesa 只依賴 `llvm-libs>=8.0.0`、找不到
+   `libLLVM.so.23.1`）就是沒有它才發生，全域關等於把 130+ 顆的保護網一起拆掉。
+2. **基座對齊目標機**：三顆的矩陣都改 `kind: artix` ＋ `image: artixlinux/artixlinux:base-devel`。
+   理由同上節——Arch 容器裡只有 openssl 3，編出來的實物 NEEDED `libcrypto.so.3`，與本包存在
+   的目的相反。Artix 的 `[system-goblins]` 有 4.1.0-1 且排第一倉 ⇒ 容器 `-Syu` 後與本機同態。
+   `pacman-git` 從 `kind: aur` 改過來，三個副作用逐一核過：
+     · 回推校驗和：那步的 giant if 本來就排除 `matrix.kind != 'artix'` ⇒ 不會再把本倉 PKGBUILD 重算；
+     · 少 `--skipchecksums`：本包 sha256sums 六條全 SKIP ⇒ 等價；
+     · 少掛 `junlin03-aur` 源：本包不依賴任何兄弟包（`pacman-mirrorlist` 由 Artix
+       [system] 的 artix-mirrorlist 提供、asciidoc／doxygen／meson／fakechroot 實查 [world] 全部有）。
+
+### 收口：驗產物，不驗配置
+新增步驟「驗產物：ossl4 三顆的 soname 依賴不得帶版本」（在「暂存产物」之後、上傳 artifact
+與 deploy 之前）：拆每顆產物的 `.PKGINFO`，任何 `depend`／`provides` 的 `.so` 條目帶 `=N-64`
+就 `exit 1`（紅掉不上架），並把二進位實際 NEEDED 的 `libcrypto/libssl` 版本印出來留證據。
+本地已拿反例驗證過這道閘門：餵「本倉現行的 pacman-git-…-2」⇒ 判紅（列出
+`libcrypto.so=3-64`、`libalpm.so=16-64`、NEEDED libcrypto.so.3）；餵「臨時倉那三顆」⇒
+全綠並印出 `libcrypto.so.4`／`libssl.so.4`。
+
+### openvpn 的自有改動（只有 systemd 那半邊）
+基準是 Arch 打包倉 main 分支的 `2.7.8-2`（與 extra-staging 同 pkgrel），改動逐條：
+  · depends 拿掉 `systemd-libs`、`libsystemd.so`；makedepends 拿掉 `systemd`；
+    configure `--enable-systemd` → `--disable-systemd`。
+  · makedepends 補 `autoconf`/`automake`/`libtool`/`pkgconf`/`file`：上游不列是因為 Arch 的
+    建置鏡像預設就裝，而 `prepare()` 的 `autoreconf --force --install` 與 `package()` 裡的
+    `file --brief --mime-type` 在只裝 base-devel＋本清單的容器裡是實打實的相依。
+  · git 源那條校驗和改 `SKIP`（VCS 源由 `?signed` 的 PGP 守，跟 AUR 系包同一做法）。
+  · 三個 aux 檔（`openvpn.install`／`openvpn.sysusers`／`openvpn.tmpfiles`）與上游逐字相同，
+    sha256 已對過上游宣告的 `15669f82…`／`b1436f95…`；`.INSTALL` 與臨時倉那顆 2.7.8-2 內的
+    `.INSTALL` diff 為空 ⇒ 除 systemd 外與上游同構。
+`tcpdump/PKGBUILD` 則**完全照上游**（它需要的「不帶版本 soname 依賴」上游早就寫好了）。
+
+### 靜態版號，不會自己追上游
+openvpn／tcpdump 是靜態 PKGBUILD（無 `pkgver()`），plan 走「靜態版本包」分支：上游出新版
+要手動抬 `pkgver/pkgrel`（`scripts/bump-pkgrel`），做法與 fcitx5-configtool／python-cu2qu 同。
+`pacman-git` 有 `pkgver()`，抬號條件已核過：pacman master HEAD 現值 `a6f7467d8c7c`
+（`git ls-remote`）⇒ `pkgver()` 仍算出 `7.1.0.r18.ga6f7467`，所以 `pkgrel=3` 會真的進檔名、
+不會被 makepkg 重置回 1。
