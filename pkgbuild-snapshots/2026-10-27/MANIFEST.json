@@ -1,6 +1,6 @@
 {
  "ci": {
-  "ci/docs/in-tree-packages.md": "24f501e073f21ed6bee850ab321ccfbf73b19342c3eab52d36a4b5582f85b828",
+  "ci/docs/in-tree-packages.md": "ea1ae67073c548a2570f509dbafe571eb756dae4aa6c4cea448b6cebd3452bde",
   "ci/docs/upstream-pkgbuilds/clang.PKGBUILD": "3b569b3f056c6a857c285f7a6c2415ab8bdf9bdd40f4a46e4de2c76b273c7875",
   "ci/docs/upstream-pkgbuilds/compiler-rt.PKGBUILD": "825464ccac403e26ef5a35b06029c59809605beb751abfa832c6cff3ee9515b5",
   "ci/docs/upstream-pkgbuilds/doxygen.PKGBUILD": "cd7c1369450dd9b7de316d2b48644e1b90fea22542fd376bf048fab3826740e0",
@@ -1192,7 +1192,7 @@
   },
   "oh-my-pi-git": {
    "files": {
-    "PKGBUILD": "a4ff5783201f57ab37e3a3261cd972eb2279c492f7d6ba03192112cbb55f578e"
+    "PKGBUILD": "453d8aee2f868c1c538654a73f908d32eee6de6ed7027e389792e0c95fa6840b"
    },
    "kind": "",
    "source": "in-tree"
@@ -1402,14 +1402,14 @@
   },
   "qoder-cli": {
    "files": {
-    "PKGBUILD": "499546c9a304d1165333c24d311aff4dd4920db57706138f37e79442f20e2792"
+    "PKGBUILD": "ee8136f066700024e5dc8121e7741eb9714ca9177af4caf3944ac839718ca3ea"
    },
    "kind": "",
    "source": "in-tree"
   },
   "qoder-cli-cn": {
    "files": {
-    "PKGBUILD": "642b81da8bf2a754a543a2111f2c5a7b3b379f568932909c68608650c2982172"
+    "PKGBUILD": "992a1d85e4bb4e603c57eb82f9d14279d335f85aae87cfc8a3a90de187afc83f"
    },
    "kind": "",
    "source": "in-tree"

@@ -1810,3 +1810,40 @@ openvpn／tcpdump 是靜態 PKGBUILD（無 `pkgver()`），plan 走「靜態版�
 `pacman-git` 有 `pkgver()`，抬號條件已核過：pacman master HEAD 現值 `a6f7467d8c7c`
 （`git ls-remote`）⇒ `pkgver()` 仍算出 `7.1.0.r18.ga6f7467`，所以 `pkgrel=3` 會真的進檔名、
 不會被 makepkg 重置回 1。
+
+## oh-my-pi-git 改從維護者 fork 建置（2026-10-27）
+
+`oh-my-pi-git/PKGBUILD` 的 `source=` 從 `can1357/oh-my-pi`（上游）改成
+`Capricornus007/oh-my-pi#branch=main`（維護者 fork）。本倉一直是在此目錄維護
+PKGBUILD、由 CI 用 raw.githubusercontent 取檔（見 workflow 的 `case` 攔截），
+這次改的只有來源倉，建置流程（`bun install` → `build:native` → `build`，
+含 bytecode 迴避與 `--smoke-test` 閘口）完全沒動。
+
+### 為什麼要從 fork 建
+
+上游沒有這份改動，而本倉要出貨的 omp 需要它：**provider 面向身分的可設定欄位**。
+
+- `packages/utils/src/dirs.ts`：`USER_AGENT` / `PROVIDER_APP_NAME` / `PROVIDER_APP_URL`
+  改成 live binding，新增 `setProviderIdentity()` / `getProviderIdentity()`；
+  `ProviderIdentity` 是 `{ userAgent?, appName?, appUrl? }` 三個自由欄位。
+- `packages/coding-agent/src/config/provider-identity-settings.ts`：對應四個設定。
+  - `provider.identity`：**一個字**就整套——填產品 token（例 `pi`、`omp`、`mycli`），
+    展開成 `User-Agent: <token>/<版本> (<平台>; <runtime>; <arch>)`、attribution app name =
+    `<token>`、homepage 省略（token 是 `omp` 才留 `omp.sh`）。CLI：
+    `omp config set provider.identity pi`；環境變數 `OMP_PROVIDER_IDENTITY`。
+  - `provider.userAgent` / `provider.appName` / `provider.appUrl`：明示覆寫，逐字照送，
+    優先於上面的 token。providers 分頁 Identity 群組可改，變更即時生效。
+- 預設留空 ⇒ 送 omp 自己的 `omp/<version>` 與 `https://omp.sh/`；
+  填了什麼就逐字送，填不填、填什麼由使用者自己決定。
+- 影響範圍只有送往模型商的 User-Agent 與 OpenRouter／Vercel 閘道的 attribution 標頭；
+  本地 binary 名稱、`~/.omp` 設定目錄、CLI 與品牌都不變。
+
+（這組改動的前一版曾在程式裡硬寫「預設冒充 pi」，已於 fork 的 `dee12fd404` 撤掉，
+改成上述通用欄位 —— 產品不預設冒充任何第三方。）
+
+### 副作用與回退
+
+- CI 的 `pkgver()` 現在 `git describe` fork 的 main，所以 fork 一有新提交本包就換代；
+  上游（can1357）自己的提交要等合併進 fork 才會出貨。
+- 要回到純上游：把 `source=` 改回 `git+https://github.com/can1357/oh-my-pi.git`
+  並刪掉 PKGBUILD 裡那段 fork 說明即可，其餘段落不用動。
