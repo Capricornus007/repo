@@ -402,7 +402,8 @@ jobs:
             # "Could not initialize GLX"、exit 134 即此；当时只能在机器上手放一份
             # 无主 libLLVM.so.22.1 硬解）。加 Artix goblins 源，让容器 llvm/clang
             # 与目标机一致；lib32-* 同源，供 _lib32=true 的 lib32 mesa 使用。
-            printf '\n[world-goblins]\nServer = https://artix.wheaton.edu/repos/world-goblins/os/$arch\n\n[lib32-goblins]\nServer = https://artix.wheaton.edu/repos/lib32-goblins/os/$arch\n' >> /etc/pacman.conf
+            # 同 474 行那段：這批倉押單一鏡像會踩空，三個一起放（nju → tuna → wheaton）。
+            printf '\n[world-goblins]\nServer = https://mirror.nju.edu.cn/artixlinux/world-goblins/os/$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/world-goblins/os/$arch\nServer = https://artix.wheaton.edu/repos/world-goblins/os/$arch\n\n[lib32-goblins]\nServer = https://mirror.nju.edu.cn/artixlinux/lib32-goblins/os/$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/lib32-goblins/os/$arch\nServer = https://artix.wheaton.edu/repos/lib32-goblins/os/$arch\n' >> /etc/pacman.conf
             # wheaton 是唯一承載 world-goblins/lib32-goblins 的 Artix 鏡像
             # （rit/checkdomain/clarkson 實測 404，不承載 goblins）。它推送新包時
             # 有同步瞬間 db 還沒落地 → 404「failed to synchronize all databases」
@@ -469,9 +470,16 @@ jobs:
               'SigLevel = Never' \
               'LocalFileSigLevel = Never' \
               'RemoteFileSigLevel = Never' > /etc/pacman.conf
+            # goblins／gremlins 這批倉**只有部分鏡像承載**，實查（2026-10-27，本機直連）：
+            #   mirror.nju.edu.cn 與 mirrors.tuna.tsinghua.edu.cn 都有 system-goblins
+            #   （內含 openssl-4.1.0-1 與過渡包 openssl-3-3.5.9-1，正是目標機那組）；
+            #   wheaton 文件上只保證 world-goblins／lib32-goblins 有。
+            # 只押 wheaton ⇒ system-goblins 拿不到 openssl 4，容器 build 出
+            # `libcrypto.so=3-64`（run #65 三顆全紅、閘門擋下的正是這個）。
+            # pacman 的 Server 是**依序嘗試**，所以放三個：快的先、有保底。
             for _r in system-goblins system-gremlins world-goblins world-gremlins \
                       galaxy-goblins galaxy-gremlins lib32-goblins lib32-gremlins; do
-              printf '\n[%s]\nServer = https://artix.wheaton.edu/repos/%s/os/$arch\n' "$_r" "$_r" >> /etc/pacman.conf
+              printf '\n[%s]\nServer = https://mirror.nju.edu.cn/artixlinux/%s/os/$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/%s/os/$arch\nServer = https://artix.wheaton.edu/repos/%s/os/$arch\n' "$_r" "$_r" "$_r" "$_r" >> /etc/pacman.conf
             done
             # system / world / galaxy / lib32 用 Include 走鏡像清單，與目標機一致
             for _r in system world galaxy lib32; do
@@ -512,6 +520,23 @@ jobs:
               || echo "（DB 裡查不到 qt6-base，Artix 倉順序可能有問題）"
             pacman -Q qt6-base 2>/dev/null || echo "（qt6-base 尚未安裝，屬預期；由 PKGBUILD 的 depends 帶入）"
           fi
+
+          # ── ossl4 三顆的早檢（2026-10-27）─────────────────────────────────
+          # 目標機（Artix）的 openssl 是 system-goblins 的 4.1.0-1，provides 的只有
+          # libcrypto.so=4-64／libssl.so=4-64。容器若解析到穩定線的 3.6.5-1，編出來的
+          # 產物會帶 `=3-64`、裝上目標機只能靠過渡包頂著（run #63 就發過這種包、
+          # run #65 被閘門擋下）。這道檢查在**編譯前**把鏡像問題喊出來，
+          # 省掉一輪十幾分鐘的 build 才在產物關卡紅掉。
+          case '${{ matrix.repo_name }}' in
+            openvpn|tcpdump|pacman-git)
+              _ov=$(LC_ALL=C pacman -Si openssl 2>/dev/null | awk -F': ' '/^Version/{print $2}' | head -n1 || true)
+              echo ">> ossl4 早檢：容器解析到的 openssl = ${_ov:-查不到}"
+              case "$_ov" in
+                4.*) ;;
+                *) echo "::error::容器解析到 openssl ${_ov:-未知}，不是目標機的 4.x（system-goblins 沒拿到）——這三顆編出來一定裝不上，先修鏡像再跑"; exit 1 ;;
+              esac
+              ;;
+          esac
 
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
           # 结果最重的 CachyOS 内核是单线程编译的，必然撞 6 小时上限。
