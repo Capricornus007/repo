@@ -403,7 +403,21 @@ jobs:
             # 无主 libLLVM.so.22.1 硬解）。加 Artix goblins 源，让容器 llvm/clang
             # 与目标机一致；lib32-* 同源，供 _lib32=true 的 lib32 mesa 使用。
             # 同 474 行那段：這批倉押單一鏡像會踩空，三個一起放（nju → tuna → wheaton）。
-            printf '\n[world-goblins]\nServer = https://mirror.nju.edu.cn/artixlinux/world-goblins/os/$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/world-goblins/os/$arch\nServer = https://artix.wheaton.edu/repos/world-goblins/os/$arch\n\n[lib32-goblins]\nServer = https://mirror.nju.edu.cn/artixlinux/lib32-goblins/os/$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/lib32-goblins/os/$arch\nServer = https://artix.wheaton.edu/repos/lib32-goblins/os/$arch\n' >> /etc/pacman.conf
+            # ⚠ 2026-10-27 順序修正（run #66 真根因）：pacman 是 first-repo-wins，目標機
+            #   /etc/pacman.conf 的 system-goblins 排**在 system 之前**；舊寫法追加到檔尾，
+            #   goblins 整個排在 [core]/[extra] 後面 → openssl 永遠解析到 [core] 的 3.6.5-1，
+            #   早檢恆紅、就算編下去也只出 =3-64 產物。改成整塊**插到第一個 [core 段之前**；
+            #   [options] 仍在檔首不受影響。
+            _gob=''
+            for _r in system-goblins system-gremlins world-goblins world-gremlins \
+                      lib32-goblins lib32-gremlins; do
+              _gob="${_gob}\n[${_r}]\nServer = https://mirror.nju.edu.cn/artixlinux/${_r}/os/\$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/${_r}/os/\$arch\nServer = https://artix.wheaton.edu/repos/${_r}/os/\$arch\n"
+            done
+            awk -v blk="$_gob" '/^\[core/ && !d {d=1; printf "%s", blk} {print}' \
+              /etc/pacman.conf > /etc/pacman.conf.gob && mv /etc/pacman.conf.gob /etc/pacman.conf
+            _lg=$(grep -n '^\[system-goblins\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
+            _lc=$(grep -n '^\[core\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
+            { [ -n "$_lg" ] && [ "$_lg" -lt "$_lc" ]; } || { echo "::error::goblins 倉沒插到 [core] 之前（$_lg vs $_lc）"; exit 1; }
             # wheaton 是唯一承載 world-goblins/lib32-goblins 的 Artix 鏡像
             # （rit/checkdomain/clarkson 實測 404，不承載 goblins）。它推送新包時
             # 有同步瞬間 db 還沒落地 → 404「failed to synchronize all databases」
@@ -535,6 +549,16 @@ jobs:
                 4.*) ;;
                 *) echo "::error::容器解析到 openssl ${_ov:-未知}，不是目標機的 4.x（system-goblins 沒拿到）——這三顆編出來一定裝不上，先修鏡像再跑"; exit 1 ;;
               esac
+              # openssl 4 與過渡包必須**同一筆交易**：openssl 4 不再帶 libcrypto.so.3，
+              # 容器原裝的 curl／python 全掛 =3，分兩筆裝必被 pacman 的 soname 檢查擋。
+              # 目標機實態＝openssl 4.1.0-1 與 openssl-3 3.5.9-1 共存（2026-10-27 實查），
+              # 容器對齊；openssl-3 只帶 .so.3 函式庫、不碰 /usr/bin，與 openssl 4 不衝突。
+              if ! pacman -S --noconfirm openssl openssl-3 > /tmp/ossl-switch.log 2>&1; then
+                cat /tmp/ossl-switch.log
+                echo "::error::openssl 換 4 + 過渡包 openssl-3 安裝失敗"
+                exit 1
+              fi
+              pacman -Q openssl openssl-3
               ;;
           esac
 
