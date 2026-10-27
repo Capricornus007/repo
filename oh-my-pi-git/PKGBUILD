@@ -41,6 +41,9 @@ epoch=2
 pkgdesc="AI Coding agent for the terminal — hash-anchored edits, optimized tool harness, LSP, Python, browser, subagents, and more (git build)"
 arch=('x86_64' 'aarch64')
 url="https://github.com/can1357/oh-my-pi"
+# 2026-10-27：改從維護者 fork 建置（Capricornus007/oh-my-pi），本倉產物因此帶著 fork
+# 自己的改動（目前是 provider 面向身分的可設定欄位，見 source= 下方說明）。
+# 要回到純上游時：把 source= 改回 can1357/oh-my-pi 並刪掉下面那段註解。
 license=('MIT')
 provides=('omp')
 conflicts=('omp')
@@ -48,7 +51,16 @@ depends=('glibc' 'gcc-libs' 'bun')
 makedepends=('git' 'rust' 'rustup' 'cmake' 'make')
 options=('!lto' '!strip')
 
-source=("git+https://github.com/can1357/oh-my-pi.git")
+# source 指向 Capricornus007/oh-my-pi（上游 can1357/oh-my-pi 的 fork）。
+# 理由：本倉出貨的 omp 需要包含 fork 的本地改動，而上游那份沒有：
+#   packages/coding-agent/src/config/provider-identity-settings.ts
+#     provider.userAgent / provider.appName / provider.appUrl 三個自由欄位
+#     （預設留空 = 送 omp 自己的 User-Agent 與 omp.sh attribution；
+#       填了什麼就逐字送什麼，由使用者自行決定要不要填、填什麼）
+#     packages/utils/src/dirs.ts 的 setProviderIdentity()/getProviderIdentity()
+# 這組改動只影響送往模型商的 User-Agent 與 attribution 標頭，本地 CLI、設定目錄、
+# 品牌都不變。若上游日後收編或改名，先確認檔案路徑再同步本行。
+source=("git+https://github.com/Capricornus007/oh-my-pi.git#branch=main")
 sha256sums=('SKIP')
 
 pkgver() {
