@@ -4,8 +4,13 @@
 # OpenRC/elogind 沒有 systemd，所以「睡之前叫驅動把顯存搬進 RAM」這一步從來沒執行。
 # 後果：PreserveVideoMemoryAllocations=1 時 nvidia 的 PCI PM 回調發現 procfs suspend
 # interface 沒被用過，nv_pmops_suspend 直接回 -5，內核否決整樁 suspend（從未進 s2idle）。
-# 醒來後的 resume 與搶回 VT 仍交給 nvidia-utils 自己的 post 分支（它讀同一個 Xorg.vt_number），
-# 所以這裡的 post 分支**只寫記錄、不對 /proc/driver/nvidia/suspend 重複下指令**。
+# ⚠ 2026-10-27 更正：上面那句「resume 交給 nvidia-utils 自己的 post 分支」是錯的。
+# nvidia-utils 的睡眠鉤子只裝在 /usr/lib/systemd/system-sleep/nvidia，OpenRC + elogind
+# 根本不會讀那個目錄 → 等於全程沒有人做 resume。
+# 實測後果（2026-10-27 08:12 那次休眠）：驅動永遠停在 suspend 狀態，之後任何 ioctl
+# 都在等一個永遠不會來的 resume → nvidia-smi 卡死、fastfetch 的 GPU 模組卡死（終端機
+# 因此不出提示符）、Electron 開機時的 GPU 探測卡死（WorkBuddy／VS Code 視窗永遠不出來），
+# 只能重開機。所以 post 分支現在必須自己做兩件事：echo resume + 搶回 VT。
 #
 # 為什麼要 post 記錄（2026-10-05）：實測有一輪 180 秒睡眠之後再也沒回來，用戶長按電源強制
 # 重啟。事後無法判定是「內核根本沒醒」還是「醒了但畫面停在空白 VT63、看起來像死機」——
@@ -37,6 +42,24 @@ case "$1" in
 		_want=$(cat "$VT_FILE" 2>/dev/null)
 		_con=$(active_console)
 		log "post-enter action=${2:-?} vt_wanted=${_want:-none} console=${_con:-?}"
+		# 2026-10-27 修復①（nvidia-smi 醒來卡死的真根因）：喚醒後必須叫驅動結束
+		# suspend 狀態機、把顯存從 /var/tmp 搬回來。順序照 NVIDIA 官方 nvidia-sleep.sh：
+		# 先 echo resume，再 RestoreVT。timeout 是保險——萬一驅動真的卡住，也不能把
+		# 整個喚醒流程拖死（elogind 會等 hook 回來才放行）。
+		if [ -f "$PROC" ]; then
+			if timeout 15 sh -c "echo resume > '$PROC'" 2>/dev/null; then
+				log "post-resume ok"
+			else
+				log "post-resume FAIL rc=$?"
+			fi
+		else
+			log "post-resume skip reason=no-procfs-suspend"
+		fi
+		# 2026-10-27 修復②：醒來卡在 tty63——nvidia-utils 的 systemd 版鉤子在 elogind
+		# 下不執行，「搶回 X 的 VT」沒人做。這裡自己切回 pre 時記下的 VT。
+		if [ -n "$_want" ] && [ "$_con" != "tty$_want" ]; then
+			chvt "$_want" && log "post-chvt vt=$_want"
+		fi
 		log "post-done action=${2:-?} console=${_con:-?}"
 		exit 0
 		;;
