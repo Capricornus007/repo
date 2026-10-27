@@ -3705,20 +3705,25 @@ jobs:
         # 紅掉比出貨一個裝不上的包好：deploy 步在後面，這裡 exit 1 就不會上架。
         if: (matrix.repo_name == 'openvpn' || matrix.repo_name == 'tcpdump' || matrix.repo_name == 'pacman-git') && steps.plan.outputs.build == 'true'
         run: |
-          set -uo pipefail
-          cd pkg_dir
+          # 刻意不用 `set -e`：這一步的職責是「把所有問題一次印出來再判紅」，
+          # 而不是碰到第一個非零就靜默退出。run #64 就是死在 `sh -e` 下——
+          # 沒有任何一行輸出、只看得到 exit 1，連是哪個環節掛的都查不出來。
+          set -u
           bad=0
+          cd pkg_dir || { echo "::error::找不到 pkg_dir"; exit 1; }
+          echo ">> pkg_dir 內容："
+          ls -l . | sed 's/^/    /'
 
           # 先把整批產物解開，收集二進位真正 NEEDED 的 libcrypto/libssl 版本。
           rm -rf /tmp/verify-x && mkdir -p /tmp/verify-x
           for f in *.pkg.tar.zst; do
             [ -e "$f" ] || continue
-            tar -xf "$f" -C /tmp/verify-x
+            tar -xf "$f" -C /tmp/verify-x || { echo "::error::$f 解不開"; bad=1; }
           done
           needed=$(
             find /tmp/verify-x -type f -exec objdump -p {} + 2>/dev/null \
               | sed -nr 's/^ +NEEDED +lib(crypto|ssl)\.so\.([0-9]+)$/lib\1.so.\2/p' \
-              | sort -u
+              | sort -u || true
           )
           echo "—— 二進位實際 NEEDED（libcrypto／libssl）——"
           printf '%s\n' "$needed" | sed 's/^/    /'
@@ -3736,8 +3741,9 @@ jobs:
               bad=1
               continue
             fi
-            grep -E '^(depend|provides) = [^ ]*\.so' /tmp/verify-PKGINFO | sed 's/^/    /'
-            for entry in $(grep -E '^(depend|provides) = lib(crypto|ssl)\.so=' /tmp/verify-PKGINFO | awk '{print $3}'); do
+            grep -E '^(depend|provides) = [^ ]*\.so' /tmp/verify-PKGINFO | sed 's/^/    /' || true
+            entries=$(grep -E '^(depend|provides) = lib(crypto|ssl)\.so=' /tmp/verify-PKGINFO | awk '{print $3}' || true)
+            for entry in $entries; do
               so=${entry%%=*}
               ver=${entry#*=}; ver=${ver%%-*}
               if [ "$ver" != 4 ]; then
