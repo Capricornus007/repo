@@ -1,0 +1,55 @@
+diff --git a/src/pacman/callback.c b/src/pacman/callback.c
+--- a/src/pacman/callback.c
++++ b/src/pacman/callback.c
+@@ -155,10 +155,18 @@
+ 	/* 8 = 1 space + 1 [ + 1 ] + 5 for percent */
+ 	const int hashlen = proglen > 8 ? proglen - 8 : 0;
+ 	const int hash = percent * hashlen / 100;
++	/* 上游那條 AUR 補丁把 fancy 字元綁死在 TERM=xterm-kitty/st-256color 兩個白名單上，
++	   本機 xfce4-terminal 不在裡面 ⇒ 永遠退回 [###---]。改成預設開啟、
++	   要關用環境變數 PACMAN_PLAIN_BAR=1（不進 /etc，符合「不動設定檔」的要求）。 */
++	int fancy = getenv("PACMAN_PLAIN_BAR") == NULL ? 1 : 0;
+ 	int i;
+ 
+ 	if(hashlen > 0) {
+-		fputs(" [", stdout);
++		if(fancy) {
++			fputs(" \uEE03", stdout);
++		} else {
++			fputs(" [", stdout);
++		}
+ 		for(i = hashlen; i > 0; --i) {
+ 			/* if special progress bar enabled */
+ 			if(config->chomp) {
+@@ -177,12 +185,28 @@
+ 				}
+ 			} /* else regular progress bar */
+ 			else if(i > hashlen - hash) {
+-				putchar('#');
++				if(fancy) {
++					fputs("\uEE04", stdout);
++				} else {
++					putchar('#');
++				}
++			} else {
++				if(fancy) {
++					fputs("\uEE01", stdout);
++				} else {
++					putchar('-');
++				}
++			}
++		}
++		if(fancy){
++			if (hashlen == hash) {
++				fputs("\uEE05", stdout);
+ 			} else {
+-				putchar('-');
++				fputs("\uEE02", stdout);
+ 			}
++		} else {
++			putchar(']');
+ 		}
+-		putchar(']');
+ 	}
+ 	/* print display percent after progress bar */
+ 	/* 5 = 1 space + 3 digits + 1 % */

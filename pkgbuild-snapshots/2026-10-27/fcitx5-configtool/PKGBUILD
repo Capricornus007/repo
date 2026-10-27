@@ -1,0 +1,54 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 來源：galaxy（官方 Arch packaging）。本包進 feed 的目的：接管 ALHP（fcitx5 兩顆）與 archlinuxcn lilac
+# （python-cu2qu）在本機的更高 pkgrel 版本——epoch=1 讓 feed 版穩定壓過它們，
+# 消掉每次 -Syu 的「local is newer than repo」警告；之後版本跟官方源同步。
+# （2026-10-27 用戶裁定「跟著把 epoch 往上加」；同時是第三方倉收編的第一批。）
+
+# Maintainer: Felix Yan <felixonmars@archlinux.org>
+# Contributor: csslayer <wengxt AT gmail com>
+
+pkgname=fcitx5-configtool
+pkgver=5.1.16
+epoch=1
+pkgrel=3
+pkgdesc="Configuration Tool for Fcitx5"
+arch=('x86_64')
+url="https://github.com/fcitx/fcitx5-configtool"
+license=('GPL-2.0-or-later' 'LGPL-2.1-or-later')
+groups=('fcitx5-im')
+provides=('fcitx5-config-qt' 'kcm-fcitx5')
+conflicts=('kcm-fcitx5')
+replaces=('kcm-fcitx5')
+depends=('fcitx5' 'fcitx5-qt' 'kdbusaddons' 'kwidgetsaddons' 'kitemviews' 'kwindowsystem')
+optdepends=('kcmutils: for KCM support'
+            'kdeclarative: for KCM support'
+            'kirigami: for KCM support'
+            'ksvg: for KCM support'
+            'libplasma: for fcitx5-plasma-theme-generator')
+makedepends=('git' 'extra-cmake-modules' 'kcmutils' 'kdeclarative' 'kirigami' 'ksvg' 'libplasma'
+             'ninja' 'python')
+source=("git+https://github.com/fcitx/fcitx5-configtool.git#tag=$pkgver?signed")
+sha512sums=('6592fb43ab2483c0275c2f90d3ddeea109394f279e3f8136e75f5fc598152be17a0ef5a752efb0442b4ee1c158a71d9bd59f8e69dfa67427a7288eac3530ea8f')
+validpgpkeys=('2CC8A0609AD2A479C65B6D5C8E8B898CBF2412F9') # Weng Xuetian <wengxt@gmail.com>
+
+prepare() {
+  mkdir -p build
+}
+
+build() {
+  cd build
+
+  cmake \
+    -GNinja \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=/usr/lib \
+    -DKDE_INSTALL_USE_QT_SYS_PATHS=ON \
+    ../$pkgname
+  ninja
+}
+
+package() {
+  cd build
+  DESTDIR="$pkgdir" ninja install
+}

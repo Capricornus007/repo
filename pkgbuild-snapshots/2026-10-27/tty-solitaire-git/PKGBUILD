@@ -1,0 +1,58 @@
+# Maintainer: Capricornus007 <Capricornus007 at proton dot me>
+# 本倉 in-tree 包（原為 kind:aur，2026-10-13 轉 in-tree，理由見 docs/in-tree-packages.md）。
+# 上游：https://github.com/mpereira/tty-solitaire（MIT，作者 Miguel Pereira）
+# 結構逐字沿用 AUR 那份 tty-solitaire-git（fredbezies 維護），只多一顆本地補丁：
+#   ghost-card-repaint.patch —— 修「同一張牌留在兩個位置」的兩個實證缺陷
+#     1) gui.c:125 erase_card() 的 wbkgd(win, WHITE_ON_GREEN) 少包 COLOR_PAIR()，
+#        擦牌時背景被設成 pair 0（終端預設色）而不是綠桌布。實測：
+#        wbkgd(w,6) 發出 ESC[39;49m；wbkgd(w,COLOR_PAIR(6)) 發出 ESC[37m ESC[42m。
+#     2) keyboard.c 的「自動送上基座」迴圈把 destination 當迴圈變數覆寫，四格
+#        基座都不接受時它仍停在 foundation[3]，接著只重畫 origin 與 destination
+#        → 真正動過的格子沒人重畫＝殘影來源。
+#   ⚠️ 這兩處都是可證明的程式碼缺陷，但**尚未重現用戶的現象**（24 seed 亂玩＋
+#      8 seed 移牌中途改尺寸都是零觸發），所以這是「修掉已知錯」，不是「已驗證治好」。
+
+
+_name=tty-solitaire
+pkgname="${_name}-git"
+pkgver=1.4.1.r2.g8401c4d
+pkgrel=1
+epoch=1
+pkgdesc='An ncurses-based Klondike solitaire clone'
+arch=('i686' 'x86_64')
+url='https://github.com/mpereira/tty-solitaire'
+license=('MIT')
+makedepends=('git')
+conflicts=('tty-solitaire')
+replaces=('tty-solitaire')
+depends=('ncurses')
+source=("${_name}"::"git+${url}"
+        "ghost-card-repaint.patch")
+sha256sums=('SKIP' 'SKIP')
+
+pkgver() {
+  cd "${srcdir}/${_name}"
+  git describe --long --tags | sed 's/\([^-]*-g\)/r\1/;s/-/./g' | cut -c2-48
+}
+
+prepare() {
+  cd "${srcdir}/${_name}"
+  # 套不上就紅，不靜默跳過：這代表上游動過 gui.c 的 erase_card 或 keyboard.c 的
+  # 自動上基座那段，要人來核對補丁是否還需要（可能上游已自己修掉）。
+  if ! patch -Np1 --dry-run -i "${srcdir}/ghost-card-repaint.patch" > /dev/null 2>&1; then
+    echo "ERROR: ghost-card-repaint.patch 套不上（上游改了 erase_card 或自動上基座那段？）" >&2
+    return 1
+  fi
+  patch -Np1 -i "${srcdir}/ghost-card-repaint.patch"
+}
+
+build() {
+  cd "${srcdir}/${_name}"
+  make
+}
+
+package() {
+  cd "${srcdir}/${_name}"
+  make DESTDIR="${pkgdir}" PREFIX="/usr" install
+  install -Dm644 -t "$pkgdir"/usr/share/licenses/$pkgname LICENSE
+}

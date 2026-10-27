@@ -1,0 +1,340 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 本倉目錄版 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md，
+# **不要寫回 workflow** —— 那個 step 有 21000 字元表達式上限且註解也計入）。
+#
+# 為什麼存在（用戶 2026-10-13 兩句點醒：「llvm 並不止這些吧？clang 啊 rt 啥的呢？」）：
+#   llvm-git 只出了 64 位元那七顆，32 位元整條是缺的。查實「32 位元到底該有幾顆」
+#   不是靠印象，是把兩個 32 位元庫的 DB 解開點名（`/var/lib/pacman/sync/{multilib,lib32}.files`）：
+#     lib32-clang  lib32-llvm  lib32-llvm-libs  lib32-spirv-llvm-translator  lib32-spirv-tools
+#   ——**只有這四顆 LLVM 系的**（spirv-tools 不鏈 LLVM，另說）。沒有 lib32-lld、
+#   沒有 lib32-lldb、也沒有 lib32-compiler-rt：lld／lldb 是「宿主工具」，32 位元連結
+#   是 64 位元 lld 加 `-m32` 做的；compiler-rt 的 i386 runtime 則**塞在同一顆
+#   compiler-rt 裡**（查實 extra 與 world-goblins 的 compiler-rt 都有
+#   `libclang_rt.asan-i386.a`），所以那部分要修的是 llvm-git／compiler-rt-git，
+#   不是在這裡憑空發明一顆 lib32-compiler-rt（已另條處理，見 llvm-git 的
+#   COMPILER_RT_DEFAULT_TARGET_ONLY）。
+#
+# 照的是 Arch 官方那兩份的**參數**，不是自己發明的交叉編譯：
+#   docs/upstream-pkgbuilds/lib32-llvm.PKGBUILD（gitlab archlinux/packaging/packages/lib32-llvm）
+#   docs/upstream-pkgbuilds/lib32-clang.PKGBUILD
+#   關鍵三條：`-m32`（CFLAGS/CXXFLAGS 附加）、`-DLLVM_LIBDIR_SUFFIX=32`（裝到
+#   /usr/lib32）、`-DLLVM_TARGET_ARCH=i686 -DLLVM_DEFAULT_TARGET_TRIPLE=i686-pc-linux-gnu
+#   -DLLVM_HOST_TRIPLE=$CHOST`。
+#
+# ⚠️ 與官方的一處**結構性差異**（故意的，要講清楚）：官方把 llvm 與 clang 拆成
+#   兩個 package base，因為 lib32-clang 的 cmake 要吃 `llvm-config32`，而那支程式
+#   是 lib32-llvm 的產物 → 先有雞先有蛋，只能靠倉庫分兩輪。本倉是「一次 cmake
+#   configure 同時開 LLVM_ENABLE_PROJECTS=clang」（跟我們 64 位元那顆同一手法），
+#   同一棵 build 樹裡 clang 直接吃 build -tree 的 llvm，不需要先裝 llvm-config32。
+#   好處：32 位元一輪就出三顆、CI 不用排兩個 job 互相等；代價：多建了官方用
+#   LLVM_DISTRIBUTION_COMPONENTS 裁掉的靜態庫與工具，所以 package_*() 裡要**照官方
+#   的收錄範圍**把它們丟掉（丟了多少會印出來，不是靜默 rm）。
+#
+# ⚠️ 分割用 mv＋先搶者赢，順序就是歸屬（同 llvm-git 的教訓）：
+#   lib32-llvm-libs-git → lib32-clang-git → lib32-llvm-git（最後一顆收 cmake／
+#   llvm-config32／兜底殘餘）。
+#
+# ⚠️ 版本由 pkgver() 從上游 HEAD 現算 ⇒ 本檔要列進「回推校驗和」的排除清單。
+
+_pkgbase=llvm-project
+pkgbase=lib32-llvm-git
+pkgname=(lib32-llvm-libs-git lib32-clang-git lib32-llvm-git)
+pkgver=24.0.0_r0.g00000000000
+pkgrel=1
+# libLLVM 的 SONAME 後綴：與 64 位元那顆同源同算法，所以值一定相同（24.0git）。
+# ⚠️ 必須在**頂層**用同檔靜態聲明的 pkgver 推導，不能在 package_*() 裡用執行期變數
+#   拼——makepkg 對分割包的 provides/depends 是「靜態抽字串再 eval」，執行期變數在
+#   那個上下文是空的，會抽成 `lib32-llvm-libs-abi=`（空版本）直接紅
+#   （run #462 的 llvm-git 實測過，細項寫在 llvm-git/PKGBUILD 的 _llvm_soname 那段）。
+_llvm_soname="${pkgver%%_r*}"; _llvm_soname="${_llvm_soname%.*}git"
+arch=(x86_64)
+url="https://llvm.org/"
+license=('Apache-2.0 WITH LLVM-exception')
+# ⚠️ **沒有 `lib32-libedit` 這顆包**（實查 `pacman -Si lib32-libedit` 查無，
+#   官方 lib32-llvm.PKGBUILD 的 makedepends 也沒有它）：寫進去 makepkg -s 會直接
+#   `target not found` 紅掉，而且是在抓完 1.5G 原始碼之後。libedit 在 32 位元
+#   下面用下面的 `-DLLVM_ENABLE_LIBEDIT=OFF` 關掉——不關的話 cmake 的 find_library
+#   會去摸到 64 位元那顆，連結階段才炸，那樣更難查。
+makedepends=(cmake ninja git python pkgconf lib32-gcc-libs lib32-zlib lib32-zstd
+             lib32-libffi lib32-ncurses lib32-libxml2 lld)
+options=(staticlibs !emptydirs !lto)
+_stage=
+_stage_init() {
+  if [ -z "$srcdir" ]; then
+    echo "FATAL: srcdir 尚未由 makepkg 設定，$_stage 無從推得（不要在 PKGBUILD 頂層取用 \$srcdir）"
+    return 1
+  fi
+  _stage="$srcdir/stage32"
+}
+_cmakeargs=(
+  -G Ninja
+  -DCMAKE_BUILD_TYPE=Release
+  -DCMAKE_INSTALL_DOCDIR=share/doc
+  -DCMAKE_SKIP_INSTALL_RPATH=ON
+  -DLLVM_ENABLE_ASSERTIONS=OFF
+  -DLLVM_ENABLE_TERMINFO=OFF
+  -DLLVM_ENABLE_ZLIB=ON
+  -DLLVM_ENABLE_ZSTD=ON
+  -DLLVM_ENABLE_FFI=ON
+  -DLLVM_ENABLE_RTTI=ON
+  # 32 位元沒有 lib32-libedit（實查查無此包），所以明確關掉，別讓 find_library 去摸
+  # 64 位元那顆、到連結階段才炸（那種錯看起來像工具鏈壞掉，不像缺一個開關）。
+  -DLLVM_ENABLE_LIBEDIT=OFF
+  -DLLVM_ENABLE_BINDINGS=OFF
+  -DLLVM_BINUTILS_INCDIR=/usr/include
+  -DLLVM_INCLUDE_TESTS=OFF
+  -DLLVM_INCLUDE_BENCHMARKS=OFF
+  -DLLVM_INCLUDE_EXAMPLES=OFF
+  -DLLVM_INCLUDE_DOCS=OFF
+  -DLLVM_INSTALL_UTILS=ON
+  # 只 clang：lld／lldb 在 32 位元**沒有對應的官方包**（查實 multilib 與 lib32 兩庫
+  # 都沒有 lib32-lld／lib32-lldb），多建只會白燒兩小時還得解釋為什麼包裡有東西沒人用。
+  -DLLVM_ENABLE_PROJECTS='clang'
+  # 2026-10-25 補 BPF：32 位元 mesa 的 `mesa_clc`（-m32 鏈 /usr/lib32/libLLVM-24git）
+  # 要 LLVMInitializeBPF* 符號，本行原本只有 X86;AMDGPU → lib32-mesa 連結炸
+  # 「undefined symbol: LLVMInitializeBPFTarget」（run 40111886779 實測）。與 64 位元
+  # llvm-git 的 'X86;AMDGPU;BPF'（2026-10-24 補）對齊。
+  -DLLVM_TARGETS_TO_BUILD='X86;AMDGPU;BPF'
+  -DLLVM_BUILD_LLVM_DYLIB=ON
+  -DLLVM_LINK_LLVM_DYLIB=ON
+  -DLLVM_DYLIB_COMPONENTS=all
+  -DLLVM_ENABLE_LLD=ON
+  -DLLVM_PARALLEL_LINK_JOBS=2
+  -DLLVM_VERSION_SUFFIX=git
+  -DCLANG_DEFAULT_PIE_ON_LINUX=ON
+  -DCLANG_LINK_CLANG_DYLIB=ON
+  -DENABLE_LINKER_BUILD_ID=ON
+  # ── 32 位元三條（官方 lib32-llvm.PKGBUILD:84-95 逐條抄）
+  -DLLVM_LIBDIR_SUFFIX=32
+  -DLLVM_TARGET_ARCH=i686
+  -DLLVM_DEFAULT_TARGET_TRIPLE=i686-pc-linux-gnu
+  -DLLVM_HOST_TRIPLE=x86_64-pc-linux-gnu
+)
+
+source=("git+https://github.com/llvm/llvm-project.git#branch=main")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd $_pkgbase
+  # 與 llvm-git/PKGBUILD 同一算法、同一理由：三段基號從上游權威檔
+  # `cmake/Modules/LLVMVersion.cmake` 現算，count 用全域 `rev-list --count`（單調），
+  # 不用 describe（HEAD 落在 tag 上時會把 tag 名當成 count 算出垃圾，repo-add 直接拒收）。
+  # ⚠️ 兩檔必須**同步改**：這顆與 llvm-git 是同一個上游倉，基號不一致時
+  #   mesa 的 llvm-libs-abi／lib32-llvm-libs-abi 兩條鎖會各指各的。
+  local v
+  v=$(awk '
+        /^[[:space:]]*set\(LLVM_VERSION_MAJOR[[:space:]]/ {gsub(/[()]/, "", $2); maj=$2}
+        /^[[:space:]]*set\(LLVM_VERSION_MINOR[[:space:]]/ {gsub(/[()]/, "", $2); min=$2}
+        /^[[:space:]]*set\(LLVM_VERSION_PATCH[[:space:]]/ {gsub(/[()]/, "", $2); pat=$2}
+        END { if (maj == "") exit 1; printf "%s.%s.%s", maj, min, pat }' \
+        cmake/Modules/LLVMVersion.cmake) \
+    || { echo "pkgver: cmake/Modules/LLVMVersion.cmake 讀不到 LLVM_VERSION_MAJOR（上游改檔名或搬家，要人來看）" >&2; return 1; }
+  printf '%s_r%s.g%s\n' "$v" "$(git rev-list --count HEAD)" "$(git rev-parse --short=11 HEAD)"
+}
+
+prepare() {
+  cd $_pkgbase
+  rm -f llvm/cmake/modules/Findzstd.cmake
+  cd ..
+  # ⚠️ `-m32` 要**同時**給 CC/CXX 與 linker：只給 CFLAGS 的話，cmake 的 ABI 探測
+  #   （try_compile）會拿 64 位元的連結結果判斷，後面才炸。官方那兩份是
+  #   `export CFLAGS+=" -m32"` 同款做法，PKG_CONFIG 也要換成 i686 那支，
+  #   否則探測會讀到 64 位元的 .pc 而把 lib32 依賴誤判成已滿足。
+  # ⚠️ `-g1`（只留最小除錯資訊）照抄官方 lib32-llvm.PKGBUILD:70-72。理由不是體積，
+  #   是**位址空間**：32 位元的編譯器自己只有 4GiB 可尋址，而 LLVM 那種動輒幾十萬行
+  #   的 C++ 翻譯單元開完整 DWARF 會把 cc1plus 撐爆（官方那行註解寫 "reduce size"，
+  #   但對 32 位元來講它同時是防 OOM 的必要條件）。
+  export CFLAGS="${CFLAGS/-g /-g1 }"
+  export CXXFLAGS="${CXXFLAGS/-g /-g1 }"
+  export CFLAGS="$CFLAGS -m32"
+  export CXXFLAGS="$CXXFLAGS -m32"
+  export LDFLAGS="$LDFLAGS -m32"
+  export PKG_CONFIG=i686-pc-linux-gnu-pkg-config
+  cmake -S "$_pkgbase/llvm" -B build "${_cmakeargs[@]}" \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_C_FLAGS_RELEASE='-O2 -DNDEBUG' \
+    -DCMAKE_CXX_FLAGS_RELEASE='-O2 -DNDEBUG'
+}
+
+build() {
+  _stage_init || return 1
+  export PKG_CONFIG=i686-pc-linux-gnu-pkg-config
+  cmake --build build -j"$(nproc)"
+  rm -rf "$_stage"
+  DESTDIR="$_stage" cmake --install build
+  [ -d "$_stage/usr/lib32" ] || { echo "FATAL: cmake --install 沒有產出 $_stage/usr/lib32（LIBDIR_SUFFIX=32 沒生效？）"; return 1; }
+  echo ">> 32 位元暫存區就緒：$_stage（$(find "$_stage" -type f | wc -l) 個檔案）"
+}
+
+# 從暫存區**搬**進 $pkgdir（mv＝歸屬轉移，先搶者赢）。與 llvm-git 同一套：
+# 含 glob 元字元的樣式交給 nullglob，字面路徑要自己判存在（缺檔印一行再跳過，
+# 但絕不用 `|| true` 把「真的缺檔」蓋掉）。
+_move() {
+  local pat h rel moved=0 skipped=0
+  _stage_init || return 1
+  [ -d "$_stage" ] || { echo "FATAL: 暫存區不存在：'$_stage'"; return 1; }
+  shopt -s nullglob
+  for pat in "$@"; do
+    case $pat in
+      *[*?]*|*[\[]*) ;;
+      *)
+        if [ ! -e "$_stage/$pat" ] && [ ! -L "$_stage/$pat" ]; then
+          echo ">> $pkgname: 跳過不存在的字面路徑 $pat"
+          skipped=$((skipped + 1))
+          continue
+        fi ;;
+    esac
+    for h in "$_stage"/$pat; do
+      rel=${h#"$_stage"/}
+      mkdir -p "$pkgdir/$(dirname "$rel")"
+      mv -f "$h" "$pkgdir/$rel"
+      moved=$((moved + 1))
+    done
+  done
+  shopt -u nullglob
+  echo ">> $pkgname: _move 搬入 $moved 個路徑、跳過 $skipped 個"
+}
+
+_license() {
+  install -Dm644 "$_pkgbase/$1/LICENSE.TXT" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
+
+package_lib32-llvm-libs-git() {
+  pkgdesc='LLVM runtime libraries (trunk, 32-bit)'
+  depends=(lib32-gcc-libs lib32-glibc lib32-zlib lib32-zstd lib32-libffi
+           lib32-ncurses lib32-libxml2 sh)
+  # ⚠️ ABI 虛擬名**必須與 64 位元那顆不同名**：pacman 判依賴只看名字，
+  #   如果 32 位元也 provides `llvm-libs-abi=24.0git`，那 64 位元 mesa 的依賴
+  #   會被這顆 satisfy 掉 → 裝完找不到 /usr/lib/libLLVM.so.24.0git，
+  #   又是 2026-10-12 那種「badge 全綠、裝下去黑屏」。
+  provides=("lib32-llvm-libs=${pkgver%%_r*}" "lib32-llvm-libs-abi=$_llvm_soname"
+            'libLLVM.so' 'libLTO.so' 'libRemarks.so')
+  conflicts=(lib32-llvm-libs)
+  replaces=(lib32-llvm-libs)
+  _move 'usr/lib32/libLLVM.so*' 'usr/lib32/libLLVM-*.so' 'usr/lib32/libLTO.so*' \
+        'usr/lib32/libRemarks.so*' 'usr/lib32/LLVMgold.so' \
+        'usr/lib32/libFuzzer.so*'
+  _license llvm
+  # 實物自證：宣告的 ABI 必須就是這顆裡 libLLVM 的實際 soname（與 64 位元同手法）。
+  # 名字對了、檔不對，下游照名字鎖依賴還是會黑屏。
+  local abi
+  abi=$(basename "$(readlink -f "$pkgdir/usr/lib32/libLLVM.so" 2>/dev/null)" 2>/dev/null \
+        | sed 's/^libLLVM\.so\.//')
+  if [ "$abi" != "$_llvm_soname" ]; then
+    echo "ERROR: 32 位元產物 soname=[$abi] 與宣告的 lib32-llvm-libs-abi=$_llvm_soname 不一致" >&2
+    exit 1
+  fi
+  # 「缺檔就紅」：官方 lib32-llvm-libs 的實物清單（解 multilib.files 查實）是
+  # libLLVM.so／libLLVM.so.<abi>／LLVMgold.so／bfd-plugins／libLTO／libRemarks，
+  # 少任何一個這顆都不能頂替 lib32-llvm-libs。
+  for _f in usr/lib32/libLLVM.so "usr/lib32/libLLVM.so.$abi" usr/lib32/LLVMgold.so; do
+    if [ ! -e "$pkgdir/$_f" ] && [ ! -L "$pkgdir/$_f" ]; then
+      echo "FATAL: $pkgname 少了 $_f（官方 lib32-llvm-libs 必含）" >&2
+      exit 1
+    fi
+  done
+  # 官方那條 bfd-plugins 符號連結是自己建的（LLVM 只裝一份到 lib32/）：
+  #   ln -s ../LLVMgold.so usr/lib32/bfd-plugins/LLVMgold.so
+  # 少了它，32 位元 `ld -plugin LLVMgold.so` 找不到路徑（binutils gold 走 bfd-plugins 目錄）。
+  install -d "$pkgdir/usr/lib32/bfd-plugins"
+  ln -sfn ../LLVMgold.so "$pkgdir/usr/lib32/bfd-plugins/LLVMgold.so"
+  echo ">> $pkgname: 實物 soname=$abi 與 lib32-llvm-libs-abi 一致，bfd-plugins 已補"
+}
+
+package_lib32-clang-git() {
+  pkgdesc='C language family frontend libraries for LLVM (trunk, 32-bit)'
+  # 官方 lib32-clang 的 depends 是 ('lib32-llvm-libs' 'clang')：32 位元**沒有** clang
+  # 執行檔（multilib 實物清單查過，lib32-clang 只有 .so＋內建標頭），編譯時用的是
+  # 宿主 clang 加 `-m32`，但 libclang.so／libclang-cpp.so 必須是 32 位元版本，
+  # 因為它們會被 32 位元的程式（例如 rust-bindgen 跑 i686 target）載入。
+  depends=("lib32-llvm-libs-git=$pkgver-$pkgrel" clang lib32-gcc-libs lib32-glibc
+           lib32-zlib lib32-zstd lib32-libxml2)
+  provides=("lib32-clang=${pkgver%%_r*}" 'libclang.so')
+  conflicts=(lib32-clang)
+  replaces=(lib32-clang)
+  # ⚠️ `libclang-cpp.so*` 在 32 位元這邊歸**本顆**，與 64 位元相反（那邊歸 llvm-libs-git）。
+  #   依據是官方實物清單：`lib32-clang  usr/lib32/libclang-cpp.so`（multilib.files），
+  #   而 64 位元的 llvm-libs 才有 libclang-cpp。照抄歸屬，別自己統一。
+  _move 'usr/lib32/libclang.so*' 'usr/lib32/libclang-cpp.so*' \
+        'usr/lib32/libclang-*' 'usr/lib32/clang/*/include' 'usr/lib32/clang/*/lib32'
+  _license clang
+  # 缺 libclang 就紅：這顆存在的意義就是「32 位元的 libclang」，
+  # mesa 的 RustiCL／bindgen 那條鏈找的就是它。
+  if [ ! -e "$pkgdir/usr/lib32/libclang.so" ]; then
+    echo "FATAL: $pkgname 沒有 /usr/lib32/libclang.so（CLANG_LINK_CLANG_DYLIB 沒生效？）" >&2
+    exit 1
+  fi
+}
+
+package_lib32-llvm-git() {
+  pkgdesc='Compiler infrastructure (trunk, 32-bit)'
+  depends=("lib32-llvm-libs-git=$pkgver-$pkgrel" llvm)
+  provides=("lib32-llvm=${pkgver%%_r*}")
+  conflicts=(lib32-llvm)
+  replaces=(lib32-llvm)
+  # 最後一顆：收 cmake 模組＋`llvm-config32`。mesa 的 `llvm32.native` 寫死
+  # `llvm-config = '/usr/bin/llvm-config32'`（實查 /tmp 那份 mesa-tkg PKGBUILD 同目錄的
+  # llvm32.native），少了這支程式 32 位元 mesa 的 meson 直接找不到 LLVM。
+  _move 'usr/lib32/cmake/llvm' 'usr/lib32/cmake/clang' 'usr/lib32/cmake/lld' \
+        'usr/lib32/pkgconfig' 'usr/lib32/*.a' 'usr/bin/llvm-config'
+  _license llvm
+  # 官方把 llvm-config 改名成 llvm-config32（`mv "$pkgdir"/usr/bin/llvm-config{,32}`），
+  # 因為 64 位元那支已經佔了 `/usr/bin/llvm-config`，兩顆包不能撞同一個檔名。
+  # 這裡照做，而且**改名失敗就紅**：叫錯名字等於 mesa 那條 native file 找不到，
+  # 32 位元整半邊白做。
+  if [ -e "$pkgdir/usr/bin/llvm-config" ] || [ -L "$pkgdir/usr/bin/llvm-config" ]; then
+    mv -f "$pkgdir/usr/bin/llvm-config" "$pkgdir/usr/bin/llvm-config32"
+    echo ">> $pkgname: 已改名 /usr/bin/llvm-config → llvm-config32"
+  fi
+  if [ ! -x "$pkgdir/usr/bin/llvm-config32" ]; then
+    echo "FATAL: $pkgname 沒有 /usr/bin/llvm-config32（mesa 的 llvm32.native 寫死這個路徑）" >&2
+    exit 1
+  fi
+  # 自證 llvm-config32 報出來的確實是 32 位元那一套。⚠️ 2026-10-13 我在此處寫错过選項名：
+  # 上一版拿 `--target-target` 比 i686，但 **llvm-config 根本沒有這個選項**（本機實測
+  # `/usr/bin/llvm-config --help` 的 target 類只有 `--host-target` 與 `--targets-built`，
+  # 傳錯選項時它印 usage、exit≠0 → 變數恆空 → 這道檢查把**好的產物判成 FATAL**，
+  # 本地 /tmp/l32 那一輪 makepkg RC=1 就是這樣來的，不是交叉參數沒生效）。
+  # 實測這棵樹的真實值：`--host-target`＝**i686-pc-linux-gnu**、`--libdir` 尾段＝/usr/lib32、
+  # `--targets-built`＝`X86 AMDGPU`。
+  # 位元寬度另加一道**不依賴 PATH** 的實物證明：直接讀 ELF 檔頭第 5 個位元組 EI_CLASS
+  # （1＝ELF32、2＝ELF64）。這比 `file`／`readelf` 可靠——那兩支在本機是 /usr/sbin/ 底下，
+  # makepkg 的 builder 環境 PATH 不一定有 /usr/sbin，實測 `readelf -h` 會靜默回空字串，
+  # 拿空字串比對「等於 Intel 80386」就成了永遠紅、或永遠綠的假檢查。
+  local _libdir _ht _elf
+  _libdir=$("$pkgdir/usr/bin/llvm-config32" --libdir 2>/dev/null) || _libdir=
+  _ht=$("$pkgdir/usr/bin/llvm-config32" --host-target 2>/dev/null) || _ht=
+  echo ">> $pkgname: llvm-config32 --libdir=[$_libdir] --host-target=[$_ht]"
+  case $_libdir in
+    */lib32) ;;
+    *) echo "FATAL: llvm-config32 的 --libdir 不是 /usr/lib32（LIBDIR_SUFFIX=32 沒傳進 configure？）" >&2
+       exit 1 ;;
+  esac
+  case $_ht in
+    i686-*) ;;
+    *) echo "FATAL: llvm-config32 的 --host-target=[$_ht] 不是 i686-*（交叉 triple 沒生效）" >&2
+       exit 1 ;;
+  esac
+  _elf=$(od -An -tu1 -j4 -N1 "$pkgdir/usr/bin/llvm-config32" 2>/dev/null | tr -d '[:space:]')
+  if [ "$_elf" != "1" ]; then
+    echo "FATAL: $pkgname 的 llvm-config32 ELF EI_CLASS=[$_elf]（1 才是 ELF32）——這顆是 64 位元程式，" >&2
+    echo "       下游 meson/llvm32.native 拿它問到的旗標會是 x86_64 那套，32 位元 mesa 編出來就是錯的。" >&2
+    exit 1
+  fi
+  echo ">> $pkgname: llvm-config32 實物 EI_CLASS=1（ELF32）確認"
+
+  # ── 與官方收錄範圍對帳：32 位元**不收** include／share/doc／share/man／其他 bin
+  #   （官方 lib32-llvm.PKGBUILD:126-127 就是 rm include、刪 llvm-config 以外全部 bin，
+  #    理由是標頭與宿主相同、工具由 64 位元那顆提供）。這裡照做，但**把丟棄數量印出來**，
+  #   不留靜默 rm。
+  local _drop
+  _drop=$(find "$_stage" -type f 2>/dev/null | wc -l)
+  rm -rf "$_stage/usr/include" "$_stage/usr/share" "$_stage/usr/bin" \
+         "$_stage/usr/lib32/baremetal" 2>/dev/null
+  echo ">> $pkgname: 依官方範圍丟掉暫存區殘餘 $((_drop - $(find "$_stage" -type f 2>/dev/null | wc -l))) 個檔（include／share／bin／baremetal——標頭與工具由 64 位元那七顆提供）"
+  echo '=== stage32 殘留（正常應為空；有東西就是漏打包）==='
+  find "$_stage" -type f 2>/dev/null | sed "s|^$_stage/||" | head -30
+}
+
+# vim:set ts=2 sw=2 et:
