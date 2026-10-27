@@ -1826,9 +1826,13 @@ PKGBUILD、由 CI 用 raw.githubusercontent 取檔（見 workflow 的 `case` 攔
 - `packages/utils/src/dirs.ts`：`USER_AGENT` / `PROVIDER_APP_NAME` / `PROVIDER_APP_URL`
   改成 live binding，新增 `setProviderIdentity()` / `getProviderIdentity()`；
   `ProviderIdentity` 是 `{ userAgent?, appName?, appUrl? }` 三個自由欄位。
-- `packages/coding-agent/src/config/provider-identity-settings.ts`：對應三個設定
-  `provider.userAgent` / `provider.appName` / `provider.appUrl`（providers 分頁
-  Identity 群組，亦可用 `OMP_PROVIDER_USER_AGENT` 等環境變數），變更即時生效。
+- `packages/coding-agent/src/config/provider-identity-settings.ts`：對應四個設定。
+  - `provider.identity`：**一個字**就整套——填產品 token（例 `pi`、`omp`、`mycli`），
+    展開成 `User-Agent: <token>/<版本> (<平台>; <runtime>; <arch>)`、attribution app name =
+    `<token>`、homepage 省略（token 是 `omp` 才留 `omp.sh`）。CLI：
+    `omp config set provider.identity pi`；環境變數 `OMP_PROVIDER_IDENTITY`。
+  - `provider.userAgent` / `provider.appName` / `provider.appUrl`：明示覆寫，逐字照送，
+    優先於上面的 token。providers 分頁 Identity 群組可改，變更即時生效。
 - 預設留空 ⇒ 送 omp 自己的 `omp/<version>` 與 `https://omp.sh/`；
   填了什麼就逐字送，填不填、填什麼由使用者自己決定。
 - 影響範圍只有送往模型商的 User-Agent 與 OpenRouter／Vercel 閘道的 attribution 標頭；
