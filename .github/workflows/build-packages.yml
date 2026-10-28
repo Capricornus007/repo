@@ -525,13 +525,25 @@ jobs:
             pacman -Q qt6-base 2>/dev/null || echo "（qt6-base 尚未安裝，屬預期；由 PKGBUILD 的 depends 帶入）"
           fi
 
-          # ── ossl4 三顆：Arch 容器也要拿到 system-goblins 的 openssl 4（2026-10-27 二次修）
+          # ── ossl4 三顆：容器要拿到 system-goblins 的 openssl 4（2026-10-27 二次修）
           # 上一版把 goblins 插入寫在 kind='tkg' 的分支裡（那是 mesa-tkg 專用），
           # 而這三顆的 kind 不是 tkg → 整段被跳過（run 40479596546 實測：插入＋同步只花
           # 0.38 秒就跳到早檢，openssl 照樣是 [core] 的 3.6.5-1）。
           # 這裡獨立一段、只對這三顆生效，避免把 openssl 4 帶給其他 130+ 包。
           # SigLevel = Never 逐段寫：Arch 容器沒有 Artix 的 GPG key，不關驗證會同步失敗。
-          if [ "${{ matrix.kind }}" != 'tkg' ]; then
+          #
+          # ⚠ 2026-10-28（run #75 紅）：這段原本假設容器是 Arch、倉庫區塊叫 [core]。
+          # pacman-git 在 2026-10-27 改成 kind=artix 之後，容器是 Artix：
+          #   · 倉庫是 [system] / [world]，根本沒有 [core] → awk 不插入；
+          #   · 接著 `grep '^\[core\]'` 拿到空字串，`[ "$_lg" -lt "" ]` 讓 bash 直接
+          #     報 integer expression expected 並在 6 毫秒內 exit 1，日誌裡一個字都看不到
+          #     （::error 會被 GitHub 轉成 annotation 從 log 流濾掉）。
+          #   · Artix 容器**本身就帶** system-goblins／system-gremlins 源（同一次 run 的
+          #     pacman -Sy 輸出直接列出 system-goblins/openssl 4.1.0-1），所以對它來說
+          #     插入段是多餘的、跳過即可。
+          # 現在：Artix 直接跳過插入；Arch 容器照舊插，锚點同時認 [core] 與 [system]，
+          # 且比較前先確認兩個行號都非空，絕不讓檢查本身變成失敗原因。
+          if [ "${{ matrix.kind }}" != 'tkg' ] && [ "${{ matrix.kind }}" != 'artix' ]; then
             case '${{ matrix.repo_name }}' in
               openvpn|tcpdump|pacman-git)
                 _gob=''
@@ -541,8 +553,13 @@ jobs:
                 awk -v blk="$_gob" '/^\[core/ && !d {d=1; printf "%s", blk} {print}' \
                   /etc/pacman.conf > /etc/pacman.conf.gob && mv /etc/pacman.conf.gob /etc/pacman.conf
                 _lg=$(grep -n '^\[system-goblins\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
-                _lc=$(grep -n '^\[core\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
-                { [ -n "$_lg" ] && [ "$_lg" -lt "$_lc" ]; } || { echo "::error::goblins 倉沒插到 [core] 之前（$_lg vs $_lc）"; exit 1; }
+                _lc=$(grep -nE '^\[(core|system)\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
+                if [ -n "$_lg" ] && [ -n "$_lc" ] && [ "$_lg" -lt "$_lc" ]; then
+                  :
+                else
+                  echo "::error::goblins 倉沒插到 [core]/[system] 之前（goblins=${_lg:-空} vs core/system=${_lc:-空}）"
+                  exit 1
+                fi
                 if ! pacman -Sy --noconfirm > /tmp/pacman-ossl4.log 2>&1; then
                   cat /tmp/pacman-ossl4.log
                   echo "::error::ossl4 的 goblins 源同步失敗"
