@@ -13,7 +13,7 @@
 #     asset 名現算，crave／jbr21 同型的「版號由外部端點驅動」：原料 `_pkgver=`，
 #     改寫步 sed 的是 `_pkgver=` 那行）。
 #   · 產物是 tdesktop 式裸二進制（Telegram＋Updater），沒有安裝包接縫：
-#     /opt 佈局＋/usr/bin 入口＋自寫 .desktop（模板取 lib/xdg/org.telegram.desktop.desktop
+#     /opt 佈局＋/usr/bin 入口＋自寫 .desktop（模板取 lib/xdg/io.github.capricornus007.moregram.desktop
 #     同 commit 原件改寫）＋hicolor 圖標（Telegram/Resources/art/icon256@2x.png）。
 #
 # Updater 是 tdesktop 自帶的增量更新器；本包由 pacman 管更新，package() 不裝它、
@@ -24,7 +24,7 @@
 pkgname=moregram-git
 _pkgver=00000000
 pkgver="$_pkgver"
-pkgrel=2
+pkgrel=3
 pkgdesc="moregram 桌面端——官方 tdesktop 復刻＋64Gram 功能移植（源碼滾動構建）"
 arch=('x86_64')
 url="https://github.com/Capricornus007/moregram"
@@ -39,7 +39,7 @@ options=('!strip')
 source=("moregram-desktop-${_pkgver}.zip::https://github.com/Capricornus007/moregram/releases/download/moregram-linux-dev/moregram-desktop-${_pkgver}.zip"
         "icon256.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/Telegram/Resources/art/icon256.png"
         "icon256@2x.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/Telegram/Resources/art/icon256@2x.png"
-        "moregram.desktop::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/lib/xdg/org.telegram.desktop.desktop")
+        "moregram.desktop::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/lib/xdg/io.github.capricornus007.moregram.desktop")
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 # 上游 zip 裡是裸二進制（Telegram／Updater，無目錄層）
