@@ -624,35 +624,6 @@ jobs:
           git config --system http.postBuffer 524288000
           echo "nproc=$(nproc)"
 
-          # ── mpv-git：先裝本倉自己的 libplacebo-git（7.387）再編 ──────────────
-          # 2026-10-28（規則 15「版本衝突以最新優先，然後修由此產生的錯誤」）：
-          # 系統/容器的 libplacebo 是 7.360（soname .so.360），feed 已收編
-          # libplacebo-git 7.387（.so.387）。不在「裝了新庫」的環境裡編，mpv 出來的
-          # 還是鏈 .so.360、等於白收。
-          # 換庫會讓容器裡既有的 ffmpeg 斷（它 NEEDED .so.360），所以換之前先把舊
-          # soname 留一份、換完放回去：兩個 soname 並存，編 mpv 用 387、ffmpeg 照跑。
-          # ffmpeg 本身暫不重建：官方 ffmpeg 的 soname 是 62/11/62，換版會連鎖打壞
-          # 一大票依賴它的包，得走官方 PKGBUILD 單獨處理，不在這一步賭。
-          if [ '${{ matrix.repo_name }}' = 'mpv-git' ]; then
-            _lp_url=$(curl -s "https://api.github.com/repos/Capricornus007/repo/releases?per_page=5" \
-              | grep -o 'https://[^"]*libplacebo-git-[^"]*x86_64\.pkg\.tar\.zst' | head -n1)
-            if [ -z "$_lp_url" ]; then
-              echo "::error::找不到 libplacebo-git 的 release 產物，mpv 會鏈到舊的 .so.360"
-              exit 1
-            fi
-            mkdir -p /tmp/lp360 && cp -a /usr/lib/libplacebo.so.360* /tmp/lp360/ 2>/dev/null || true
-            curl -fL -o /tmp/libplacebo-git.pkg.tar.zst "$_lp_url"
-            # libplacebo-git 的 PKGBUILD 寫了 conflicts=('libplacebo')，而 pacman -U --noconfirm
-            # 對「是否移除衝突包」的提問預設答 N ⇒ 先強制卸掉容器裡的 libplacebo 再裝。
-            # 容器內 ffmpeg 的 NEEDED 是 .so.360，卸掉後先靠 /tmp/lp360 的副本頂著（下面會放回）。
-            pacman -Rdd --noconfirm libplacebo || true
-            pacman -U --noconfirm /tmp/libplacebo-git.pkg.tar.zst
-            cp -a /tmp/lp360/. /usr/lib/ 2>/dev/null || true
-            ldconfig
-            pacman -Q libplacebo-git
-            ls -1 /usr/lib/libplacebo.so.* | tr '\n' ' '; echo
-          fi
-
           useradd builder -m || true
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           git config --global user.name "github-actions[bot]"
@@ -3582,6 +3553,11 @@ jobs:
           pacman -Q ffmpeg >/dev/null 2>&1 \
             || { echo "::error::容器裡裝不上同步庫 ffmpeg，無法按上面的順序換 libplacebo"; exit 1; }
 
+          # ①.5 舊 soname 先留一份：容器裡 ffmpeg 的 NEEDED 是 libplacebo.so.360，
+          #      拔掉同步庫後這顆檔案會一起消失。留著它，mpv 用 387、ffmpeg 照跑
+          #      （兩個 soname 並存＝新舊通吃；不留下就變成拆東牆補西牆）。
+          mkdir -p /tmp/lp360 && cp -a /usr/lib/libplacebo.so.360* /tmp/lp360/ 2>/dev/null || true
+
           # ② 拔同步庫 libplacebo（-Rdd 跳過依賴檢查：它此時是 ffmpeg 的依賴，
           #    普通 -R 會被擋。與「把 Go 工具鏈換成自有 go-git」那步同一手法）
           pacman -Rdd --noconfirm libplacebo >/dev/null 2>&1 || true
@@ -3592,6 +3568,11 @@ jobs:
             echo "::warning::裝 libplacebo-git 失敗（第 ${_t}/3 次），重試"
             sleep $((_t * 8))
           done
+
+          # ③.5 把 .so.360 放回去（ffmpeg 仍需要它），並讓 ldconfig 認得兩個版本
+          cp -a /tmp/lp360/. /usr/lib/ 2>/dev/null || true
+          ldconfig
+          ldd /usr/bin/ffmpeg 2>/dev/null | grep -i placebo || true
 
           # ④ 產物端自證：不是「裝了就算」，問的是三道實際閘門
           pacman -Q libplacebo-git >/dev/null 2>&1 \
