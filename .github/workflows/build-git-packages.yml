@@ -217,7 +217,7 @@ jobs:
           {"key": "i3blocks-git", "repo_name": "i3blocks-git", "variant": "none", "kind": "aur"},
           {"key": "i3lock-color-git", "repo_name": "i3lock-color-git", "variant": "none", "kind": "aur"},
           {"key": "glib2-git", "repo_name": "glib2-git", "variant": "none", "kind": "aur"},
-          {"key": "lib32-glib2-git", "repo_name": "lib32-glib2-git", "variant": "none", "kind": "aur"},
+          {"key": "lib32-glib2-git", "repo_name": "lib32-glib2-git", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
           {"key": "linux-firmware-nfp-git", "repo_name": "linux-firmware-nfp-git", "variant": "none", "kind": "aur"},
           {"key": "rofi-git", "repo_name": "rofi-git", "variant": "none", "kind": "aur"},
           {"key": "helium-browser-bin", "repo_name": "helium-browser-bin", "variant": "none", "kind": "aur"},
