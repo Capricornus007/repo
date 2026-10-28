@@ -2262,7 +2262,8 @@ jobs:
                 # `cd $_pkgbase` 會失敗 → plan 報「跑 pkgver() 失敗」→ 每輪跳過、永不出包
                 # （與上面 i3-git 那批「掛了卻永遠不出包」同形，只是變數名不同）。
                 for d in "${pkgname}" "${pkgname%-git}" "${_pkgname:-}" "${_gitname:-}" \
-                         "${_base:-}" "${_gitrepo:-}" "${_pkgbase:-}" "${pkgbase:-}"; do
+                         "${_base:-}" "${_gitrepo:-}" "${_pkgbase:-}" "${pkgbase:-}" \
+                         "$(printf '%s' "$url" | sed -E 's|^.*/||; s/\.git$//')"; do
                   [ -n "$d" ] || continue
                   ln -sfn repo "src/$d"
                 done
