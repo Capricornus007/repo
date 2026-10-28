@@ -18,7 +18,7 @@ pkgver=7.1.0.r18.ga6f7467
 # 抬到 4.1.0-1（只 provides =4-64）⇒ 那顆 -2 在本機只能靠過渡包 openssl-3 頂著才裝得上去。
 # 抬 pkgrel 是因為**檔名必須變**：CI 的跳過判據是「產物檔名已在 release 裡」，
 # 不抬號就不會重出檔（見上面那段 ⚠️）。
-pkgrel=4
+pkgrel=5
 pkgdesc="A library-based package manager with dependency support (upstream git, built for Artix)"
 arch=('x86_64')
 url="https://www.archlinux.org/pacman/"
@@ -65,8 +65,10 @@ source=("git+https://gitlab.archlinux.org/pacman/pacman.git"
         makepkg.conf
         fortran.conf
         rust.conf
-        fancy-progress.patch)
+        fancy-progress.patch
+        ipv4-prefer.patch)
 sha256sums=('SKIP'
+            'SKIP'
             'SKIP'
             'SKIP'
             'SKIP'
@@ -114,6 +116,15 @@ sha256sums=('SKIP'
 #      build_options 的選項，autodeps 沒被註冊 ⇒ 直接
 #      「錯誤： options 陣列包含未知選項『!autodeps』」。所以只能走 /etc/makepkg.conf 的
 #      OPTIONS（lint_config 的 known_option 裡有 autodeps），由 CI 針對性地追加。
+# 5. 2026-10-28（抬到 -5）：加 ipv4-prefer.patch。病灶是 workbuddy 報的「pacman 從 GitHub
+#    下載比 curl 本家慢」：同一顆檔實測 IPv6 10.6 MB/s、IPv4 37.6 MB/s（快 3.5 倍），
+#    是本機到 GitHub 的 v6 路由差。先試過 XferCommand＝裸掛 curl，實測 -Sy 的
+#    「下載 <倉庫>.db.part」那行會被 curl 的進度表整片取代、倉庫名全消失，所以改補在
+#    libalpm 的 dload.c：只對名單內主機（github.com／objects.githubusercontent.com／
+#    codeload／raw／gist）先試 IPv4，其餘鏡像零影響；IPv4 解析或連線失敗時把該 payload
+#    退回 curl 預設雙棧，v6-only 來源不會被擋死。名單可用 PACMAN_IPV4_HOSTS 覆蓋。
+#    驗證：本機隔離副本 meson 編譯 0 error、上游測試 338 過 0 錯（6 個 expected fail）、
+#    libalpm 探針實測同一顆 73.5 MB 檔在補丁前後 4.5 → 7.3 MB/s。
 
 pkgver() {
   # ⚠️ 目錄名是 source 抓下來的 `pacman`，不是 $pkgname（這裡的 $pkgname 是 pacman-git）。
@@ -133,6 +144,11 @@ prepare() {
   # 且 `fc-match monospace` → JetBrains Maple Mono（本機預設字型）在清單內 ⇒ 可用。
   patch -p1 -N --quiet -i ../fancy-progress.patch \
     || { echo "::error::fancy-progress.patch 套不上（上游 callback.c 的 fill_progress 變了）"; exit 1; }
+  # 2026-10-28：GitHub 系主機先走 IPv4（本機到 GitHub 的 v6 只有 v4 的 ~1/3.5 速度）。
+  # 只碰名單內主機，其餘鏡像零影響；IPv4 失敗會自動退回雙棧，v6-only 來源不會被擋死。
+  # 名單用 PACMAN_IPV4_HOSTS 覆蓋，設成空字串＝停用這條補丁。
+  patch -p1 -N --quiet -i ../ipv4-prefer.patch \
+    || { echo "::error::ipv4-prefer.patch 套不上（上游 dload.c 的 curl 設定段變了）"; exit 1; }
 }
 
 build() {
