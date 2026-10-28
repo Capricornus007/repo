@@ -1906,9 +1906,8 @@ Major／API／Fix 三段，接 `.r<rev-list --count>.g<short>` ⇒ 現值
    - `provides = libplacebo=7.387.0`、`provides = libplacebo.so`、`conflict = libplacebo`
    - `usr/lib/libplacebo.so.387` 與 `usr/lib/pkgconfig/libplacebo.pc`（`Version: 7.387.0`）都在
    - CI 端還會由 makepkg 的 autodeps 補上帶版本的 `libplacebo.so=387-64`
-     （實證：feed 裡 `ffmpeg-full-git` 的 `%PROVIDES%` 有 `libavcodec.so=63-64` 那批，
-     說明 CI 容器的 makepkg 是開著這個選項的；本機 `/etc/makepkg.conf` 寫 `!autodeps`
-     所以本地產物看不見，這不是包的洞）。
+     （本機 `/etc/makepkg.conf` 寫 `!autodeps`，所以本地產物看不見這些條目，
+     那不是包的洞；CI 那邊的下一次節點用**公開發布實物**逐行拆過，見下面第 4 項）。
    ⚠️ 本地缺 `glad`（Arch `glad` 2.0.8 裝的是 python 模組，本機沒裝、也不準動系統套件），
    所以兩輪都用 `PYTHONPATH=/tmp/lp-verify/glad-py` 顶上去；CI 容器由
    `makedepends=('glad')` 正式安裝，路徑不同但 meson 只問 `python -c 'import glad'`
