@@ -1,0 +1,70 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+#
+# omnirush —— 從 npm registry 直接打包的 AI coding agent CLI。
+# AUR 查無同名包（2026-10-22 實測 `rpc/v5/info?arg[]=omnirush` 回 resultcount=0，
+# 連 omnirush-cli 也沒有），所以包名就用上游的 omnirush，不需要 -cli 後綴。
+#
+# 為什麼 source 只有一顆 tgz，package() 卻有近 300MB 的內容：
+# 上游 1.0.0 起改成「launcher + 各平台預編譯引擎包」的佈局（esbuild 那套 optional
+# dependency 手法，見上游 src/runtime.js 檔頭）。omnirush-<ver>.tgz 只有 5MB 的
+# JS launcher，真正的 bun／opencode／fd／rg 二進位在 optionalDependencies 的
+#   @omnirush-ai/cli-linux-x64@<ver>（glibc x64，117MB tgz、解開 278MB）
+# 裡；npm 只會挑 os/cpu/libc 相符的那一顆。這裡在 build() 用 npm 把它抓下來、
+# package() 原樣放進 /usr/lib/node_modules/omnirush/node_modules/，讓
+# runtime.js 的 require.resolve 找得到。**不要**為了縮包體把這步刪掉：
+# 少了它 `omnirush --version` 照樣印版本，但一跑 agent 就缺引擎。
+#
+# 版本怎麼升：沒有 pkgver()（上游是固定版號的 npm release，不是 git 滾動包）。
+# 升版要同時改 pkgver 與 sha256sums，前者讓 CI 的「產物檔名是否已在 release 裡」
+# 判據失效、後者由 `updpkgsums` 或手動 `sha256sum` 取得。
+#
+# 為什麼 !strip／!debug：平台包裡的 bun 與 opencode 是上游自己簽過／校驗過的
+# 預編譯執行檔（package.json 的 omnirushEngineSha256 會逐次核對 sha256，
+# 見上游 src/release-build.js），strip 會改檔內容 → 執行時直接被判
+# 「engine binary does not match this release」而拒絕啟動。
+pkgname=omnirush
+pkgver=2.7.5
+pkgrel=1
+pkgdesc="Omnirush — AI coding agent CLI from the npm registry (bundled linux engine)"
+arch=('x86_64' 'aarch64')
+url="https://omnirush.ai"
+license=('Apache-2.0')
+depends=('nodejs>=22.19.0')
+makedepends=('npm')
+options=('!strip' '!debug')
+source=("https://registry.npmjs.org/omnirush/-/omnirush-${pkgver}.tgz")
+sha256sums=('73d868ae5a9c46bc7ea6e7e5f96f16a5ca975c9e193ebabd4a51f3160e0cfc79')
+
+build() {
+  cd "$srcdir/package"
+
+  # npm 會按本機 os/cpu/libc 只安裝相符的平台包（x86_64/glibc 是
+  # @omnirush-ai/cli-linux-x64）。--ignore-scripts 是防上游日後在平台包加
+  # postinstall；目前兩顆包都沒有 scripts，關掉不影響結果。
+  # 重試參數是給 CI 的慢鏈路：平台包 117MB，預設 fetch-retries=2 在
+  # registry 抖一下就會讓整個 job 紅。
+  npm install --omit=dev --ignore-scripts --no-audit --no-fund \
+    --package-lock=false --fetch-retries=5 --fetch-retry-maxtimeout=120000
+
+  # npm 的內部帳本會記下建置機路徑，不隨包安裝。
+  rm -f node_modules/.package-lock.json package-lock.json
+}
+
+package() {
+  local _dest="$pkgdir/usr/lib/node_modules/$pkgname"
+  install -d "$_dest"
+  cp -a "$srcdir/package/." "$_dest/"
+
+  # 上游 tar 已帶執行位；這裡再保險一次（cp -a 在某些 umask 下會保留不了）。
+  chmod 755 "$_dest/src/bin.js"
+  find "$_dest/node_modules/@omnirush-ai" -type f -path '*/bin/*' -exec chmod 755 {} +
+
+  install -Dm644 "$_dest/LICENSE" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$_dest/THIRD_PARTY_NOTICES.md" \
+    "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
+
+  # 相對 symlink：pacman 包裡不要出現指向建置機或絕對路徑的連結。
+  install -d "$pkgdir/usr/bin"
+  ln -sfn "../lib/node_modules/$pkgname/src/bin.js" "$pkgdir/usr/bin/$pkgname"
+}

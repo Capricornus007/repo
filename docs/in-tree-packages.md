@@ -1982,3 +1982,23 @@ libraries` 起動失敗。要真的可用，機器上的 ffmpeg 也必須是照 
    `ffmpeg` 變成 `ffmpeg-full-git`。
 下一輪若 mpv-git 仍紅，先查這三條，不要在 `libplacebo-git` 這顆上找原因。
 
+---
+
+omnirush（2026-10-22，使用者指定把 npm 套件打包進 feed）：
+
+- **為什麼 in-tree**：上游是固定版號的 npm release（`registry.npmjs.org/omnirush`），
+  不是 `-git` 包；通用規則「非 `-git` → clone `github.com/<owner>/omnirush.git`」會去要
+  一個不存在的倉，CI 無 TTY 直接 exit 128。所以必須在 `build-packages.yml` 的
+  in-tree 大 alternation 尾端加 `|omnirush` 攔下來（首命中即中）。
+- **PKGBUILD 只有一個檔**；`source` 就是 npm 的 `omnirush-<ver>.tgz`（5.3MB launcher）。
+  真正的引擎在 optionalDependencies 的 `@omnirush-ai/cli-linux-x64`
+  （117MB tgz、解開 278MB），由 `build()` 的 `npm install` 按 os/cpu/libc 自動挑、
+  `package()` 放進 `/usr/lib/node_modules/omnirush/node_modules/`。所以產物 162MB
+  是正常的，不是把 debug 符號包進去了。`options=('!strip')` 是硬需求：strip 會讓
+  引擎 sha256 對不上 `package.json` 的 `omnirushEngineSha256`，執行期直接拒絕啟動
+  （見上游 `src/release-build.js`）。
+- **版本是靜態的（無 `pkgver()`）**：上游出新版要人工改 `pkgver` 與 `sha256sums`；
+  CI 的「產物檔名已在 release 裡」判據會在未升版時直接跳過，不會白編。
+- **觸發**：
+  `gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[{"key":"omnirush","repo_name":"omnirush","variant":"none"}]'`
+
