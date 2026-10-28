@@ -549,40 +549,6 @@ jobs:
             esac
           fi
 
-          # ── ossl4 三顆专属的 goblins 插入＋同步（2026-10-28，run 40479596546 實證）
-          # 上一輪我把插入寫進了 `if kind = tkg` 的閘裡——openvpn／tcpdump／pacman-git
-          # 是 kind=arch，根本走不到那段 → 早檢看見的 pacman.conf 還是沒動過的
-          # [core] 優先。這裡給這三顆補專屬的一份：只插 system-goblins／system-gremlins
-          # （openssl 4.1.0-1 與過渡包 openssl-3 都在 system-goblins，實查 nju 鏡像在庫），
-          # 整塊插到第一個 [core 段之前（pacman first-repo-wins），同步成功才放行。
-          # 鏡像放 nju＋wheaton 兩條：tuna 對資料中心 IP 回 403（2026-10-28 實查），
-          # 押它只會白等一輪退避。
-          case '${{ matrix.repo_name }}' in
-            openvpn|tcpdump|pacman-git)
-              _gob=''
-              for _r in system-goblins system-gremlins; do
-                _gob="${_gob}\n[${_r}]\nServer = https://mirror.nju.edu.cn/artixlinux/${_r}/os/\$arch\nServer = https://artix.wheaton.edu/repos/${_r}/os/\$arch\n"
-              done
-              awk -v blk="$_gob" '/^\[core/ && !d {d=1; printf "%s", blk} {print}' \
-                /etc/pacman.conf > /etc/pacman.conf.gob && mv /etc/pacman.conf.gob /etc/pacman.conf
-              _lg=$(grep -n '^\[system-goblins\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
-              _lc=$(grep -n '^\[core\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
-              { [ -n "$_lg" ] && [ "$_lg" -lt "$_lc" ]; } || { echo "::error::ossl4 的 system-goblins 沒插到 [core] 之前（$_lg vs $_lc）"; exit 1; }
-              synced=false
-              for attempt in 1 2 3 4 5; do
-                if pacman -Sy --noconfirm > /tmp/goblins-sy.log 2>&1; then
-                  grep -a 'system-goblins' /tmp/goblins-sy.log || true
-                  synced=true
-                  break
-                fi
-                tail -n 5 /tmp/goblins-sy.log
-                echo "ossl4 goblins 源同步失敗（第 ${attempt}/5 次），退避重試"
-                sleep $(( attempt * 20 ))
-              done
-              [ "$synced" = true ] || { echo "::error::ossl4 的 system-goblins 连续 5 次同步失败"; exit 1; }
-              ;;
-          esac
-
           # ── ossl4 三顆的早檢（2026-10-27）─────────────────────────────────
           # 目標機（Artix）的 openssl 是 system-goblins 的 4.1.0-1，provides 的只有
           # libcrypto.so=4-64／libssl.so=4-64。容器若解析到穩定線的 3.6.5-1，編出來的
