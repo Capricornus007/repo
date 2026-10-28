@@ -1385,6 +1385,59 @@ jobs:
             (cd "/build/aur-deps/${aur_pkg}" && su builder -c 'makepkg -si --noconfirm --needed --asdeps')
           done
 
+      - name: 把容器的 libplacebo 換成自有 libplacebo-git（ffmpeg-full-git 重鏈 387）
+        if: matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true'
+        run: |
+          set -uo pipefail
+          # 起因（全實物）：ffmpeg-full-git 的產物 libavfilter.so.12 的 NEEDED 實測
+          #   libplacebo.so.360（readelf -d），而容器預設只有同步庫 libplacebo 7.360
+          #   （Arch [extra]）。本倉自有 libplacebo-git 7.387 已在 feed，但這個 job
+          #   沒換包，makepkg -s 就永遠鏈同步庫的 .so.360 → 裝上機器後與本倉
+          #   libplacebo-git 的 .so.387 對不上（mpv NEEDED .387 但 libavfilter 要
+          #   .360 → "libplacebo.so.360 => not found"）。
+          # 換包手法與 mpv-git 的同源步驟一致：裸名 libplacebo 會被同步庫那顆搶走
+          # （pacman 對同步庫實包優先於 provider），唯一穩的做法是本倉那顆先裝進
+          # 本地 DB。順序不能反：
+          #  ① 先讓同步庫 ffmpeg（含它依賴的同步庫 libplacebo）落地——此時那筆
+          #     libplacebo.so=360-64 解決得了；
+          #  ② 把同步庫 libplacebo 拔掉（-Rdd 跳過依賴檢查）；
+          #  ③ 裝本倉 libplacebo-git；
+          #  ④ 產物端自證：.so.387 在、deptest 不認缺。
+          grep -q '^\[junlin03-aur\]' /etc/pacman.conf \
+            || { echo "::error::junlin03-aur 沒掛上（初始化步的點名清單被改壞了？）"; exit 1; }
+          for _t in 1 2 3 4 5; do
+            pacman -Sy >/dev/null 2>&1 && break
+            echo "::warning::同步 junlin03-aur 失敗（第 ${_t}/5 次），退避重試"
+            sleep $((_t * 5))
+          done
+          # ① 同步庫 ffmpeg（連同它依賴的同步庫 libplacebo）落地
+          for _t in 1 2 3; do
+            pacman -S --noconfirm --needed ffmpeg && break
+            echo "::warning::裝同步庫 ffmpeg 失敗（第 ${_t}/3 次），重試"
+            sleep $((_t * 8))
+          done
+          pacman -Q ffmpeg >/dev/null 2>&1 \
+            || { echo "::error::容器裡裝不上同步庫 ffmpeg，無法按上面的順序換 libplacebo"; exit 1; }
+          # ② 拔同步庫 libplacebo（-Rdd 跳過依賴檢查）
+          pacman -Rdd --noconfirm libplacebo >/dev/null 2>&1 || true
+          # ③ 裝本倉那顆
+          for _t in 1 2 3; do
+            pacman -S --noconfirm --needed libplacebo-git && break
+            echo "::warning::裝 libplacebo-git 失敗（第 ${_t}/3 次），重試"
+            sleep $((_t * 8))
+          done
+          # ④ 產物端自證
+          pacman -Q libplacebo-git >/dev/null 2>&1 \
+            || { echo "::error::libplacebo-git 沒裝進容器（feed 裡那顆下載失敗？）"; exit 1; }
+          _miss="$(pacman -T libplacebo ffmpeg)"
+          if [ -n "$_miss" ]; then
+            echo "::error::makepkg 的 deptest 仍認為缺：$_miss —— 裸名又被同步庫搶走了"
+            exit 1
+          fi
+          [ -e /usr/lib/libplacebo.so.387 ] \
+            || { echo "::error::/usr/lib/libplacebo.so.387 不在，裝的不是本倉那顆"; exit 1; }
+          echo "::notice::ffmpeg-full-git 的 libplacebo 已換成本倉（$(pkg-config --modversion libplacebo 2>/dev/null || echo 查不到)），重鏈後才是 .so.387"
+
       - name: 云端编译 ffmpeg-full-git
         if: matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true'
         run: |
