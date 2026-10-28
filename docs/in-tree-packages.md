@@ -1932,12 +1932,18 @@ Major／API／Fix 三段，接 `.r<rev-list --count>.g<short>` ⇒ 現值
 3. `build-packages.yml:801` 那條 in-tree 大 alternation 尾端加 `|libplacebo-git`
    （首命中即中，擋掉「名字以 -git 結尾 → clone AUR」的通用規則）。
 4. mpv-git 側三個接點（動的是 workflow，不是 `mpv-git/PKGBUILD`——本輪範圍不碰別的包）：
-   · `build-packages.yml:130` 附近的「掛 junlin03-aur 源」點名清單加 `mpv-git`
+   · `build-packages.yml:132` 「掛 junlin03-aur 源」的點名清單加 `mpv-git`
      （plan 的依賴閘門與換包步驟都要查得到 feed 裡那顆）；
-   · `build-packages.yml:2184` plan 步的 `_extra_gate_deps` 加
-     `mpv-git) → libplacebo-git`（還沒進 feed 就本輪跳過，靠排程按 DAG 收斂）；
-   · `build-packages.yml:3474` 新步驟「把容器的 libplacebo 換成自有 libplacebo-git」，
+   · `build-packages.yml:1649` plan 步**mpv-git 真正走的那條**探測分支
+     （`mpv-git|oh-my-pi-git|pysolfc-git)`）尾端加一道
+     `pacman -Si libplacebo-git` 就緒閘門，查不到就 `skip` 等下輪；
+   · `build-packages.yml:3486` 新步驟「把容器的 libplacebo 換成自有 libplacebo-git」，
      排在「云端编译」之前。
+   ⚠️ 這道閘門第一版（3dd9721）寫在下方通用分支的 `_extra_gate_deps` 表裡，
+   對 mpv-git 是**死碼**——mpv-git 有專屬分支，永遠到不了通用分支，結果
+   run `40626721506` 的 mpv job 直接紅在 `error: target not found: libplacebo-git`。
+   這正是本檔「2026-10-15 四顆紅的根因」病灶二（「閘門寫在永不執行的分支＝沒有閘門」）
+   的第三次踩雷，這次是自己踩的，死碼已刪、註記留在原處。
 5. 本檔。
 
 ### mpv 那邊「裸名會被同步庫同名實包搶走」的處置（病灶一的第三例）
@@ -1969,7 +1975,7 @@ libavfilter 找 `libplacebo.so.360`；找不到就是 `error while loading share
 libraries` 起動失敗。要真的可用，機器上的 ffmpeg 也必須是照 libplacebo 7.387
 重鏈的。三條路（本輪都沒做，因為都等於動別的包）：
 ① 等同步庫 ffmpeg 跟著 libplacebo 抬版（Arch 那邊 mpv 0.41 也在推，會自己到位）；
-② 把 `build-packages.yml:3474` 那步的 `if:` 也點名 `ffmpeg-full-git`（同一套
+② 把 `build-packages.yml:3486` 那步的 `if:` 也點名 `ffmpeg-full-git`（同一套
    「先裝 ffmpeg 再換 libplacebo」的順序，注意該 job 有自己的建置步與 AUR 依賴步）；
 ③ 讓 `mpv-git` 改用 feed 的 `ffmpeg-full-git`（那顆的 depends 目前是裸名
    `libplacebo`、沒有 `=360` 那筆，所以 provider 頂得住），但那要嘛改它的
