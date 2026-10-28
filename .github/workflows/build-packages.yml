@@ -403,21 +403,7 @@ jobs:
             # 无主 libLLVM.so.22.1 硬解）。加 Artix goblins 源，让容器 llvm/clang
             # 与目标机一致；lib32-* 同源，供 _lib32=true 的 lib32 mesa 使用。
             # 同 474 行那段：這批倉押單一鏡像會踩空，三個一起放（nju → tuna → wheaton）。
-            # ⚠ 2026-10-27 順序修正（run #66 真根因）：pacman 是 first-repo-wins，目標機
-            #   /etc/pacman.conf 的 system-goblins 排**在 system 之前**；舊寫法追加到檔尾，
-            #   goblins 整個排在 [core]/[extra] 後面 → openssl 永遠解析到 [core] 的 3.6.5-1，
-            #   早檢恆紅、就算編下去也只出 =3-64 產物。改成整塊**插到第一個 [core 段之前**；
-            #   [options] 仍在檔首不受影響。
-            _gob=''
-            for _r in system-goblins system-gremlins world-goblins world-gremlins \
-                      lib32-goblins lib32-gremlins; do
-              _gob="${_gob}\n[${_r}]\nServer = https://mirror.nju.edu.cn/artixlinux/${_r}/os/\$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/${_r}/os/\$arch\nServer = https://artix.wheaton.edu/repos/${_r}/os/\$arch\n"
-            done
-            awk -v blk="$_gob" '/^\[core/ && !d {d=1; printf "%s", blk} {print}' \
-              /etc/pacman.conf > /etc/pacman.conf.gob && mv /etc/pacman.conf.gob /etc/pacman.conf
-            _lg=$(grep -n '^\[system-goblins\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
-            _lc=$(grep -n '^\[core\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
-            { [ -n "$_lg" ] && [ "$_lg" -lt "$_lc" ]; } || { echo "::error::goblins 倉沒插到 [core] 之前（$_lg vs $_lc）"; exit 1; }
+            printf '\n[world-goblins]\nServer = https://mirror.nju.edu.cn/artixlinux/world-goblins/os/$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/world-goblins/os/$arch\nServer = https://artix.wheaton.edu/repos/world-goblins/os/$arch\n\n[lib32-goblins]\nServer = https://mirror.nju.edu.cn/artixlinux/lib32-goblins/os/$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/lib32-goblins/os/$arch\nServer = https://artix.wheaton.edu/repos/lib32-goblins/os/$arch\n' >> /etc/pacman.conf
             # wheaton 是唯一承載 world-goblins/lib32-goblins 的 Artix 鏡像
             # （rit/checkdomain/clarkson 實測 404，不承載 goblins）。它推送新包時
             # 有同步瞬間 db 還沒落地 → 404「failed to synchronize all databases」
@@ -541,7 +527,7 @@ jobs:
           # 0.38 秒就跳到早檢，openssl 照樣是 [core] 的 3.6.5-1）。
           # 這裡獨立一段、只對這三顆生效，避免把 openssl 4 帶給其他 130+ 包。
           # SigLevel = Never 逐段寫：Arch 容器沒有 Artix 的 GPG key，不關驗證會同步失敗。
-          if [ "${{ matrix.kind }}" != 'artix' ] && [ "${{ matrix.kind }}" != 'tkg' ]; then
+          if [ "${{ matrix.kind }}" != 'tkg' ]; then
             case '${{ matrix.repo_name }}' in
               openvpn|tcpdump|pacman-git)
                 _gob=''
@@ -562,6 +548,40 @@ jobs:
                 ;;
             esac
           fi
+
+          # ── ossl4 三顆专属的 goblins 插入＋同步（2026-10-28，run 40479596546 實證）
+          # 上一輪我把插入寫進了 `if kind = tkg` 的閘裡——openvpn／tcpdump／pacman-git
+          # 是 kind=arch，根本走不到那段 → 早檢看見的 pacman.conf 還是沒動過的
+          # [core] 優先。這裡給這三顆補專屬的一份：只插 system-goblins／system-gremlins
+          # （openssl 4.1.0-1 與過渡包 openssl-3 都在 system-goblins，實查 nju 鏡像在庫），
+          # 整塊插到第一個 [core 段之前（pacman first-repo-wins），同步成功才放行。
+          # 鏡像放 nju＋wheaton 兩條：tuna 對資料中心 IP 回 403（2026-10-28 實查），
+          # 押它只會白等一輪退避。
+          case '${{ matrix.repo_name }}' in
+            openvpn|tcpdump|pacman-git)
+              _gob=''
+              for _r in system-goblins system-gremlins; do
+                _gob="${_gob}\n[${_r}]\nServer = https://mirror.nju.edu.cn/artixlinux/${_r}/os/\$arch\nServer = https://artix.wheaton.edu/repos/${_r}/os/\$arch\n"
+              done
+              awk -v blk="$_gob" '/^\[core/ && !d {d=1; printf "%s", blk} {print}' \
+                /etc/pacman.conf > /etc/pacman.conf.gob && mv /etc/pacman.conf.gob /etc/pacman.conf
+              _lg=$(grep -n '^\[system-goblins\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
+              _lc=$(grep -n '^\[core\]' /etc/pacman.conf | head -n1 | cut -d: -f1)
+              { [ -n "$_lg" ] && [ "$_lg" -lt "$_lc" ]; } || { echo "::error::ossl4 的 system-goblins 沒插到 [core] 之前（$_lg vs $_lc）"; exit 1; }
+              synced=false
+              for attempt in 1 2 3 4 5; do
+                if pacman -Sy --noconfirm > /tmp/goblins-sy.log 2>&1; then
+                  grep -a 'system-goblins' /tmp/goblins-sy.log || true
+                  synced=true
+                  break
+                fi
+                tail -n 5 /tmp/goblins-sy.log
+                echo "ossl4 goblins 源同步失敗（第 ${attempt}/5 次），退避重試"
+                sleep $(( attempt * 20 ))
+              done
+              [ "$synced" = true ] || { echo "::error::ossl4 的 system-goblins 连续 5 次同步失败"; exit 1; }
+              ;;
+          esac
 
           # ── ossl4 三顆的早檢（2026-10-27）─────────────────────────────────
           # 目標機（Artix）的 openssl 是 system-goblins 的 4.1.0-1，provides 的只有
