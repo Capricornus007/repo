@@ -624,6 +624,31 @@ jobs:
           git config --system http.postBuffer 524288000
           echo "nproc=$(nproc)"
 
+          # ── mpv-git：先裝本倉自己的 libplacebo-git（7.387）再編 ──────────────
+          # 2026-10-28（規則 15「版本衝突以最新優先，然後修由此產生的錯誤」）：
+          # 系統/容器的 libplacebo 是 7.360（soname .so.360），feed 已收編
+          # libplacebo-git 7.387（.so.387）。不在「裝了新庫」的環境裡編，mpv 出來的
+          # 還是鏈 .so.360、等於白收。
+          # 換庫會讓容器裡既有的 ffmpeg 斷（它 NEEDED .so.360），所以換之前先把舊
+          # soname 留一份、換完放回去：兩個 soname 並存，編 mpv 用 387、ffmpeg 照跑。
+          # ffmpeg 本身暫不重建：官方 ffmpeg 的 soname 是 62/11/62，換版會連鎖打壞
+          # 一大票依賴它的包，得走官方 PKGBUILD 單獨處理，不在這一步賭。
+          if [ '${{ matrix.repo_name }}' = 'mpv-git' ]; then
+            _lp_url=$(curl -s "https://api.github.com/repos/Capricornus007/repo/releases?per_page=5" \
+              | grep -o 'https://[^"]*libplacebo-git-[^"]*x86_64\.pkg\.tar\.zst' | head -n1)
+            if [ -z "$_lp_url" ]; then
+              echo "::error::找不到 libplacebo-git 的 release 產物，mpv 會鏈到舊的 .so.360"
+              exit 1
+            fi
+            mkdir -p /tmp/lp360 && cp -a /usr/lib/libplacebo.so.360* /tmp/lp360/ 2>/dev/null || true
+            curl -fL -o /tmp/libplacebo-git.pkg.tar.zst "$_lp_url"
+            pacman -U --noconfirm /tmp/libplacebo-git.pkg.tar.zst
+            cp -a /tmp/lp360/. /usr/lib/ 2>/dev/null || true
+            ldconfig
+            pacman -Q libplacebo-git
+            ls -1 /usr/lib/libplacebo.so.* | tr '\n' ' '; echo
+          fi
+
           useradd builder -m || true
           echo "builder ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           git config --global user.name "github-actions[bot]"

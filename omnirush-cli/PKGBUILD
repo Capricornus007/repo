@@ -22,10 +22,14 @@
 # 預編譯執行檔（package.json 的 omnirushEngineSha256 會逐次核對 sha256，
 # 見上游 src/release-build.js），strip 會改檔內容 → 執行時直接被判
 # 「engine binary does not match this release」而拒絕啟動。
-pkgname=omnirush
+pkgname=omnirush-cli
 pkgver=2.7.5
-pkgrel=1
+pkgrel=2
 pkgdesc="Omnirush — AI coding agent CLI from the npm registry (bundled linux engine)"
+# 2026-10-28 使用者裁定：包名要能一眼看出是 CLI ⇒ omnirush-cli。
+# 但指令名維持 omnirush（大家敲的是這個），所以 package() 裡的安裝目錄與 symlink 用固定字串。
+provides=('omnirush')
+conflicts=('omnirush')
 arch=('x86_64' 'aarch64')
 url="https://omnirush.ai"
 license=('Apache-2.0')
@@ -51,7 +55,8 @@ build() {
 }
 
 package() {
-  local _dest="$pkgdir/usr/lib/node_modules/$pkgname"
+  local _app=omnirush
+  local _dest="$pkgdir/usr/lib/node_modules/$_app"
   install -d "$_dest"
   cp -a "$srcdir/package/." "$_dest/"
 
@@ -66,5 +71,5 @@ package() {
 
   # 相對 symlink：pacman 包裡不要出現指向建置機或絕對路徑的連結。
   install -d "$pkgdir/usr/bin"
-  ln -sfn "../lib/node_modules/$pkgname/src/bin.js" "$pkgdir/usr/bin/$pkgname"
+  ln -sfn "../lib/node_modules/$_app/src/bin.js" "$pkgdir/usr/bin/$_app"
 }
