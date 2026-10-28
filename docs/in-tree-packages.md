@@ -1984,12 +1984,16 @@ libraries` 起動失敗。要真的可用，機器上的 ffmpeg 也必須是照 
 
 ---
 
-omnirush（2026-10-22，使用者指定把 npm 套件打包進 feed）：
+omnirush-cli（原名 omnirush；2026-10-28 使用者裁定改名，理由是「光看包名看不出它是 CLI 還是 GUI」）：
+
+- **包名 vs 指令名**：`pkgname=omnirush-cli`、但安裝目錄與 `/usr/bin` symlink 都是
+  `omnirush`（大家敲的是這個）；`provides=(omnirush)` + `conflicts=(omnirush)`
+  讓新包能直接頂掉改名前的舊包，不用先手動卸載。
 
 - **為什麼 in-tree**：上游是固定版號的 npm release（`registry.npmjs.org/omnirush`），
   不是 `-git` 包；通用規則「非 `-git` → clone `github.com/<owner>/omnirush.git`」會去要
   一個不存在的倉，CI 無 TTY 直接 exit 128。所以必須在 `build-packages.yml` 的
-  in-tree 大 alternation 尾端加 `|omnirush` 攔下來（首命中即中）。
+  in-tree 大 alternation 尾端加 `|omnirush-cli` 攔下來（首命中即中）。
 - **PKGBUILD 只有一個檔**；`source` 就是 npm 的 `omnirush-<ver>.tgz`（5.3MB launcher）。
   真正的引擎在 optionalDependencies 的 `@omnirush-ai/cli-linux-x64`
   （117MB tgz、解開 278MB），由 `build()` 的 `npm install` 按 os/cpu/libc 自動挑、
