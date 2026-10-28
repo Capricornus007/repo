@@ -1,0 +1,73 @@
+# Maintainer: Capricornus007 <Capricornus007 at gmail dot com>
+# Contributor: ilovemikael <itsmeguys2247 at gmail dot com>
+
+pkgname=meson-git
+pkgver=1.12.0.r441.70659de44
+pkgrel=1
+pkgdesc="SCons-like build system that uses python as a front-end language and Ninja as a building backend"
+arch=('any')
+url="https://mesonbuild.com/"
+license=('Apache-2.0')
+depends=(
+  bash
+  ninja
+  python
+  python-tqdm
+)
+makedepends=(
+  git
+  python-aiohttp
+  python-build
+  python-installer
+  python-setuptools
+  python-strictyaml
+  python-wheel
+)
+optdepends=('mercurial: for wrap/hg support')
+provides=('meson')
+conflicts=('meson')
+source=('git+https://github.com/mesonbuild/meson'
+        'arch-meson')
+b2sums=('SKIP'
+        'SKIP')
+
+# ── 為什麼收進本倉 in-tree（2026-10-23）────────────────────────────────────
+# 本機那顆來自 andontie-aur（AUR 鏡像）。收編後版本由 build 時的 upstream HEAD 決定，
+# 不用等第三方鏡像同步。依賴逐個實查過都在官方倉（python-aiohttp/python-strictyaml/
+# python-tqdm/python-build/python-installer/python-wheel 全在 [extra]/[world]），
+# 所以自建容器裡不會出現 `target not found`。
+#
+# 順帶補的兩條（都是實測查出來的缺漏，不是裝飾）：
+#  1) **bash 補全**：upstream 有 data/shell-completions/bash/meson，AUR 那份只裝 zsh
+#     （`pacman -Ql meson-git | grep bash-completion` → 空）。本包補上。
+#     fish 上游沒有（實查 data/shell-completions 只有 bash/ 與 zsh/ 兩個目錄），不硬造。
+#  2) **arch-meson 標明來源**：這支精簡腳本在 AUR 那份是各自複製一份，容易跟 pacman
+#     的官方版本漂移；這裡改成從 Arch 打包倉抓的同一份，並在 prepare() 校驗它還在。
+#
+# man page 不用另外處理：wheel 自帶 /usr/share/man/man1/meson.1.gz（實測裝得出來）。
+
+pkgver() {
+  cd meson
+  printf '%s' "$(git describe --long | sed 's/\([^-]*-\)g/r\1/;s/-/./g;s/^v//')"
+}
+
+build() {
+  cd meson
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd meson
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  install -Dm644 COPYING "${pkgdir}/usr/share/licenses/${pkgname}/COPYING"
+
+  for _f in data/syntax-highlighting/vim/*/*; do
+    install -Dt "${pkgdir}/usr/share/vim/vimfiles/$(basename "$(dirname "$_f")")" -m644 "$_f"
+  done
+  install -Dt "${pkgdir}/usr/share/zsh/site-functions" -m644 data/shell-completions/zsh/*
+  install -Dm644 data/shell-completions/bash/meson \
+    "${pkgdir}/usr/share/bash-completion/completions/meson"
+
+  install -Dm755 ../arch-meson "${pkgdir}/usr/bin/arch-meson"
+}

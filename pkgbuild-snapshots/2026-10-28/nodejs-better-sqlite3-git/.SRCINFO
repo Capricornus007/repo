@@ -1,0 +1,24 @@
+pkgbase = nodejs-better-sqlite3-git
+	pkgdesc = The fastest and simplest library for SQLite3 in Node.js (upstream git)
+	pkgver = 13.0.3.r0.g0000000
+	pkgrel = 2
+	url = https://github.com/WiseLibs/better-sqlite3
+	arch = x86_64
+	license = MIT
+	makedepends = git
+	makedepends = npm
+	makedepends = node-gyp
+	makedepends = python
+	makedepends = make
+	makedepends = gcc
+	depends = nodejs
+	provides = nodejs-better-sqlite3
+	provides = better-sqlite3
+	conflicts = nodejs-better-sqlite3
+	conflicts = better-sqlite3
+	replaces = nodejs-better-sqlite3
+	options = !strip
+	source = better-sqlite3::git+https://github.com/WiseLibs/better-sqlite3.git
+	sha256sums = SKIP
+
+pkgname = nodejs-better-sqlite3-git

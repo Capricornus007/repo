@@ -1,0 +1,91 @@
+# multitail 的開發版（上游 master）。
+# 基準對照物：**AUR 的 multitail（7.1.5-1）**，不是 Arch 官方——本輪實測 Arch 的
+# packaging 群組裡查不到 multitail 這個專案（groups/archlinux/packaging/packages/projects?search=multitail
+# 回空列表），multitail 一直只活在 AUR。AUR 原件取自
+# https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=multitail
+# Artix 來源本機全部抓不到（api.artixlinux.org／code.artixlinux.org 連 DNS 都解析不出來）。
+# 這包沒有 systemd unit、沒有 install 鉤子、沒有 .patch 檔，所以 Artix 那一側沒有需要補的差異。
+#
+# 官方（AUR）那份的實質內容全部搬過来了：4 個 sed（ncursesw 頭檔案路徑修正）、
+# cmake -DCMAKE_INSTALL_PREFIX=/usr、package() 裡的三個 mv 擺位（etc 搬到大目、
+# multitail.conf.new 改名、doc 目錄去掉版本後綴）、backup=('etc/multitail.conf')、
+# LICENSE 的安裝位置，一個都沒丟。
+#
+# 上游狀態（實測）：master = 7.1.5-34-gfdfcd84，比最新 release tag 7.1.5 領先 34 個 commit，
+# 最新一顆 2026-07-17（PR #73 fix71），之後到現在約兩個多月沒動。倉裡的 version 檔案在
+# master 上仍寫 VERSION=7.1.5，也就是上游還沒準備發下一版，-git 拿到的是「7.1.5 + 34 顆修正」。
+# 另外本倉 CI 矩陣已經在蓋 AUR 的 "multitail"（kind:aur），這顆進矩陣等於同一程式在源裡
+# 同時有穩定與開發兩條；provides/conflicts 寫對了不會互踩，但要知道/feed 會有兩包。
+#
+# ⚠️ 循環依賴（低）：build 要用 cmake 與 make。若用戶機把 cmake 換成 cmake-git，
+#   這包的構建就會吃 cmake-git；兩顆一起換時建議一次只換一顆。
+
+_name=multitail
+pkgname=$_name-git
+# 佔位值，僅供人讀：實際由 pkgver() 從 origin/master 現算覆寫。
+pkgver=7.1.5.r34.gfdfcd84
+pkgrel=1
+# epoch=1：上游 tag 有不規則形狀（7.1.4a、5.2.12），describe 錨點若被這種 tag 搶走，
+# 產物會被 repo-add 判降級而永遠拒收（本倉最陰的一類故障，不准用 --force 繞）。
+epoch=1
+pkgdesc='View one or multiple files like the original tail program'
+arch=('x86_64')
+url='https://www.vanheusden.com/multitail'
+license=('MIT')
+depends=('glibc' 'bash' 'ncurses' 'perl')
+# AUR 只寫 ('cmake')，靠 chroot 的 base-devel 撐著。-git 需要 git；cmake --build 預設
+# 生成 Makefile 所以需要 make。兩樣都明列。
+makedepends=('cmake' 'make' 'git')
+backup=('etc/multitail.conf')
+provides=("$_name")
+conflicts=("$_name")
+source=("git+https://github.com/folkertvanheusden/${_name}.git#branch=master")
+sha256sums=('SKIP')
+
+pkgver() {
+  # 目錄名必須是 ${pkgname%-git}=multitail；上游倉目錄名也是 multitail，克隆結果對得上。
+  # CI 的泛用版本探測照這個名字克隆，對不上會恆 skip（踩過的坑）。
+  # 只看 origin/master 這個 ref，不看 HEAD：探測輪克隆預設分支、實建才 checkout，
+  # 只有釘 ref 兩邊算出來的才同值，否則每輪白編。
+  # --match '[0-9]*'：實測上游 14 顆 tag 全部數字開頭（含 7.1.4a 這種帶字母尾巴的），
+  # 這道限制是防日後被 v / latest 之類的 tag 搶錨點。
+  cd "${pkgname%-git}"
+  git describe --tags --long --match '[0-9]*' origin/master \
+    | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd "${_name}"
+  # 與 AUR 逐字相同：上游 mt.h 在 #else 分支裡仍然寫 <ncursesw/panel.h>／<ncursesw/ncurses.h>，
+  # 本輪實測 master 的 mt.h 第 66-67 行還是有這兩行（也就是這條修正還沒上游化），必須留。
+  sed -i 's|ncursesw/panel.h|panel.h|' mt.h
+  sed -i 's|ncursesw/ncurses.h|ncurses.h|' mt.h
+}
+
+build() {
+  cd "${_name}"
+  # 與 AUR 同款旗標（上游 CMakeLists 只有這一個必要定義；UTF8_SUPPORT 預設 ON，
+  # pcreposix 那段只在 CYGWIN 才走，不需要額外套件）
+  cmake -B build -S . \
+    -DCMAKE_INSTALL_PREFIX=/usr
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install "${_name}/build"
+
+  # 以下三段是 AUR 原檔的安裝細節，逐字搬：
+  mv "$pkgdir"/{usr/,}etc
+  mv "$pkgdir"/etc/multitail.conf{.new,}
+  # 上游把 doc 裝成帶版本後綴的目錄（AUR 原檔用 `multitail{-$pkgver,}` 收）。
+  # 這裡**不能照抄 $pkgver**：本包是 -git，pkgver 長成 7.1.5.r34.g<hash>，拼出來的目錄名
+  # 不存在，mv 會直接把 build 打紅。改用 glob 收，上游叫 multitail-7.1.5 或 multitail 都吃得下。
+  if [ -d "$pkgdir"/usr/share/doc/multitail-* ]; then
+    for _d in "$pkgdir"/usr/share/doc/multitail-*; do
+      mv "$_d" "$pkgdir"/usr/share/doc/multitail
+    done
+  fi
+
+  cd "${_name}"
+  install -Dm644 LICENSE -t "$pkgdir"/usr/share/licenses/$pkgname/
+}

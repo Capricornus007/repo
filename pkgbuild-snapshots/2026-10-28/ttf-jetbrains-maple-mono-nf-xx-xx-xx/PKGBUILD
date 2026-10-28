@@ -1,0 +1,56 @@
+# 來源：用戶自建倉 ~/.cache/yay/ttf-jetbrains-maple-mono-nf-xx-xx-xx/PKGBUILD
+# （origin = github.com/Capricornus007/ttf-jetbrains-maple-mono-nf-xx-xx-xx，用戶 commit
+# 5ecbcae「我自己專用的等寬字體最前沿版本」）。AUR 上只有 ttf-jetbrains-maple-mono-nf-xx-xx
+# （baddate，固定 1.2304.76），**-xx-xx-xx 這個名字 AUR 沒有**，故本目錄保留 AUR 式命名、
+# 內容以用戶版為準。用戶相對 AUR 的改動全部保留：
+#   1. pkgname/pkgbase 由 AUR 的 …-nf-xx-xx 再加一級 -xx 後綴（換上游另一組變體）
+#   2. pkgver 固定 "pre" → 源改成上游滾動 pre-release 的 JetBrainsMapleMono-NF-XX-XX-XX.zip
+#   3. 安裝路徑 /usr/share/fonts/TTF/<字體名>/ → /usr/share/fonts/TTF/monospace/
+#   4. 拿掉 upstream maintainer 註解、新增 .gitignore（.gitignore 屬打包倉自用，不入本倉）
+#
+# 卡代病灶與修法（2026-10-03 用戶定案）：上游把資產在**同一個滾動 tag** 下原地重傳，
+# 版號字串永遠是 "pre"，所以「版號有沒有變」根本無法當觸發條件；實測庫裡 pre-1 建於
+# 2026-09-18T17:47Z，上游資產 2026-09-20T20:20Z 換過檔，此後再沒重建。
+# 觸發條件改成**資產本身的 sha256**：CI 讀 GitHub release API 的 `digest` 欄（一個 API
+# call，不用拉 152MB），與本檔 sha256sums 比對，不同就把 pkgrel 抬一、寫回新 sha 並重建。
+# 所以這顆既不是 -git 類（沒有 commit 序號可算）也不是 kernel 類（不用等編譯），
+# 判據只有一句話：**source 的檔內容換了沒換**。
+# sha256sums 必須寫**真值**——它就是變更偵測的基準，寫 SKIP 等於把偵測器拆掉；
+# 值由 CI 自動維護（見 build-packages.yml 的 ttf 分支與 in-tree 回推），人不用手工抬。
+#
+# 歷史教訓（同一檔寫兩次會只改半邊）：本檔曾經用 `pkgver()` 把「資產 updated_at 日期」
+# 編進版號（pre.YYYYMMDD）。那個做法有兩個硬傷：① plan 步是 `source ./PKGBUILD` 讀
+# `$pkgver`，而 `pkgver()` 是**函式**不是變數 → 讀到空字串，實測日誌
+# 「当前 PKGBUILD: … pkgver=」「目标版本: -1」，job 直接紅；② 就算修好，日期欄位
+# （updated_at）與檔內容不同步的風險仍在。故改回靜態 pkgver=pre ＋ sha256 觸發。
+# 字體包不需要 .install hook：本機 fontconfig 已提供 /usr/share/libalpm/hooks/fontconfig.hook
+# 會在 usr/share/fonts/** 變動時跑 fc-cache，AUR 原版也沒有 hook。
+
+pkgname=ttf-jetbrains-maple-mono-nf-xx-xx-xx
+_rel_tag=pre
+pkgver=pre
+# 3 = 故意抬的一等：庫裡那顆 pre-2 建於 2026-09-18T17:47Z，而上游資產在
+# 2026-09-20T20:20Z 原地重傳過（sha256 已是下面這個值），pre-1 裝的是舊檔。
+# 這一輪補建之後，往後的重建完全由「資產 sha256 變了沒變」驅動，人不用再抬。
+pkgrel=5
+pkgdesc="JetBrains Maple Mono: The free and open-source font fused with JetBrains Mono & Maple Mono"
+arch=('any')
+url="https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono"
+license=('OFL')
+source=("https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono/releases/download/${_rel_tag}/JetBrainsMapleMono-NF-XX-XX-XX.zip")
+sha256sums=('335371dd9fcecfb211c7ceb342a2499a3f158c7b871d17eef54be05456ada087')
+provides=('ttf-font')
+
+package() {
+  _fontname=JetBrains-Maple-Mono-NF-XX-XX
+  # Create font directory
+  install -dm755 "$pkgdir/usr/share/fonts/TTF"
+
+  # Install all font files
+  for font in *.ttf; do
+    install -Dm644 "$font" "$pkgdir/usr/share/fonts/TTF/monospace/$font"
+  done
+
+  # Install license file
+  install -Dm644 "LICENSE.txt" "$pkgdir/usr/share/licenses/${_fontname}/LICENSE.txt"
+}

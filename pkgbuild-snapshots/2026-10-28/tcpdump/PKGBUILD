@@ -1,0 +1,74 @@
+# Maintainer: Capricornus007 <Capricornus007 at gmail dot com>
+# 基準：Arch 打包倉 gitlab.archlinux.org/archlinux/packaging/packages/tcpdump
+#       （main 分支，pkgver=4.99.7 pkgrel=2，2026-10-27 實取）；內容逐字照上游，
+#       本包没有任何自有修改——它需要的「不帶版本的 soname 依賴」上游已經寫好了
+#       （見下面 package() 的 depends+=），缺的只是構建時把 autodeps 關掉。
+
+pkgname=tcpdump
+pkgver=4.99.7
+pkgrel=3
+pkgdesc='Powerful command-line packet analyzer'
+url="https://www.tcpdump.org/"
+arch=(x86_64)
+license=(BSD-3-Clause)
+# ⚠️ `.so` 依賴不帶版本（libpcap.so／libcap-ng.so／libcrypto.so，不是 =1-64/=0-64/=3-64），
+#    且 CI 對本包關掉 makepkg 的 autodeps（見 build-packages.yml 的「對 openssl-4 相容的
+#    三顆關閉 autodeps」步驟）。不開 autodeps 的話這些手寫条目會被替換成帶版本的形，
+#    而目標機的 openssl 已從 Artix [system-goblins] 抬到 4.1.0-1（provides
+#    libcrypto.so=4-64），`libcrypto.so=3-64` 在本機只能靠過渡包 openssl-3 頂著。
+depends=(glibc)
+makedepends=(
+  cmake
+  libpcap
+  libcap-ng
+  openssl
+)
+source=(https://www.tcpdump.org/release/$pkgname-$pkgver.tar.gz{,.sig})
+sha512sums=('5f6bf26d72fd12d31320ab06cd9051226df513bdc9a1ed682f290fac0170d402fe6727a416d437f8cef15c2015512a63bbfecd68c9b36cc3a93c8ef952b0c730'
+            'SKIP')
+b2sums=('15cb61451ba7b0d60255a335d9741857100bf30f90bf7e737cd625e461ce02cb320905006881e5c8d3e4056fae28282ecf29447f0827a961507fca2db14face7'
+        'SKIP')
+validpgpkeys=('1F166A5742ABB9E0249A8D30E089DEF1D9C15D0D') # The Tcpdump Group (Package signing key) <release@tcpdump.org>
+
+# ── 為什麼收進本倉 in-tree（2026-10-27）────────────────────────────────────
+# 1. 不是「官方倉已有、只是本機 DB 過舊」那一類。實查（現抓 DB 逐條拆 %DEPENDS%）：
+#      · Artix [galaxy] tcpdump 4.99.7-1 → depends libcrypto.so=3-64（本機 openssl 是 4）
+#      · Artix [world]／[world-goblins]／[world-gremlins] 查無 tcpdump 這顆（Artix 把它放
+#        galaxy，且還沒有 openssl-4 的重建）
+#      · Arch  [extra] 4.99.7-1 → 同樣 =3-64；[extra-staging] 4.99.7-2 → =4-64，但那要連
+#        Arch core-staging 的整條 openssl 4 鏈，本機用的是 Artix 的 openssl 4，不是 Arch 的
+#      · AUR RPC 查無 tcpdump（實查 v=5&type=search&arg=tcpdump）⇒ 也沒有 AUR 版可吃
+#    ⇒ 目標態（ openssl 4 鏈、soname 依賴不帶版本）只能自己出。
+# 2. 版本取捨：4.99.7-**2**（＝Arch staging 的 pkgrel，也是本機臨時倉已裝的那一版），
+#    不退回 galaxy／extra 的 -1。
+# 3. 構建基座：`kind: artix`＋Artix 容器，讓鏈進去的 openssl 與目標機同一顆（4.1.0-1）。
+#    用 Arch 容器會鏈出 NEEDED libcrypto.so.3，等於把「必須留著 openssl-3」又釘回去一輪。
+# 4. 逐包理由與驗證證據記 docs/in-tree-packages.md。
+
+build() {
+  local cmake_options=(
+    -DCMAKE_INSTALL_PREFIX=/usr
+    -DCMAKE_BUILD_TYPE=None
+    -Wno-dev
+    -B build
+    -S $pkgname-$pkgver
+  )
+
+  cmake "${cmake_options[@]}"
+  cmake --build build --verbose
+}
+
+check() {
+  make VERBOSE=1 check -C build
+}
+
+package() {
+  depends+=(
+    libpcap libpcap.so
+    libcap-ng libcap-ng.so
+    openssl libcrypto.so
+  )
+
+  DESTDIR="$pkgdir" cmake --install build
+  install -vDm 644 $pkgname-$pkgver/LICENSE -t "$pkgdir/usr/share/licenses/$pkgname/"
+}
