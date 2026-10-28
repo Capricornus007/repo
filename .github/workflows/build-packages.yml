@@ -642,6 +642,10 @@ jobs:
             fi
             mkdir -p /tmp/lp360 && cp -a /usr/lib/libplacebo.so.360* /tmp/lp360/ 2>/dev/null || true
             curl -fL -o /tmp/libplacebo-git.pkg.tar.zst "$_lp_url"
+            # libplacebo-git 的 PKGBUILD 寫了 conflicts=('libplacebo')，而 pacman -U --noconfirm
+            # 對「是否移除衝突包」的提問預設答 N ⇒ 先強制卸掉容器裡的 libplacebo 再裝。
+            # 容器內 ffmpeg 的 NEEDED 是 .so.360，卸掉後先靠 /tmp/lp360 的副本頂著（下面會放回）。
+            pacman -Rdd --noconfirm libplacebo || true
             pacman -U --noconfirm /tmp/libplacebo-git.pkg.tar.zst
             cp -a /tmp/lp360/. /usr/lib/ 2>/dev/null || true
             ldconfig
