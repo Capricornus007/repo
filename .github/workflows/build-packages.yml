@@ -129,10 +129,16 @@ jobs:
              || [ "${{ matrix.repo_name }}" = 'spirv-tools-git' ] \
              || [ "${{ matrix.repo_name }}" = 'spirv-headers-git' ] \
              || [ "${{ matrix.repo_name }}" = 'fcitx5-qt-git' ] \
-             || [ "${{ matrix.repo_name }}" = 'mpv-git' ]; then
+             || [ "${{ matrix.repo_name }}" = 'mpv-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'ffmpeg-full-git' ]; then
             # mpv-git 點名掛源（2026-10-28）：它的 depends 有裸名 libplacebo，同步庫那顆
             # 只有 7.360.1 而 mpv 的 meson 閘門要 >= 7.387.0；要先查得到/裝得上本倉的
             # libplacebo-git，plan 的依賴閘門與「換 libplacebo」那步才走得通。
+            # ffmpeg-full-git 點名掛源（2026-10-28）：plan 步的兄弟依賴閘門
+            # （mpeghdec-git/quirc-git/svt-jpeg-xs-git/astc-encoder-git 四顆）靠
+            # `pacman -Si` 查 feed；不掛源就恆查無 → 恆跳過 → ffmpeg-full-git
+            # 永遠不重編（run 40676135750／40678866674 兩輪實測都卡在
+            # 「mpeghdec-git 尚未發佈」——它明明 2026-09-23 就在 feed 裡）。
             # 把自有 junlin03-aur 掛成匿名 pacman 源。矩陣 job 並行，靠它看見
             # 兄弟 job 已發布的 KDE 依賴產物（release 資產公開可取，實測
             # …/current-repo/junlin03-aur.db 與包檔均 HTTP 200）。冷啟動時
