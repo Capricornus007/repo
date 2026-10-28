@@ -1640,6 +1640,17 @@ jobs:
                   | sed 's/\([^-]*-g\)/r\1/;s/-/./g')
               fi
               [ -n "$TARGET_PKGVER" ] || skip "拿不到 $PKG 上游版本"
+              # mpv-git 的依賴就緒閘門（2026-10-28）：mpv 的 depends 寫裸名 libplacebo，
+              # 同步庫那顆只有 7.360.1 而 mpv 的 meson 閘門要 >= 7.387.0，修法是
+              # 「云端编译」之前那步把本倉 libplacebo-git 先裝進容器本地 DB。那步要先
+              # 在 feed 裡查得到這顆才有意義——還沒發布就放行，只會白紅一輪
+              # （run 40626721506 的 mpv job 實測紅在 `error: target not found:
+              # libplacebo-git`）。閘門必須寫在**這條分支**：mpv-git 到不了下面的
+              # 通用分支（2026-10-15 病灶二同一形）。
+              if [ "$PKG" = "mpv-git" ]; then
+                pacman -Si -- libplacebo-git >/dev/null 2>&1 \
+                  || skip "本倉 libplacebo-git 尚未發布到 junlin03-aur（裸名會被同步庫同名實包搶走），本輪跳過等下輪"
+              fi
               ;;
 
             protonvpn-cli-community-git)
@@ -2176,12 +2187,12 @@ jobs:
                 # 沒進的話容器會去裝官方 clang 23.1，產出一顆又鏈 .23.1 的死包
                 # ——那是本包存在的全部意義的反面，寧可本輪跳過等下輪。
                 shiboken6-git)             _extra_gate_deps="clang-git llvm-libs-git" ;;
-                # mpv-git（2026-10-28）：depends 寫裸名 libplacebo，同步庫那顆只有
-                # 7.360.1、而 mpv 的 meson 閘門要 >= 7.387.0。修法是讓本倉
-                # libplacebo-git 先落地（下面「把容器的 libplacebo 換成自有」那步），
-                # 它還沒進 feed 之前本輪跳過——放行只會讓后面那道換包步驟查不到源、
-                # 白紅一輪。
-                mpv-git)                   _extra_gate_deps="libplacebo-git" ;;
+                # ⚠️ mpv-git 不屬於這張表（2026-10-28 自己踩過的死碼）：plan 步裡
+                # mpv-git 走的是上面那條 `mpv-git|oh-my-pi-git|pysolfc-git)` 專屬探測
+                # 分支，根本到不了這個通用分支。它的「libplacebo-git 就緒」閘門寫在
+                # 那裡。與 2026-10-15 病灶二同一形：閘門寫在永不執行的分支＝沒有閘門
+                # （run 40626721506 的 mpv job 就是這樣直接紅在
+                # `error: target not found: libplacebo-git`）。
                 *)                         _extra_gate_deps="" ;;
               esac
               for _d in $_extra_gate_deps; do
