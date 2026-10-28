@@ -108,6 +108,16 @@ jobs:
       #   的 lint_options 會回「options 陣列包含未知選項『!autodeps』」（autodeps 沒註冊進
       #   packaging_options/build_options），所以由 build-packages.yml 的專用步驟追加到
       #   /etc/makepkg.conf 的 OPTIONS。
+      # · libplacebo-git（2026-10-28，補 mpv-git 的依賴缺口）：mpv master 的 meson.build
+      #   把 libplacebo 釘在 >= 7.387.0，同步庫只有 7.360.1（run 40591719745 job
+      #   122497382921 實測紅在Dependency lookup ... found '7.360.1'）。上游已出
+      #   tag v7.387.0 且 master == 該 tag，所以這顆不是拿未發布版湊數。逐包理由、
+      #   SONAME 360→387 的換代影響、以及 mpv 那邊「裸名 libplacebo 會被同步庫同名實包
+      #   搶走」的處置，全部寫在 docs/in-tree-packages.md 與 libplacebo-git/PKGBUILD 頭部。
+      #   kind: aur 只為借用回推那步的 matrix.kind != 'aur'（版號由上游 HEAD 現算，
+      #   updpkgsums 回推沒有意義）、自動掛 junlin03-aur 源，並讓 check 走 CI 的
+      #   無 GPU → --nocheck 常態；case 首命中即中，走本倉 libplacebo-git/ 目錄，
+      #   不會去 clone AUR 那份停在 7.350.0 的舊配方。
       packages: |
         [
           {"key": "linuxqq", "repo_name": "linuxqq", "variant": "none"},
@@ -143,6 +153,7 @@ jobs:
           {"key": "spirv-tools-git", "repo_name": "spirv-tools-git", "variant": "none"},
           {"key": "doxygen-git", "repo_name": "doxygen-git", "variant": "none"},
           {"key": "lib32-llvm-git", "repo_name": "lib32-llvm-git", "variant": "none", "kind": "multilib"},
+          {"key": "libplacebo-git", "repo_name": "libplacebo-git", "variant": "none", "kind": "aur"},
           {"key": "mpv-git", "repo_name": "mpv-git", "variant": "none"},
           {"key": "oh-my-pi-git", "repo_name": "oh-my-pi-git", "variant": "none"},
           {"key": "protonvpn-cli-community-git", "repo_name": "protonvpn-cli-community-git", "variant": "none"},

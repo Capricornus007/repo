@@ -1847,3 +1847,133 @@ PKGBUILD、由 CI 用 raw.githubusercontent 取檔（見 workflow 的 `case` 攔
   上游（can1357）自己的提交要等合併進 fork 才會出貨。
 - 要回到純上游：把 `source=` 改回 `git+https://github.com/can1357/oh-my-pi.git`
   並刪掉 PKGBUILD 裡那段 fork 說明即可，其餘段落不用動。
+
+## libplacebo-git（2026-10-28；補 mpv-git 的依賴缺口）
+
+### 為什麼必須有這顆（不是「也想 -git」，是排程構建真的紅）
+
+mpv master 的 `meson.build:30` 把 libplacebo 釘在 `>= 7.387.0`，而同步庫
+（Arch `[extra]`／Artix `[world]`）只有 `7.360.1-7`。本倉 mpv-git 的 job 從
+依賴一變硬就一路紅，實物日誌（run `40591719745`／job `122497382921`，
+「云端编译」步驟）：
+
+```
+Dependency libplacebo for host machine found: NO. Found 7.360.1 but need: '>=7.387.0'
+meson.build:30:13: ERROR: Dependency lookup for libplacebo with method 'pkg-config' failed:
+Invalid version, need 'libplacebo' ['>=7.387.0'] found '7.360.1'.
+```
+
+上游已經出了 tag `v7.387.0`，實測 `refs/heads/master == refs/tags/v7.387.0 == 275f7dea`
+（`git ls-remote`），所以這顆不是「拿未發布版湊數」，纯粹是同步庫還沒跟上。
+AUR 有 `libplacebo-git`（sl1pkn07）可參考，但它那份的 `pkgver` 卡在
+`7.350.0.3601.g5ba13768`（LastModified=2024-12-01）——照抄 AUR 的**版號**等於
+裝一顆比同步庫還舊的東西，違反規則 15；所以配方借 AUR，版號公式改成自己算。
+
+### 版號：讀 meson.build 的 project version，不讀 tag
+
+`pkgver()` 從 `meson.build` 的 `version: '@0@.@1@.@2@'.format(...)` 區塊取
+Major／API／Fix 三段，接 `.r<rev-list --count>.g<short>` ⇒ 現值
+`7.387.0.r4051.g275f7dea`。理由是這三段**就是**裝出去的
+`/usr/lib/pkgconfig/libplacebo.pc` 裡那個 `Version:`（實測產物逐字 `7.387.0`），
+所以 `provides` 帶的版本與 meson 實際看到的版本同一個來源，不會出現
+「包名號說 7.387、pkg-config 回報 7.360」這種虛報。與本倉 xorg-server-git
+「版本號：讀 meson.build，不讀 tag 名」同一判讀。
+
+⚠️ 老實記錄一個本輪才查實的 makepkg 行為：pacman 7.1.0 跑完 `pkgver()`
+之後會把新值**寫回 PKGBUILD 的 `pkgver=` 行並重新 source**（實測把佔位值改成
+`7.350.0.r0.g0000000` 再-build，檔內那行自己變成 `7.387.0.r4051.g275f7dea`，
+產物 `.PKGINFO` 的 `provides = libplacebo=7.387.0` 也隨之正確）。
+`package()` 尾段仍重算一次 `provides`——不把正確性押在 makepkg 的內部行為上。
+
+### SONAME 換代（360 → 387）與 conflicts
+
+上游 `src/meson.build` 寫 `soversion: apiver`，所以這顆產的是
+`/usr/lib/libplacebo.so.387`（實測產物檔名），與同步庫那顆的
+`libplacebo.so.360` **不是同一個 ABI**。照 AUR 原版保留 `conflicts=('libplacebo')`
+是正確的，不是漏接：兩顆不同裝。代價要講明白——本機 `objdump` 查實
+`/usr/lib/libavfilter.so` 的 NEEDED 正是 `libplacebo.so.360`，
+`LC_ALL=C pacman -Qi ffmpeg` 也查實同步庫 ffmpeg 帶一筆**帶版本的 soname 依賴**
+`libplacebo.so=360-64`。所以在装了这顆的機器上，所有還鏈 `.so.360` 的包
+（同步庫的 ffmpeg／librewolf／opencv／qt6-webengine／sox／vlc…）都要嘛換成本倉
+對應的源碼直出版、要嘛等同步庫抬版。這是最後面那節「還差什麼」的主題。
+
+### 本地實跑（兩輪，都在 /tmp 隔離副本，原倉 git status 乾淨）
+
+1. `makepkg -dc --noconfirm --skipchecksums`（`nice -n19 ionice -c3`、`MAKEFLAGS=-j4`）
+   ⇒ EXIT=0，產物 `libplacebo-git-7.387.0.r4051.g275f7dea-1-x86_64.pkg.tar.zst`（1.1MB）。
+2. 把佔位 `pkgver` 故意改舊 + 補 `usr/share/licenses/libplacebo-git/LICENSE` 再跑一遍
+   ⇒ EXIT=0，`.PKGINFO` 驗收：
+   - `provides = libplacebo=7.387.0`、`provides = libplacebo.so`、`conflict = libplacebo`
+   - `usr/lib/libplacebo.so.387` 與 `usr/lib/pkgconfig/libplacebo.pc`（`Version: 7.387.0`）都在
+   - CI 端還會由 makepkg 的 autodeps 補上帶版本的 `libplacebo.so=387-64`
+     （實證：feed 裡 `ffmpeg-full-git` 的 `%PROVIDES%` 有 `libavcodec.so=63-64` 那批，
+     說明 CI 容器的 makepkg 是開著這個選項的；本機 `/etc/makepkg.conf` 寫 `!autodeps`
+     所以本地產物看不見，這不是包的洞）。
+   ⚠️ 本地缺 `glad`（Arch `glad` 2.0.8 裝的是 python 模組，本機沒裝、也不準動系統套件），
+   所以兩輪都用 `PYTHONPATH=/tmp/lp-verify/glad-py` 顶上去；CI 容器由
+   `makedepends=('glad')` 正式安裝，路徑不同但 meson 只問 `python -c 'import glad'`
+   這一件事（實查 `src/opengl/include/glad/meson.build`，要求 `>= 2.0`）。
+3. 複現 CI plan 步的版號探測（逐字照 build-packages.yml 那段：取**第一條** `git+`
+   來源、blobless 克隆進 `src/repo`、把 `${pkgname}`／`${pkgname%-git}`／`$_pkgname`
+   等八種候選名软鏈過去、`cd src` 再跑 `pkgver()`）⇒ 回
+   `7.387.0.r4051.g275f7dea`，與 makepkg 自己算出的**逐字相同**，
+   所以「產物已在 release 裡 ⇒ 跳過」的比對會收斂，不會每輪白編
+   （docs 開頭那條「克隆目錄名 ≠ pkgname 派生名」的靜默跳過陷阱，這顆的源碼目錄
+   名 `libplacebo` 剛好等於 `${pkgname%-git}`，不會踩到）。
+
+### 四接點（全部已接）
+
+1. `libplacebo-git/PKGBUILD`（本倉目錄版，AUR 配方 + 自算版號 + 檔頭寫盡理由）。
+2. `build-git-packages.yml:156` 矩陣條目
+   `{"key": "libplacebo-git", "repo_name": "libplacebo-git", "variant": "none", "kind": "aur"}`；
+   `kind: aur` 借三件事：回推校驗和那步的 `matrix.kind != 'aur'`（版號由上游 HEAD
+   現算，`updpkgsums` 回推沒有意義）、自動掛 junlin03-aur 源、以及 CI 對無 GPU
+   容器一律 `--nocheck`（這顆的 `check()` 不加 `|| true`，跑就老實回報）。
+3. `build-packages.yml:801` 那條 in-tree 大 alternation 尾端加 `|libplacebo-git`
+   （首命中即中，擋掉「名字以 -git 結尾 → clone AUR」的通用規則）。
+4. mpv-git 側三個接點（動的是 workflow，不是 `mpv-git/PKGBUILD`——本輪範圍不碰別的包）：
+   · `build-packages.yml:130` 附近的「掛 junlin03-aur 源」點名清單加 `mpv-git`
+     （plan 的依賴閘門與換包步驟都要查得到 feed 裡那顆）；
+   · `build-packages.yml:2184` plan 步的 `_extra_gate_deps` 加
+     `mpv-git) → libplacebo-git`（還沒進 feed 就本輪跳過，靠排程按 DAG 收斂）；
+   · `build-packages.yml:3474` 新步驟「把容器的 libplacebo 換成自有 libplacebo-git」，
+     排在「云端编译」之前。
+5. 本檔。
+
+### mpv 那邊「裸名會被同步庫同名實包搶走」的處置（病灶一的第三例）
+
+`mpv-git/PKGBUILD` 的 `depends=('ffmpeg' 'libplacebo' ...)` 寫的是裸名，而 pacman
+對「同步庫裡真有一顆叫這名字」優先於 provider。光把 `libplacebo-git` 發到 feed
+**不會**讓它被選中——照 2026-10-15 那三場（librime→opencc、translator→spirv-tools、
+spirv-tools→spirv-headers）的做法是把 depends 翻成 `-git` 名，但那要改
+`mpv-git/PKGBUILD`，本輪明令不碰別的包，所以改用「**先把它裝進本地 DB**」這條：
+裝了之後 provider 即算滿足，makepkg 的 `pacman -T` 根本不會再去碰同步庫那顆；
+而且 `mpv-git` 的 `package()` 尾段本來就會用 `find-deps.py`（`pacman -Qo` 問
+**本地** DB 的檔案擁有者）覆寫 depends，所以發布出去的 mpv-git 會自然寫成
+依賴 `libplacebo-git`——不用改它的 PKGBUILD 就拿到正確的產品依賴。
+
+順序不能反：同步庫 ffmpeg 帶一筆 `libplacebo.so=360-64`（帶版本的 soname 依賴），
+必須讓它先與同步庫 libplacebo 一起落地，再把同步庫 libplacebo 拔掉、換成本倉的
+387 版。反過來做的話，makepkg -s 裝 ffmpeg 時那筆 `=360` 只能拉同步庫 libplacebo，
+而它與已裝的 `libplacebo-git` conflicts，`--noconfirm` 對「Remove?」預設 N ⇒
+`unresolvable package conflicts detected`（2026-10-15 mesa 那場 compiler-rt 死結
+的同形）。拔掉的代價寫在明處：`/usr/lib/libplacebo.so.360` 這檔隨同步庫那顆一起
+消失，鏈 mpv 時 GNU ld 對「缺 NEEDED 但符號解得到（mpv 自己 `-lplacebo` 直接解到
+.so.387）」只給 warning 不給 error（本機 binutils 2.47 用兩層自造 libA/libB 實測過
+這個形狀）⇒ **建置會綠**。
+
+### 還差什麼（不掩蓋：綠不等於拿去就能跑）
+
+上面那顆 mpv 拿到裝了 `libplacebo-git` 的機器上執行時，dynamic loader 仍要替
+libavfilter 找 `libplacebo.so.360`；找不到就是 `error while loading shared
+libraries` 起動失敗。要真的可用，機器上的 ffmpeg 也必須是照 libplacebo 7.387
+重鏈的。三條路（本輪都沒做，因為都等於動別的包）：
+① 等同步庫 ffmpeg 跟著 libplacebo 抬版（Arch 那邊 mpv 0.41 也在推，會自己到位）；
+② 把 `build-packages.yml:3474` 那步的 `if:` 也點名 `ffmpeg-full-git`（同一套
+   「先裝 ffmpeg 再換 libplacebo」的順序，注意該 job 有自己的建置步與 AUR 依賴步）；
+③ 讓 `mpv-git` 改用 feed 的 `ffmpeg-full-git`（那顆的 depends 目前是裸名
+   `libplacebo`、沒有 `=360` 那筆，所以 provider 頂得住），但那要嘛改它的
+   PKGBUILD、要嘛在 CI 裡替它的 depends 動手腳，而且產出的 mpv 依賴檔名會從
+   `ffmpeg` 變成 `ffmpeg-full-git`。
+下一輪若 mpv-git 仍紅，先查這三條，不要在 `libplacebo-git` 這顆上找原因。
+

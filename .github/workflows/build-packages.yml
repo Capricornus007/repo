@@ -128,7 +128,11 @@ jobs:
              || [ "${{ matrix.repo_name }}" = 'librime-git' ] \
              || [ "${{ matrix.repo_name }}" = 'spirv-tools-git' ] \
              || [ "${{ matrix.repo_name }}" = 'spirv-headers-git' ] \
-             || [ "${{ matrix.repo_name }}" = 'fcitx5-qt-git' ]; then
+             || [ "${{ matrix.repo_name }}" = 'fcitx5-qt-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'mpv-git' ]; then
+            # mpv-git 點名掛源（2026-10-28）：它的 depends 有裸名 libplacebo，同步庫那顆
+            # 只有 7.360.1 而 mpv 的 meson 閘門要 >= 7.387.0；要先查得到/裝得上本倉的
+            # libplacebo-git，plan 的依賴閘門與「換 libplacebo」那步才走得通。
             # 把自有 junlin03-aur 掛成匿名 pacman 源。矩陣 job 並行，靠它看見
             # 兄弟 job 已發布的 KDE 依賴產物（release 資產公開可取，實測
             # …/current-repo/junlin03-aur.db 與包檔均 HTTP 200）。冷啟動時
@@ -794,7 +798,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|brotli-git|nodejs-git|nodejs-better-sqlite3-git|npm-git|pnpm-git|fcitx5-chinese-addons-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git|htop-git|chafa-git|xtitle-git|downgrade-git|pacman-git|meson-git|python2-git|qt4-git|expac-git|shiboken6-git|zcode-ce-git|openvpn|tcpdump)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|brotli-git|nodejs-git|nodejs-better-sqlite3-git|npm-git|pnpm-git|fcitx5-chinese-addons-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git|htop-git|chafa-git|xtitle-git|downgrade-git|pacman-git|meson-git|python2-git|qt4-git|expac-git|shiboken6-git|zcode-ce-git|openvpn|tcpdump|libplacebo-git)
               # 這批包為什麼走本倉目錄版（逐包理由）：見 docs/in-tree-packages.md。
               # 那個 step 的表達式有 21000 字元上限、註解也計入，加包只加清單、
               # 說明寫進該檔，別寫回這裡。
@@ -2172,6 +2176,12 @@ jobs:
                 # 沒進的話容器會去裝官方 clang 23.1，產出一顆又鏈 .23.1 的死包
                 # ——那是本包存在的全部意義的反面，寧可本輪跳過等下輪。
                 shiboken6-git)             _extra_gate_deps="clang-git llvm-libs-git" ;;
+                # mpv-git（2026-10-28）：depends 寫裸名 libplacebo，同步庫那顆只有
+                # 7.360.1、而 mpv 的 meson 閘門要 >= 7.387.0。修法是讓本倉
+                # libplacebo-git 先落地（下面「把容器的 libplacebo 換成自有」那步），
+                # 它還沒進 feed 之前本輪跳過——放行只會讓后面那道換包步驟查不到源、
+                # 白紅一輪。
+                mpv-git)                   _extra_gate_deps="libplacebo-git" ;;
                 *)                         _extra_gate_deps="" ;;
               esac
               for _d in $_extra_gate_deps; do
@@ -3460,6 +3470,89 @@ jobs:
             echo "已放好 mesa 的 LLVM 24 userpatch：$(ls mesa-userpatches/)"
           fi
           pacman -Qo /usr/lib/llvm-config 2>/dev/null || true
+
+      - name: 把容器的 libplacebo 換成自有 libplacebo-git（mpv-git 的 meson 閘門）
+        if: matrix.repo_name == 'mpv-git' && steps.plan.outputs.build == 'true'
+        run: |
+          set -uo pipefail
+          # 起因（全部是實物，不是推測）—— run 40591719745 job 122497382921 紅在
+          # 「云端编译」那步：
+          #   Dependency libplacebo for host machine found: NO. Found 7.360.1 but need: '>=7.387.0'
+          #   meson.build:30:13: ERROR: Dependency lookup for libplacebo with method 'pkg-config' failed
+          # mpv 問的是 pkg-config 那個 Version；同步庫（Arch [extra]／Artix [world]）那顆
+          # 停在 7.360.1，而上游已出 tag v7.387.0（master == 該 tag），所以本倉自己出
+          # 一顆 libplacebo-git（目錄在本倉 libplacebo-git/，逐包理由見 docs）。
+          #
+          # 為什麼不能讓 makepkg 自己解析：mpv 的 depends 寫的是裸名 libplacebo，而
+          # pacman 對「同步庫裡真有一顆叫這名字」優先於 provider（2026-10-15 查明的
+          # 病灶一，同 librime→opencc、translator→spirv-tools 那兩場）。裸名解析到的
+          # 就是 7.360.1，那道閘門照樣過不了。唯一穩的做法是把本倉那顆**先裝進本地
+          # DB**：裝了之後 provider 即算滿足，makepkg 的 deptest 根本不會再去碰同步庫。
+          #
+          # ffmpeg 的順序不能反：
+          #  · 同步庫 ffmpeg 的 .PKGINFO 帶一筆**帶版本的 soname 依賴**
+          #    libplacebo.so=360-64（本機 LC_ALL=C pacman -Qi ffmpeg 查實），
+          #    而 /usr/lib/libavfilter.so 的 NEEDED 正是 libplacebo.so.360（objdump 查實）。
+          #  · 所以先讓同步庫 ffmpeg 連同同步庫 libplacebo 一起落地（此時那筆 =360
+          #    解決得了），再把同步庫 libplacebo 拔掉、換成本倉的 387 版。反過來做的話，
+          #    makepkg -s 裝 ffmpeg 時那筆 =360 只能拉同步庫 libplacebo，而它與已裝的
+          #    libplacebo-git conflicts，--noconfirm 對「Remove?」預設 N →
+          #    「unresolvable package conflicts detected」（2026-10-15 mesa 那場
+          #    compiler-rt 死結的同形）。
+          #  · 拔掉的代價寫在明處：/usr/lib/libplacebo.so.360 這檔隨同步庫那顆一起消失，
+          #    鏈 mpv 時 ld 對「缺 NEEDED 但符號解得到」只給 warning（GNU ld 2.47 本機
+          #    實測），所以**建置會綠**。但這顆 mpv 拿到裝了 libplacebo-git 的機器上跑，
+          #    loader 仍要為 libavfilter 找 libplacebo.so.360 —— 要它真的可用，機器上的
+          #    ffmpeg 必須也是照 libplacebo 7.387 重鏈的（同步庫抬版，或本倉
+          #    ffmpeg-full-git 也走同樣的換包步驟）。那一步驟不在本輪授權範圍內
+          #    （「禁碰別的包」），已列進 docs 與回報的待辦。
+          # 源與 -Sy 由「初始化容器環境」那步負責（mpv-git 已點名進掛源名單），
+          # 這裡只自證掛上了沒有——沒掛上就是那份清單被改壞了，直接紅不要靜默退回。
+          grep -q '^\[junlin03-aur\]' /etc/pacman.conf \
+            || { echo "::error::junlin03-aur 沒掛上（初始化步的點名清單被改壞了？）"; exit 1; }
+          for _t in 1 2 3 4 5; do
+            pacman -Sy >/dev/null 2>&1 && break
+            echo "::warning::同步 junlin03-aur 失敗（第 ${_t}/5 次），退避重試"
+            sleep $((_t * 5))
+          done
+
+          # ① 先讓同步庫 ffmpeg（連同它依賴的同步庫 libplacebo）落地
+          for _t in 1 2 3; do
+            pacman -S --noconfirm --needed ffmpeg && break
+            echo "::warning::裝同步庫 ffmpeg 失敗（第 ${_t}/3 次），重試"
+            sleep $((_t * 8))
+          done
+          pacman -Q ffmpeg >/dev/null 2>&1 \
+            || { echo "::error::容器裡裝不上同步庫 ffmpeg，無法按上面的順序換 libplacebo"; exit 1; }
+
+          # ② 拔同步庫 libplacebo（-Rdd 跳過依賴檢查：它此時是 ffmpeg 的依賴，
+          #    普通 -R 會被擋。與「把 Go 工具鏈換成自有 go-git」那步同一手法）
+          pacman -Rdd --noconfirm libplacebo >/dev/null 2>&1 || true
+
+          # ③ 裝本倉那顆
+          for _t in 1 2 3; do
+            pacman -S --noconfirm --needed libplacebo-git && break
+            echo "::warning::裝 libplacebo-git 失敗（第 ${_t}/3 次），重試"
+            sleep $((_t * 8))
+          done
+
+          # ④ 產物端自證：不是「裝了就算」，問的是三道實際閘門
+          pacman -Q libplacebo-git >/dev/null 2>&1 \
+            || { echo "::error::libplacebo-git 沒裝進容器（feed 裡那顆下載失敗？）"; exit 1; }
+          _miss="$(pacman -T libplacebo ffmpeg)"
+          if [ -n "$_miss" ]; then
+            echo "::error::makepkg 的 deptest 仍認為缺：$_miss —— 裸名又被同步庫搶走了"
+            exit 1
+          fi
+          _ver="$(pkg-config --modversion libplacebo 2>/dev/null || true)"
+          echo "容器現在的 libplacebo：$(pacman -Q libplacebo-git)，pkg-config Version=${_ver:-查不到}"
+          if [ -z "$_ver" ] || [ "$(vercmp "$_ver" 7.387.0)" = 2 ]; then
+            echo "::error::pkg-config 回報 ${_ver:-空}，低於 mpv 要的 7.387.0——換包沒生效"
+            exit 1
+          fi
+          [ -e /usr/lib/libplacebo.so.387 ] \
+            || { echo "::error::/usr/lib/libplacebo.so.387 不在，裝的不是本倉那顆"; exit 1; }
+          echo "::notice::libplacebo 已換成本倉 ${_ver}，mpv 的 >=7.387.0 閘門這輪才可能過"
 
       - name: 云端编译 `.pkg.tar.zst`
         if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'
