@@ -1,0 +1,150 @@
+# Maintainer: Capricornus007 <Capricornus007 at proton dot me>
+# Contributor: Felix Yan <felixonmars@archlinux.org>
+# Contributor: 網軍總司令
+#
+# 本倉 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md）。
+#
+# 動機（2026-10-11 實測）：本機 capnproto-git 已換代到 2.0（SONAME
+# libcapnp.so.2.0-dev），而 world 倉的 librime 1:1.17.0-5.1 裡那個
+# rime-plugins/librime-proto.so 還硬連結 libcapnp.so.1.5.0 → 全系統只有
+# 這一個檔找不到 capnp，fcitx5 每次啟動都印
+#   E... plugins_module.cc:55] error loading plugin proto: ... libcapnp.so.1.5.0
+# 也就是 capnp 一換代，librime 就必須跟著重建；等倉換代是被動，自建 -git
+# 才能讓「capnp 換代 → librime 重編」自動發生在 feed 裡。
+#
+# 為什麼不用 AUR 的 librime-git：它釘在 1.7.3.r6（2023 年）而本機是 1.17.0，
+# 照抄是「假尖端真降級」（同一條教訓見 llvm-git 的註解）。本檔六個倉全部吃
+# 各自 master 尖端。
+#
+# ⚠️ SOVERSION 必須還是 1：上游 CMakeLists.txt 是 set(rime_soversion 1)，
+#    實測 /usr/lib/fcitx5/librime.so 的 NEEDED 就是 librime.so.1，所以尖端
+#    產物仍叫 librime.so.1.17.0 + librime.so.1，fcitx5-rime 不會斷鏈。
+#    哪天上游把它抬到 2，這包裝上會讓 fcitx5-rime 起不來 —— 那時候要連
+#    fcitx5-rime 一起重建，不是回退 librime。
+#
+# ⚠️ 上游 PR #1184（commit 96a55478，OpenCC simplifier 空鏈防護）**不能再用
+#    cherry-pick**：2026-10-11 實測在 master 尖端直接衝突，因為 8c5094fa
+#    "refactor(simplifier): extract rime::Opencc into opencc.h/opencc.cc"
+#    把整段搬走了，而搬過去時那三處防護沒跟著搬（實測
+#    git show HEAD:src/rime/gear/opencc.cc 搜 GetConversionChain 得 3 處、
+#    搜 conversions.empty 得 0 處）。所以改自帶等價補丁
+#    opencc-empty-conversion-chain.patch，套在 opencc.cc 上，並順手擋掉
+#    Initialize() 中空清單時 conversions.front() 的未定義行為。
+#    上游把防護補回尖端之後，刪掉這個 patch 與 source 裡那一行。
+
+_pkgname=librime
+pkgname=$_pkgname-git
+pkgver=1.17.0.r63.g7bc3fb0005
+pkgrel=1
+epoch=2
+pkgdesc="Rime input method engine (mainline GIT version)"
+arch=('x86_64')
+url="https://github.com/rime/librime"
+license=('BSD-3-Clause')
+# capnproto 在本機由 capnproto-git 提供（實測 Provides: capnproto、libcapnp.so=2.0），
+# 這裡寫通用名而不是 capnproto-git，換臺機器（用官方 capnproto）也不會擰死。
+# ⚠️ 依賴寫 `opencc-git` 而不是裸名 `opencc`（2026-10-15 查實的教訓）：pacman 對「同名
+#   實包」優先於 provider，而 [extra]/[world] 有一顆真叫 opencc 的包（1.3.2-1）→ 裸名
+#   永遠解到 1.3，建置日誌就是 `-- Found opencc: /usr/lib/libopencc.so` 連到
+#   libopencc.so.1.3；run 38511938671 的 librime job 就是這樣紅的。同一份原始碼在本機
+#   用 opencc-git 1.4.2 重跑（`makepkg -dc`）是 **100% tests passed out of 2** 並正常出包
+#   ——不必改測試、不必跳測試。1.3→1.4 是**跨 soname** 換代，依賴必須點名 1.4 的來源。
+depends=('boost-libs' 'capnproto' 'glibc' 'google-glog' 'leveldb' 'libgcc'
+         'librime-data' 'libstdc++' 'lua' 'marisa' 'opencc-git' 'yaml-cpp')
+makedepends=('git' 'cmake' 'boost' 'gtest' 'ninja')
+provides=("$_pkgname" "$_pkgname=1.17.0")
+conflicts=("$_pkgname")
+source=("git+https://github.com/rime/librime.git"
+        "git+https://github.com/lotem/librime-octagram.git"
+        "git+https://github.com/hchunhui/librime-lua.git"
+        "git+https://github.com/rime/librime-charcode.git"
+        "git+https://github.com/lotem/librime-proto.git"
+        "git+https://github.com/rime/librime-predict.git"
+        'cxx20-for-capnp-2.patch'
+        'opencc-empty-conversion-chain.patch'
+        'lua-u8string-cxx20.patch'
+        'proto-capnp-2-text-reader.patch')
+sha512sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+pkgver() {
+  # ⚠️ 不能假設「$srcdir/$_pkgname 一定存在可以 cd」：CI 的「更新校验和并回推
+  #    PKGBUILD」那一步先跑 updpkgsums，而它把 BUILDDIR 換成 mktemp 的目錄、結束
+  #    時連目錄一起刪；緊接著同一步的 `makepkg --printsrcinfo` 仍會執行 pkgver()，
+  #    這時倉庫目錄沒了 → `cd` 落空 → 後面的 git 直接
+  #      fatal: not a git repository (or any parent up to mount point /)  exit 128
+  #    把整步搞紅（實測 2026-10-12 run #452 librime-git）。所以先探一個「真的是
+  #    git 倉庫」的位置，全找不到就沿用 PKGBUILD 寫死的 pkgver：.SRCINFO 裡那串
+  #    本來只是佔位，真正出包時 makepkg 會再算一次。
+  local d v n s
+  for d in "$_pkgname" "$SRCDEST/$_pkgname" "$srcdir/$_pkgname"; do
+    [[ -d $d ]] && git -C "$d" rev-parse -q --verify HEAD >/dev/null 2>&1 && break
+    d=
+  done
+  if [[ -z $d ]]; then
+    printf '%s\n' "$pkgver"
+    return 0
+  fi
+  # ⚠️ 不能用 git describe：實測 describe 挑到的是 rime-1.3.1（它離 HEAD 的
+  #    commit 距離比 rime-1.17.0 近），打出 1:1.3.1.r709 這種「假降級」版本號。
+  #    版本基準改吃上游 CMakeLists.txt 的 set(rime_version ...)——那才是 Arch/Artix
+  #    官方包用的同一個來源；r709 換成「距該 tag 的 commit 數」，tag 不在本血脈時
+  #    退回總 commit 數。用 `git show HEAD:` 讀檔，裸倉庫（SRCDEST）也拿得到。
+  v=$(git -C "$d" show HEAD:CMakeLists.txt \
+      | sed -n 's/^set(rime_version \([0-9.][0-9.]*\)).*/\1/p' | head -1)
+  [[ -z "$v" ]] && v=0.0.0
+  if git -C "$d" rev-parse -q --verify "refs/tags/rime-$v" >/dev/null 2>&1; then
+    n=$(git -C "$d" rev-list --count "rime-$v..HEAD")
+  else
+    n=$(git -C "$d" rev-list --count HEAD)
+  fi
+  s=$(git -C "$d" rev-parse --short=10 HEAD)
+  printf '%s.r%s.g%s\n' "$v" "$n" "$s"
+}
+
+prepare() {
+  cd librime
+  # capnp 2.0 的 kj 標頭要求 C++20（#error "This code requires C++20"），
+  # 而上游釘 17 → 抬到 20。實測這一筆就把 420 個錯誤壓到 12 個。
+  git apply -v "$srcdir/cxx20-for-capnp-2.patch"
+  git apply -v "$srcdir/opencc-empty-conversion-chain.patch"
+
+  cd ../librime-lua
+  # C++20 之後 path.u8string() 回 std::u8string（char8_t），與本插件自己那份
+  # Opencc(const string&) 對不上 → 改用 .string()。
+  git apply -v "$srcdir/lua-u8string-cxx20.patch"
+
+  cd ../librime-proto
+  # capnp 2.0 把 Text::Reader 換成 kj::StringPtr，不再從 std::string 隱式轉換
+  # → 11 處 setter 加 .c_str()、1 處讀取改 cStr()。
+  git apply -v "$srcdir/proto-capnp-2-text-reader.patch"
+
+  cd ../librime/plugins
+  # 上游把這幾個插件當 submodule 管；-git 版直接掛本機已 clone 的尖端。
+  for p in librime-octagram librime-lua librime-charcode librime-proto librime-predict; do
+    rm -rf "$p"
+    ln -sf "$srcdir"/$p "$p"
+  done
+}
+
+build() {
+  cd librime
+  export CXXFLAGS="$CXXFLAGS -DNDEBUG -DGLOG_USE_GLOG_EXPORT -DGLOG_USE_GFLAGS"
+  cmake . -GNinja -Bbuild -DCMAKE_INSTALL_PREFIX=/usr \
+    -DBUILD_MERGED_PLUGINS=Off -DENABLE_EXTERNAL_PLUGINS=On -Wno-dev
+  cmake --build build
+}
+
+check() {
+  cd librime/build
+  # ⚠️ 直接叫 ctest 並帶 `--output-on-failure`，不要用 `ninja test`：後者只回一行
+  #   `FAILED: [code=8] CMakeFiles/test.util`，整份 job 日誌裡**一條 gtest 細節都沒有**
+  #   （run 38511938671 就是這樣：grep 過 `[ FAILED ]`／Segmentation／what() 全空，
+  #   得在本機重跑三分鐘才知道是哪兩條紅）。紅的時候要能一眼看到失敗測試名。
+  ctest --output-on-failure -j2
+}
+
+package() {
+  cd librime/build
+  DESTDIR="$pkgdir" ninja install
+  install -vDm 644 ../LICENSE -t "$pkgdir"/usr/share/licenses/$pkgname/
+}

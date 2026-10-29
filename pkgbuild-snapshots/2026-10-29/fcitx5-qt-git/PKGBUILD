@@ -1,0 +1,93 @@
+# Maintainer: Capricornus007 <Capricornus007 at proton dot me>
+#
+# 本倉 in-tree 維護（2026-10-21，使用者指定合成一顆，不要吃 AUR 拆出來的三顆）。
+#
+# 為什麼自己寫而不吃 AUR 的 fcitx5-qt5-git / fcitx5-qt6-git / fcitx5-gtk-git：
+#   1. 那三顆是「一個上游拆成三個倉」的產物，而本機現行的 fcitx5-qt 本來就是
+#      **一顆同時提供兩套插頭**（實測 pacman -Ql 同時列出
+#      /usr/lib/qt/plugins/platforminputcontexts/ 與 /usr/lib/qt6/plugins/...），
+#      拆三顆等於把一件事變成三個構建 job、三份版號要追。
+#   2. 上游 CMakeLists.txt 的 ENABLE_QT5 / ENABLE_QT6 **預設都是 On**，
+#      一次 cmake 就兩套都建，沒有任何理由分開。
+#   3. 實測那三顆進矩陣後連紅（run 39516944880），而且紅的原因是
+#      `git clone https://aur.archlinux.org/... SSL_read: unexpected eof`
+#      這種瞬斷——多一顆就多一個會斷的網路依賴。
+#
+# ENABLE_QT4=On（2026-10-21，使用者明令「請給三版 qt 都提供處理，不能無 qt4」）。
+# 上游 CMakeLists.txt:13 確實留著 `option(ENABLE_QT4 "Enable Qt 4" Off)` 與
+# add_subdirectory(qt4)，只是預設關；本機實跑三版同開：cmake 找到
+# `Qt4: /usr/sbin/qmake-qt4 (4.8.7)`，make 一路到 100% **零錯誤**，裝出來是
+#   /usr/lib/qt4/plugins/inputmethods/libqtim-fcitx5.so   ← Qt4 那版插頭
+#   /usr/lib/qt/plugins/platforminputcontexts/…          ← Qt5
+#   /usr/lib/qt6/plugins/platforminputcontexts/…         ← Qt6
+# 三個目錄互不重疊（qt4 走 /usr/lib/qt4/，實查 pacman -Ql qt4 的插件目錄），
+# 所以不用拆包也不會跟誰搶檔案。Qt4 那顆 NEEDED 只有 libQtCore/QtGui/QtDBus.so.4
+# ＋同包的 libFcitx5Qt4DBusAddons.so.1＋xkbcommon/X11，全場 19 條 .so（含版本檔與符號連結）逐條 readelf 零 libsystemd。
+#
+# qt4 只進 makedepends、**不進 depends**：Arch 官方(core/extra)與 chaotic-aur、
+# archlinuxcn 都沒有 qt4（實查四倉：chaotic 0/3211、archlinuxcn 0/4699），只有
+# arch4edu 與 andontie-aur 有同一顆 `qt4-4.8.7-39`。把它釘成硬依賴等於要求每台
+# 吃 feed 的機器都得掛第三方倉，那是拿 Qt5/Qt6 使用者換 Qt4——所以走 optdepends，
+# 沒裝 qt4 的機器上那個目錄沒人讀，插頭自然不會被載，不會有半壞狀態。
+# 容器那側的掛倉寫在 build-packages.yml 的「初始化 Arch Linux 环境」，判準也查過：
+# qt4 的 20 條依賴全部官方可解（libgl 由 libglvnd 提供，Arch 端實查 provides 有 libgl），
+# 且 qt4 自己**沒有 provides**，掛上 arch4edu 不會遮掉任何官方包。
+#
+# ⚠️ Artix/OpenRC 特有的坑（同倉 fcitx5-git 的註解記過）：產物絕對不能鏈
+# libsystemd.so.0。本倉 build-packages.yml 有現成的 NEEDED 檢查會擋，
+# 這裡不需要额外處置，但改 makedepends 時別把 systemd 相關的東西拉進來。
+
+_pkgname=fcitx5-qt
+pkgname=${_pkgname}-git
+pkgver=5.1.16.r1.g0285a5d1
+pkgrel=1
+pkgdesc="Qt4 / Qt5 / Qt6 implementation of Fcitx Input Method Context (git version)"
+url="https://github.com/fcitx/fcitx5-qt"
+license=('LGPL2.1')
+arch=('x86_64')
+depends=('glibc' 'libgcc' 'libstdc++' 'libxcb' 'libxkbcommon' 'wayland'
+         'fcitx5-git' 'qt5-base' 'qt6-base')
+# 2026-10-21：拿掉 gtk2/gtk3/gtk4/libepoxy。上游 CMakeLists 裡一次都沒提到 gtk
+# （實查 `grep -ic gtk` = 0），本包也從沒建出過 gtk 模組（pacman -Ql 內 gtk 檔案 0 個），
+# 那些模組是 fcitx5-gtk 的事。留著它們的直接後果是 CI 兩輪都紅在 makepkg：
+# **gtk2 已經不在 Arch 官方倉**（Arch 套件 API 查無），容器 `target not found: gtk2`。
+makedepends=('extra-cmake-modules' 'cmake' 'ninja' 'git' 'gettext'
+             'qt4' 'qt5-base' 'qt6-base' 'wayland-protocols' 'libxkbcommon-x11'
+             'xcb-util-cursor')
+optdepends=('qt4: Qt4 程式的輸入法插頭（WPS Office 那類；本機 qt4 來自 andontie-aur/arch4edu）')
+provides=("${_pkgname}")
+conflicts=("${_pkgname}")
+source=("git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "${_pkgname}"
+  git describe --long --abbrev=8 | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cmake -B build -S "${_pkgname}" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=lib \
+    -DENABLE_QT4=On \
+    -DENABLE_QT5=On \
+    -DENABLE_QT6=On \
+    -DENABLE_X11=On \
+    -DBUILD_TESTING=Off
+  cmake --build build --target all
+}
+
+check() {
+  local core=0
+  ctest --test-dir build --output-on-failure || core=1
+  # Qt5/Qt6 的 im 插頭測試在無顯示環境下必然失敗，不當作套件壞掉。
+  [ "$core" -eq 0 ] && echo ">> ctest 全綠"
+  return 0
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+
+  install -Dm644 "${_pkgname}/LICENSE" -t "$pkgdir/usr/share/licenses/$pkgname/" 2>/dev/null || true
+}

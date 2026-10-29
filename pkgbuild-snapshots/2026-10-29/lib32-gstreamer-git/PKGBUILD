@@ -1,0 +1,533 @@
+# Maintainer: Capricornus007 <Capricornus007 at proton dot me>
+# 本倉 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md）。
+#
+# 動機（用戶 2026-10-12 裁定：「務必」換 -git）：系統上那兩顆是
+#   lib32-gstreamer            1.28.1-3  （Artix [lib32]，packager ndowens）
+#   lib32-gst-plugins-base-libs 1.28.1-3 （同一 pkgbase=lib32-gstreamer 的 split）
+# 而 64 位元那 25 顆已經是本倉 gstreamer-git（monorepo main 尖端 1.29.2.1）。
+# 32 位元停在 1.28.1、64 位元跑尖端，是「一半尖端一半舊版」的混合態，
+# Wine／Steam 那類真的會載這批 .so 的軟體就吃這一層。
+#
+# 結構：逐字沿用 Arch 官方 multilib 倉 `lib32-gstreamer` 的 PKGBUILD
+#   （https://gitlab.archlinux.org/archlinux/packaging/packages/lib32-gstreamer，
+#   407 行、4 顆 split），只 -git 化，不憑空另創一套：
+#   · 源改成 monorepo main 尖端、不釘 tag（上游是 `?signed#tag=$pkgver`）；
+#     版號由 meson.build 的 project version 推導，手法與本倉 gstreamer-git 一致。
+#   · 只做用戶裝的那兩顆 split（core＋base-libs）。上游另外兩顆
+#     lib32-gst-plugins-base／lib32-gst-plugins-good 用戶**沒裝**，本轮不收
+#     → 見下方「兄弟包檔的去向」那段：它們的內容全部是
+#     usr/lib32/gstreamer-1.0/libgst*.so，由收口守衛單獨記帳後丟掉，
+#     其他任何殘留一律讓建置紅。
+#   · provides/conflicts 對準**穩定版包名**（寫死，不用 ${pkgname%-git}：
+#     本倉 gstreamer-git 實測 split 執行期那個展開取到空值，makepkg 會報
+#     「conflicts 不可以空白」）。
+#   · 不加 epoch。gstreamer-git 那輪的死教訓是「加了 epoch，所有精確等號依賴
+#     就必須連 epoch 一起寫，否則 pacman 精確等號永遠匹配不上、split 互相鎖死」。
+#     這顆吃尖端 1.29.x，本來就比 world／[lib32] 的 1.28.1 新，不需要 epoch，
+#     順手不製造那個坑。
+#   · 內部等號依賴只釘**自己的 -git 兄弟**（lib32-gstreamer-git=$pkgver-$pkgrel）。
+#     對 64 位元 counterpart（gstreamer／gst-plugins-base-libs）寫**不帶版本號**的
+#     包名：用戶機上那兩顆現在是 gstreamer-git，它靠
+#     `provides=("gstreamer=$pkgver-$pkgrel")` 頂掉穩定版名，寫不帶版本才能同時
+#     解得開「已換 -git」與「還在穩定版」兩種狀態（寫等號就把其中一邊釘死）。
+#   · 不帶 gstreamer-docs 那顆的 `_docsver` 問題：這套 build() 是 `-D doc=disabled`，
+#     根本不抓 fd.o 的 release-only tarball，所以文檔資產那條坑在這裡不存在。
+#
+# ⚠️ 與上游那份的結構差異只有一處：**不帶 0001-HACK-meson-Disable-broken-tests.patch**
+#    （詳見下方 source 旁的三條理由）。上游那顆把 patch 帶在 source 裡是為了讓
+#    `check()` 的退出碼能用；本包的 check() 不拿測試當門檻，帶 patch 只會多一條
+#    「尖端漂移 → prepare() 撕檔 → 整包紅」的失效路徑。
+#
+# ⚠️ 這批包與 [lib32] 的穩定版**互斥**（conflicts）。退回穩定版：
+#    pacman -Rdd lib32-gstreamer-git lib32-gst-plugins-base-libs-git
+#    再 pacman -S lib32-gstreamer lib32-gst-plugins-base-libs。
+
+pkgbase=lib32-gstreamer-git
+pkgname=(
+  lib32-gstreamer-git
+  lib32-gst-plugins-base-libs-git
+)
+pkgver=1.29.2.1.r0.ge1edc090bc07
+pkgrel=2
+pkgdesc="Multimedia graph framework (32-bit)"
+url="https://gstreamer.freedesktop.org/"
+arch=(x86_64)
+license=(LGPL-2.1-or-later)
+# plan 步（「检测目标版本并决定是否需要构建」）在探測尖端版號時會 blobless clone
+# 源倉、然後把一堆「可能的源碼目錄名」軟鏈到 clone 出來的 repo 再跑 pkgver()。
+# 那個清單吃的是 ${pkgname}／${pkgname%-git}／${_pkgname}／${_gitname}／${_base}／
+# ${_gitrepo}／${_pkgbase}／${pkgbase}。本包的源碼目錄叫 gstreamer，而
+# ${pkgname%-git} 展開是 lib32-gstreamer（64 位元那顆 gstreamer-git 剛好對得上、
+# 這顆對不上）→ 沒有這行指派的話 pkgver() 找不到目錄，會一路退回 PKGBUILD 寫死的
+# 佔位 pkgver，於是「已在 release 裡」永不命中、每 3 小時白編一次。
+# （與 2026-10-11 llvm-git 補 `_pkgbase` 同一類坑，只是變數名不同。）
+_gitrepo=gstreamer
+makedepends=(
+  git
+  glib2-devel
+  lib32-aalib
+  lib32-alsa-lib
+  lib32-bzip2
+  lib32-cairo
+  lib32-cdparanoia
+  lib32-flac
+  lib32-gcc-libs
+  lib32-gdk-pixbuf2
+  lib32-glib2
+  lib32-glibc
+  lib32-gtk3
+  lib32-jack2
+  lib32-libavc1394
+  lib32-libcaca
+  lib32-libcap
+  lib32-libdrm
+  lib32-libdv
+  lib32-libelf
+  lib32-libglvnd
+  lib32-libgudev
+  lib32-libiec61883
+  lib32-libjpeg-turbo
+  lib32-libogg
+  lib32-libpng
+  lib32-libpulse
+  lib32-libraw1394
+  lib32-libshout
+  lib32-libsoup3
+  lib32-libtheora
+  lib32-libunwind
+  lib32-libvpx
+  lib32-libx11
+  lib32-libxcb
+  lib32-libxdamage
+  lib32-libxext
+  lib32-libxfixes
+  lib32-libxi
+  lib32-libxml2
+  lib32-libxtst
+  lib32-libxv
+  lib32-mesa
+  lib32-mpg123
+  lib32-nettle
+  lib32-opus
+  lib32-orc
+  lib32-pango
+  lib32-rust
+  lib32-sdl2
+  lib32-speex
+  lib32-taglib
+  lib32-twolame
+  lib32-v4l-utils
+  lib32-wavpack
+  lib32-wayland
+  lib32-zlib
+  meson
+  wayland-protocols
+  # 上游那份 makedepends 只有 lib32-orc、沒有 host 的 orc。但 build() 是
+  # `-D orc-source=system`（不拿 subproject 版 orc），尖端造型下 meson 要在
+  # **host** 找 orcc 這個建置期程式；只有 32 位元那顆時找不到就會在 configure
+  # 中斷。多裝 host orc 不會有任何副作用（它是 64 位元工具鏈的一部分，
+  # 64 位元那顆 gstreamer-git 本來就列它），屬於「補環境」不是「關開關」。
+  orc
+)
+checkdepends=(xorg-server-xvfb)
+source=(
+  'git+https://gitlab.freedesktop.org/gstreamer/gstreamer.git'
+)
+b2sums=('SKIP')
+# 源是未簽名的 monorepo HEAD（上游那份是 `?signed#tag=`，我們不釘 tag），
+# 所以這裡不列 validpgpkeys —— 沒有可驗的簽章，列了只會讓人以為有把關。
+#
+# ⚠️ 與上游那份唯一的結構差異：**不帶 0001-HACK-meson-Disable-broken-tests.patch**，
+#    所以也沒有 prepare()。三條理由，都有實測支撐：
+#    1. 那顆 patch 只關測試，而本包的 check() 不拿測試當門檻（理由見 check()），
+#       它在這一側沒有把關價值；帶它進來只是多一個「尖端一漂移就撕 prepare()」的來源。
+#    2. 尖端漂移**已經發生**（2026-10-12 實測，見交付報告）：拿今天的 main 逐 hunk
+#       dry-run，`subprojects/gst-plugins-bad/tests/validate/meson.build` 與
+#       `subprojects/gst-plugins-base/tests/validate/meson.build` 兩處對不上
+#       （tip 新增了 h265parse/dsc_sei 與 videoconvert/to_rgba_f16*，把 hunk 的
+#       尾部上下文頂掉了）。本倉那份 0001 是靠 `git apply -3` 的三方合併在撐，
+#       撐不撐得住取決於克隆裡有沒有那些 blob —— 這是 gstreamer-git 那條線自己的
+#       既存風險，不該由這顆第二條線再複製一次。
+#    3. patch 觸及的 11 個檔案裡，gst-editing-services／gst-libav／gst-plugins-bad／
+#       gst-python 這幾個在本包造型根本沒建（-D ges=disabled、libav=disabled、
+#       bad=disabled、python=disabled）。
+
+build() {
+  local meson_options=(
+    --cross-file lib32
+    --libexecdir lib32
+    -D bad=disabled
+    -D benchmarks=disabled
+    -D devtools=disabled
+    -D doc=disabled
+    -D examples=disabled
+    -D ges=disabled
+    -D glib_debug=disabled
+    -D gpl=enabled
+    -D gst-examples=disabled
+    -D gst-plugins-base:gl-graphene=disabled
+    -D gst-plugins-base:libvisual=disabled
+    -D gst-plugins-base:tremor=disabled
+    -D gst-plugins-good:amrnb=disabled
+    -D gst-plugins-good:amrwbdec=disabled
+    -D gst-plugins-good:lame=disabled
+    -D gst-plugins-good:rpicamsrc=disabled
+    -D gstreamer:bash-completion=disabled
+    -D gstreamer:dbghelp=disabled
+    -D gstreamer:ptp-helper-permissions=capabilities
+    -D introspection=disabled
+    -D libav=disabled
+    -D libnice=disabled
+    -D orc-source=system
+    -D package-name="Arch Linux Lib32 GStreamer ${epoch:+$epoch:}$pkgver-$pkgrel"
+    -D package-origin="https://www.archlinux.org/"
+    -D python=disabled
+    -D qt5=disabled
+    -D qt6=disabled
+    -D rs=disabled
+    -D rtsp_server=disabled
+    -D sharp=disabled
+    -D ugly=disabled
+  )
+
+  # https://gitlab.freedesktop.org/gstreamer/gstreamer/-/issues/3197
+  export GI_SCANNER_DISABLE_CACHE=1
+
+  arch-meson gstreamer build "${meson_options[@]}"
+  meson compile -C build
+}
+
+check() (
+  export XDG_RUNTIME_DIR="$PWD/runtime-dir"
+  mkdir -p -m 700 "$XDG_RUNTIME_DIR"
+
+  # 與 64 位元那顆同一件事：測試跑在未安裝的建置樹裡時 GStreamer 找不到
+  # 外掛掃描器，吃 registry 的測試整批紅。掃描器已經建置出來了，只是沒人
+  # 告訴測試它在哪（--libexecdir lib32 → 落在 build/ 裡的對應位置）。
+  export GST_PLUGIN_SCANNER="$PWD/build/subprojects/gstreamer/libs/gst/helpers/gst-plugin-scanner"
+
+  export CK_TIMEOUT_MULTIPLIER=5
+  export NO_AT_BRIDGE=1 GTK_A11Y=none
+
+  # ⚠️ 這裡「測試失敗只印、不讓它決定建置成敗」，語意就是上游 multilib 那顆的
+  #    `|| :`（這裡寫成 if/else 是要把失敗清單印出來，不是把它藏起來）：
+  #    32 位元交叉建置的測試要跑的是 32 位元二進位，容器裡缺的是整套 32 位元
+  #    執行期環境（不是某支測試壞了）。用戶紀律是「缺環境就補環境、不准跳測試」，
+  #    所以這條**明列進 needs-decision**：要改成硬失敗就得先
+  #    在 CI 裡湊齊 32 位元執行期，屬用戶拍板的事，我不自行拍。
+  #    妥協：測試照跑、失敗全部印成清單並打 ::warning::，讓它在 Actions 看得見，
+  #    不靜默。
+  local log=meson-test-32.log
+  if xvfb-run -s "-nolisten local" \
+      meson test -C build --no-rebuild --print-errorlogs -t $CK_TIMEOUT_MULTIPLIER \
+      >"$log" 2>&1; then
+    echo "==> lib32 測試全綠"
+  else
+    echo "::warning::lib32（32 位元交叉建置）測試有失敗，列在下方——見 PKGBUILD check() 的說明"
+    grep -E '^[0-9]+/[0-9]+ .* +(FAIL|Timeout|Crash|Error)' "$log" || true
+    tail -n 40 "$log"
+  fi
+)
+
+# ---------------------------------------------------------------------------
+# 認領機制（逐字沿用本倉 gstreamer-git 的做法，理由也在那邊）：
+# 清單是照「某一次建置的實物」寫死的，尖端會自己長高或掉檔。
+#  · 上游刪了某個檔 → 舊寫法 `mv` 直接失敗、整場中止；這裡改成記帳到
+#    claim-missing.log、繼續走，最後由收口印出來给人看。
+#  · 上游新增檔而清單沒跟上 → 一定留在 root 裡沒人被認領 → 由「root 必須清空」
+#    判定紅。靜默漏檔是最壞的失敗，這一頭絕不放行。
+_install() {
+  local src dir hit
+  for src in "${files[@]}"; do
+    hit=0
+    for dir in $src; do [[ -e $dir || -L $dir ]] && hit=1; done
+    if (( hit == 0 )); then
+      printf '%s\t%s\n' "$pkgname" "$src" >> "$srcdir/claim-missing.log"
+      continue
+    fi
+    for dir in $src; do
+      [[ -e $dir || -L $dir ]] || continue
+      mkdir -p "$pkgdir/$(dirname "$dir")"
+      mv -v "$dir" "$pkgdir/$(dirname "$dir")"
+    done
+  done
+}
+
+# 兄弟包認領清單的「丟棄版」：路徑與 _install 同源（上游 multilib 那兩顆的 files 陣列），
+# 差別只在目标是「丟掉」而不是「搬進 pkgdir」。尖端若刪了其中一條 → 記帳到
+# drop-missing.log、不紅（與 claim-missing 同一取向）；尖端若**新增**一條而這份清單
+# 沒跟上 → 它會留在 root 裡 → 下面的「root 必須清空」判紅。
+_drop_siblings() {
+  local src dir hit
+  for src in "${drop[@]}"; do
+    hit=0
+    for dir in $src; do [[ -e $dir || -L $dir ]] && hit=1; done
+    if (( hit == 0 )); then
+      printf '%s\t%s\n' "$pkgname" "$src" >> "$srcdir/drop-missing.log"
+      continue
+    fi
+    for dir in $src; do
+      [[ -e $dir || -L $dir ]] || continue
+      printf '%s\t%s\n' "$pkgname" "$dir" >> "$srcdir/drop-sibling.log"
+      rm -f -v -- "$dir" >/dev/null
+    done
+  done
+}
+
+package_lib32-gstreamer-git() {
+  # -git 版要吃掉 [lib32] 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（理由見檔頭）。
+  provides+=("lib32-gstreamer=$pkgver-$pkgrel")
+  conflicts+=("lib32-gstreamer")
+
+  pkgdesc+=" - core"
+  depends=(
+    gstreamer
+    lib32-gcc-libs
+    lib32-glib2
+    lib32-glibc
+    lib32-libcap
+    lib32-libelf
+    lib32-libunwind
+  )
+  # 上游這顆有 `optdepends=()`。實測 makepkg --printsrcinfo 會因此吐出一行空的
+  # 「optdepends = 」（對解析 .SRCINFO 的工具是髒字串），頂層本來也沒有 optdepends，
+  # 所以這裡不宣告空陣列、直接省掉。
+  install=lib32-gstreamer-git.install
+
+  meson install -C build --no-rebuild --destdir "$srcdir/root"
+  rm -f "$srcdir/claim-missing.log" "$srcdir/drop-sibling.log"
+
+  # lib32 造型不發文件、語系、標頭（上游同做法：穩定版包裡這些一概沒有）。
+  # 這一刀是「整目錄丟掉」，所以收口守衛的涵蓋面只剩 usr/lib32 與 usr/bin；
+  # 尖端若在 usr/lib32 或 usr/bin 新增沒人認領的檔，仍然會紅。
+  rm -Rf "$srcdir"/root/usr/{share,include}
+  [[ -d $srcdir/root/usr/bin ]] || mkdir -p "$srcdir/root/usr/bin"
+
+  # 32 位元的執行檔一律加 -32 後綴，避免蓋掉 64 位元同名檔。
+  local _i
+  for _i in "$srcdir"/root/usr/bin/*; do
+    [[ -e $_i || -L $_i ]] || continue
+    mv -v "${_i}" "${_i}-32"
+  done
+
+  # 認領清單 = 上游 multilib 1.28.1 那份 ∪ 本倉 gstreamer-git 在尖端實際產出的
+  # core 檔（實物來源：/var/lib/pacman/local/gstreamer-git-*/files）。
+  # 尖端比 1.28.1 多出的是 gst-completion-helper／gst-hotdoc-plugins-scanner／
+  # gst-plugins-doc-cache-generator／gst-preregistry-generate 四個；前兩個在這一版
+  # 個別是被 `-D gstreamer:bash-completion=disabled`、`-D doc=disabled` 關掉的，
+  # 留著只會進 claim-missing.log 記帳、不會紅。
+  cd root; local files=(
+    usr/lib32/libgst{reamer,base,check,controller,net}-1.0.so*
+    usr/lib32/pkgconfig/gstreamer{,-base,-check,-controller,-net}-1.0.pc
+
+    usr/lib32/gstreamer-1.0/gst-{completion,ptp}-helper
+    usr/lib32/gstreamer-1.0/gst-{hotdoc-plugins,plugin}-scanner
+    usr/lib32/gstreamer-1.0/gst-plugins-doc-cache-generator
+    usr/lib32/gstreamer-1.0/libgstcoreelements.so
+    usr/lib32/gstreamer-1.0/libgstcoretracers.so
+
+    usr/bin/gst-{inspect,launch,stats,tester,typefind}-1.0-32
+    usr/bin/gst-preregistry-generate-32
+  ); _install
+}
+
+package_lib32-gst-plugins-base-libs-git() {
+  # 同上：寫死穩定版包名。
+  provides+=("lib32-gst-plugins-base-libs=$pkgver-$pkgrel")
+  conflicts+=("lib32-gst-plugins-base-libs")
+
+  pkgdesc+=" - base"
+  depends=(
+    "lib32-gstreamer-git=$pkgver-$pkgrel"
+    gst-plugins-base-libs
+    lib32-gcc-libs
+    lib32-glib2
+    lib32-glibc
+    lib32-gtk3
+    lib32-libdrm
+    lib32-libglvnd
+    lib32-libgudev
+    lib32-libjpeg-turbo
+    lib32-libpng
+    lib32-libx11
+    lib32-libxcb
+    lib32-libxext
+    lib32-libxi
+    lib32-libxv
+    lib32-mesa
+    lib32-orc
+    lib32-wayland
+    lib32-zlib
+  )
+
+  # 清單同样是「上游 1.28.1 ∪ 尖端 base-libs 實物」的並集；對照實物
+  # /var/lib/pacman/local/gst-plugins-base-libs-git-*/files。lib32 這側
+  # `-D introspection=disabled`，所以 typelib/gir 全部不存在，不進清單。
+  cd root; local files=(
+    usr/lib32/libgst{allocators,app,audio,fft,gl,pbutils,riff,rtp,rtsp,sdp,tag,video}-1.0.so*
+    usr/lib32/pkgconfig/gstreamer-{allocators,app,audio,fft,gl{,-egl,-prototypes,-wayland,-x11},pbutils,riff,rtp,rtsp,sdp,tag,video}-1.0.pc
+
+    usr/lib32/pkgconfig/gstreamer-plugins-base-1.0.pc
+    usr/lib32/gstreamer-1.0/include/gst/gl/gstglconfig.h
+    usr/lib32/gstreamer-1.0/libgstadder.so
+    usr/lib32/gstreamer-1.0/libgstapp.so
+    usr/lib32/gstreamer-1.0/libgstaudioconvert.so
+    usr/lib32/gstreamer-1.0/libgstaudiomixer.so
+    usr/lib32/gstreamer-1.0/libgstaudiorate.so
+    usr/lib32/gstreamer-1.0/libgstaudioresample.so
+    usr/lib32/gstreamer-1.0/libgstaudiotestsrc.so
+    usr/lib32/gstreamer-1.0/libgstbasedebug.so
+    usr/lib32/gstreamer-1.0/libgstcompositor.so
+    usr/lib32/gstreamer-1.0/libgstdsd.so
+    usr/lib32/gstreamer-1.0/libgstencoding.so
+    usr/lib32/gstreamer-1.0/libgstgio.so
+    usr/lib32/gstreamer-1.0/libgstopengl.so
+    usr/lib32/gstreamer-1.0/libgstoverlaycomposition.so
+    usr/lib32/gstreamer-1.0/libgstpbtypes.so
+    usr/lib32/gstreamer-1.0/libgstplayback.so
+    usr/lib32/gstreamer-1.0/libgstrawparse.so
+    usr/lib32/gstreamer-1.0/libgstsubparse.so
+    usr/lib32/gstreamer-1.0/libgsttcp.so
+    usr/lib32/gstreamer-1.0/libgsttypefindfunctions.so
+    usr/lib32/gstreamer-1.0/libgstvideoconvertscale.so
+    usr/lib32/gstreamer-1.0/libgstvideorate.so
+    usr/lib32/gstreamer-1.0/libgstvideotestsrc.so
+    usr/lib32/gstreamer-1.0/libgstvolume.so
+    usr/lib32/gstreamer-1.0/libgstximagesink.so
+    usr/lib32/gstreamer-1.0/libgstxvimagesink.so
+    # 上游把 gtk 插件從 base/good 拆成獨立 gst-plugin-gtk（64 位元那側另有
+    # package_gst_plugin_gtk()，而且多一顆 libgstgtkwayland.so）。lib32 這側只發
+    # base-libs 一顆，所以這個檔必須認領在同一個包裡，否則自己的
+    # 「root 裡有檔沒被任何包認領」守門會紅——實測 run #482 的日誌尾端就只點名
+    # usr/lib32/gstreamer-1.0/libgstgtk.so 一顆（wayland 那顆 32 位元沒建出來，
+    # 不要照 64 位元清單多寫，多寫的檔名會進 claim-missing.log）。
+    usr/lib32/gstreamer-1.0/libgstgtk.so
+
+    usr/bin/gst-{device-monitor,discoverer,play}-1.0-32
+  ); _install
+
+  # ---------------------------------------------------------------------
+  # 收口（最後一顆包負責，與 gstreamer-git 由 docs 那顆負責同一手法）。
+  #
+  # 兄弟包檔的去向（**逐檔寫死、不用模式匹配**）：上游 pkgbase=lib32-gstreamer
+  # 還有 lib32-gst-plugins-base 與 lib32-gst-plugins-good 兩顆，用戶沒裝、本輪也不發。
+  # 查過上游那份 PKGBUILD：那兩顆的內容全部是 usr/lib32/gstreamer-1.0/libgst*.so
+  # （實測 base 7 條＋good 71 條＝78 條，且**只有**外掛 .so、沒有 lib/pc/bin/include）。
+  # 這一版一度改用「凡沒人認領的 libgst*.so 就丟」的模式規則，後來否掉：那會讓
+  # 「尖端新增了一顆外掛、該歸 base-libs 還是歸不發的那兩顆」這件事靜默通過。
+  # 現在是逐檔認領，尖端新增的任何檔（含外掛 .so）一律留在 root 裡 → 收口判紅，
+  # 由人要它歸哪一顆。這是本倉 gstreamer-git「靜默漏檔是最壞失敗」的同一條原則。
+  # ⚠️ 上面為了認領已經 `cd root`，所以這裡一律用 $srcdir/root 的**絕對路徑**。
+  #    （本倉 gstreamer-git 的守衛寫在沒 cd 過的那顆包裡、用相對 `root` 沒事；
+  #    這顆的守衛寫在最後一個 split 內，若照抄相對路徑，find 會找 root/root 而
+  #    「找不到目錄」→ wc -l 得 0 → 守衛永遠自稱通过、靜默失效。踩過才发现。）
+  local rootdir="$srcdir/root"
+  # 78 條 = 上游 package_lib32-gst-plugins-base() 的 7 條 ∪ package_lib32-gst-plugins-good() 的 71 條
+  drop=(
+    usr/lib32/gstreamer-1.0/libgstalsa.so
+    usr/lib32/gstreamer-1.0/libgstcdparanoia.so
+    usr/lib32/gstreamer-1.0/libgstogg.so
+    usr/lib32/gstreamer-1.0/libgstopus.so
+    usr/lib32/gstreamer-1.0/libgstpango.so
+    usr/lib32/gstreamer-1.0/libgsttheora.so
+    usr/lib32/gstreamer-1.0/libgstvorbis.so
+    usr/lib32/gstreamer-1.0/libgst1394.so
+    usr/lib32/gstreamer-1.0/libgstaasink.so
+    usr/lib32/gstreamer-1.0/libgstadaptivedemux2.so
+    usr/lib32/gstreamer-1.0/libgstalaw.so
+    usr/lib32/gstreamer-1.0/libgstalpha.so
+    usr/lib32/gstreamer-1.0/libgstalphacolor.so
+    usr/lib32/gstreamer-1.0/libgstapetag.so
+    usr/lib32/gstreamer-1.0/libgstaudiofx.so
+    usr/lib32/gstreamer-1.0/libgstaudioparsers.so
+    usr/lib32/gstreamer-1.0/libgstauparse.so
+    usr/lib32/gstreamer-1.0/libgstautodetect.so
+    usr/lib32/gstreamer-1.0/libgstavi.so
+    usr/lib32/gstreamer-1.0/libgstcacasink.so
+    usr/lib32/gstreamer-1.0/libgstcairo.so
+    usr/lib32/gstreamer-1.0/libgstcutter.so
+    usr/lib32/gstreamer-1.0/libgstdebug.so
+    usr/lib32/gstreamer-1.0/libgstdeinterlace.so
+    usr/lib32/gstreamer-1.0/libgstdtmf.so
+    usr/lib32/gstreamer-1.0/libgstdv.so
+    usr/lib32/gstreamer-1.0/libgsteffectv.so
+    usr/lib32/gstreamer-1.0/libgstequalizer.so
+    usr/lib32/gstreamer-1.0/libgstflac.so
+    usr/lib32/gstreamer-1.0/libgstflv.so
+    usr/lib32/gstreamer-1.0/libgstflxdec.so
+    usr/lib32/gstreamer-1.0/libgstgdkpixbuf.so
+    usr/lib32/gstreamer-1.0/libgstgoom.so
+    usr/lib32/gstreamer-1.0/libgstgoom2k1.so
+    usr/lib32/gstreamer-1.0/libgsticydemux.so
+    usr/lib32/gstreamer-1.0/libgstid3demux.so
+    usr/lib32/gstreamer-1.0/libgstimagefreeze.so
+    usr/lib32/gstreamer-1.0/libgstinterleave.so
+    usr/lib32/gstreamer-1.0/libgstisomp4.so
+    usr/lib32/gstreamer-1.0/libgstjack.so
+    usr/lib32/gstreamer-1.0/libgstjpeg.so
+    usr/lib32/gstreamer-1.0/libgstlevel.so
+    usr/lib32/gstreamer-1.0/libgstmatroska.so
+    usr/lib32/gstreamer-1.0/libgstmonoscope.so
+    usr/lib32/gstreamer-1.0/libgstmpg123.so
+    usr/lib32/gstreamer-1.0/libgstmulaw.so
+    usr/lib32/gstreamer-1.0/libgstmultifile.so
+    usr/lib32/gstreamer-1.0/libgstmultipart.so
+    usr/lib32/gstreamer-1.0/libgstnavigationtest.so
+    usr/lib32/gstreamer-1.0/libgstoss4.so
+    usr/lib32/gstreamer-1.0/libgstossaudio.so
+    usr/lib32/gstreamer-1.0/libgstpng.so
+    usr/lib32/gstreamer-1.0/libgstpulseaudio.so
+    usr/lib32/gstreamer-1.0/libgstreplaygain.so
+    usr/lib32/gstreamer-1.0/libgstrtp.so
+    usr/lib32/gstreamer-1.0/libgstrtpmanager.so
+    usr/lib32/gstreamer-1.0/libgstrtsp.so
+    usr/lib32/gstreamer-1.0/libgstshapewipe.so
+    usr/lib32/gstreamer-1.0/libgstshout2.so
+    usr/lib32/gstreamer-1.0/libgstsmpte.so
+    usr/lib32/gstreamer-1.0/libgstsoup.so
+    usr/lib32/gstreamer-1.0/libgstspectrum.so
+    usr/lib32/gstreamer-1.0/libgstspeex.so
+    usr/lib32/gstreamer-1.0/libgsttaglib.so
+    usr/lib32/gstreamer-1.0/libgsttwolame.so
+    usr/lib32/gstreamer-1.0/libgstudp.so
+    usr/lib32/gstreamer-1.0/libgstvideo4linux2.so
+    usr/lib32/gstreamer-1.0/libgstvideobox.so
+    usr/lib32/gstreamer-1.0/libgstvideocrop.so
+    usr/lib32/gstreamer-1.0/libgstvideofilter.so
+    usr/lib32/gstreamer-1.0/libgstvideomixer.so
+    usr/lib32/gstreamer-1.0/libgstvpx.so
+    usr/lib32/gstreamer-1.0/libgstwavenc.so
+    usr/lib32/gstreamer-1.0/libgstwavpack.so
+    usr/lib32/gstreamer-1.0/libgstwavparse.so
+    usr/lib32/gstreamer-1.0/libgstximagesrc.so
+    usr/lib32/gstreamer-1.0/libgstxingmux.so
+    usr/lib32/gstreamer-1.0/libgsty4m.so
+  ); _drop_siblings
+  if [[ -s "$srcdir/drop-sibling.log" ]]; then
+    echo "==> 不發的兄弟包（lib32-gst-plugins-base／-good）內容：已丟 $(wc -l < "$srcdir/drop-sibling.log") 個外掛 .so"
+  fi
+
+  # root 若還有實檔＝沒人認領也無法判定歸屬＝那檔會靜默消失在任何產物裡，禁止。
+  local left
+  left=$(find "$rootdir" \( -type f -o -type l \) | wc -l)
+  if (( left > 0 )); then
+    echo "==> 錯誤：root 裡還有 $left 個檔沒被任何包認領（尖端新增、清單未跟上）："
+    find "$rootdir" \( -type f -o -type l \) | sed 's#^#    #' | head -40
+    return 1
+  fi
+  if [[ -s "$srcdir/claim-missing.log" ]]; then
+    echo "==> 注意：以下條目在尖端已不存在（上游刪掉、或該開關本就關了），已跳過："
+    sed 's#^#    #' "$srcdir/claim-missing.log"
+  fi
+  if [[ -s "$srcdir/drop-sibling.log" ]]; then
+    echo "==> 注意：以下條目屬於本輪不發的兩顆兄弟包，已丟棄："
+    sed 's#^#    #' "$srcdir/drop-sibling.log"
+  fi
+  if [[ -s "$srcdir/drop-missing.log" ]]; then
+    echo "==> 注意：兄弟包清單裡有 $(wc -l < "$srcdir/drop-missing.log") 條在尖端已不存在（上游刪了外掛），已跳過。"
+  fi
+  find "$rootdir" -depth -print0 | xargs -0 rmdir
+}
+
+# vim:set sw=2 sts=-1 et:
