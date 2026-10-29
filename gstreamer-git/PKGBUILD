@@ -57,7 +57,6 @@ pkgname=(
   gst-rtsp-server-git
   gst-editing-services-git
   gst-python-git
-  gstreamer-docs-git
 )
 pkgver=1.29.2.1.r0.ge1edc090bc07
 pkgrel=1
@@ -241,7 +240,6 @@ makedepends_x86_64=(svt-hevc)
 checkdepends=(xorg-server-xvfb)
 source=(
   'git+https://gitlab.freedesktop.org/gstreamer/gstreamer.git'
-  "https://gstreamer.freedesktop.org/src/gstreamer-docs/gstreamer-docs-$_docsver.tar.xz"{,.asc}
 
   # Disable broken tests
   0001-HACK-meson-Disable-broken-tests.patch
@@ -1540,48 +1538,5 @@ package_gst-python-git() {
   ); _install
 }
 
-package_gstreamer-docs-git() {
-  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
-  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
-  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
-  provides+=("gstreamer-docs=$pkgver-$pkgrel")
-  conflicts+=("gstreamer-docs")
-
-  pkgdesc+=" - documentation"
-  license=(
-    "BSD-2-Clause OR MIT OR LGPL-2.1-or-later"
-    CC-BY-SA-4.0
-    LGPL-2.1-or-later
-    MIT
-    OPUBL-1.0
-  )
-  options=(
-    !debug
-    !strip
-  )
-
-  # 收口（缺檔紅的正確方向）：前面 24 個包都把各自認領的檔搬走後，
-  # root 若還有實檔＝尖端新增了東西而清單沒跟上＝那檔會靜默消失在任何產物裡，禁止。
-  local left
-  left=$(find root \( -type f -o -type l \) | wc -l)
-  if (( left > 0 )); then
-    echo "==> 錯誤：root 裡還有 $left 個檔沒被任何包認領（上游新增、清單未跟上）："
-    find root \( -type f -o -type l \) | sed 's#^#    #' | head -40
-    return 1
-  fi
-  if [[ -s "$srcdir/claim-missing.log" ]]; then
-    echo "==> 注意：以下條目在尖端已不存在（上游刪掉了），已跳過："
-    sed 's#^#    #' "$srcdir/claim-missing.log"
-  fi
-  find root -depth -print0 | xargs -0 rmdir
-
-  cd gstreamer-docs-$_docsver
-
-  mkdir -p "$pkgdir/usr/share/doc/$pkgbase"
-  cp -t "$pkgdir/usr/share" -a devhelp
-  cp -t "$pkgdir/usr/share/doc/$pkgbase" -a html README*
-
-  install -Dt "$pkgdir/usr/share/licenses/$pkgname" -m644 COPYING LICENSE*
-}
 
 # vim:set sw=2 sts=-1 et:

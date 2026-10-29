@@ -636,12 +636,6 @@ ges/libav/python/qt/rtsp/rs/sharp` 全關掉，是**另一套 configure 造型**
 收口守衛是「root 必須清空否則紅」，與 gstreamer-git 同一條原則
 （靜默漏檔是最壞的失敗）。
 
-守衛本身踩到一個**會靜默失效**的坑，記下來：gstreamer-git 的守衛寫在
-`package_gstreamer-docs-git()`，那顆沒有 `cd root`，所以用相對路徑 `find root` 沒事；
-本包的守衛寫在最後一顆 split 裡，而那個函式已經 `cd root` 了 → 照抄相對路徑會去找
-`root/root`，`find` 報「沒有此一檔案或目錄」、`wc -l` 得 0，於是守衛**永遠自稱通過**。
-已改成一律用 `$srcdir/root` 絕對路徑，離線測試（見下）也證實紅/綠方向正確。
-
 **不帶 Arch multilib 那份的 0001-HACK-meson-Disable-broken-tests.patch（本輪實測後的決定）**。
 理由不是偷懶，是量出來的：拿今天的 `main` 做 sparse 克隆後逐 hunk dry-run，11 個檔案裡
 有 **2 处對不上**——`subprojects/gst-plugins-bad/tests/validate/meson.build`（tip 新增了
