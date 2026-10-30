@@ -1,0 +1,304 @@
+# Maintainer: Capricornus007 <Capricornus007 at gmail dot com>
+# 上游：https://code.qt.io/qt/qt.git branch **4.8**（Qt 4 的維護分支尖端）。
+# ⚠️ 分支名是 `4.8`，**不存在 `4.8.7` 分支**：實查 code.qt.io 的 refs 廣告清單，heads 只有
+#   4.5 / 4.6 / 4.6-digia / 4.7 / 4.7-digia / 4.8 / 4.8-bb10 / 4.8.0-symbian / 4.8.1-symbian，
+#   `4.8.7` 只以 tag `v4.8.7` 存在。第一版我寫 #branch=4.8.7 → CI 的 `git clone --branch`
+#   直接失敗 → plan 印「跑 qt4-git 的 pkgver() 失敗」→ 又是綠燈零產物（run 39822659311
+#   實測，job 119977700249 日誌第 2511 行）。
+
+# ── 為什麼做 -git 並收進本倉（2026-10-23，使用者明確指示「編不過不算藉口」）──────
+# 本機那顆 qt4 來自 andontie-aur（arch4edu 也有）。AUR 那份的源是 **Fedora 的
+# qt-everywhere-opensource-src-4.8.7.tar.gz**，再疊 21 個自帶檔案（5 個 .desktop +
+# 16 條補丁，含 gcc6/8/9/11、glibc-2.25、icu59、openssl-1.1、cups、trayicon、clipboard）。
+# 收進本倉後改成直接吃 code.qt.io 的 4.8 維護分支尖端，並把那些 aux 檔整份進倉
+# （實測 21/21 抓齊），不再依賴 AUR 頁面與 Fedora 的 distfiles 位址。
+# 轉換手法：逐條機械替換（pkgname/conflicts/provides/_pkgfqn/source/sums/pkgver()），
+# prepare()、build()、package() 的邏輯**原封不動**保留 AUR 那套，因為 4.8.7 分支
+# 的內容就等於那個 tarball，補丁全部必須套得上、不需要「已在源碼」的跳過邏輯。
+# ⚠️ 建置成本：qt4 是長建置（單輪一小時起），所以一律在 CI 容器跑，不在本機編。
+
+# Maintainer: Echo J. <aidas957 at gmail dot com>
+# Contributor: Viktor Drobot (aka dviktor) linux776 [at] gmail [dot] com
+# Contributor: Felix Yan <felixonmars@archlinux.org>
+# Contributor: Andrea Scarpino <andrea@archlinux.org>
+# Contributor: Pierre Schmitz <pierre@archlinux.de>
+
+pkgname=qt4-git
+_pkgname=qt   # ⚠️ 給 CI plan 步的 pkgver() 探測用：它會照 $pkgname/${pkgname%-git}/$_pkgname 等名字軟鏈到克隆目錄，少了這行就 `cd qt` 失敗 → 本輪被跳過（實測 run 39821657583）
+pkgver=4.8.7
+pkgrel=1
+arch=(i686 x86_64)
+url="https://www.qt.io"
+license=(GPL-3.0-only LGPL-3.0-only GFDL-1.3-only)
+pkgdesc="A cross-platform application and UI framework"
+depends=(sqlite fontconfig libgl libxrandr libxi alsa-lib xdg-utils hicolor-icon-theme libmng
+         dbus libx11 libxrender glib2 libice freetype2 libsm libxext libpng zlib openssl)
+makedepends=(patch postgresql-libs mariadb-libs unixodbc cups gtk2 mesa)
+optdepends=('postgresql-libs: PostgreSQL driver'
+            'mariadb-libs: MySQL/MariaDB driver'
+            'unixodbc: ODBC driver'
+            'libxinerama: Xinerama support'
+            'libxcursor: Xcursor support'
+            'libxfixes: Xfixes support'
+            'icu: Unicode support'
+            'sni-qt: StatusNotifierItem (AppIndicators) support'
+            'libjpeg-turbo: JPEG plugin'
+            'libtiff: TIFF plugin')
+replaces=('qt<=4.8.4')
+conflicts=(qt4 qt)
+provides=(qt4)
+options=('!lto') # Avoid static library issues
+_pkgfqn=qt   # -git 版：源碼目錄就是 clone 下來的 qt（非 -git 那份是 tarball 解出的長目錄名）
+source=("qt::git+https://code.qt.io/qt/qt.git#branch=4.8"
+        "qtconfig-qt4.desktop"
+        "assistant-qt4.desktop"
+        "designer-qt4.desktop"
+        "linguist-qt4.desktop"
+        "qdbusviewer-qt4.desktop"
+        "improve-cups-support.patch"
+        "moc-boost-workaround.patch"
+        "kubuntu_14_systemtrayicon.diff"
+        "kde4-settings.patch"
+        "glib-honor-ExcludeSocketNotifiers-flag.diff"
+        "disable-sslv3.patch"
+        "l-qclipboard_fix_recursive.patch"
+        "l-qclipboard_delay.patch"
+        "qt4-gcc6.patch"
+        "qt4-gcc8.patch"
+        "qt4-gcc9.patch"
+        "qt4-gcc11.patch"
+        "qt4-glibc-2.25.patch"
+        "qt4-icu59.patch"
+        "qt4-openssl-1.1.patch"
+        "fix_jit.patch")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+pkgver() {
+  cd qt
+  _d=$(git describe --long --tags --match 'v4.8.7' 2>/dev/null) && {
+    printf '%s' "${_d#v}" | sed 's/\([^-]*-g\)/r\1/;s/-/./g'; return 0; }
+  # 找不到標籤也要給得出號，絕不讓 plan 靜默跳過（實測 run 39821657583 就是
+  # pkgver() 非零 → plan 印「跑 pkgver() 失敗」→ job 綠但產物不存在）。
+  printf '4.8.7.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=9 HEAD)"
+}
+
+prepare() {
+  cd "${_pkgfqn}"
+
+  # (FS#28381) (KDEBUG#180051)
+  patch -p1 -i "${srcdir}"/improve-cups-support.patch
+
+  # QTBUG#22829
+  patch -p1 -i "${srcdir}"/moc-boost-workaround.patch
+
+  # http://blog.martin-graesslin.com/blog/2014/06/where-are-my-systray-icons/
+  rm -f src/gui/util/qabstractsystemtrayiconsys.cpp \
+    src/gui/util/qabstractsystemtrayiconsys_p.h \
+    src/gui/util/qxembedsystemtrayicon_x11.cpp \
+    src/gui/util/qxembedsystemtrayicon_x11_p.h || true
+  patch -p1 -i "${srcdir}"/kubuntu_14_systemtrayicon.diff
+
+  # FS#45106
+  patch -p0 -i "${srcdir}"/kde4-settings.patch
+
+  # fixes for LibreOffice from the upstream Qt bug tracker FS#46436, FS#41648, FS#39819
+  # https://bugreports.qt.io/browse/QTBUG-37380
+  patch -p1 -i "${srcdir}"/glib-honor-ExcludeSocketNotifiers-flag.diff
+  # https://bugreports.qt.io/browse/QTBUG-34614
+  patch -p0 -i "${srcdir}"/l-qclipboard_fix_recursive.patch
+  # https://bugreports.qt.io/browse/QTBUG-38585
+  patch -p0 -i "${srcdir}"/l-qclipboard_delay.patch
+
+  # React to OpenSSL's OPENSSL_NO_SSL3 define
+  patch -p1 -i "${srcdir}"/disable-sslv3.patch
+
+  sed -i "s|-O2|${CXXFLAGS}|" mkspecs/common/{g++,gcc}-base.conf
+  sed -i "/^QMAKE_LFLAGS_RPATH/s| -Wl,-rpath,||g" mkspecs/common/gcc-base-unix.conf
+  sed -i "/^QMAKE_LFLAGS\s/s|+=|+= ${LDFLAGS}|g" mkspecs/common/gcc-base.conf
+
+  cp mkspecs/common/linux{,32}.conf
+  sed -i "/^QMAKE_LIBDIR\s/s|=|= /usr/lib32|g" mkspecs/common/linux32.conf
+  sed -i "s|common/linux.conf|common/linux32.conf|" mkspecs/linux-g++-32/qmake.conf
+
+  # Reduce warning verbosity
+  sed -i "s|-Wall -W||" mkspecs/common/gcc-base.conf
+  sed -i "s|-Wall -W||" mkspecs/linux-lsb-g++/qmake.conf
+
+  # Fix building with GCC6 (Fedora)
+  patch -p1 -i "${srcdir}"/qt4-gcc6.patch
+
+  # Fix building with GCC8.3
+  patch -Np0 -i "${srcdir}"/qt4-gcc8.patch
+
+  # Fix building with GCC9
+  patch -Np0 -i "${srcdir}"/qt4-gcc9.patch
+
+  # Fix building with GCC11 (thx de-vries)
+  patch -Np0 -i "${srcdir}"/qt4-gcc11.patch
+
+  # Fix building of Qt4 applications with glibc 2.25 (Fedora)
+  patch -p1 -i "${srcdir}"/qt4-glibc-2.25.patch
+
+  # Fix building with ICU 59 (pld-linux)
+  patch -p1 -i "${srcdir}"/qt4-icu59.patch
+
+  # Fix building with OpenSSL 1.1 (Debian + OpenMandriva)
+  patch -p1 -i "${srcdir}"/qt4-openssl-1.1.patch
+
+  # Fix linking step for JIT (Gentoo)
+  patch -Np0 -i "${srcdir}/fix_jit.patch"
+
+  # Remove usage of "requires" reserved keyword in qmake
+  sed -i 's|requires|qmakeRequires|g' qmake/generators/makefile.cpp
+
+  ### JavaScriptCore mess (TODO: Turn these into patches) ###
+
+  # Replace obsolete TR1 functions
+  sed -i -e 's|tr1::has_trivial_constructor|is_trivially_constructible|' \
+    -e 's|tr1::has_trivial_destructor|is_trivially_destructible|' \
+    src/3rdparty/javascriptcore/JavaScriptCore/wtf/TypeTraits.h
+
+  # Use rvalue of m_attributesInPrevious
+  # (https://bugs.webkit.org/show_bug.cgi?id=59261)
+  sed -i 's|, existingTransition->m_attributesInPrevious|, +existingTransition->m_attributesInPrevious|' \
+    src/3rdparty/javascriptcore/JavaScriptCore/runtime/Structure.h
+  sed -i 's|, m_attributesInPrevious)|, +m_attributesInPrevious)|' \
+    src/3rdparty/javascriptcore/JavaScriptCore/runtime/Structure.cpp
+
+  # Remove auto_ptr deprecation warnings
+  sed -i 's|auto_ptr|unique_ptr|g' \
+    src/3rdparty/javascriptcore/JavaScriptCore/wtf/*.h \
+    src/3rdparty/javascriptcore/JavaScriptCore/parser/Nodes.h \
+    src/3rdparty/javascriptcore/JavaScriptCore/wtf/unicode/Collator*
+  sed -i 's|(data)|(std::move(data))|' \
+    src/3rdparty/javascriptcore/JavaScriptCore/parser/Nodes.h
+
+  # Remove invalid template usage in ctors (this is only currently a warning though)
+  sed -i 's|StringTypeAdapter<.*>(|StringTypeAdapter(|' \
+    src/3rdparty/javascriptcore/JavaScriptCore/runtime/UString.h
+
+  # Use the ASSERT macro that masks unused variables
+  sed -i 's|ASSERT(differenceBetween(label|ASSERT_UNUSED(label, differenceBetween(label|' \
+    src/3rdparty/javascriptcore/JavaScriptCore/assembler/MacroAssemblerX86_64.h
+
+  # Use a proper compile-time assert function
+  sed -i 's|COMPILE_ASSERT(exp, name) .*|COMPILE_ASSERT(exp, name) static_assert((exp), #name)|' \
+    src/3rdparty/javascriptcore/JavaScriptCore/wtf/Assertions.h
+
+  # Correct the swap function name
+  sed -i -e 's|swap(from|hashTableSwap(from|' \
+    -e 's|inline void swap|inline void hashTableSwap|' \
+    src/3rdparty/javascriptcore/JavaScriptCore/wtf/HashTable.h
+  sed -i 's|// swap pairs|template<typename T> inline void hashTableSwap(T\& a, T\& b) { swap(a, b); }\n\n&|' \
+    src/3rdparty/javascriptcore/JavaScriptCore/wtf/HashTable.h
+
+  # Fixup obviously wrong return value
+  sed -i 's|return false|return nullptr|' \
+    src/3rdparty/javascriptcore/JavaScriptCore/yarr/RegexCompiler.cpp
+
+  # Silence -Wclass-memaccess warnings
+  sed -i 's|memcpy(dst|memcpy(reinterpret_cast<char*>(dst)|' \
+    src/3rdparty/javascriptcore/JavaScriptCore/wtf/Vector.h
+  sed -i -e 's|memcpy(x.p|memcpy(reinterpret_cast<char*>(x.p)|' \
+    -e 's|memmove(i|memmove(reinterpret_cast<char*>(i)|' \
+    src/corelib/tools/qvector.h
+
+  # Do a SelectionFlags cast in accessible plugin
+  sed -i 's|QItemSelectionModel::Columns \& QItemSelectionModel::Deselect|QItemSelectionModel::SelectionFlags(&)|' \
+    src/plugins/accessible/widgets/itemviews.cpp
+}
+
+build() {
+  export QT4DIR="${srcdir}"/build
+  export LD_LIBRARY_PATH="${QT4DIR}/lib:${LD_LIBRARY_PATH}"
+
+  # Force the C++17 standard (this might suppress some deprecation warnings and keep the build working for longer)
+  export CXXFLAGS+=" -std=c++17"
+
+  mkdir build || true
+  cd build
+
+  ../${_pkgfqn}/configure -confirm-license -opensource \
+    -prefix /usr \
+    -bindir /usr/lib/qt4/bin \
+    -headerdir /usr/include/qt4 \
+    -docdir /usr/share/doc/qt4 \
+    -plugindir /usr/lib/qt4/plugins \
+    -importdir /usr/lib/qt4/imports \
+    -datadir /usr/share/qt4 \
+    -translationdir /usr/share/qt4/translations \
+    -sysconfdir /etc/xdg \
+    -examplesdir /usr/share/doc/qt4/examples \
+    -demosdir /usr/share/doc/qt4/demos \
+    -plugin-sql-{psql,mysql,sqlite,odbc} \
+    -system-sqlite \
+    -no-phonon \
+    -no-phonon-backend \
+    -no-webkit \
+    -graphicssystem raster \
+    -openssl-linked \
+    -nomake demos \
+    -nomake examples \
+    -nomake docs \
+    -xmlpatterns \
+    -silent \
+    -no-rpath \
+    -optimized-qmake \
+    -no-reduce-relocations \
+    -dbus-linked \
+    -no-openvg \
+    -little-endian -host-little-endian
+
+  make
+}
+
+package() {
+  make -C build INSTALL_ROOT="${pkgdir}" install
+
+  cd ${_pkgfqn}
+
+  # install missing icons and desktop files
+  install -D -m644 src/gui/dialogs/images/qtlogo-64.png "${pkgdir}"/usr/share/icons/hicolor/64x64/apps/qt4logo.png
+  install -D -m644 tools/assistant/tools/assistant/images/assistant.png "${pkgdir}"/usr/share/icons/hicolor/32x32/apps/assistant-qt4.png
+  install -D -m644 tools/assistant/tools/assistant/images/assistant-128.png "${pkgdir}"/usr/share/icons/hicolor/128x128/apps/assistant-qt4.png
+  install -D -m644 tools/designer/src/designer/images/designer.png "${pkgdir}"/usr/share/icons/hicolor/128x128/apps/designer-qt4.png
+
+  for icon in tools/linguist/linguist/images/icons/linguist-*-32.png; do
+    size=$(echo $(basename ${icon}) | cut -d- -f2)
+    install -D -m644 ${icon} "${pkgdir}"/usr/share/icons/hicolor/${size}x${size}/apps/linguist-qt4.png
+  done
+
+  install -D -m644 tools/qdbus/qdbusviewer/images/qdbusviewer.png "${pkgdir}"/usr/share/icons/hicolor/32x32/apps/qdbusviewer-qt4.png
+  install -D -m644 tools/qdbus/qdbusviewer/images/qdbusviewer-128.png "${pkgdir}"/usr/share/icons/hicolor/128x128/apps/qdbusviewer-qt4.png
+
+  install -d "${pkgdir}"/usr/share/applications
+  install -m644 "${srcdir}"/{assistant,designer,linguist,qtconfig,qdbusviewer}-qt4.desktop "${pkgdir}"/usr/share/applications/
+
+  # Useful symlinks for cmake and configure scripts
+  install -d "${pkgdir}"/usr/bin
+
+  for b in "${pkgdir}"/usr/lib/qt4/bin/*; do
+    ln -s /usr/lib/qt4/bin/$(basename $b) "${pkgdir}"/usr/bin/$(basename $b)-qt4
+  done
+
+  # Install the licenses
+  # ⚠️ AUR 那三份（LICENSE.GPL3 / LICENSE.LGPLv3 / LICENSE.FDL）是 **Fedora tarball 才有的
+  #   檔案**；git 樹裡 `LICENSE.GPL3` 不存在（實查 code.qt.io cgit plain：
+  #   LICENSE.GPL3 → 404，而 LICENSE.LGPL=200/26840、LICENSE.LGPLv21=200/26832、
+  #   LICENSE.LGPLv3=200/8049、LICENSE.FDL=200/22961）。run 39823328871 就是紅在
+  #   `install: cannot stat 'LICENSE.GPL3'`（整棵 Qt 已經編完、死在 package() 的最後一步）。
+  #   所以改裝 git 樹實際有的三份；license= 陣列不動（Qt4 的双授權是 LGPLv2.1 為主、
+  #   GPL3 為選項，少一個文字檔不改變授權本身）。
+  install -D -m644 LICENSE.LGPLv21 "${pkgdir}"/usr/share/licenses/${pkgname}/LICENSE.LGPLv21
+  install -D -m644 LICENSE.LGPLv3 "${pkgdir}"/usr/share/licenses/${pkgname}/LICENSE.LGPLv3
+  install -D -m644 LICENSE.FDL "${pkgdir}"/usr/share/licenses/${pkgname}/LICENSE.FDL
+
+  # Fix wrong libs path in pkgconfig files
+  find "${pkgdir}/usr/lib/pkgconfig" -type f -name '*.pc' -exec perl -pi -e "s, -L${srcdir}/?\S+,,g" {} \;
+
+  # Fix wrong bins path in pkgconfig files
+  find "${pkgdir}/usr/lib/pkgconfig" -type f -name '*.pc' -exec sed -i 's|/usr/bin/|/usr/lib/qt4/bin/|g' {} \;
+
+  # Fix wrong path in prl files
+  find "${pkgdir}/usr/lib" -type f -name '*.prl' -exec sed -i -e '/^QMAKE_PRL_BUILD_DIR/d;s/\(QMAKE_PRL_LIBS =\).*/\1/' {} \;
+}

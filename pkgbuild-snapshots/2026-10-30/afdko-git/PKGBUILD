@@ -1,0 +1,52 @@
+# Maintainer: Capricornus007 <Capricornus007 at proton dot me>
+#
+# 本倉 in-tree 維護（2026-10-21）。原本吃 AUR 的 afdko-git，但它停更在 2024-03，
+# 還在呼叫 `python setup.py build`——**上游早就刪掉 setup.py 了**（實查
+# adobe-type-tools/afdko 預設分支 develop 的 setup.py／setup.cfg 都是 404），
+# 改成 pyproject + scikit-build-core（CMake 後端）。所以 CI 一直紅在
+#   python: can't open file '.../src/afdko/setup.py': [Errno 2]
+# 這裡照新的建置系統重寫，只依官方倉就有的依賴（逐條查過：python-lxml／
+# python-booleanoperations／python-defcon／python-fontmath／python-fonttools／
+# python-scikit-build-core／python-installer／python-build 全在 extra）。
+#
+# 注意預設分支是 **develop** 不是 main。
+
+pkgname=afdko-git
+pkgver=5.0.1.r0.g0000000
+pkgrel=1
+pkgdesc='Adobe Font Development Kit for OpenType (git develop)'
+arch=('any')
+url='https://github.com/adobe-type-tools/afdko'
+license=('Apache-2.0')
+depends=('python' 'python-lxml' 'python-booleanoperations' 'python-defcon'
+         'python-fontmath' 'python-fonttools')
+makedepends=('git' 'python-build' 'python-installer' 'python-wheel'
+             'python-scikit-build-core' 'python-setuptools-scm' 'cython'
+             'cmake' 'ninja')
+provides=('afdko')
+conflicts=('afdko')
+source=("git+${url}.git#branch=develop")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd afdko
+  local d
+  d=$(git describe --long --tags --abbrev=7 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g')
+  if [ -n "$d" ]; then
+    printf '%s\n' "$d"
+  else
+    printf '5.0.1.r%s.g%s\n' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+  fi
+}
+
+build() {
+  cd afdko
+  # --no-isolation：依賴由 makedepends 提供，容器不另外開 venv 抓網
+  python -m build --wheel --no-isolation
+}
+
+package() {
+  cd afdko
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  install -Dm644 LICENSE.md -t "$pkgdir/usr/share/licenses/$pkgname/"
+}

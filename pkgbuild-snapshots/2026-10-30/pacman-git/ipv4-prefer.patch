@@ -1,0 +1,119 @@
+diff --git a/lib/libalpm/dload.c b/lib/libalpm/dload.c
+index 87b3df6f..378ea927 100644
+--- a/lib/libalpm/dload.c
++++ b/lib/libalpm/dload.c
+@@ -371,6 +371,63 @@ static size_t dload_parseheader_cb(void *ptr, size_t size, size_t nmemb, void *u
+ 	return realsize;
+ }
+ 
++/* ── 本地補丁（Capricornus007/repo）───────────────────────────────────────
++ * 目標：pacman 從 GitHub 下載比 curl 本家慢。實測同一顆檔案 IPv6 10.6 MB/s、
++ * IPv4 37.6 MB/s（快 3.5 倍），原因是本機到 GitHub 的 v6 路由差，不是 pacman 的錯。
++ *
++ * 為什麼不掛 XferCommand：裸掛 curl 會把 -Sy 的「下載 <倉庫>.db.part」那行整個換成
++ * curl 的進度表，倉庫名全消失（2026-10-27 實測）。補在 libalpm 裡就沒有這個代價。
++ *
++ * 為什麼不是一律 IPv4：那會讓 v6-only 的來源直接斷掉（拆東牆補西牆）。這裡只對
++ * 名單內的主機先試 IPv4，其餘鏡像的行為一個字都不變；IPv4 解析或連線失敗時把該
++ * payload 退回 curl 預設的雙棧，下一次（重試或下一個鏡像）就走得通。
++ *
++ * 名單可用環境變數 PACMAN_IPV4_HOSTS 覆蓋（逗號分隔；支援 ".example.com" 這種
++ * 後綴寫法）。設成空字串表示停用這條補丁。 */
++static const char *alpm_default_ipv4_hosts =
++	"github.com,objects.githubusercontent.com,codeload.github.com,"
++	"raw.githubusercontent.com,gist.githubusercontent.com";
++
++static int alpm_host_matches(const char *hostname, const char *list)
++{
++	const char *p = list;
++
++	if(hostname == NULL || list == NULL) {
++		return 0;
++	}
++	while(*p) {
++		const char *end = strchr(p, ',');
++		size_t len = end ? (size_t)(end - p) : strlen(p);
++		size_t hostlen = strlen(hostname);
++
++		if(len > 0 && hostlen >= len
++				&& strncmp(hostname + hostlen - len, p, len) == 0
++				&& (hostlen == len || hostname[hostlen - len - 1] == '.')) {
++			return 1;
++		}
++		if(end == NULL) {
++			break;
++		}
++		p = end + 1;
++	}
++	return 0;
++}
++
++static long alpm_ipresolve_for(const char *url)
++{
++	const char *env = getenv("PACMAN_IPV4_HOSTS");
++	const char *list = env != NULL ? env : alpm_default_ipv4_hosts;
++	char hostname[HOSTNAME_SIZE];
++
++	if(list == NULL || *list == '\0') {
++		return 0;
++	}
++	if(url == NULL || curl_gethost(url, hostname, sizeof(hostname)) != 0) {
++		return 0;
++	}
++	return alpm_host_matches(hostname, list) ? CURL_IPRESOLVE_V4 : 0;
++}
++
+ static void curl_set_handle_opts(CURL *curl, struct dload_payload *payload)
+ {
+ 	alpm_handle_t *handle = payload->handle;
+@@ -395,6 +452,17 @@ static void curl_set_handle_opts(CURL *curl, struct dload_payload *payload)
+ 	}
+ 	curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, dload_parseheader_cb);
+ 	curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)payload);
++	/* 本地補丁：名單內主機先走 IPv4；一旦失敗過（ipresolve 被設成 WHATEVER）
++	 * 就不再強制，交給 curl 預設的雙棧。 */
++	if(payload->ipresolve != CURL_IPRESOLVE_WHATEVER) {
++		long ipresolve = alpm_ipresolve_for(payload->fileurl);
++		if(ipresolve != 0) {
++			payload->ipresolve = ipresolve;
++		}
++	}
++	if(payload->ipresolve != 0) {
++		curl_easy_setopt(curl, CURLOPT_IPRESOLVE, payload->ipresolve);
++	}
+ 	curl_easy_setopt(curl, CURLOPT_NETRC, CURL_NETRC_OPTIONAL);
+ 	curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
+ 	curl_easy_setopt(curl, CURLOPT_TCP_KEEPIDLE, 60L);
+@@ -568,6 +636,8 @@ static int curl_check_finished_download(alpm_handle_t *handle, CURLM *curlm, CUR
+ 			}
+ 			goto cleanup;
+ 		case CURLE_COULDNT_RESOLVE_HOST:
++			/* 本地補丁：IPv4 解析不到（v6-only 來源）就退回雙棧，別讓這條補丁擋死。 */
++			payload->ipresolve = CURL_IPRESOLVE_WHATEVER;
+ 			handle->pm_errno = ALPM_ERR_SERVER_BAD_URL;
+ 			_alpm_log(handle, ALPM_LOG_ERROR,
+ 					_("failed retrieving file '%s' from %s : %s\n"),
+@@ -580,6 +650,8 @@ static int curl_check_finished_download(alpm_handle_t *handle, CURLM *curlm, CUR
+ 				goto cleanup;
+ 			}
+ 		default:
++			/* 本地補丁：連線／逾時類失敗也退回雙棧，下一次嘗試改走 curl 預設。 */
++			payload->ipresolve = CURL_IPRESOLVE_WHATEVER;
+ 			if(!payload->request_errors_ok) {
+ 				handle->pm_errno = ALPM_ERR_LIBCURL;
+ 				_alpm_log(handle, ALPM_LOG_ERROR,
+diff --git a/lib/libalpm/dload.h b/lib/libalpm/dload.h
+index dd504e88..7f0134c6 100644
+--- a/lib/libalpm/dload.h
++++ b/lib/libalpm/dload.h
+@@ -58,6 +58,10 @@ struct dload_payload {
+ 	char error_buffer[CURL_ERROR_SIZE];
+ 	int signature; /* specifies if this payload is for a signature file */
+ 	int request_errors_ok; /* per-request errors-ok */
++	/* 0 = 尚未決定；CURL_IPRESOLVE_V4 = 這一輪先走 IPv4；
++	 * CURL_IPRESOLVE_WHATEVER = 已經失敗過、退回 curl 預設的雙棧。
++	 * 實際判定與回退見 dload.c 的 alpm_ipresolve_for()。 */
++	long ipresolve;
+ #endif
+ 	FILE *localf; /* temp download file */
+ };

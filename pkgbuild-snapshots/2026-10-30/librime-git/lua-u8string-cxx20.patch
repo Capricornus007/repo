@@ -1,0 +1,18 @@
+diff --git a/src/opencc.cc b/src/opencc.cc
+index 4413397..d61102b 100644
+--- a/src/opencc.cc
++++ b/src/opencc.cc
+@@ -195,11 +195,11 @@ namespace OpenccReg {
+       auto user_path = deployer.user_data_dir;
+       auto shared_path = deployer.shared_data_dir;
+       try{
+-        return T((user_path / "opencc" / filename).u8string());
++        return T((user_path / "opencc" / filename).string());
+       }
+       catch(...) {
+         try{
+-          return T((shared_path / "opencc" / filename).u8string());
++          return T((shared_path / "opencc" / filename).string());
+         }
+         catch(...) {
+           LOG(ERROR) << " [" << user_path << "|" << shared_path << "]/opencc/"

@@ -1,0 +1,81 @@
+name: Build Kernels
+
+# 内核套件：编译一次动辄 150 分钟以上，linux-cachyos-cjktty 更久。
+# 上游内核一天最多发一版，每天查一次足够，跑太勤只是重复做同样的版本检测。
+#
+# concurrency 里保留 cancel-in-progress 只对 push / 手动触发生效：推代码时正在
+# 跑的那个 run 用的是旧 workflow，留着没意义。定时触发的一律排队，否则新一轮
+# 会把还在编译的内核掐死，永远出不了成品。
+
+on:
+  push:
+    branches:
+      - master
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: build-kernels-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-packages.yml
+    permissions:
+      contents: write
+    # 可重用 workflow 默认拿不到调用方的 secrets，必须显式继承，
+    # 否则 PERSONAL_BUILD_TOKEN 为空、回推 PKGBUILD 会静默失败。
+    secrets: inherit
+    with:
+      timeout_minutes: 340
+      # ⚠️ packages 是 `packages: |` 的**純 JSON 字面塊**，下游用 fromJSON(inputs.packages)
+      # 解析——註解只能寫在這裡（YAML 區），寫進方括號裡面會讓整條矩陣一起解析失敗
+      # （2026-10-11 在 build-git-packages.yml 真的踩過：run #436 只剩 deploy 一顆 job）。
+      #
+      # NVIDIA -beta 四顆（用戶 2026-10-11 點名全部進本倉，我方追蹤 #170）：
+      # · 為什麼要自己出：Artix 的 world／lib32 與 Arch 的 extra／testing 都**只有
+      #   stable 那條 nvidia**，查 nvidia-beta* 一律查無（實測 archlinux.org API 404、
+      #   pacman -Si 在本機啟用的倉裡也查無）→ -beta 分支唯一的來源是 AUR。
+      #   版號追隨 AUR：plan 步用 AUR RPC 取 Version，pkgver／pkgrel 拆開用。
+      # · ⚠️ **兩條矩陣＝四顆包**：AUR 的 nvidia-utils-beta 是 **split pkgbase**
+      #   （實查 ~/.cache/yay/nvidia-utils-beta 的 PKGBUILD 與 .SRCINFO：
+      #   pkgname=('nvidia-utils-beta' 'opencl-nvidia-beta' 'nvidia-settings-beta')），
+      #   一次 makepkg 就產三顆；收集與 repo-add 那兩步都是 pkg_dir/*.pkg.tar.zst 的
+      #   glob，所以 split 不需要額外接點（llvm-git／gstreamer 同形）。
+      #   ⚠️ 千萬**別**再為 opencl-nvidia-beta／nvidia-settings-beta 各加一條矩陣：
+      #   AUR 的 git 倉是以 pkgbase 命名的，拿這兩個包名去 clone 會 404，而且同
+      #   pkgbase 並行會打出兩份同版本產物互相打架。
+      # · 本機那顆「nvidia-settings」就是 nvidia-settings-beta：pacman -Qi 是靠它的
+      #   provides `nvidia-settings=615.78.08` 解析到的，Name 欄實測為
+      #   nvidia-settings-beta，不是另一顆包、也不是 Arch 官方那顆。
+      # · kind: aur 是 AUR 來源在既有慣例該用的值，它一次給你三件事：
+      #   (1) 「拉取对应的套件仓库」走 AUR clone；
+      #   (2) 「初始化容器環境（Arch／Artix）」把自有 junlin03-aur 掛成 pacman 源——
+      #       nvidia-beta-dkms 的 depends 有 `nvidia-utils-beta=${pkgver}`（硬釘等號），
+      #       不掛源就 `target not found` 直接紅；
+      #   (3) 「更新校验和并回推 PKGBUILD」的 giant if 有 `matrix.kind != 'aur'`，
+      #       自動排除回推（本倉沒有 Capricornus007/nvidia-utils-beta 這種獨立倉，
+      #       不排除會索要憑證 → CI 無 TTY → exit 128）。
+      #   不能改用 kind: artix（實查「初始化容器環境（Arch／Artix）」的代碼：是 kind != artix
+      #   才裝 devtools，所以 artix 那條不會炸 devtools，但會丟掉三件必須的事）：
+      #   (a) 只有 kind 是 kde／wayland／aur 才掛 junlin03-aur 源 → artix 那條解不開
+      #       nvidia-utils-beta=615.78.08 這個等號硬釘依賴，makepkg -s 直接紅；
+      #   (b) 拿不到 kind: aur 的 --skipchecksums --nocheck → AUR 輔助檔的 sha 一過時
+      #       就「One or more files did not pass the validity check」（run #225 實測）；
+      #   (c) 「更新校验和并回推」的 giant if 只按 kind != 'aur' 排除，改用 artix 就還
+      #       要把包名再點名加進那條已經很長的字串（21000 上限的地雷區）。
+      # · 掛低频線（本檔）而不是 155 項的 -git 線：NVIDIA 的 beta 分支不像 git 那樣
+      #   天天動，每天查一次 AUR RPC 足夠；單輪還要下載 530MB＋409MB 的 .run。
+      #   逐包的依賴與換代分析寫進 docs/in-tree-packages.md 的 NVIDIA -beta 段。
+      packages: |
+        [
+          {"key": "snd-pcsp-dkms", "repo_name": "snd-pcsp-dkms", "variant": "none"},
+          {"key": "linux-zencjk", "repo_name": "linux-zencjk", "variant": "none"},
+          {"key": "linux-ltscjk", "repo_name": "linux-ltscjk", "variant": "none"},
+          {"key": "linux-cachyos-cjktty-release", "repo_name": "linux-cachyos-cjktty", "variant": "release"},
+          {"key": "linux-cachyos-cjktty-rc", "repo_name": "linux-cachyos-cjktty", "variant": "rc"},
+          {"key": "nvidia-utils-openrc", "repo_name": "nvidia-utils-openrc", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
+          {"key": "nvidia-utils-beta", "repo_name": "nvidia-utils-beta", "variant": "none", "kind": "aur"},
+          {"key": "nvidia-beta-dkms", "repo_name": "nvidia-beta-dkms", "variant": "none", "kind": "aur"}
+        ]
