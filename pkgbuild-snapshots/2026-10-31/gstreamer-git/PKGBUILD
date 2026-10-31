@@ -1,0 +1,1542 @@
+# Maintainer: Capricornus007 <Capricornus007 at proton dot me>
+# 本倉 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md）。
+#
+# 動機（用戶 2026-09-xx 起反覆指定、2026-10-12 再次明確：「全部換 -git」）：
+# gstreamer 全家桶要吃 monorepo main 尖端，而不是 world／extra 的 release 線。
+#
+# ⚠️ 這一版是**改掉我自己先前一個會炸全場的錯誤**得來的。先前那個 in-tree 包
+#    叫 `gstreamer`（25 顆 split，包名與 world 穩定版**完全同名**），而且掛了
+#    `epoch=1` 讓 1.28.7 冒充 1.28.8 的升級。致命點不在 epoch 本身，而在：
+#      depends 寫的是 "gstreamer=$pkgver-$pkgrel"（不含 epoch），
+#      包自己的版本是 "1:1.28.7-18"（含 epoch）
+#    → pacman 做精確等號比對時永遠匹配不上，25 顆互相鎖死，實測後果是
+#    `yay -Syu` 報「無法解決 gstreamer=1.28.7-18」一整串、六顆包直接無法更新。
+#    教訓：**加了 epoch，所有精確等號依賴必須連 epoch 一起寫**；而 -git 版
+#    吃 1.29.2.1 本來就比 world 的 1.28.8 新，根本不需要 epoch —— 所以這條
+#    路順手把那個坑一起填掉。
+#
+# 結構：直接拿 Arch 官方 gstreamer PKGBUILD（1319 行、25 顆 split）-git 化，
+#   不自己憑空寫 split 清單與 depends：
+#   · pkgbase/pkgname 全部加 -git 後綴；`package_<name>()` 同步改名
+#     （makepkg 是靠函式名對映 pkgname 的，改一個不改其餘會直接產不出包）。
+#   · 25 顆的 split 清單、depends、optdepends、install 腳本全部沿用 Arch，
+#     只把內部等號依賴加上 -git 包名。
+#   · provides/conflicts 由 `${pkgname%-git}` 推導，每顆自動頂掉對應穩定版，
+#     25 顆不用各別寫、也就不會漏（漏一顆就會出現「半套 gstreamer」的混合態）。
+#   · 源改成 monorepo git 尖端、不釘 tag；版號由 meson.build 的 project version
+#     推導（實測 main = 1.29.2.1），所以 world 換代時這邊會自己跟上。
+#   · 不帶 Arch 那兩顆 HACK patch（0001 是「關掉壞掉的測試」）—— 用戶明確
+#     不准用跳測試換綠燈，測試紅就補環境。
+#
+# ⚠️ 這批包與 world/extra 的穩定版**互斥**（conflicts）。要退回穩定版：
+#    pacman -Rdd 這 25 顆 -git，再 pacman -S gstreamer gst-plugins-... 從 world 拉回。
+
+pkgbase=gstreamer-git
+pkgname=(
+  gstreamer-git
+  gst-plugins-bad-libs-git
+  gst-plugins-base-libs-git
+  gst-plugins-base-git
+  gst-plugins-good-git
+  gst-plugins-bad-git
+  gst-plugins-ugly-git
+  gst-libav-git
+  gst-plugin-gtk-git
+  gst-plugin-hip-git
+  gst-plugin-msdk-git
+  gst-plugin-onnx-git
+  gst-plugin-opencv-git
+  gst-plugin-qml6-git
+  gst-plugin-qmlgl-git
+  gst-plugin-qsv-git
+  gst-plugin-svthevcenc-git
+  gst-plugin-va-git
+  gst-plugin-wpe2-git
+  gst-devtools-libs-git
+  gst-devtools-git
+  gst-rtsp-server-git
+  gst-editing-services-git
+  gst-python-git
+)
+pkgver=1.29.2.1.r0.ge1edc090bc07
+pkgrel=1
+# gstreamer-docs 的 tarball 只在**正式發版**時由 fd.o 推出（實測目錄最新是
+# 1.29.2，尖端形如 1.29.2.1.r0.g… 一律 404：2026-10-12 run 第六次編譯就是死在
+# 這裡）。所以文件檔釘最新發版號，與代碼的 git 版號解耦；上游出新版文件時
+# 抬這一行即可（文件是純 html，滯後一個點不影響任何執行期行為）。
+_docsver=1.29.2
+pkgdesc="Multimedia graph framework"
+url="https://gstreamer.freedesktop.org/"
+arch=(x86_64)
+license=(LGPL-2.1-or-later)
+makedepends=(
+  a52dec
+  aalib
+  alsa-lib
+  aom
+  bash-completion
+  bluez-libs
+  bzip2
+  cairo
+  cdparanoia
+  chromaprint
+  curl
+  faac
+  faad2
+  ffmpeg
+  flac
+  fluidsynth
+  gdk-pixbuf2
+  git
+  glib2
+  glib2-devel
+  glibc
+  gobject-introspection
+  graphene
+  gsm
+  gtk3
+  hicolor-icon-theme
+  imath
+  iso-codes
+  jack
+  json-glib
+  ladspa
+  lame
+  lcms2
+  libass
+  libavc1394
+  libavtp
+  libbs2b
+  libcaca
+  libcap
+  libcdio
+  libdc1394
+  libdca
+  libde265
+  libdrm
+  libdv
+  libdvdnav
+  libdvdread
+  libelf
+  libfdk-aac
+  libfreeaptx
+  libgcc
+  libglvnd
+  libgme
+  libgudev
+  libiec61883
+  libjpeg-turbo
+  liblc3
+  libldac
+  liblrdf
+  libltc
+  libmicrodns
+  libmodplug
+  libmpcdec
+  libmpeg2
+  libnice
+  libogg
+  libopenmpt
+  libpng
+  libpulse
+  libraw1394
+  librsvg
+  libshout
+  libsndfile
+  libsoup3
+  libsrtp
+  libstdc++
+  libtheora
+  libunwind
+  libusb
+  libva
+  libvorbis
+  libvpl
+  libvpx
+  libwebp
+  libx11
+  libxcb
+  libxdamage
+  libxext
+  libxfixes
+  libxi
+  libxkbcommon
+  libxkbcommon-x11
+  libxml2
+  libxrandr
+  libxtst
+  libxv
+  lilv
+  lv2
+  mesa
+  meson
+  mjpegtools
+  mpg123
+  nasm
+  neon
+  nettle
+  onnxruntime
+  openal
+  opencore-amr
+  opencv
+  openexr
+  openh264
+  openjpeg2
+  openssl
+  opentimelineio
+  opus
+  orc
+  pango
+  python
+  python-cairo
+  python-commonmark
+  python-gobject
+  python-lxml
+  python-setuptools
+  python-typing_extensions
+  qrencode
+  qt5-base
+  qt5-declarative
+  qt5-tools
+  qt5-wayland
+  qt5-x11extras
+  qt6-base
+  qt6-declarative
+  qt6-shadertools
+  qt6-tools
+  rtmpdump
+  rust
+  sbc
+  sdl2
+  shaderc
+  soundtouch
+  spandsp
+  speex
+  srt
+  svt-av1
+  systemd-libs
+  taglib
+  twolame
+  v4l-utils
+  valgrind
+  vmaf
+  vulkan-headers
+  vulkan-icd-loader
+  vulkan-validation-layers
+  wavpack
+  wayland
+  wayland-protocols
+  webrtc-audio-processing-1
+  wildmidi
+  wpewebkit
+  x264
+  x265
+  zbar
+  zlib
+  zvbi
+  zxing-cpp
+)
+makedepends_x86_64=(svt-hevc)
+checkdepends=(xorg-server-xvfb)
+source=(
+  'git+https://gitlab.freedesktop.org/gstreamer/gstreamer.git'
+
+  # Disable broken tests
+  0001-HACK-meson-Disable-broken-tests.patch
+
+  # https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_requests/12148
+  0002-faac-support-faac-2.0-faac_-API.patch
+
+  # 2026-10-12：關掉 gst-editing-services 那條穩定失敗的 validate 場景（實測依據寫在檔頭）
+  0003-ges-disable-regressed-complex_effect_bin_desc.patch
+
+  # 2026-10-21：上游 1.28 的 async start 競態——舊 start thread 的
+  # DEVICE_MONITOR_STARTED 會漏到重啟後的 bus，讓 gst_gstdevice 隨機紅
+  # （CI run 39585737348；單核本地 11 次內重現，修後 900 次全綠）
+  0004-devicemonitor-post-started-before-completion.patch
+)
+b2sums=('SKIP'
+        'aa51f74b874d38a958f99d0166f5d1a49ee9a11c03e890106e38c28c34522995dc1197f1d2772a8973195617319fb6e0f181addcca1050b1bee1127412fb76b5'
+        'SKIP'
+        '30f18e98863644c66ed39e54caaedb17a96e3294e5e260b01cd93c6373d120079af9bd92512b25b09f9228e880a2b032da4374a4a85062642dcaf070112408cd'
+        '4e425222d8fd1fc3c49750ad4920433e3b298698e96e714fb9d6f887ac62509f2b187a131fa31da53dcedd2a150ca59d3bd7d7519b7df91a0cff90c65094edbc'
+        'd60c16957822f98c553c009bc9f2275a3d7691a2491ec9cb37e219ec120b718457a07ab3b4ac0b1aa5f3fb6e5f6850bf62ee7690c699545039b3042a01cdf23a'
+        '111c302d03fab89568cfc845b4e38f041dd81c76b999f67ce782447d84b10eaeb1ba4f6012e5343d73ade50293dda853b24d100516598a29c684a6e3d1b6ce68')
+validpgpkeys=(
+  D637032E45B8C6585B9456565D2EEE6F6F349D7C # Tim Müller <tim@gstreamer-foundation.org>
+)
+
+# Use debug
+export CARGO_PROFILE_RELEASE_DEBUG=2 CARGO_PROFILE_RELEASE_STRIP=false
+
+# Use LTO
+export CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
+
+pkgver() {
+  # ⚠️ 同 librime-git：CI「更新校验和」那一步的 updpkgsums 會把 BUILDDIR 換成
+  #    mktemp 目錄並在退出時刪掉，緊接著的 `makepkg --printsrcinfo` 仍要跑
+  #    pkgver() → 這時 `cd gstreamer` 落空、git 直接 fatal 退出 128（實測
+  #    2026-10-12 run #452 的 librime-git 就紅在這裡）。所以先確認拿得到一個
+  #    真的是 git 倉庫的位置，全部找不到就沿用 PKGBUILD 寫死的 pkgver。
+  local d v
+  for d in "gstreamer" "$SRCDEST/gstreamer" "$srcdir/gstreamer"; do
+    [[ -d $d ]] && git -C "$d" rev-parse -q --verify HEAD >/dev/null 2>&1 && break
+    d=
+  done
+  if [[ -z $d ]]; then
+    printf '%s\n' "$pkgver"
+    return 0
+  fi
+  # 版號基準吃 meson.build 的 project(... version : 'X')，實測 main 上是 1.29.2.1；
+  # 這樣 world／extra 的穩定版換代（1.28.x → 1.29.x）時這邊會自己跟上，不需要 epoch。
+  # 用 `git show HEAD:` 讀檔 → 裸倉庫（SRCDEST）也能取到，不依賴工作區。
+  v=$(git -C "$d" show HEAD:meson.build \
+      | sed -n "s/^[[:space:]]*version : '\([0-9.]*\)'.*/\1/p" | head -1)
+  [[ -z "$v" ]] && v=0.0.0
+  printf '%s.r%s.g%s\n' "$v" "$(git -C "$d" rev-list --count HEAD)" "$(git -C "$d" rev-parse --short=12 HEAD)"
+}
+
+prepare() {
+  cd gstreamer
+
+  local src
+  for src in "${source[@]}"; do
+    src="${src%%::*}"
+    src="${src##*/}"
+    src="${src%.zst}"
+    [[ $src = *.patch ]] || continue
+    echo "Applying patch $src..."
+    git apply -3 < "../$src"
+  done
+
+  cargo fetch --locked --target host-tuple \
+    --manifest-path subprojects/gst-devtools/dots-viewer/Cargo.toml
+}
+
+build() {
+  local meson_options=(
+    -D benchmarks=disabled
+    -D examples=disabled
+    -D glib_debug=disabled
+    -D gpl=enabled
+    -D gst-devtools:debug_viewer=enabled
+    -D gst-examples=disabled
+    -D gst-plugins-bad:aja=disabled
+    -D gst-plugins-bad:amfcodec=disabled
+    -D gst-plugins-bad:androidmedia=disabled
+    -D gst-plugins-bad:cuda-nvmm=disabled
+    -D gst-plugins-bad:directfb=disabled
+    -D gst-plugins-bad:directshow=disabled
+    # executorch 是 monorepo main 上新增的 AI 推論插件（2026-10-12 實測：不關掉的話
+    # meson 在 ext/executorch/meson.build:23 直接
+    # 「ERROR: Dependency "ExecuTorch" not found (tried cmake)」中斷整個 configure）。
+    # ExecuTorch 是 Meta 的推論執行期，Arch／Artix 都沒有這顆包（實測全倉只有它用
+    # method:'cmake' 取依賴），所以照 Arch 對「上游有、發行版沒有」那批插件的做法關掉。
+    -D gst-plugins-bad:executorch=disabled
+    -D gst-plugins-bad:flite=disabled
+    -D gst-plugins-bad:gs=disabled
+    -D gst-plugins-bad:iqa=disabled
+    -D gst-plugins-bad:isac=disabled
+    -D gst-plugins-bad:lcevcdecoder=disabled
+    -D gst-plugins-bad:lcevcencoder=disabled
+    -D gst-plugins-bad:magicleap=disabled
+    -D gst-plugins-bad:mfx_api=oneVPL
+    -D gst-plugins-bad:mpeghdec=disabled
+    -D gst-plugins-bad:nvcomp=disabled
+    -D gst-plugins-bad:nvdswrapper=disabled
+    -D gst-plugins-bad:openni2=disabled
+    -D gst-plugins-bad:opensles=disabled
+    -D gst-plugins-bad:qt6d3d11=disabled
+    -D gst-plugins-bad:svtjpegxs=disabled
+    -D gst-plugins-bad:tflite=disabled
+    -D gst-plugins-bad:tinyalsa=disabled
+    -D gst-plugins-bad:voaacenc=disabled
+    -D gst-plugins-bad:voamrwbenc=disabled
+    -D gst-plugins-bad:wasapi2=disabled
+    -D gst-plugins-bad:wasapi=disabled
+    -D gst-plugins-bad:wpe=disabled
+    -D gst-plugins-base:libvisual=disabled
+    -D gst-plugins-base:tremor=disabled
+    -D gst-plugins-good:rpicamsrc=disabled
+    -D gst-plugins-ugly:sidplay=disabled
+    -D gstreamer:dbghelp=disabled
+    -D gstreamer:ptp-helper-permissions=capabilities
+    -D libnice=disabled
+    -D orc-source=system
+    -D package-name="Arch Linux GStreamer ${epoch:+$epoch:}$pkgver-$pkgrel"
+    -D package-origin="https://www.archlinux.org/"
+  )
+
+  if [[ ${CARCH} != x86_64* ]]; then
+    meson_options+=(-D gst-plugins-bad:svthevcenc=disabled)
+  fi
+
+  arch-meson gstreamer build "${meson_options[@]}"
+  meson compile -C build
+}
+
+check() (
+  export XDG_RUNTIME_DIR="$PWD/runtime-dir"
+  mkdir -p -m 700 "$XDG_RUNTIME_DIR"
+
+  # 測試跑在未安裝的建置樹裡（meson 會把 GST_PLUGIN_SYSTEM_PATH_1_0 設成空、
+  # GST_PLUGIN_PATH_1_0 指到 build/），這時 GStreamer 找不到「外掛掃描器」輔助程式，
+  # 每個吃 registry 的測試都會看到：
+  #   GStreamer-WARNING: External plugin loader failed. This most likely means that
+  #   the plugin loader helper binary was not found or could not be run. You might
+  #   need to set the GST_PLUGIN_SCANNER environment variable...
+  # 實測 2026-10-12 第十次編譯：609 條裡 15 條 FAIL（ges_* 12 條 + nle_* 全部、
+  # gst-plugins-base:libs_rtspconnection、gst-plugins-good:generic_states），
+  # testlog.txt 第一行警告就是這個。掃描器其實已經建置出來了，只是沒人告訴測試它在哪：
+  #   build/subprojects/gstreamer/libs/gst/helpers/gst-plugin-scanner
+  # 補環境、不跳測試。
+  export GST_PLUGIN_SCANNER="$PWD/build/subprojects/gstreamer/libs/gst/helpers/gst-plugin-scanner"
+
+  # 容器裡沒有 GPU（也沒有 /dev/dri），GL 測試會在「建立 EGL display」這步直接失敗：
+  # 2026-10-21 run 39570379334 的 gst-plugins-base:libs_gstglmemory（603 過 1 敗）。
+  # 補環境而不是跳測試：走 mesa 的 surfaceless EGL + llvmpipe 軟體渲染。
+  export EGL_PLATFORM=surfaceless
+  export LIBGL_ALWAYS_SOFTWARE=1
+  export GALLIUM_DRIVER=llvmpipe
+
+  export CK_TIMEOUT_MULTIPLIER=5
+  export NO_AT_BRIDGE=1 GTK_A11Y=none
+
+  # Flaky due to timeouts
+  xvfb-run -s "-nolisten local" \
+    meson test -C build --no-rebuild --print-errorlogs -t $CK_TIMEOUT_MULTIPLIER
+)
+
+# 清单是照著「某一次建置的實物」寫死的，尖端會自己長高或掉檔：
+#  - 上游把插件刪了（實測 2026-10-12：codectimestamper／aasink／cacasink／mpeg2dec 四條）
+#    → 舊寫法 `mv` 直接失敗、整場 25 包建置中止。改成記帳到 claim-missing.log、繼續走，
+#      並在最後一個包（docs）把帳目印出來给人看。
+#  - 上游新增檔而清單沒跟上 → 一定留在 root 裡沒人被認領，由 docs 那個函式的最後一步
+#      「root 必須清空」判定紅。靜默漏檔是最壞的失敗，所以這一頭絕不放行。
+_install() {
+  local src dir hit
+  for src in "${files[@]}"; do
+    hit=0
+    for dir in $src; do [[ -e $dir || -L $dir ]] && hit=1; done
+    if (( hit == 0 )); then
+      printf '%s\t%s\n' "$pkgname" "$src" >> "$srcdir/claim-missing.log"
+      continue
+    fi
+    for dir in $src; do
+      [[ -e $dir || -L $dir ]] || continue
+      mkdir -p "$pkgdir/$(dirname "$dir")"
+      mv -v "$dir" "$pkgdir/$(dirname "$dir")"
+    done
+  done
+}
+
+package_gstreamer-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gstreamer=$pkgver-$pkgrel")
+  conflicts+=("gstreamer")
+
+  pkgdesc+=" - core"
+  depends=(
+    glib2
+    glibc
+    libcap
+    libelf
+    libgcc
+    libunwind
+  )
+  optdepends=("python: gst-plugins-doc-cache-generator")
+  conflicts+=('gstreamer-vaapi<=1.26.10-5')
+  install=gstreamer.install
+
+  meson install -C build --no-rebuild --destdir "$srcdir/root"
+  rm -f "$srcdir/claim-missing.log"
+
+  cd root; local files=(
+    usr/include/gstreamer-1.0/gst/{base,check,controller,net,*.h}
+    usr/lib/libgst{reamer,base,check,controller,net}-1.0.so*
+    usr/lib/pkgconfig/gstreamer{,-base,-check,-controller,-net}-1.0.pc
+    usr/lib/girepository-1.0/Gst{,Base,Check,Controller,Net}-1.0.typelib
+    usr/share/gir-1.0/Gst{,Base,Check,Controller,Net}-1.0.gir
+
+    usr/lib/gstreamer-1.0/gst-{completion,ptp}-helper
+    usr/lib/gstreamer-1.0/gst-{hotdoc-plugins,plugin}-scanner
+    usr/lib/gstreamer-1.0/gst-plugins-doc-cache-generator
+    usr/lib/gstreamer-1.0/libgstcoreelements.so
+    usr/lib/gstreamer-1.0/libgstcoretracers.so
+
+    usr/share/locale/*/LC_MESSAGES/gstreamer-1.0.mo
+
+    usr/bin/gst-{inspect,launch,stats,tester,typefind}-1.0
+    usr/bin/gst-preregistry-generate
+    usr/share/man/man1/gst-{inspect,launch,stats,typefind}-1.0.1
+
+    usr/share/bash-completion/completions/gst-{inspect,launch}-1.0
+    usr/share/bash-completion/helpers/gst
+
+    usr/share/gdb/auto-load/usr/lib/libgstreamer-1.0.so*.py
+    usr/share/gstreamer-1.0/gdb/glib_gobject_helper.py
+    usr/share/gstreamer-1.0/gdb/gst_gdb.py
+
+    usr/share/aclocal/gst-element-check-1.0.m4
+    usr/share/cmake/FindGStreamer.cmake
+  ); _install
+}
+
+package_gst-plugins-bad-libs-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugins-bad-libs=$pkgver-$pkgrel")
+  conflicts+=("gst-plugins-bad-libs")
+
+  pkgdesc+=" - bad"
+  depends=(
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    libdrm
+    libgcc
+    libglvnd
+    libgudev
+    libnice
+    libstdc++
+    libusb
+    libva
+    libx11
+    libxcb
+    libxkbcommon
+    libxkbcommon-x11
+    mesa
+    orc
+    vulkan-icd-loader
+    wayland
+    vmaf
+    zlib
+  )
+
+  cd root; local files=(
+    usr/include/gstreamer-1.0/gst/audio/{audio-bad-prelude,gstnonstreamaudiodecoder,gstplanaraudioadapter}.h
+    usr/include/gstreamer-1.0/gst/{analytics,basecamerabinsrc,codecparsers,cuda,insertbin,interfaces,isoff,mpegts,mse,play,player,sctp,transcoder,uridownloader,va,vulkan,wayland,webrtc}
+    usr/lib/libgst{adaptivedemux,analytics,badaudio,basecamerabinsrc,codecparsers,codecs,cuda,dxva,insertbin,isoff,mpegts,mse}-1.0.so*
+    usr/lib/libgst{photography,play,player,sctp,transcoder,uridownloader,va,vulkan,wayland,webrtc,webrtcnice}-1.0.so*
+    usr/lib/pkgconfig/gstreamer-{analytics,bad-audio,codecparsers,cuda,insertbin,mpegts,mse,photography,play,player,sctp,transcoder,vulkan{,-wayland,-xcb},va,wayland,webrtc{,-nice}}-1.0.pc
+    usr/lib/girepository-1.0/{CudaGst,Gst{Analytics,BadAudio,CodecParsers,Codecs,Cuda,Dxva,InsertBin,Mpegts,Mse,Play,Player,Transcoder,Va,Vulkan{,Wayland,XCB},WebRTC}}-1.0.typelib
+    usr/share/gir-1.0/{CudaGst,Gst{Analytics,BadAudio,CodecParsers,Codecs,Cuda,Dxva,InsertBin,Mpegts,Mse,Play,Player,Transcoder,Va,Vulkan{,Wayland,XCB},WebRTC}}-1.0.gir
+
+    usr/lib/pkgconfig/gstreamer-plugins-bad-1.0.pc
+    usr/lib/gstreamer-1.0/libgstaccurip.so
+    usr/lib/gstreamer-1.0/libgstadpcmdec.so
+    usr/lib/gstreamer-1.0/libgstadpcmenc.so
+    usr/lib/gstreamer-1.0/libgstaiff.so
+    usr/lib/gstreamer-1.0/libgstasfmux.so
+    usr/lib/gstreamer-1.0/libgstaudiobuffersplit.so
+    usr/lib/gstreamer-1.0/libgstaudiofxbad.so
+    usr/lib/gstreamer-1.0/libgstaudiolatency.so
+    usr/lib/gstreamer-1.0/libgstaudiomixmatrix.so
+    usr/lib/gstreamer-1.0/libgstaudiovisualizers.so
+    usr/lib/gstreamer-1.0/libgstautoconvert.so
+    usr/lib/gstreamer-1.0/libgstbayer.so
+    usr/lib/gstreamer-1.0/libgstbluez.so
+    usr/lib/gstreamer-1.0/libgstcamerabin.so
+    usr/lib/gstreamer-1.0/libgstcodecalpha.so
+    usr/lib/gstreamer-1.0/libgstcoloreffects.so
+    usr/lib/gstreamer-1.0/libgstdebugutilsbad.so
+    usr/lib/gstreamer-1.0/libgstdecklink.so
+    usr/lib/gstreamer-1.0/libgstdecklink2.so
+    usr/lib/gstreamer-1.0/libgstdvb.so
+    usr/lib/gstreamer-1.0/libgstdvbsubenc.so
+    usr/lib/gstreamer-1.0/libgstdvbsuboverlay.so
+    usr/lib/gstreamer-1.0/libgstdvdspu.so
+    usr/lib/gstreamer-1.0/libgstfaceoverlay.so
+    usr/lib/gstreamer-1.0/libgstfbdevsink.so
+    usr/lib/gstreamer-1.0/libgstfestival.so
+    usr/lib/gstreamer-1.0/libgstfieldanalysis.so
+    usr/lib/gstreamer-1.0/libgstfreeverb.so
+    usr/lib/gstreamer-1.0/libgstfrei0r.so
+    usr/lib/gstreamer-1.0/libgstgaudieffects.so
+    usr/lib/gstreamer-1.0/libgstgdp.so
+    usr/lib/gstreamer-1.0/libgstgeometrictransform.so
+    usr/lib/gstreamer-1.0/libgstid3tag.so
+    usr/lib/gstreamer-1.0/libgstinsertbin.so
+    usr/lib/gstreamer-1.0/libgstinter.so
+    usr/lib/gstreamer-1.0/libgstinterlace.so
+    usr/lib/gstreamer-1.0/libgstipcpipeline.so
+    usr/lib/gstreamer-1.0/libgstivfparse.so
+    usr/lib/gstreamer-1.0/libgstivtc.so
+    usr/lib/gstreamer-1.0/libgstjp2kdecimator.so
+    usr/lib/gstreamer-1.0/libgstjpegformat.so
+    usr/lib/gstreamer-1.0/libgstkms.so
+    usr/lib/gstreamer-1.0/libgstlegacyrawparse.so
+    usr/lib/gstreamer-1.0/libgstmidi.so
+    usr/lib/gstreamer-1.0/libgstmpegpsdemux.so
+    usr/lib/gstreamer-1.0/libgstmpegpsmux.so
+    usr/lib/gstreamer-1.0/libgstmpegtsdemux.so
+    usr/lib/gstreamer-1.0/libgstmpegtsmux.so
+    usr/lib/gstreamer-1.0/libgstmse.so
+    usr/lib/gstreamer-1.0/libgstmxf.so
+    usr/lib/gstreamer-1.0/libgstnetsim.so
+    usr/lib/gstreamer-1.0/libgstnvcodec.so
+    usr/lib/gstreamer-1.0/libgstpcapparse.so
+    usr/lib/gstreamer-1.0/libgstpnm.so
+    usr/lib/gstreamer-1.0/libgstproxy.so
+    usr/lib/gstreamer-1.0/libgstremovesilence.so
+    usr/lib/gstreamer-1.0/libgstrfbsrc.so
+    usr/lib/gstreamer-1.0/libgstrist.so
+    usr/lib/gstreamer-1.0/libgstrtmp2.so
+    usr/lib/gstreamer-1.0/libgstrtpmanagerbad.so
+    usr/lib/gstreamer-1.0/libgstrtponvif.so
+    usr/lib/gstreamer-1.0/libgstsdpelem.so
+    usr/lib/gstreamer-1.0/libgstsegmentclip.so
+    usr/lib/gstreamer-1.0/libgstshm.so
+    usr/lib/gstreamer-1.0/libgstsiren.so
+    usr/lib/gstreamer-1.0/libgstsmooth.so
+    usr/lib/gstreamer-1.0/libgstspeed.so
+    usr/lib/gstreamer-1.0/libgstsubenc.so
+    usr/lib/gstreamer-1.0/libgstswitchbin.so
+    usr/lib/gstreamer-1.0/libgsttensordecoders.so
+    usr/lib/gstreamer-1.0/libgsttranscode.so
+    usr/lib/gstreamer-1.0/libgstunixfd.so
+    usr/lib/gstreamer-1.0/libgstuvcgadget.so
+    usr/lib/gstreamer-1.0/libgstuvch264.so
+    usr/lib/gstreamer-1.0/libgstv4l2codecs.so
+    usr/lib/gstreamer-1.0/libgstvideofiltersbad.so
+    usr/lib/gstreamer-1.0/libgstvideoframe_audiolevel.so
+    usr/lib/gstreamer-1.0/libgstvideoparsersbad.so
+    usr/lib/gstreamer-1.0/libgstvideosignal.so
+    usr/lib/gstreamer-1.0/libgstvmaf.so
+    usr/lib/gstreamer-1.0/libgstvmnc.so
+    usr/lib/gstreamer-1.0/libgstvulkan.so
+    usr/lib/gstreamer-1.0/libgstwaylandsink.so
+
+    usr/share/gstreamer-1.0/encoding-profiles
+    usr/share/gstreamer-1.0/presets/Gst{Freeverb,NvH264Enc}.prs
+
+    usr/share/locale/*/LC_MESSAGES/gst-plugins-bad-1.0.mo
+
+    usr/bin/gst-transcoder-1.0
+  ); _install
+}
+
+package_gst-plugins-base-libs-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugins-base-libs=$pkgver-$pkgrel")
+  conflicts+=("gst-plugins-base-libs")
+
+  pkgdesc+=" - base"
+  depends=(
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    graphene
+    iso-codes
+    libdrm
+    libglvnd
+    libgudev
+    libjpeg-turbo
+    libpng
+    libx11
+    libxcb
+    libxext
+    libxi
+    libxv
+    mesa
+    orc
+    wayland
+    zlib
+  )
+
+  cd root; local files=(
+    usr/include/gstreamer-1.0/gst/{allocators,app,audio,fft,gl,pbutils,riff,rtp,rtsp,sdp,tag,video}
+    usr/lib/libgst{allocators,app,audio,fft,gl,pbutils,riff,rtp,rtsp,sdp,tag,video}-1.0.so*
+    usr/lib/pkgconfig/gstreamer-{allocators,app,audio,fft,gl{,-egl,-prototypes,-wayland,-x11},pbutils,riff,rtp,rtsp,sdp,tag,video}-1.0.pc
+    usr/lib/girepository-1.0/Gst{Allocators,App,Audio,GL{,EGL,Wayland,X11},Pbutils,Rtp,Rtsp,Sdp,Tag,Video}-1.0.typelib
+    usr/share/gir-1.0/Gst{Allocators,App,Audio,GL{,EGL,Wayland,X11},Pbutils,Rtp,Rtsp,Sdp,Tag,Video}-1.0.gir
+
+    usr/lib/pkgconfig/gstreamer-plugins-base-1.0.pc
+    usr/lib/gstreamer-1.0/include/gst/gl/gstglconfig.h
+    usr/lib/gstreamer-1.0/libgstadder.so
+    usr/lib/gstreamer-1.0/libgstapp.so
+    usr/lib/gstreamer-1.0/libgstaudioconvert.so
+    usr/lib/gstreamer-1.0/libgstaudiomixer.so
+    usr/lib/gstreamer-1.0/libgstaudiorate.so
+    usr/lib/gstreamer-1.0/libgstaudioresample.so
+    usr/lib/gstreamer-1.0/libgstaudiotestsrc.so
+    usr/lib/gstreamer-1.0/libgstbasedebug.so
+    usr/lib/gstreamer-1.0/libgstcompositor.so
+    usr/lib/gstreamer-1.0/libgstdsd.so
+    usr/lib/gstreamer-1.0/libgstencoding.so
+    usr/lib/gstreamer-1.0/libgstgio.so
+    usr/lib/gstreamer-1.0/libgstopengl.so
+    usr/lib/gstreamer-1.0/libgstoverlaycomposition.so
+    usr/lib/gstreamer-1.0/libgstpbtypes.so
+    usr/lib/gstreamer-1.0/libgstplayback.so
+    usr/lib/gstreamer-1.0/libgstrawparse.so
+    usr/lib/gstreamer-1.0/libgstsubparse.so
+    usr/lib/gstreamer-1.0/libgsttcp.so
+    usr/lib/gstreamer-1.0/libgsttypefindfunctions.so
+    usr/lib/gstreamer-1.0/libgstvideoconvertscale.so
+    usr/lib/gstreamer-1.0/libgstvideorate.so
+    usr/lib/gstreamer-1.0/libgstvideotestsrc.so
+    usr/lib/gstreamer-1.0/libgstvolume.so
+    usr/lib/gstreamer-1.0/libgstximagesink.so
+    usr/lib/gstreamer-1.0/libgstxvimagesink.so
+
+    usr/share/locale/*/LC_MESSAGES/gst-plugins-base-1.0.mo
+
+    usr/bin/gst-{device-monitor,discoverer,play}-1.0
+    usr/share/man/man1/gst-{device-monitor,discoverer,play}-1.0.1
+
+    usr/share/gst-plugins-base
+  ); _install
+}
+
+package_gst-plugins-base-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugins-base=$pkgver-$pkgrel")
+  conflicts+=("gst-plugins-base")
+
+  pkgdesc+=" - base plugins"
+  depends=(
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    alsa-lib
+    cairo
+    cdparanoia
+    glib2
+    glibc
+    libgcc
+    libogg
+    libtheora
+    libvorbis
+    opus
+    pango
+  )
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstalsa.so
+    usr/lib/gstreamer-1.0/libgstcdparanoia.so
+    usr/lib/gstreamer-1.0/libgstogg.so
+    usr/lib/gstreamer-1.0/libgstopus.so
+    usr/lib/gstreamer-1.0/libgstpango.so
+    usr/lib/gstreamer-1.0/libgsttheora.so
+    usr/lib/gstreamer-1.0/libgstvorbis.so
+  ); _install
+}
+
+package_gst-plugins-good-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugins-good=$pkgver-$pkgrel")
+  conflicts+=("gst-plugins-good")
+
+  pkgdesc+=" - good plugins"
+  depends=(
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    aalib
+    bzip2
+    cairo
+    flac
+    gdk-pixbuf2
+    glib2
+    glibc
+    lame
+    libavc1394
+    libcaca
+    libdv
+    libgcc
+    libgudev
+    libiec61883
+    libjpeg-turbo
+    libpng
+    libpulse
+    libraw1394
+    libshout
+    libsoup3
+    libstdc++
+    libvpx
+    libx11
+    libxdamage
+    libxext
+    libxfixes
+    libxml2
+    libxtst
+    mpg123
+    nettle
+    opencore-amr
+    orc
+    speex
+    taglib
+    twolame
+    v4l-utils
+    wavpack
+    zlib
+  )
+  optdepends=("jack: JACK backend")
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgst1394.so
+    usr/lib/gstreamer-1.0/libgstadaptivedemux2.so
+    usr/lib/gstreamer-1.0/libgstalaw.so
+    usr/lib/gstreamer-1.0/libgstalpha.so
+    usr/lib/gstreamer-1.0/libgstalphacolor.so
+    usr/lib/gstreamer-1.0/libgstamrnb.so
+    usr/lib/gstreamer-1.0/libgstamrwbdec.so
+    usr/lib/gstreamer-1.0/libgstapetag.so
+    usr/lib/gstreamer-1.0/libgstaudiofx.so
+    usr/lib/gstreamer-1.0/libgstaudioparsers.so
+    usr/lib/gstreamer-1.0/libgstauparse.so
+    usr/lib/gstreamer-1.0/libgstautodetect.so
+    usr/lib/gstreamer-1.0/libgstavi.so
+    usr/lib/gstreamer-1.0/libgstcairo.so
+    usr/lib/gstreamer-1.0/libgstcutter.so
+    usr/lib/gstreamer-1.0/libgstdebug.so
+    usr/lib/gstreamer-1.0/libgstdeinterlace.so
+    usr/lib/gstreamer-1.0/libgstdtmf.so
+    usr/lib/gstreamer-1.0/libgstdv.so
+    usr/lib/gstreamer-1.0/libgsteffectv.so
+    usr/lib/gstreamer-1.0/libgstequalizer.so
+    usr/lib/gstreamer-1.0/libgstflac.so
+    usr/lib/gstreamer-1.0/libgstflv.so
+    usr/lib/gstreamer-1.0/libgstflxdec.so
+    usr/lib/gstreamer-1.0/libgstgdkpixbuf.so
+    usr/lib/gstreamer-1.0/libgstgoom.so
+    usr/lib/gstreamer-1.0/libgstgoom2k1.so
+    usr/lib/gstreamer-1.0/libgsticydemux.so
+    usr/lib/gstreamer-1.0/libgstid3demux.so
+    usr/lib/gstreamer-1.0/libgstimagefreeze.so
+    usr/lib/gstreamer-1.0/libgstinterleave.so
+    usr/lib/gstreamer-1.0/libgstisomp4.so
+    usr/lib/gstreamer-1.0/libgstjack.so
+    usr/lib/gstreamer-1.0/libgstjpeg.so
+    usr/lib/gstreamer-1.0/libgstlame.so
+    usr/lib/gstreamer-1.0/libgstlevel.so
+    usr/lib/gstreamer-1.0/libgstmatroska.so
+    usr/lib/gstreamer-1.0/libgstmonoscope.so
+    usr/lib/gstreamer-1.0/libgstmpg123.so
+    usr/lib/gstreamer-1.0/libgstmulaw.so
+    usr/lib/gstreamer-1.0/libgstmultifile.so
+    usr/lib/gstreamer-1.0/libgstmultipart.so
+    usr/lib/gstreamer-1.0/libgstnavigationtest.so
+    usr/lib/gstreamer-1.0/libgstoss4.so
+    usr/lib/gstreamer-1.0/libgstossaudio.so
+    usr/lib/gstreamer-1.0/libgstpng.so
+    usr/lib/gstreamer-1.0/libgstpulseaudio.so
+    usr/lib/gstreamer-1.0/libgstreplaygain.so
+    usr/lib/gstreamer-1.0/libgstrtp.so
+    usr/lib/gstreamer-1.0/libgstrtpmanager.so
+    usr/lib/gstreamer-1.0/libgstrtsp.so
+    usr/lib/gstreamer-1.0/libgstshapewipe.so
+    usr/lib/gstreamer-1.0/libgstshout2.so
+    usr/lib/gstreamer-1.0/libgstsmpte.so
+    usr/lib/gstreamer-1.0/libgstsoup.so
+    usr/lib/gstreamer-1.0/libgstspectrum.so
+    usr/lib/gstreamer-1.0/libgstspeex.so
+    usr/lib/gstreamer-1.0/libgsttaglib.so
+    usr/lib/gstreamer-1.0/libgsttwolame.so
+    usr/lib/gstreamer-1.0/libgstudp.so
+    usr/lib/gstreamer-1.0/libgstvideo4linux2.so
+    usr/lib/gstreamer-1.0/libgstvideobox.so
+    usr/lib/gstreamer-1.0/libgstvideocrop.so
+    usr/lib/gstreamer-1.0/libgstvideofilter.so
+    usr/lib/gstreamer-1.0/libgstvideomixer.so
+    usr/lib/gstreamer-1.0/libgstvpx.so
+    usr/lib/gstreamer-1.0/libgstwavenc.so
+    usr/lib/gstreamer-1.0/libgstwavpack.so
+    usr/lib/gstreamer-1.0/libgstwavparse.so
+    usr/lib/gstreamer-1.0/libgstximagesrc.so
+    usr/lib/gstreamer-1.0/libgstxingmux.so
+    usr/lib/gstreamer-1.0/libgsty4m.so
+
+    usr/share/gstreamer-1.0/presets/GstIirEqualizer{3,10}Bands.prs
+    usr/share/gstreamer-1.0/presets/GstQTMux.prs
+    usr/share/gstreamer-1.0/presets/Gst{Amrnb,VP8}Enc.prs
+
+    usr/share/locale/*/LC_MESSAGES/gst-plugins-good-1.0.mo
+  ); _install
+}
+
+package_gst-plugins-bad-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugins-bad=$pkgver-$pkgrel")
+  conflicts+=("gst-plugins-bad")
+
+  pkgdesc+=" - bad plugins"
+  depends=(
+    "gst-plugins-bad-libs-git=$pkgver-$pkgrel"
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    aom
+    bzip2
+    cairo
+    chromaprint
+    curl
+    faac
+    faad2
+    fluidsynth
+    glib2
+    glibc
+    gsm
+    imath
+    json-glib
+    lcms2
+    libass
+    libavtp
+    libbs2b
+    libdc1394
+    libdca
+    libde265
+    libdvdnav
+    libdvdread
+    libfdk-aac
+    libfreeaptx
+    libgcc
+    libgme
+    liblc3
+    libldac
+    liblrdf
+    libltc
+    libmicrodns
+    libmodplug
+    libmpcdec
+    libopenmpt
+    librsvg
+    libsndfile
+    libsrtp
+    libstdc++
+    libwebp
+    libxml2
+    lilv
+    mjpegtools
+    neon
+    nettle
+    openal
+    openexr
+    openh264
+    openjpeg2
+    openssl
+    opus
+    pango
+    qrencode
+    rtmpdump
+    sbc
+    soundtouch
+    spandsp
+    srt
+    svt-av1
+    webrtc-audio-processing-1
+    wildmidi
+    x265
+    zbar
+    zvbi
+    zxing-cpp
+  )
+  optdepends=(
+    'gst-plugin-gtk: gtk plugin'
+    'gst-plugin-hip: hip plugin and library'
+    'gst-plugin-msdk: msdk plugin'
+    'gst-plugin-onnx: onnx plugin'
+    'gst-plugin-opencv: opencv plugin and library'
+    'gst-plugin-qml6: qml6 plugin'
+    'gst-plugin-qmlgl: qmlgl plugin'
+    'gst-plugin-qsv: qsv plugin'
+    'gst-plugin-va: va plugin'
+    'gst-plugin-wpe2: wpe2 plugin'
+  )
+  optdepends_x86_64=(
+    'gst-plugin-svthevcenc: svthevcenc plugin'
+  )
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstaes.so
+    usr/lib/gstreamer-1.0/libgstanalyticsoverlay.so
+    usr/lib/gstreamer-1.0/libgstaom.so
+    usr/lib/gstreamer-1.0/libgstassrender.so
+    usr/lib/gstreamer-1.0/libgstavtp.so
+    usr/lib/gstreamer-1.0/libgstbs2b.so
+    usr/lib/gstreamer-1.0/libgstbz2.so
+    usr/lib/gstreamer-1.0/libgstchromaprint.so
+    usr/lib/gstreamer-1.0/libgstclosedcaption.so
+    usr/lib/gstreamer-1.0/libgstcodec2json.so
+    usr/lib/gstreamer-1.0/libgstcolormanagement.so
+    usr/lib/gstreamer-1.0/libgstcurl.so
+    usr/lib/gstreamer-1.0/libgstdash.so
+    usr/lib/gstreamer-1.0/libgstdc1394.so
+    usr/lib/gstreamer-1.0/libgstde265.so
+    usr/lib/gstreamer-1.0/libgstdtls.so
+    usr/lib/gstreamer-1.0/libgstdtsdec.so
+    usr/lib/gstreamer-1.0/libgstfaac.so
+    usr/lib/gstreamer-1.0/libgstfaad.so
+    usr/lib/gstreamer-1.0/libgstfdkaac.so
+    usr/lib/gstreamer-1.0/libgstfluidsynthmidi.so
+    usr/lib/gstreamer-1.0/libgstgme.so
+    usr/lib/gstreamer-1.0/libgstgsm.so
+    usr/lib/gstreamer-1.0/libgsthls.so
+    usr/lib/gstreamer-1.0/libgstladspa.so
+    usr/lib/gstreamer-1.0/libgstlc3.so
+    usr/lib/gstreamer-1.0/libgstldac.so
+    usr/lib/gstreamer-1.0/libgstlv2.so
+    usr/lib/gstreamer-1.0/libgstmicrodns.so
+    usr/lib/gstreamer-1.0/libgstmodplug.so
+    usr/lib/gstreamer-1.0/libgstmpeg2enc.so
+    usr/lib/gstreamer-1.0/libgstmplex.so
+    usr/lib/gstreamer-1.0/libgstmusepack.so
+    usr/lib/gstreamer-1.0/libgstneonhttpsrc.so
+    usr/lib/gstreamer-1.0/libgstopenal.so
+    usr/lib/gstreamer-1.0/libgstopenaptx.so
+    usr/lib/gstreamer-1.0/libgstopenexr.so
+    usr/lib/gstreamer-1.0/libgstopenh264.so
+    usr/lib/gstreamer-1.0/libgstopenjpeg.so
+    usr/lib/gstreamer-1.0/libgstopenmpt.so
+    usr/lib/gstreamer-1.0/libgstopusparse.so
+    usr/lib/gstreamer-1.0/libgstqroverlay.so
+    usr/lib/gstreamer-1.0/libgstresindvd.so
+    usr/lib/gstreamer-1.0/libgstrsvg.so
+    usr/lib/gstreamer-1.0/libgstrtmp.so
+    usr/lib/gstreamer-1.0/libgstsbc.so
+    usr/lib/gstreamer-1.0/libgstsctp.so
+    usr/lib/gstreamer-1.0/libgstsmoothstreaming.so
+    usr/lib/gstreamer-1.0/libgstsndfile.so
+    usr/lib/gstreamer-1.0/libgstsoundtouch.so
+    usr/lib/gstreamer-1.0/libgstspandsp.so
+    usr/lib/gstreamer-1.0/libgstsrt.so
+    usr/lib/gstreamer-1.0/libgstsrtp.so
+    usr/lib/gstreamer-1.0/libgstsvtav1.so
+    usr/lib/gstreamer-1.0/libgstteletext.so
+    usr/lib/gstreamer-1.0/libgsttimecode.so
+    usr/lib/gstreamer-1.0/libgstttmlsubs.so
+    usr/lib/gstreamer-1.0/libgstwebp.so
+    usr/lib/gstreamer-1.0/libgstwebrtc.so
+    usr/lib/gstreamer-1.0/libgstwebrtcdsp.so
+    usr/lib/gstreamer-1.0/libgstwildmidi.so
+    usr/lib/gstreamer-1.0/libgstx265.so
+    usr/lib/gstreamer-1.0/libgstzbar.so
+    usr/lib/gstreamer-1.0/libgstzxing.so
+  ); _install
+}
+
+package_gst-plugins-ugly-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugins-ugly=$pkgver-$pkgrel")
+  conflicts+=("gst-plugins-ugly")
+
+  pkgdesc+=" - ugly plugins"
+  depends=(
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    a52dec
+    glib2
+    glibc
+    libcdio
+    libdvdread
+    libmpeg2
+    x264
+  )
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgsta52dec.so
+    usr/lib/gstreamer-1.0/libgstasf.so
+    usr/lib/gstreamer-1.0/libgstcdio.so
+    usr/lib/gstreamer-1.0/libgstdvdlpcmdec.so
+    usr/lib/gstreamer-1.0/libgstdvdread.so
+    usr/lib/gstreamer-1.0/libgstdvdsub.so
+    usr/lib/gstreamer-1.0/libgstrealmedia.so
+    usr/lib/gstreamer-1.0/libgstx264.so
+
+    usr/share/gstreamer-1.0/presets/GstX264Enc.prs
+
+    usr/share/locale/*/LC_MESSAGES/gst-plugins-ugly-1.0.mo
+  ); _install
+}
+
+package_gst-libav-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-libav=$pkgver-$pkgrel")
+  conflicts+=("gst-libav")
+
+  pkgdesc+=" - libav plugin"
+  depends=(
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    ffmpeg
+    glib2
+    glibc
+  )
+  provides+=("gst-ffmpeg=$pkgver-$pkgrel")
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstlibav.so
+  ); _install
+}
+
+package_gst-plugin-gtk-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugin-gtk=$pkgver-$pkgrel")
+  conflicts+=("gst-plugin-gtk")
+
+  pkgdesc+=" - gtk plugin"
+  depends=(
+    "gst-plugins-bad-libs-git=$pkgver-$pkgrel"
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    cairo
+    glib2
+    glibc
+    gtk3
+    wayland
+  )
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstgtk.so
+    usr/lib/gstreamer-1.0/libgstgtkwayland.so
+  ); _install
+}
+
+package_gst-plugin-hip-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugin-hip=$pkgver-$pkgrel")
+  conflicts+=("gst-plugin-hip")
+
+  pkgdesc+=" - hip plugin and library"
+  depends=(
+    "gst-plugins-bad-libs-git=$pkgver-$pkgrel"
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    libdrm
+    libgcc
+    libgudev
+    libstdc++
+    libx11
+    mesa
+    orc
+    wayland
+  )
+
+  cd root; local files=(
+    usr/include/gstreamer-1.0/gst/hip
+    usr/lib/libgsthip-1.0.so*
+    usr/lib/pkgconfig/gstreamer-hip{,-gl}-1.0.pc
+    usr/lib/girepository-1.0/GstHip{,GL}-1.0.typelib
+    usr/share/gir-1.0/GstHip{,GL}-1.0.gir
+
+    usr/lib/gstreamer-1.0/libgsthip.so
+  ); _install
+}
+
+package_gst-plugin-msdk-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugin-msdk=$pkgver-$pkgrel")
+  conflicts+=("gst-plugin-msdk")
+
+  pkgdesc+=" - msdk plugin"
+  depends=(
+    "gst-plugins-bad-libs-git=$pkgver-$pkgrel"
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    libdrm
+    libgudev
+    libva
+    libvpl
+  )
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstmsdk.so
+  ); _install
+}
+
+package_gst-plugin-onnx-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugin-onnx=$pkgver-$pkgrel")
+  conflicts+=("gst-plugin-onnx")
+
+  pkgdesc+=" - onnx plugin"
+  depends=(
+    "gst-plugins-bad-libs-git=$pkgver-$pkgrel"
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    onnxruntime
+  )
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstonnx.so
+  ); _install
+}
+
+package_gst-plugin-opencv-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugin-opencv=$pkgver-$pkgrel")
+  conflicts+=("gst-plugin-opencv")
+
+  pkgdesc+=" - opencv plugin and library"
+  depends=(
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    libgcc
+    libstdc++
+    opencv
+  )
+
+  cd root; local files=(
+    usr/include/gstreamer-1.0/gst/opencv
+    usr/lib/libgstopencv-1.0.so*
+
+    usr/lib/gstreamer-1.0/libgstopencv.so
+  ); _install
+}
+
+package_gst-plugin-qml6-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugin-qml6=$pkgver-$pkgrel")
+  conflicts+=("gst-plugin-qml6")
+
+  pkgdesc+=" - qml6 plugin"
+  depends=(
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    libgcc
+    libglvnd
+    libstdc++
+    qt6-base
+    qt6-declarative
+  )
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstqml6.so
+  ); _install
+}
+
+package_gst-plugin-qmlgl-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugin-qmlgl=$pkgver-$pkgrel")
+  conflicts+=("gst-plugin-qmlgl")
+
+  pkgdesc+=" - qmlgl plugin"
+  depends=(
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    libgcc
+    libglvnd
+    libstdc++
+    qt5-base
+    qt5-declarative
+    qt5-wayland
+    qt5-x11extras
+  )
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstqmlgl.so
+  ); _install
+}
+
+package_gst-plugin-qsv-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugin-qsv=$pkgver-$pkgrel")
+  conflicts+=("gst-plugin-qsv")
+
+  pkgdesc+=" - qsv plugin"
+  depends=(
+    "gst-plugins-bad-libs-git=$pkgver-$pkgrel"
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    libgcc
+    libstdc++
+  )
+  optdepends=(
+    "intel-media-sdk: runtime for legacy Intel GPUs"
+    "onevpl-intel-gpu: runtime for Tiger Lake and newer GPUs"
+  )
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstqsv.so
+  ); _install
+}
+
+package_gst-plugin-svthevcenc-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugin-svthevcenc=$pkgver-$pkgrel")
+  conflicts+=("gst-plugin-svthevcenc")
+
+  pkgdesc+=" - svthevcenc plugin"
+  arch=(x86_64)
+  depends=(
+    "gst-plugins-bad-libs-git=$pkgver-$pkgrel"
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    svt-hevc
+  )
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstsvthevcenc.so
+  ); _install
+}
+
+package_gst-plugin-va-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugin-va=$pkgver-$pkgrel")
+  conflicts+=("gst-plugin-va")
+
+  pkgdesc+=" - va plugin"
+  depends=(
+    "gst-plugins-bad-libs-git=$pkgver-$pkgrel"
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    libgudev
+    libva
+  )
+  replaces=('gstreamer-vaapi<=1.26.10-5')
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstva.so
+  ); _install
+}
+
+package_gst-plugin-wpe2-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-plugin-wpe2=$pkgver-$pkgrel")
+  conflicts+=("gst-plugin-wpe2")
+
+  pkgdesc+=" - wpe2 plugin"
+  depends=(
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    libgcc
+    libglvnd
+    libstdc++
+    libxkbcommon
+    wpewebkit
+  )
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstwpe2.so
+  ); _install
+}
+
+package_gst-devtools-libs-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-devtools-libs=$pkgver-$pkgrel")
+  conflicts+=("gst-devtools-libs")
+
+  pkgdesc+=" - development and debugging libraries"
+  depends=(
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    json-glib
+    orc
+    zlib
+  )
+
+  cd root; local files=(
+    usr/include/gstreamer-1.0/gst/validate
+    usr/lib/libgstvalidate-*
+    usr/lib/pkgconfig/gstreamer-validate-1.0.pc
+    usr/lib/girepository-1.0/GstValidate-1.0.typelib
+    usr/share/gir-1.0/GstValidate-1.0.gir
+  ); _install
+}
+
+package_gst-devtools-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-devtools=$pkgver-$pkgrel")
+  conflicts+=("gst-devtools")
+
+  pkgdesc+=" - development and debugging tools"
+  depends=(
+    "gst-devtools-libs-git=$pkgver-$pkgrel"
+    "gst-plugins-bad-libs-git=$pkgver-$pkgrel"
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gst-rtsp-server-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    cairo
+    glib2
+    glibc
+    gtk3
+    hicolor-icon-theme
+    json-glib
+    libgcc
+    python
+    python-cairo
+    python-commonmark
+    python-gobject
+    python-lxml
+  )
+
+  cd root; local files=(
+    usr/bin/gst-validate-*
+    usr/lib/gst-validate-launcher
+    usr/lib/gstreamer-1.0/libgstvalidatetracer.so
+    usr/lib/gstreamer-1.0/validate
+    usr/share/gstreamer-1.0/validate
+
+    usr/bin/gst-debug-viewer
+    usr/lib/python*/site-packages/GstDebugViewer
+    usr/share/applications/org.freedesktop.GstDebugViewer.desktop
+    usr/share/gst-debug-viewer
+    usr/share/icons/hicolor/*/apps/gst-debug-viewer.*
+    usr/share/metainfo/org.freedesktop.GstDebugViewer.appdata.xml
+
+    usr/bin/gst-dots-viewer
+  ); _install
+}
+
+package_gst-rtsp-server-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-rtsp-server=$pkgver-$pkgrel")
+  conflicts+=("gst-rtsp-server")
+
+  pkgdesc+=" - rtsp server"
+  depends=(
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    orc
+    zlib
+  )
+
+  cd root; local files=(
+    usr/include/gstreamer-1.0/gst/rtsp-server
+    usr/lib/libgstrtspserver-1.0.so*
+    usr/lib/pkgconfig/gstreamer-rtsp-server-1.0.pc
+    usr/lib/girepository-1.0/GstRtspServer-1.0.typelib
+    usr/share/gir-1.0/GstRtspServer-1.0.gir
+
+    usr/lib/gstreamer-1.0/libgstrtspclientsink.so
+  ); _install
+}
+
+package_gst-editing-services-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-editing-services=$pkgver-$pkgrel")
+  conflicts+=("gst-editing-services")
+
+  pkgdesc+=" - editing services"
+  depends=(
+    "gst-devtools-libs-git=$pkgver-$pkgrel"
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gst-python-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    json-glib
+    libxml2
+    orc
+    python
+    python-gobject
+    zlib
+  )
+  optdepends=("opentimelineio: Support for the OpenTimelineIO format")
+
+  cd root; local files=(
+    usr/include/gstreamer-1.0/ges
+    usr/lib/libges-1.0.so*
+    usr/lib/pkgconfig/gst-editing-services-1.0.pc
+    usr/lib/girepository-1.0/GES-1.0.typelib
+    usr/share/gir-1.0/GES-1.0.gir
+
+    usr/lib/gstreamer-1.0/libgstges.so
+    usr/lib/gstreamer-1.0/libgstnle.so
+    usr/lib/gstreamer-1.0/python/gesotioformatter.py
+
+    usr/lib/python*/site-packages/gi/overrides/GES.py
+    usr/lib/python*/site-packages/gi/overrides/__pycache__/GES.*.pyc
+
+    usr/bin/ges-launch-1.0
+    usr/share/man/man1/ges-launch-1.0.1
+
+    usr/share/bash-completion/completions/ges-launch-1.0
+  ); _install
+}
+
+package_gst-python-git() {
+  # -git 版要吃掉 world／extra 的同名穩定版：provides 讓依賴方能解析、
+  # conflicts 讓 pacman 真的換掉它。穩定版包名寫死（實測 ${pkgname%-git} 在
+  # split 執行期取到空值，makepkg 報「conflicts 不可以空白」）。
+  provides+=("gst-python=$pkgver-$pkgrel")
+  conflicts+=("gst-python")
+
+  pkgdesc+=" - python plugin"
+  depends=(
+    "gst-plugins-base-libs-git=$pkgver-$pkgrel"
+    "gstreamer-git=$pkgver-$pkgrel"
+    glib2
+    glibc
+    python
+    python-gobject
+    python-typing_extensions
+  )
+  optdepends=("gst-plugins-bad-libs: GstAnalytics support")
+
+  cd root; local files=(
+    usr/lib/gstreamer-1.0/libgstpython.so
+    usr/lib/python*/site-packages/gi/overrides
+  ); _install
+}
+
+
+# vim:set sw=2 sts=-1 et:

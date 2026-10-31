@@ -1,0 +1,38 @@
+# Maintainer: Capricornus007 <Capricornus007 at gmail dot com>
+# Contributor: Andrew O'Neill <andrew at haunted dot sh>
+
+_pkgname=xtitle
+pkgname="${_pkgname}-git"
+pkgver=r47.6f46584
+pkgrel=1
+pkgdesc='Outputs X window titles'
+arch=('x86_64' 'aarch64')
+url="https://github.com/baskerville/${_pkgname}"
+license=('Unlicense')
+depends=('libxcb' 'xcb-util-wm' 'xcb-util')
+makedepends=('git')
+provides=("${_pkgname}")
+conflicts=("${_pkgname}")
+source=("${_pkgname}::git+${url}.git")
+sha256sums=('SKIP')
+
+# 收進本倉 in-tree 的理由（2026-10-23）：原本裝的 xtitle 來自 [linuxrepos]，而該倉
+# 唯一的鏡像 https://archlinux.repo.063240.xyz 從本機 TLS 連線直接失敗（HTTP 000），
+# 且該倉只剩 downgrade／xtitle 兩顆跟我們有關 ⇒ 把它們收進自建倉後 [linuxrepos] 整段刪掉。
+# 做成 -git 是使用者指示（「把那俩的 -git 都弄進自動構建倉庫」），上游最後一筆提交
+# 就在 master，追尖端不會漂。
+
+pkgver() {
+  cd "${_pkgname}"
+  echo "r$(git rev-list --count HEAD).$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "${_pkgname}"
+  make PREFIX=/usr
+}
+
+package() {
+  cd "${_pkgname}"
+  make PREFIX=/usr DESTDIR="${pkgdir}" install
+}

@@ -1,0 +1,124 @@
+# Maintainer: Capricornus007 <Capricornus007@users.noreply.github.com>
+# 基底：Arch 官方 packaging/tk（Caleb Maclennan）的 configure 參數與 package() 佈局，
+# 改成吃上游 git 尖端。
+pkgname=tk-git
+pkgver=8.6.18.r1634.g100ace3
+pkgrel=1
+pkgdesc='A windowing toolkit for use with tcl (git, 8.6 line)'
+arch=(x86_64)
+url='https://core.tcl-lang.org/tk/'
+license=(TCL)
+# 本來想钉成 tcl-git=$pkgver-$pkgrel（兩顆必須同代），實測行不通：
+# tcl 與 tk 是兩條不一樣的 commit 流，同一輪 pkgver() 各自量出來的數字不同
+# （本機實測 tcl-git=8.6.18.r767.g476b1c6、tk 那條是 r1634），
+# 拿 tk 的 pkgver 去要求 tcl 的版本，那個依賴永远解析不到、包根本裝不下去。
+# 退成不帶版本的 tcl-git：feed 每輪两颗一起重建，實務上同代；
+# 而 soname 都是 8.6，就算差一天也不會斷鏈。
+depends=(tcl-git
+         libxss
+         libxft)
+makedepends=(zip xorg-server-xvfb)
+provides=("tk=$pkgver-$pkgrel")
+conflicts=(tk)
+options=(staticlibs)
+# 分支理由見 tcl-git/PKGBUILD 同一節：master 是 Tk 8.7a（libtk8.7.so），
+# 現行 python/_tkinter 鏈的是 libtk8.6.so，吃 master 會把 pysolfc 一類打死。
+# core-8-6-branch 的尖端有實貨：core-8-6-18 tag 之後還领先 1634 筆，其中
+# 2026-09-28「X11 <KeyRelease> broken」、2026-10-04「deiconify 丟視窗位置」、
+# 2026-10-07「-zoomed 被誤還原」、2026-10-09「raise command 在近期 linux 失敗」
+# 全是对 X11 行為的修正（本機 tk 8.6.16 拿不到這些）。
+_BRANCH=core-8-6-branch
+source=("git+https://github.com/tcltk/tk#branch=${_BRANCH}")
+b2sums=('SKIP')
+_dirname=tk
+# Tk 8.6 的 `all` 目標依賴 doc/man.macros，而這條規則的來源寫的是
+#   $(INSTALL_DATA) $(TCLDIR)/doc/man.macros $(TOP_DIR)/doc/man.macros
+# ——那是「建 tcl 那台機器上的源碼樹路徑」，Tcl 套件本身**不會裝**這個檔
+# （實測 `pacman -Ql tcl-git | grep doc` 零筆）。所以從源頭把它抓下來放進源碼樹，
+# 該規則就沒有先決條件、直接略過，也不會再企圖寫 /usr/include。
+source+=("https://raw.githubusercontent.com/tcltk/tcl/${_BRANCH}/doc/man.macros")
+b2sums+=('SKIP')
+
+pkgver() {
+  # 與 tcl-git 同一套防禦：目錄不在／探不到 HEAD 就沿用寫死的 pkgver，
+  # 不讓探版本變成建置失敗的原因（librime-git run #452 的教訓）。
+  local d v
+  for d in "$_dirname" "$SRCDEST/$_dirname" "$srcdir/$_dirname"; do
+    [[ -d $d ]] && git -C "$d" rev-parse -q --verify HEAD >/dev/null 2>&1 && break
+    d=
+  done
+  if [[ -z $d ]]; then
+    printf '%s\n' "$pkgver"
+    return 0
+  fi
+  v=$(git -C "$d" describe --tags --long --abbrev=7 --match 'core-8-6-*' HEAD 2>/dev/null |
+      sed 's/^core-//;s/\([^-]*-g\)/r\1/;s/-/./g')
+  printf '%s\n' "${v:-8.6.18.r0.g$(git -C "$d" rev-parse --short=7 HEAD)}"
+}
+
+prepare() {
+  cd "$_dirname"
+  install -Dm644 "$srcdir/man.macros" doc/man.macros
+}
+
+build() {
+  cd "$_dirname/unix"
+  ./configure \
+    ZIP_PROG=zip \
+    --prefix=/usr \
+    --mandir=/usr/share/man \
+    --enable-threads \
+    --disable-rpath \
+    --enable-64bit
+  make
+}
+
+# Tk 自帶的測試需要真的 X display，且上游自己沒把它接進 CI（Arch 的 PKGBUILD 也是註解掉的）。
+# 這裡不抄那份註解，改成自己補一個顯示伺服器把「裝出來的 Tk 真的能起窗、能拿到字型、
+# 能畫一個 toplevel」跑成紅綠分明的一關：缺環境就補環境（xvfb），不是關掉這一關。
+# 細節與實數記在 feed 的 docs/in-tree-packages.md。
+check() {
+  cd "$_dirname/unix"
+  # 建置樹裡的執行檔叫 ./wish（裝檔時才改名 wish8.6），實測 ./wish8.6 不存在：
+  # /usr/sbin/xvfb-run: 列 180: ./wish8.6: 沒有此一檔案或目錄
+  LD_LIBRARY_PATH="$PWD:${LD_LIBRARY_PATH:-}" xvfb-run -a -s '-screen 0 640x480x24' ./wish <<'TCL'
+package require Tk
+if {![winfo exists .]} {puts stderr "no toplevel"; exit 1}
+wm geometry . 200x100+10+10
+update idletasks
+if {[winfo width .] != 200} {puts stderr "geometry ignored"; exit 1}
+if {[font metrics TkDefaultFont -ascent] <= 0} {puts stderr "no usable font"; exit 1}
+puts "tk smoke ok: tcl=[info patchlevel] tk=[package present Tk] font=[font actual TkDefaultFont]"
+exit 0
+TCL
+}
+
+package() {
+  cd "$_dirname/unix"
+  make INSTALL_ROOT="$pkgdir" install install-private-headers
+  local _tkver=8.6
+  ln -sf wish${_tkver} "$pkgdir/usr/bin/wish"
+  ln -sf libtk${_tkver}.so "$pkgdir/usr/lib/libtk.so"
+  # 8.6 這條線的授權檔在樹頂、不在 unix/ 底下（實測在 unix/ 裡找不到 license.terms）
+  install -Dm644 ../license.terms "$pkgdir/usr/share/licenses/$pkgname/license.terms"
+
+  # private headers（FS#14388／FS#47616）：少了這些，下游含 tk 的 C 扩展編不過。
+  cd ..
+  for dir in compat generic generic/ttk unix; do
+    install -dm755 "$pkgdir/usr/include/tk-private/$dir"
+    install -m644 -t "$pkgdir/usr/include/tk-private/$dir" $dir/*.h
+  done
+
+  sed -e "s#$srcdir/$_dirname/unix#/usr/lib#" \
+      -e "s#$srcdir/$_dirname#/usr/include#" \
+      -i "$pkgdir/usr/lib/tkConfig.sh"
+
+  # 不該有執行位的靜態檔（FS#75042）
+  # 同 tcl-git：8.6 這條線是 libtkstub8.6.a，寫死不帶版本的名會錯過去。
+  chmod -x "$pkgdir"/usr/lib/libtkstub*.a
+
+  if grep -rlF "$srcdir" "$pkgdir/usr/lib/tkConfig.sh" 2>/dev/null | grep -q .; then
+    echo '==> 錯誤：tkConfig.sh 還帶著 $srcdir 路徑'
+    return 1
+  fi
+}

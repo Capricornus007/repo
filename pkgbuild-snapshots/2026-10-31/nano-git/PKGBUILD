@@ -1,0 +1,57 @@
+# Maintainer: Capricornus007
+# nano 的開發版（上游 Savannah master）。基準對照物是 Arch 官方 extra/nano 9.2-1：
+# https://gitlab.archlinux.org/archlinux/packaging/packages/nano/-/raw/main/PKGBUILD
+# 穩定版住在 Arch 官方倉（不是 AUR），故依本倉慣例做 in-tree、以官方那份為底改。
+#
+# AUR 現成的 nano-git 最後更新停在 20231210-1（RPC 實查），已落後上游兩年多，
+# 所以本包走 in-tree：矩陣標 kind:aur 只為借用「回推排除」，實際取檔由
+# build-packages.yml 的 in-tree 攔截分支優先命中（case 首命中即中）。
+#
+# ⚠️ pkgver() 一律用絕對路徑 cd "$srcdir/nano"：本倉 CI 的泛用版本探測把源克隆成
+#    ${pkgname%-git}=nano，且它的 CWD 停在 startdir，makepkg 叫 pkgver() 前才會先 cd $srcdir。
+#    寫相對路徑會「本地能過、探測必敗」→ 探測拿不到版本就 skip，badge 全綠卻永遠不產包。
+pkgname=nano-git
+pkgver=9.2.r10812.gd9684a97
+pkgrel=1
+pkgdesc="Pico editor clone with enhancements (development branch)"
+arch=('x86_64')
+url="https://www.nano-editor.org"
+license=('GPL-3.0-or-later')
+depends=('ncurses' 'file' 'glibc')
+optdepends=('nano-syntax-highlighting-git: syntax highlighting definitions')
+makedepends=('git' 'autoconf' 'automake' 'gettext' 'pkgconf')
+provides=('nano')
+conflicts=('nano')
+replaces=('nano')
+backup=('etc/nanorc')
+options=(!debug)
+source=('git+https://git.savannah.gnu.org/git/nano.git')
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/nano" || return 1
+  # configure.ac 實物是 AC_INIT([GNU nano], [9.2], [nano-devel@gnu.org], [nano])
+  # → 取第二個中括號裡的基版號
+  local _base
+  _base=$(sed -n 's/^AC_INIT(\[[^]]*\], *\[\([0-9][0-9.]*\)\].*/\1/p' configure.ac | head -n 1)
+  [ -z "$_base" ] && _base=0
+  printf '%s.r%s.g%s' "$_base" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "$srcdir/nano"
+  ./autogen.sh
+  ./configure \
+    --prefix=/usr \
+    --sysconfdir=/etc \
+    --enable-color \
+    --enable-nanorc \
+    --enable-multibuffer
+  make
+}
+
+package() {
+  cd "$srcdir/nano"
+  make DESTDIR="${pkgdir}" install
+  install -Dm644 doc/sample.nanorc "${pkgdir}/etc/nanorc"
+}

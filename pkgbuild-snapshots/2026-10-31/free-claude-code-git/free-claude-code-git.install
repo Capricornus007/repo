@@ -1,0 +1,23 @@
+# 隨包 hook：原樣帶自用戶本地 ~/.cache/yay/free-claude-code-bin/free-claude-code-bin.install，
+# 只把提示裡的包名改成 free-claude-code-git（/opt/free-claude-code 這個 venv 路徑未變，
+#  removal 時清目錄的行為保留——它與 -bin 互斥，不會誤刪對面的檔）。
+post_install() {
+  echo ":: free-claude-code-git installed to /opt/free-claude-code"
+  # AUR 原版這裡叫使用者跑 fcc-init；實查上游 6.2.39 的 [project.scripts] 已無
+  # fcc-init/free-claude-code 兩支（改成 fcc-<各家 agent> 一堆），提示照實改。
+  echo "   Run 'fcc-claude' (or 'fcc-server --help') to get started."
+}
+
+post_upgrade() {
+  :
+}
+
+pre_remove() {
+  :
+}
+
+post_remove() {
+  if [ -d /opt/free-claude-code ]; then
+    rm -rf /opt/free-claude-code
+  fi
+}

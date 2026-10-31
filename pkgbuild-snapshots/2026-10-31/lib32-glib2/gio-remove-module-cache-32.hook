@@ -1,0 +1,9 @@
+[Trigger]
+Type = Package
+Operation = Remove
+Target = lib32-glib2
+
+[Action]
+Description = Removing 32-bit GIO module cache...
+When = PreTransaction
+Exec = /usr/bin/rm --force /usr/lib32/gio/modules/giomodule.cache

@@ -1,0 +1,130 @@
+# 本目錄的 PKGBUILD 是 in-tree 維護（CI 從 raw.githubusercontent 抓這份，不再取
+# AUR 快照），原因是 AUR/上游的建置組合會產出「建置成功、一執行就掛」的 omp：
+# 見下方 prepare() 的 bytecode 迴避與 build() 末尾的實跑檢查。
+# 要跟 AUR 同步時：curl https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=oh-my-pi-git
+# 然後把 prepare()/build() 兩處的本地改動重放一次即可（其餘段落刻意保持逐字相同）。
+
+pkgname=oh-my-pi-git
+pkgver=v18.4.3.r0.gfc671eb
+# pkgrel 保持 1：-git 包的 pkgver 由上面的 pkgver() 在構建時從上游 HEAD 算出，
+# makepkg 的 update_pkgver_and_pkgrel() 一發現 pkgver 變了就順帶把 PKGBUILD 裡的
+# pkgrel 重寫回 1，所以在這裡把 pkgrel 抬到 2 並不會讓產物檔名變成 -2。
+# 但 CI 的「目標版本比對」用的是 PKGBUILD 裡的 pkgrel（拿 <pkgver>-<pkgrel> 去
+# 对 release 已有的資產），所以 pkgrel 抬上去会讓它每小時都判定「產物不存在」
+# 而無限重構這個包（单次 ~15 分鐘的 rust 編譯）。2026-09-15 就是靠 temporarily
+# pkgrel=2 逼 CI 重跑了一次、把壞的 v18.2.0.r06f2c14b-1 產物蓋掉，隨後立即改回 1。
+# 日後要再強制重構：短期抬 pkgrel 跑一輪就改回來，或直接删 release 裡那個資產。
+pkgrel=1
+# 舊 pkgver() 的 sed 寫錯：s/\([^--]*\)-g/r\1/ 把「-g」整段吞掉，只保留 capture 到的距離
+# 數字，於是 describe 的 `v18.3.2-5-g4886f21d` 變成 `v18.3.2.r54886f21d`——距離與 hash
+# 黏成一團。vercmp 會去比這段前導數字（實測 vercmp v18.3.2.r54886f21d v18.3.2.r74adc7e8c
+# = 1，即庫裡那條被判定「比較新」），所以距離從 5 進到 7、再進到兩位數時，新產物會被
+# repo-add 當舊版拒收（2026-09-27 run #269 日誌：WARNING: A newer version for 'oh-my-pi-git'
+# is already present in database），接著剛蓋好的產物被「清理未引用資產」刪掉，這包再也不換代。
+# 改成與 mpv-git/kew-git 同型的 s/\([^-]*-g\)/r\1/（把 -g 留在 capture 內）才有 <tag>.r<距離>.g<hash>
+# 這個單調形狀（實測 v18.3.2-5-g4886f21d → v18.3.2.r5.g4886f21d）。epoch=1 是為了跨過庫裡
+# 那顆舊格式的條目（拒收閘門不准用 --force 繞）。
+# 上面的 pkgver 佔位值是舊格式殘留，僅供人讀；構建時 makepkg 一律用 pkgver() 重算覆寫。
+# pkgrel 必須留 1：pkgver() 每輪都算出與頭部不同的值，makepkg 就會把 pkgrel 打回 1，
+# 而 CI 比對「產物是否已存在」吃的是本檔的 pkgrel（plan 步 TARGET_PKGREL=$CUR_PKGREL）。
+# 頭部寫 2 會讓比對永遠找 -2、實物卻是 -1 → 每輪判定「產物不存在」，這包每小時重編一次
+# 15 分鐘的 rust 構建。pre-commit 的 bump-pkgrel 鉤子會自動 +1，所以改動本檔時要連 pkgver
+# 一行一起更新（鉤子見到 pkgver/pkgrel 已動就不會再加）。
+# epoch 在 2026-09-29 再抬一等（1 → 2），這次不是公式的錯，是上游把 tag 移了：
+# 庫裡那條是 1:v18.4.3.r21.g33f887a（33f887a，09-29 00:21Z），接著上游把 v18.4.3 這顆 tag
+# 重新打在 fc671eb（03:45Z，"chore: bump version to 18.4.3"，compare 實測比 33f887a 領先
+# 1 個 commit），describe 的距離於是從 r21 掉回 r0 —— 同一個 tag 名、數字卻倒退，
+# repo-add 又判降版拒收（run #296 日誌 04:52:55 那行 WARNING），剛上傳的產物接著被
+# 「清理未引用資產」刪掉。tag 被往後移是上游的自由，公式無從預防，只能靠 epoch 跨過去；
+# 往後距離要爬到 r22 才會再換代，所以不抬就得讓用戶機停在舊碼上。
+epoch=2
+pkgdesc="AI Coding agent for the terminal — hash-anchored edits, optimized tool harness, LSP, Python, browser, subagents, and more (git build)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/can1357/oh-my-pi"
+# 2026-10-27：改從維護者 fork 建置（Capricornus007/oh-my-pi），本倉產物因此帶著 fork
+# 自己的改動（目前是 provider 面向身分的可設定欄位，見 source= 下方說明）。
+# 要回到純上游時：把 source= 改回 can1357/oh-my-pi 並刪掉下面那段註解。
+license=('MIT')
+provides=('omp')
+conflicts=('omp')
+depends=('glibc' 'gcc-libs' 'bun')
+makedepends=('git' 'rust' 'rustup' 'cmake' 'make')
+options=('!lto' '!strip')
+
+# source 指向 Capricornus007/oh-my-pi（上游 can1357/oh-my-pi 的 fork）。
+# 理由：本倉出貨的 omp 需要包含 fork 的本地改動，而上游那份沒有：
+#   packages/coding-agent/src/config/provider-identity-settings.ts
+#     provider.userAgent / provider.appName / provider.appUrl 三個自由欄位
+#     （預設留空 = 送 omp 自己的 User-Agent 與 omp.sh attribution；
+#       填了什麼就逐字送什麼，由使用者自行決定要不要填、填什麼）
+#     packages/utils/src/dirs.ts 的 setProviderIdentity()/getProviderIdentity()
+# 這組改動只影響送往模型商的 User-Agent 與 attribution 標頭，本地 CLI、設定目錄、
+# 品牌都不變。若上游日後收編或改名，先確認檔案路徑再同步本行。
+source=("git+https://github.com/Capricornus007/oh-my-pi.git#branch=main")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "oh-my-pi"
+  git describe --tags --long --abbrev=7 | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd "oh-my-pi"
+  git submodule update --init --recursive
+
+  # ---- WORKAROUND：bun 的 --bytecode 與 import.meta 不相容（2026-09-15 踩到）----
+  # 上游 commit 16013e3ec（v18.2.0）把 packages/coding-agent/scripts/compile-binary.ts
+  # 的 Bun.build() 加了 `bytecode: true`（啟動 256ms→30ms）。但 bun 的 bytecode 路徑
+  # 只會靜態替換掉 import.meta.url/.dir/.main/.path/.dirname；bundle 裡只要還留下
+  # 任何「活的」import.meta（本套件走非 frozen 的 `bun install`，依賴樹比上游 release
+  # CI 多了 yargs，而 yargs/build/lib/utils/apply-extends.js 用了 import.meta.resolve），
+  # 該模組就會被當成非模組腳本求值，於是在 main() 之前丟出
+  #   SyntaxError: import.meta is only valid inside modules.
+  # 而且它連設定檔都還沒讀就死，所以使用者端無從自救。關掉 bytecode（回到 18.1.22
+  # 以來的行為）即可規避；上游若自行修好，這段 sed 自然失效、不影響建置。
+  local _cb="packages/coding-agent/scripts/compile-binary.ts"
+  if [ -f "$_cb" ] && grep -qE '^[[:space:]]*bytecode:[[:space:]]*true,' "$_cb"; then
+    sed -i -E 's/^([[:space:]]*)bytecode:[[:space:]]*true,/\1bytecode: false,/' "$_cb"
+    grep -qE '^[[:space:]]*bytecode:[[:space:]]*false,' "$_cb" || {
+      echo "FATAL: bytecode 迴避未生效（sed 未命中 $_cb）" >&2
+      exit 1
+    }
+    echo "INFO: 已關閉 bun --bytecode（迴避 live import.meta 造成的啟動即掛）"
+  else
+    echo "INFO: $_cb 內沒有 'bytecode: true' —— 上游已移除或改寫該選項，本次不套 workaround"
+  fi
+  # 兜底：bytecode 只要還從任何地方被打開，就可能重現同一個啟動即掛
+  if grep -rn --include='*.ts' --include='*.js' -E '^[[:space:]]*bytecode:[[:space:]]*true,' \
+       packages scripts 2>/dev/null; then
+    echo "FATAL: 仍有未關閉的 bytecode: true（見上列檔案），拒絕產出可能無法啟動的套件" >&2
+    exit 1
+  fi
+}
+
+build() {
+  cd "oh-my-pi"
+  bun install
+  rustup install nightly
+  rustup default nightly
+  bun run build:native
+  cd packages/coding-agent
+  bun run build
+  sha1sum dist/omp
+  pwd
+
+  # 產物必須「能跑」而不只是「能建」：上面那個 bytecode bug 就是 makepkg 全綠、
+  # 裝上去卻連 omp --version 都印不出來。用上游自己的 --smoke-test 當閘口
+  # （上游 ci:test:smoke 亦用同一旗標），壞版在這裡就會把 job 打紅。
+  ./dist/omp --version
+  ./dist/omp --smoke-test
+}
+
+package() {
+  pwd
+  sha1sum "${srcdir}/oh-my-pi/packages/coding-agent/dist/omp"
+  install -Dm755 "${srcdir}/oh-my-pi/packages/coding-agent/dist/omp" "${pkgdir}/usr/bin/omp"
+  sha1sum "${pkgdir}/usr/bin/omp"
+#  for _f in "oh-my-pi/src/oh-my-pi/packages/natives/native/pi_natives"*.node; do
+#    [[ -f "$_f" ]] && install -Dm755 "$_f" "${pkgdir}/usr/bin/$(basename "$_f")"
+#  done
+}

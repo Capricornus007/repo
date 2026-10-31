@@ -1,0 +1,136 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 本倉目錄版 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md，
+# **不要寫回 workflow** —— 那個 step 有 21000 字元表達式上限且註解也計入）。
+#
+# 為什麼存在（用戶 2026-10-13 裁定：「那讓這個也走源碼直出不就也行了？」）：
+#   本倉 spirv-llvm-translator-git 的 cmake 是 `-DLLVM_EXTERNAL_SPIRV_HEADERS_SOURCE_DIR
+#   =/usr/include/spirv`，吃的就是系統這顆標頭；而 distro 那顆釘在 tag 上。
+#   查實（`git ls-remote`）：
+#     refs/heads/main            = 86f980c731e62ae4eaf383d320449d71687936bf
+#     refs/tags/vulkan-sdk-1.4.363.0 = 496543121ce6419f23d6fa5d7194ba66c36212d2
+#   兩個 sha 不同 ⇒ 最新 tag 之後 main 上還有未發佈的提交，而 translator 那條鏈
+#   吃的是 LLVM trunk 的 translator 介面，新擴的 SPIR-V 能力通常**先**落在
+#   SPIRV-Headers main、再落在 translator main。標頭停在 tag 上，就會出現
+#   「translator 有實作、標頭沒這個 enum」的那種錯位（編不過還算好的，最壞是靜默少支援）。
+#
+# ⚠️ 這顆是 **header-only**（`arch=(any)`，官方同款），沒有編譯產物；
+#   真正的取捨在「誰依賴它」：`pacman -Sii spirv-headers` 實測 Required By: None
+#   （本機只有 spirv-tools／translator 在**建置期**吃標頭，執行期不鏈），
+#   所以換成 -git 不會把 32/64 位元的執行期鏈拉進風險區，只是讓下一次重建
+#   （mesa、translator、glslang）讀到未發佈的標頭。
+#
+# ⚠️ 版本：官方是 `1:1.4.363.0-1`（**epoch 1**）。本檔必須**同樣帶 epoch=1**，
+#   否則 vercmp 會判「我們的比較舊」→ yay/pacman 寧可留官方那顆、這顆永遠裝不上去
+#   （同類坑：llvm-git 的 provides 基號，實測 vercmp 24_r13699… 24.0.0 回 -1）。
+#   pkgver 形如 `1.4.363.0.r<距 tag 提交數>.g<sha>`：`1.4.363.0.rN` 恒比 `1.4.363.0` 新，
+#   所以換代是正常遞增、repo-add 不會拒收。
+#
+# ⚠️ 版本與校驗和都由 pkgver() 從上游 HEAD 現算 ⇒ 本檔要列進「回推校驗和」的排除清單。
+
+_pkgbase=SPIRV-Headers
+pkgbase=spirv-headers-git
+pkgname=(spirv-headers-git)
+pkgver=1.4.363.0.r0.g00000000000
+pkgrel=1
+epoch=1
+pkgdesc='SPIR-V header files and registry (git)'
+arch=(any)
+url='https://www.khronos.org/spirv/'
+license=('MIT')
+makedepends=(cmake git ninja)
+checkdepends=(python)
+groups=(vulkan-devel)
+depends=()
+provides=("spirv-headers=${pkgver%%.r*}")
+conflicts=(spirv-headers)
+replaces=(spirv-headers)
+source=("git+https://github.com/KhronosGroup/SPIRV-Headers#branch=main")
+b2sums=('SKIP')
+
+pkgver() {
+  cd $_pkgbase
+  # 基號取「HEAD 能達到的最新 `vulkan-sdk-*` tag」，尾段 r<count>.g<sha> 取距該 tag 的
+  # 提交數。⚠️ 不寫 `--match 'v*'`：這仓的 tag 前綴是 `vulkan-sdk-`，`v*` 會連
+  # 舊的 `1.5.4.rerolled.*` 那種一起收進來，describe 選到不可達的那個就吐垃圾。
+  # describe 在「HEAD 正好落在 tag 上」時只回 tag 名（沒有 -N-gsha 尾巴），
+  # 那種情形 count 要算成 0（kew-git／llvm-git 都是這樣被 repo-add 拒收過的同款坑）。
+  local raw base count
+  raw=$(git describe --tags --match 'vulkan-sdk-*' HEAD 2>/dev/null)
+  if [ -n "$raw" ]; then
+    count=${raw##*-}
+    if [ "$count" = "$raw" ]; then
+      count=0; base=$raw
+    else
+      raw=${raw%-*}
+      count=${raw##*-}
+      base=${raw%-*}
+    fi
+    base=${base#vulkan-sdk-}
+  else
+    base=0; count=$(git rev-list --count HEAD)
+  fi
+  printf '%s.r%s.g%s\n' "$base" "$count" "$(git rev-parse --short=11 HEAD)"
+}
+
+build() {
+  cd $_pkgbase
+  # 與官方同一組 cmake 參數（header-only，build 只是產生 install 規則與 ctest 佈局）。
+  cmake -S . -B build -G Ninja \
+    -D CMAKE_BUILD_TYPE=Release \
+    -D CMAKE_INSTALL_PREFIX=/usr \
+    -D CMAKE_INSTALL_SYSCONFDIR=/etc \
+    -D CMAKE_SKIP_INSTALL_RPATH=ON
+  cmake --build build
+}
+
+check() {
+  cd $_pkgbase
+  # ⚠️ **不要照抄官方的 `ctest --test-dir build`**：本機實跑（2026-10-13，
+  #   makepkg -sf 完整走過一遍）那條回 `No tests were found!!!`，因為上游根本沒
+  #   產生 `build/CTestTestfile.cmake`（實查該檔不存在）——ctest 沒註冊任何測試。
+  #   真正的檢查是 build 階段那三個**拿標頭實際編譯**的目標：
+  #     spirv_headers_simple_test_c（C）／_test（C++98）／_test_cpp11（C++11）
+  #   標頭壞了那三個就編不過、build() 直接紅。所以這裡改成「確認三支柱都在、
+  #   並各跑一次」，而不是假裝 ctest 跑了東西（跑空的 check 比沒有 check 更壞：
+  #   它會在 CI 日誌裡長出一條「有驗過」的假證據）。
+  local t made=0
+  for t in spirv_headers_simple_test spirv_headers_simple_test_c spirv_headers_simple_test_cpp11; do
+    if [ -x "build/tests/$t" ]; then
+      "./build/tests/$t" || { echo "ERROR: 標頭自測 $t 回非零" >&2; return 1; }
+      made=$((made + 1))
+    else
+      echo "ERROR: 缺 build/tests/$t（上游改了測試目標名？標頭有沒被真的編過就不知道了）" >&2
+      return 1
+    fi
+  done
+  echo ">> $pkgname: 標頭自測 $made/3 全過（C／C++98／C++11 各編一次並執行）"
+}
+
+package_spirv-headers-git() {
+  cd $_pkgbase
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+  # 「該進產物的必須進產物」：這顆的全部意義就是 /usr/include/spirv 那幾棵。
+  # 清單是**實測**出來的（2026-10-13 本機 makepkg 產物 `find` 點名，88 個檔），
+  # 不是照抄官方 .FILELIST：頂層**沒有** include.json（那是 SPIRV-Registry 的東西，
+  # 我上一版憑印象寫它、當場被自己的檢查擋紅），實際長這樣：
+  #   usr/include/spirv/{1.0,1.1,1.2,unified1}/… 與 usr/include/spirv/spir-v.xml
+  for _d in usr/include/spirv/spir-v.xml \
+            usr/include/spirv/unified1/spirv.core.grammar.json \
+            usr/include/spirv/unified1/spirv.hpp \
+            usr/include/spirv/unified1/spirv.hpp11 \
+            usr/include/spirv/1.2/spirv.json; do
+    if [ ! -e "$pkgdir/$_d" ]; then
+      echo "ERROR: $pkgname 少了 /$_d（官方 spirv-headers 必含）" >&2
+      exit 1
+    fi
+  done
+  # 裝出去不能還帶 build 目錄殘影（cmake 的 install 規則偶爾會漏 .cmake 絕對路徑）
+  if grep -rl "$startdir" "$pkgdir/usr" >/dev/null 2>&1; then
+    echo "ERROR: 產物裡出現建置路徑 \$startdir，裝到別臺會找不到檔" >&2
+    exit 1
+  fi
+  echo ">> $pkgname: 標頭樹完整（$(find "$pkgdir/usr/include/spirv" -type f | wc -l) 個檔）"
+}
+
+# vim:set ts=2 sw=2 et:

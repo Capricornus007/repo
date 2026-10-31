@@ -1,0 +1,62 @@
+diff --git a/src/package_formatter.cc b/src/package_formatter.cc
+index ee7c311e1af6789452543df8734f305aa3ed2b87..1fe8b154a1088e0e08ff145baf9088f84a2f630c 100644
+--- a/src/package_formatter.cc
++++ b/src/package_formatter.cc
+@@ -27,6 +27,21 @@ static std::string alpm_backup_get_name(alpm_backup_t* bkup) {
+   return bkup->name;
+ }
+ 
++// %s (md5sum) 的資料來源在 pacman 7 已經被拆掉了，這裡用一個一次性警告頂替。
++static void warn_md5sum_removed(void) {
++  static bool warned = false;
++
++  if (!warned) {
++    warned = true;
++    fputs("expac: %s (md5sum) is unavailable: libalpm removed "
++          "alpm_pkg_get_md5sum() in pacman 7, and installed packages no longer "
++          "store a package-level checksum (see the mtree in "
++          "/var/lib/pacman/local/<pkg>/). Use %h (sha256sum) for sync "
++          "databases.\n",
++          stderr);
++  }
++}
++
+ static std::pair<double, std::string> humanize_size(off_t bytes,
+                                                     const char target_unit) {
+   static const int unitcount = sizeof(size_tokens) - 1;
+@@ -320,7 +335,16 @@ void PackageFormatter::Print(alpm_pkg_t* pkg) {
+           out += printf(fmt, alpm_pkg_get_packager(pkg));
+           break;
+         case 's': // md5sum
+-          out += printf(fmt, alpm_pkg_get_md5sum(pkg));
++          // pacman 7（libalpm 16）移除了 alpm_pkg_get_md5sum()，連 alpm.h 裡的宣告
++          // 都不剩：照原樣呼叫會同時在編譯期（undeclared）與已二進位制的執行期
++          // （symbol lookup error）炸掉整支程式。本地 DB 也沒有可改用的對應欄位
++          // （實測 /var/lib/pacman/local/*/desc 的欄位清單裡既無 md5sum 也無
++          // sha256sum——套件層級雜湊已被 gzip mtree 的逐檔 sha256 取代），所以
++          // %s 沒有「換一條 API 就取回同一個值」的路，值本身已不存在。
++          // 這裡印空字串（保留 %s 的寬度與分隔符語意，讓腳本解析不會吃到雜訊），
++          // 並在 stderr 給一次提示，而不是讓整支 expac 無法啟動。
++          warn_md5sum_removed();
++          out += printf(fmt, "");
+           break;
+         case 'a': // architecture
+           out += printf(fmt, alpm_pkg_get_arch(pkg));
+diff --git a/tests/test_sync.py b/tests/test_sync.py
+index 934ac76639aff3f9dce31535248e29dedae194a4..4aca9adfb81dc7c4caab5490e6a0e30d18ce7264 100644
+--- a/tests/test_sync.py
++++ b/tests/test_sync.py
+@@ -9,9 +9,12 @@ class TestSync(expac_test.TestCase):
+     def testSyncOnlyAttributes(self):
+         r = self.Expac(['-S', '%n|%r|%f|%k|%s|%h', 'extra/foo'])
+         self.assertEqual(0, r.returncode)
++        # %s (md5sum) 欄位在 pacman 7 之後恆為空：libalpm 移除了
++        # alpm_pkg_get_md5sum()，我方補丁讓它輸出空字串並只在 stderr 給一次提示
++        # （見 src/package_formatter.cc 的 case 's'）。其餘欄位照原樣。
+         self.assertEqual(
+             'foo|extra|foo-1.1-1-x86_64.pkg.tar.zst|1048576|'
+-            'd41d8cd98f00b204e9800998ecf8427e|'
++            '|'
+             'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n',
+             r.stdout.decode(),
+         )

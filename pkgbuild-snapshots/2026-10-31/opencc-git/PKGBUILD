@@ -1,0 +1,118 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 本倉目錄版 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md，
+# **不要寫回 workflow** —— 那個 step 有 21000 字元表達式上限且註解也計入）。
+#
+# 為什麼存在（任務 #181）：本機 opencc 是 Artix world 的 **1.3.2-1**，而上游
+# 最新發布是 ver.1.4.2（2026-08-22）、master 尖端更晚。librime master 有 5 個
+# OpenccTest 失敗就是吃這個版本差；而且 world 那顆永遠不會自己動。
+#
+# ⚠️ 換代是**跨 soname** 的：實測本機 `/usr/lib/libopencc.so` → `.so.1.3` → `.so.1.3.2`，
+#   而上游 CMakeLists 是 `set(OPENCC_ABI_VERSION 1.4)` ⇒ 產物會變成 `libopencc.so.1.4`。
+#   全系統掃「NEEDED libopencc.so.1.3」實測命中 8 個檔：
+#     libopencc.so.1.3.2 本身、librime.so.1.17.0、rime-plugins/librime-lua.so、
+#     opencc/plugins/libopencc-jieba.so、python 的 opencc_clib*.so、cmake 的
+#     OpenCCTargets-noconfig.cmake、/usr/bin/{opencc,opencc_dict,opencc_phrase_extract,cppjieba_dict}
+#   其中 jieba 插件、CLI、python 綁定都出自本包（重建即一致），**唯一的外部依賴是
+#   librime 那兩顆**，而它們由本倉的 librime-git 提供 ⇒ 裝機必須 opencc-git 與
+#   librime-git **同一筆交易**換掉，不能只換一邊（同 llvm 那條鏈的纪律）。
+#
+# ⚠️ 版本與校驗和都由 pkgver() 從上游 HEAD 現算 ⇒ 本檔要列進「回推校驗和」的排除清單。
+
+# ⚠️ 必須在檔案頂層開：prepare() 裡的 `deps/!(darts-clone-0.32h)` 是在 makepkg
+#   source 本檔時就要能被 bash 解析，放在函式內部太慢（實測 rc=6：
+#   `未預期的字組「(」附近有語法錯誤`，本地 makepkg -s 直接來源失敗）。
+shopt -s extglob
+
+_pkgbase=OpenCC
+pkgname=opencc-git
+pkgver=1.4.2.r0.g00000000000
+pkgrel=1
+pkgdesc='Library for Open Chinese Convert (mainline GIT version)'
+arch=('x86_64')
+url='https://github.com/BYVoid/OpenCC'
+license=('Apache-2.0')
+depends=('gcc-libs' 'marisa' 'python')
+makedepends=('git' 'cmake' 'ninja' 'chrpath' 'cppjieba' 'doxygen' 'gtest' 'pybind11'
+             'python-build' 'python-installer' 'python-setuptools' 'python-wheel'
+             'rapidjson' 'tclap')
+provides=("opencc=${pkgver%%.r*}" 'libopencc.so')
+conflicts=('opencc')
+replaces=('opencc')
+source=("git+https://github.com/BYVoid/OpenCC.git#branch=master")
+b2sums=('SKIP')
+
+pkgver() {
+  cd "$_pkgbase"
+  # 基號取 HEAD 可達的最新 `ver.*` tag（上游 tag 形如 ver.1.4.2），尾段 r<count>.g<sha>。
+  # ⚠️ 一定要 --match 'ver.*'：不寫的話 describe 會把別的 tag 也當候選（同 spirv-headers
+  #   與 dae 那顆 `lastst` 的教訓——選到不可達或無意義的 tag，版號就變成 vercmp 無法排序的垃圾）。
+  # tag 正好落在 HEAD 時 describe 只回 tag 名、沒有 -N-gsha 尾巴，那種情形 count 要算 0。
+  local raw base count
+  raw=$(git describe --tags --match 'ver.*' HEAD 2>/dev/null)
+  if [ -n "$raw" ]; then
+    count=${raw##*-}
+    if [ "$count" = "$raw" ]; then
+      count=0; base=$raw
+    else
+      raw=${raw%-*}
+      count=${raw##*-}
+      base=${raw%-*}
+    fi
+    base=${base#ver.}
+  else
+    base=0; count=$(git rev-list --count HEAD)
+  fi
+  printf '%s.r%s.g%s\n' "$base" "$count" "$(git rev-parse --short=11 HEAD)"
+}
+
+prepare() {
+  cd "$_pkgbase"
+  # 上游 deps/ 裡自帶一堆 submodule 源碼；只留 darts-clone（它沒有系統包），其餘用系統的。
+  rm -r deps/!(darts-clone-0.32h)
+
+  # jieba 插件的詞典改用系統 cppjieba 的路徑（官方同款，避免把詞典打包兩份）。
+  sed -i 's|${CMAKE_CURRENT_SOURCE_DIR}/deps/cppjieba/dict/|/usr/share/cppjieba/dict/|g' plugins/jieba/CMakeLists.txt
+
+  # python 綁定複用上面 make 已經建好的原生擴充，不要再跑一次 CMake。
+  sed -i 's|import os|import glob\nimport os|' setup.py
+  sed -i 's|^            build_libopencc(output_path)$|            os.makedirs(output_path, exist_ok=True)\n            shutil.copy2(glob.glob(os.path.join(_this_dir, "opencc_clib.*.so"))[0], output_path)|' setup.py
+
+  # 保留 CMake 裝進去的原生 CLI，不要用 python wrapper 頂替它。
+  sed -i '/^    entry_points={$/,/^    },$/d' setup.py
+}
+
+build() {
+  cd "$_pkgbase"
+  cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_DOCUMENTATION:BOOL=ON -DBUILD_PYTHON:BOOL=ON \
+        -DBUILD_OPENCC_JIEBA_PLUGIN:BOOL=ON \
+        -DUSE_SYSTEM_MARISA:BOOL=ON -DUSE_SYSTEM_PYBIND11:BOOL=ON -DUSE_SYSTEM_RAPIDJSON:BOOL=ON \
+        -DUSE_SYSTEM_TCLAP:BOOL=ON -DENABLE_GTEST:BOOL=ON -DUSE_SYSTEM_GTEST:BOOL=ON .
+  make
+  VERSION="${pkgver%%.r*}" python -m build --wheel --no-isolation
+}
+
+check() {
+  cd "$_pkgbase"
+  # JiebaPluginIntegrationTest 斷言的是上游**自帶**詞典的輸出；我們改用系統 cppjieba
+  # 詞典（見 prepare），那條測試必然對不上，官方同款也是這樣排除的。其餘全部要跑。
+  ctest --output-on-failure -E '^JiebaPluginIntegrationTest$'
+}
+
+package() {
+  cd "$_pkgbase"
+  make DESTDIR="$pkgdir" install
+  python -m installer --destdir="$pkgdir" dist/*.whl
+
+  # 讓 python 綁定找到系統 opencc 的資料檔（官方同款符號鏈接）。
+  local python_version
+  python_version=$(python -c 'import sysconfig; print(sysconfig.get_python_version())')
+  mkdir "$pkgdir"/usr/lib/"python$python_version"/site-packages/opencc/clib/share
+  ln -s ../../../../../../share/opencc "$pkgdir"/usr/lib/"python$python_version"/site-packages/opencc/clib/share/
+
+  chrpath --delete "$pkgdir"/usr/lib/"python$python_version"/site-packages/opencc/clib/*.so
+
+  # 文件不進包（本機裝的 world 那顆也沒有 doc；省 20MB 級體積）。
+  rm -rf "$pkgdir/usr/share/opencc/doc"
+
+  install -vDm 644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname/"
+}

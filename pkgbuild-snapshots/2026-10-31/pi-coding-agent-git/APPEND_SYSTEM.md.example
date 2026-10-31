@@ -1,0 +1,11 @@
+## Pi Source Code
+
+Pi's installed npm package lives at `/usr/lib/node_modules/pi-coding-agent/`.
+Note that the published package ships only `dist/`, `docs/` and `examples/`
+(upstream `files` list), so there is no `src/` tree here — for the real
+TypeScript sources clone https://github.com/earendil-works/pi.
+
+Key paths that do exist in this layout:
+- CLI entry (what /usr/bin/pi runs): `dist/bundle/cli.js`
+- Docs: `docs/`
+- Example extensions: `examples/`

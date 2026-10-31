@@ -1,0 +1,199 @@
+From: Capricornus007 <Capricornus007@users.noreply.github.com>
+Date: Sun, 12 Oct 2026 00:00:00 +0800
+Subject: [PATCH] fix Ctrl+Q (and Alt+F4 / window close button / toolbar Quit)
+ being silently dropped while the game is busy
+
+症狀
+    PySolFC 3.6.1（本機裝的是 pysolfc-git 2:3.6.1.r37.gc39976f-1），Linux 的 Tk
+    介面（pysollib/ui/tktile），遊戲中按 Ctrl+Q 不會離開遊戲：視窗不關、不報錯、
+    畫面上什麼事都沒發生。同一條路一起失效的還有 Ctrl+X（Hold and quit）、
+    Alt+F4、視窗管理員的關閉按鈕（WM_DELETE_WINDOW -> MfxRoot.wmDeleteWindow ->
+    menubar.mQuit()），以及工具列上的 Quit 按鈕。
+
+根因（跟 fcitx5、Tk 版本、綁定被拆掉都無關）
+    按鍵綁定本身是好的。在 Xvfb :97 用真實 XTEST 按鍵（xdotool windowfocus 之後
+    xdotool key ctrl+q）配 Tk 自己的內省實測：
+
+        5.81  RAW keysym=Control_L state=0x0 widget=.
+        5.81  >>> mQuit via q/0x4   [game=Klondike busy=1 pause=False demo=None changed=0]
+        5.81      mQuit done: mainquit delta=0            <-- 事件送到了、mQuit 也進去了，
+                                                              但什麼都沒有發生
+        （把 game.busy 改回 0，同一顆鍵再按）
+        8.31  >>> mQuit via q/0x4   [game=Klondike busy=0 pause=False demo=None changed=0]
+        8.31      >>> mainquit CALLED
+        8.31  main() returned -> app quit                 <-- 正常離開
+
+    也就是：<Control-KeyPress-q> 確實比對、mQuit 確實被呼叫，但 mQuit 的第一行
+
+        if self._cancelDrag():
+            return
+
+    在 game.busy == 1 時拿到 1 就直接 return —— 不提示、不排程重試、不丟例外
+    （從桌面啟動器起來時 stderr 也看不到），使用者看到的就完全是「按了沒反應」。
+
+    busy 什麼時候是 1（本包實際會撞到的時間窗）：
+      * Game.__createCommon() 設 self.busy = 1，App.runGame() 在 app.py:518 再設
+        一次，一路到 app.py:572 要進 Tk mainloop 前才清掉 —— 整個「建局 +
+        autodeal / autodrop / autofaceup 的 autoPlay()」期間 busy 都是 1。
+        本機 ~/.PySolFC/options.cfg 是 autodeal = True、autodrop = True、
+        animations = 3（最慢的一檔動畫），所以開局和連串自動拖牌期間，
+        busy=1 常常一口氣持續好幾秒，而且每壓一次牌都會再來一排。
+      * animatedMoveTo() 每顆牌的動畫迴圈期間設 busy=1（上游加它就是為了擋
+        canvas.update() 重入踩壞牌局，程式碼註解寫 #576），finally 還原。
+
+已被實測排除的其它理論（別再走回頭路）
+  1. 精確修飾鍵比對不是問題。Tk 8.6.18 在這些狀態下 <Control-KeyPress-q> 照樣觸發：
+        NumLock  ON  state=0x14  -> HIT exact
+        CapsLock ON  state=0x6   -> HIT exact（keysym 變成 Q）
+        按住滑鼠左鍵 state=0x104 -> HIT exact
+        Ctrl+Shift    state=0x5  -> HIT exact
+     Tk 對 KeyPress 會把 Lock/NumLock/按鈕/Shift 從比對遮罩裡遮掉。
+  2. 寬鬆寫法不能用：<Control+KeyPress-q> 在 Tk 8.6 直接被拒
+        "bad event type or keysym \"Control+KeyPress\""
+     所以不能靠改綁定語法解決。
+  3. 綁定沒有被拆掉、也沒有綁錯 top-level：tkutil.__mfx_bindings 全程只有
+     path='.' 這一筆 <Control-KeyPress-q>；ui/tktile/menubar.py:965 的 _bindKey
+     建立的綁定沒被 unbind_destroy 命中過（逐次呼叫都有記錄，全是對話框自己的
+     MfxCanvasGroup/MfxCanvasImage，與 '.' 無交集）。
+  4. 純淨環境（無 fcitx、無 WM、同一套 tk-git 8.6.18.r1636 + Python 3.14）下
+     Ctrl+Q 完全正常 —— 所以這不是我先前懷疑的「Tk 收不到鍵」。
+
+同一輪實測到的兩條「另外會按了沒反應」狀況（本補丁刻意不改行為）
+  * 所有選單快捷鍵只綁在 root toplevel '.' 上（bindtags 為 ['.','Pysol','all']），
+    而 Tk 的 Toplevel bindtags 是 ['.!toplevel2','Toplevel','all']，不含 '.'。
+    實測：任何對話框（選遊戲、選花色、選項、說明、統計、找牌、解法、以及
+    mQuit 自己開的確認框）擁有鍵盤時，再按 Ctrl+Q，根視窗的 <KeyPress> 探針
+    計數完全沒增加 —— 快捷鍵在對話框裡是死的。
+  * confirm = True（上游預設）時，Ctrl+Q 在有動過的牌局會開「要丟棄這局嗎？」
+    模態框並等答案，而 pysollib 全套介面從頭到尾沒呼叫過 focus_set/focus_force，
+    實測 app.top.focus() 與 dialog.focus() 都是 None。本機 options.cfg 已是
+    confirm = False，所以這條不是這個症狀的來源，但值得知道。
+
+修法
+    Game._cancelDrag() / PysolMenubar._cancelDrag() 增加 force 參數；force=True
+    時不因 busy 而拒絕請求（清掉 busy 繼續拆局）。只有「要把這局拆掉」的兩個
+    入口 mQuit / mHoldAndQuit 用 force=True，其它入口（New game、Select game、
+    Restart……）行為完全不變。動畫迴圈自己用 old_busy + finally 還原，busy 被
+    中途清掉不會留下髒狀態。工具列 Quit 按鈕拿掉 _busy()（= game.busy）那層
+    擋門，跟快捷鍵一致。
+
+驗證方式（實測輸出）
+    修後同一組條件（game.busy 設 1 + 真實 XTEST Ctrl+Q，Xvfb :97）：
+        5.81  RAW keysym=Control_L state=0x0 widget=.
+        5.81  >>> mQuit via q/0x4  [game=Klondike busy=1 pause=False demo=None changed=0]
+        5.81      >>> mainquit CALLED
+        5.81      mQuit done: mainquit delta=1
+        5.82  E5 end {'mquit': 1, 'mainquit': 1, 'raw': 1}
+    回歸（確認沒有把「問一下」的保護弄丟）：busy=0、changed()=1、confirm=True 時
+        4.89  >>> mQuit via q/0x4 [busy=0 ... changed=1]
+        8.13      Toplevels now: ['.!toplevel2']   標題 '離開 PySol'、'要丟棄這局嗎？'
+        8.13      after Ctrl+Q: mainquit=0
+    仍然只開確認框、要按「確定」才離開 —— 補丁不改變這條。
+
+對中文輸入（XIM/fcitx5）零影響
+    補丁只動 actions.py 與 game/__init__.py 的 9 行程式碼（其餘全是註解），
+    不碰任何事件過濾、不碰 focus、不碰 bind()、不碰環境變數（絕對不是
+    `env -u XMODIFIERS` 那種拿掉輸入法的繞法）。實證：
+      1. 用同一支腳本把兩套树的完整 Tk 綁定表逐條 dump（tk bind <bindtag>），
+         626 行內容修前／修後逐字相同，唯一差異是 package 路徑那一行。
+      2. 帶著 XMODIFIERS='@im=fcitx'、GTK_IM_MODULE=fcitx、QT_IM_MODULE=fcitx、
+         LANG/LC_CTYPE=zh_TW.UTF-8 起 pysol，init() 前後這些變數原值保留，
+         pysollib 自己不剝 XMODIFIERS（`tk windowingsystem -> x11`）。
+      3. 上面那 626 行裡含 89 條 Entry/Text 綁定，修前後一致 ⇒ 打字路徑沒被動。
+
+套進 pysolfc-git feed 包
+    prepare() 裡跟 follow-desktop-theme.patch 一樣用 fail-loud 的寫法追加：
+        install -Dm644 "$srcdir/0001-*.patch" .
+        patch -p1 -N -i 0001-*.patch || { echo "ERROR: Ctrl+Q 補丁套不上——上游動過
+            pysollib/actions.py 或 pysollib/game/__init__.py 的 _cancelDrag/mQuit"; exit 1; }
+    並把 epoch 抬一（本包只有 epoch 是換代開關），同時把這顆 .patch 列進 source=()
+    與 sha256sums（'SKIP' 照本包慣例）。
+
+Co-Authored-By: Qoder <noreply@qoder.com>
+---
+diff --git a/pysollib/actions.py b/pysollib/actions.py
+index f74eaf5..dcb2249 100644
+--- a/pysollib/actions.py
++++ b/pysollib/actions.py
+@@ -102,10 +102,10 @@ class PysolMenubar(PysolMenubarTk):
+     def _finishDrag(self):
+         return self.game is None or self.game._finishDrag()
+ 
+-    def _cancelDrag(self, break_pause=True):
++    def _cancelDrag(self, break_pause=True, force=False):
+         if self.game is None:
+             return True
+-        ret = self.game._cancelDrag(break_pause=break_pause)
++        ret = self.game._cancelDrag(break_pause=break_pause, force=force)
+         self._setPauseMenu(self.game.pause)
+         return ret
+ 
+@@ -424,13 +424,17 @@ class PysolMenubar(PysolMenubarTk):
+                 self.mSaveAs()
+ 
+     def mHoldAndQuit(self, *args):
+-        if self._cancelDrag():
++        # force: quitting must never be swallowed by an animation/auto-deal
++        if self._cancelDrag(force=True):
+             return
+         self.game.endGame(holdgame=1)
+         self.game.quitGame(holdgame=1)
+ 
+     def mQuit(self, *args):
+-        if self._cancelDrag():
++        # force: this is the handler of Ctrl+Q, Alt+F4 and the window manager
++        # close button; when it bailed out on game.busy the app looked as if
++        # it ignored all of them.
++        if self._cancelDrag(force=True):
+             return
+         if self.changed():
+             if not self.game.areYouSure(_("Quit %s") % TITLE):
+@@ -1098,8 +1102,10 @@ class PysolToolbar(PysolToolbarTk):
+         return 1
+ 
+     def mQuit(self, *args):
+-        if not self._busy():
+-            self.menubar.mQuit()
++        # don't gate on _busy() (== game.busy): the toolbar Quit button had
++        # the same silent no-op as the Ctrl+Q accelerator.  mQuit() itself now
++        # interrupts the animation instead of being refused by it.
++        self.menubar.mQuit()
+         return 1
+ 
+     def mOptPlayerOptions(self, *args):
+diff --git a/pysollib/game/__init__.py b/pysollib/game/__init__.py
+index b9f156d..7fdc3ab 100644
+--- a/pysollib/game/__init__.py
++++ b/pysollib/game/__init__.py
+@@ -1510,7 +1510,7 @@ class Game:
+             self.drag.stack.finishDrag()
+         return 0
+ 
+-    def _cancelDrag(self, break_pause=True):
++    def _cancelDrag(self, break_pause=True, force=False):
+         self.stopWinAnimation()
+         if self.demo:
+             self.stopDemo()
+@@ -1519,7 +1519,18 @@ class Game:
+         self.interruptSleep()
+         self.deleteStackDesc()
+         if self.busy:
+-            return 1
++            # busy is set for the whole of Game.__createCommon()/App.runGame()
++            # (i.e. while a game is being built and auto-dealt) and by
++            # animatedMoveTo() for every animated move.  Returning 1 here made
++            # the caller drop the request *silently* - no message, no error,
++            # nothing on stderr - so Ctrl+Q / Ctrl+X / Alt+F4 / the window
++            # manager close button / File > Quit did simply nothing.
++            # A request that tears the game down must not be dropped: clear
++            # the lock and go on.  Animation loops save/restore their own
++            # previous value in a finally: block, so they are unaffected.
++            if not force:
++                return 1
++            self.busy = 0
+         if self.drag.stack:
+             self.drag.stack.cancelDrag()
+         return 0
+
+-- 
+2.47.1

@@ -1,0 +1,162 @@
+# Maintainer: Capricornus007 <contact@capricornus007.com>
+#
+# linux-firmware 的 nfp（Netronome Flow Processor）子包，跟上游 main 尖端。
+# 基準 = Arch 官方 core 倉的 linux-firmware PKGBUILD（實測 20260916-1，官方那份已
+# 下載比對過），不是 AUR 的 linux-firmware-git。官方拆 20 顆子包，這裡只取 nfp 一顆。
+#
+# 為什麼 in-tree（用戶 2026-10-10 裁決；改前是 kind:aur 直接 clone AUR pkgbase）：
+#   AUR 那份在 CI 從沒建成功過，而且是一關過了露下一關：
+#     (a) 授權行 `install -m644 LICEN*` 仍指頂層，上游早已把授權檔搬進 LICENSES/，
+#         樣式會匹配到 LICENSES 目錄本身 → `install: omitting directory 'LICENSES'`
+#         → package() 中止（2026-10-10 run #426 實測）。
+#     (b) 在 CI 用 sed 修掉 (a) 之後露出第二關：`install: cannot stat
+#         'linux-firmware-git/LICENSE.amd-ucode'` → package_amd-ucode_git() 中止。
+#         該檔在頂層**確實存在**（kernel.org cgit 查過 a3e1417a 的檔案清單），
+#         所以不是上游改名，是 AUR 那份對「來源目錄／工作檔」的假設壞了——它的
+#         source 是 `linux-firmware-git::git+<url>.git`，裸 git+、不帶 #tag=/#commit=，
+#         日誌顯示 `Cloning into bare repository`。
+#   用戶裁決：停止在壞掉的 AUR 配方上疊 sed，自己寫一份由本倉維護。
+#
+# 為什麼只做 nfp 一顆、不做完整 pkgbase（選項 B 被否）：
+#   1. 矩陣裡本來只有 linux-firmware-nfp-git 這一條，需求就是這顆（用戶機上它是
+#      mkinitcpio-firmware 的硬依賴鏈一環，見下方現況）。
+#   2. 整組 20 顆會把官方 core 的固件全部換成 git 尖端並顶掉同名包，Wi-Fi/GPU/
+#      NVMe 固件一起跟著漂移，出问题难回滚——风险与收益完全不成比。
+#   3. 官方一次 `make install-zst` 要壓完整 1.4GB 級固件樹；單做一顆照抄那套
+#      「全裝再 _pick 搬出去」等於每三小時的 CI 白燒一遍再丟掉 99%。
+#
+# ⚠️ 用戶機現況（這三個欄位是照實測定的，不要随手改）：
+#   `pacman -Q linux-firmware-nfp-git` = 20261009.afabaf77-1，Packager = Garuda Builder
+#   （epoch 0），官方 linux-firmware 未裝；`mkinitcpio-firmware` 的 Depends 有
+#   `linux-firmware-nfp`；`linux-firmware-whence` 這名字目前由同批的
+#   `linux-firmware-whence-git` provides。因此：
+#     · epoch=1 **必須**留著：本檔 pkgver() 錨在最新 tag（20260916.r131.gxxxxx），
+#       vercmp 的日期段 20260916 < 20261009 → 不加 epoch 就會「CI 出了包、用戶
+#       pacman -Syu 卻永不換裝」（比 CI 紅更難查）。手法與 tar-git／gh-git／
+#       gstreamer／mpv-git 一致，build-packages.yml 的資產比對會自動帶 `1.` 前綴。
+#     · provides=('linux-firmware-nfp=…') **必須**留著：換裝後 mkinitcpio-firmware
+#       的依賴靠它滿足，拿掉就是整機依賴斷鏈。
+#     · conflicts=('linux-firmware-nfp') 擋掉「官方穩定 nfp 與本包共裝」互相蓋檔。
+#
+# 裝檔方式（與官方的差異及理由）：
+#   官方在 package_linux-firmware-other() 裡把整棵樹 `make install-zst` 進 pkgdir，
+#   再用 _pick 把各廠商目錄搬到 $srcdir/<split>/，各子包的 package_() 只 `mv` 回來
+#   ＋跑 dedup。上游 copy-firmware.sh 的輸入只有兩樣：**CWD 的 WHENCE**（只讀
+#   File:/RawFile:/Link: 三種行，Version: 純註記它不管）與**相對 CWD 的源檔**。
+#   所以這裡把 WHENCE 過濾成只剩 `Driver: nfp` 那一段，在臨時 stage 目錄放一支
+#   `netronome -> 源/netronome` 的符號鏈接，腳本就只會處理 nfp 的 40 個檔與 38 條
+#   鏈接，產出與官方完全同形（真檔 *.zst ＋同名 *.zst 符號鏈接，實測比對過用戶機上
+#   Garuda 那顆的 /usr/lib/firmware/netronome 佈局）。
+#   stage 目錄刻意不含 .git：copy-firmware.sh 只在 `.git/config` 存在時跑
+#   check_whence.py，而它驗的是「整棵樹都被 WHENCE 覆蓋」，過濾版必然不過。
+#   官方 makedepends 的 parallel 用不到（不傳 -j，40 個小檔串行壓縮不到一秒）、
+#   python 用不到（不跑 check_whence.py）；rdfind 仍要——dedup 是官方每顆子包都跑的，
+#   少了它會跟官方包不同形。
+
+_pkgname=linux-firmware
+_gitname=linux-firmware
+pkgname=linux-firmware-nfp-git
+# 佔位值，僅供人讀：實際 pkgver 由下方 pkgver() 在構建時從上游 HEAD 現算覆寫。
+pkgver=20260916.r131.gafabaf7
+pkgrel=1
+# epoch=1 的用見檔頭 ⚠️ 段（不是可選的保守值）。
+epoch=1
+pkgdesc="Firmware files for Linux - nfp / Firmware for Netronome Flow Processors"
+arch=('any')
+url="https://gitlab.com/kernel-firmware/linux-firmware"
+license=(LicenseRef-WHENCE LicenseRef-netronome)
+# 官方 nfp 分包這條依賴照留（WHENCE 由它提供）；本包另自帶一份對應 git 尖端的
+# WHENCE 進 licenses 目錄，兩邊路徑不同、不撞檔，whence 掉鏈子時也不至於沒授權依據。
+depends=('linux-firmware-whence')
+provides=("linux-firmware-nfp=${pkgver}")
+conflicts=('linux-firmware-nfp')
+makedepends=('git' 'rdfind')
+options=('!debug' '!strip')
+# 目錄名釘死成 linux-firmware：makepkg 的工作樹、CI 通用版本探測的軟鏈名
+# （它會為 ${pkgname%-git}／$_gitname／$pkgbase 等名字各建一支軟鏈）都要落在
+# 同一個名字上，只對一半就會「探測拿不到版本 → skip → job 綠但永遠不產包」。
+source=("linux-firmware::git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  # ⚠️ 必須是 "$srcdir/…" 絕對形式，不能寫相對 cd：makepkg 叫 pkgver() 前會先
+  # cd 到 srcdir，所以相對寫法本地能過；CI 的通用版本探測把源克隆進 src/repo
+  # 再對一堆名字做軟鏈、它自己的 CWD 停在 startdir → 相對 cd 找不到目錄
+  # →「拿不到上游版本」而 skip，最後是「CI 全綠但永遠不產包」
+  # （2026-09-23 那批 i3-git／brightnessctl-git 同因，本倉最陰的一類故障）。
+  cd "$srcdir/$_gitname" || return 1
+  # --match '[0-9]*' 是必須的：上游 tag 全是純日期（實測 ls-remote 85 個 tag 除
+  # 剝開 peeling 的 ^{} 外全為 YYYYMMDD），但 describe 不帶 --match 一旦被日後
+  # 混進來的非版號 tag 劫持，產出的字串沒有排序意義（本倉在 dae-git、tar-git
+  # 踩過兩次）。--long --abbrev=7 + 這三段 sed 是倉庫慣例：
+  #   20260916-131-gafabaf7 → 20260916.r131.gafabaf7
+  # sed 裡 `s/\([^-]*-g\)/r\1/` 必須把「-g」留在 capture 內，簡化會把距離與 hash
+  # 黏成一團，被 repo-add 判成降級拒收（見 oh-my-pi-git 的說明）。
+  git describe --tags --long --abbrev=7 --match '[0-9]*' \
+    | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+package() {
+  local _src="$srcdir/$_gitname"
+  local _stage="$srcdir/nfp-stage"
+  local _fwdir="$pkgdir/usr/lib/firmware"
+  local _empty
+
+  rm -rf "$_stage"
+  install -d "$_stage"
+
+  # 取 WHENCE 裡 `Driver: nfp` 那一段：上游用整排連字號當段落分隔線，所以「遇到
+  # 分隔線就把緩衝區交出去，只交含有 Driver: nfp 的那塊」，段尾靠下一條分隔線或
+  # 檔案結束收尾。
+  awk '
+    /^-{10,}/ { if (buf ~ /^Driver: nfp/) printf "%s", buf; buf = ""; next }
+    { buf = buf $0 "\n" }
+    END { if (buf ~ /^Driver: nfp/) printf "%s", buf }
+  ' "$_src/WHENCE" > "$_stage/WHENCE"
+
+  # 防呆：過濾式一旦被上游改版（段落改名、分隔線換字元）就會抽空 WHENCE，
+  # 那樣 copy-firmware.sh 仍會乖乖回 0、產出一顆只有授權檔的空包——CI 全綠、
+  # 用戶裝完「固件不见了」。這裡先硬性擋掉。
+  grep -qE '^(File|RawFile|Link): netronome/' "$_stage/WHENCE" \
+    || { echo "==> ERROR: WHENCE 裡沒抓到 nfp 段（上游格式變了），拒絕產出空包" >&2; return 1; }
+
+  # copy-firmware.sh 用相對 CWD 的路徑讀源檔，所以只需把 netronome/ 接進 stage
+  ln -sfn "$_src/netronome" "$_stage/netronome"
+
+  # --zstd 與官方 install-zst 一致；腳本自帶「最後不得有斷鏈」檢查，斷鏈會非 0 退出
+  ( cd "$_stage" && sh "$_src/copy-firmware.sh" --zstd "$_fwdir" ) || return 1
+
+  # 防呆二：netronome/ 必須真的裝出檔，而且**一顆都不能是 0 字節**。
+  # 這條不是 theorizing，是本地負向測試打出來的：copy-firmware.sh 的複製迴路是
+  # `grep WHENCE | while read`，迴路內 zstd 讀不到源檔不會讓腳本非 0 退出；而
+  # `$compress "$f" > "$destdir/$f$compext"` 的重定向會先把目標檔建出來——把源目錄
+  # netronome/ 改名後實測（/tmp/lfp-negtest）：回 0、留下 40 顆 0 字節的 .zst，
+  # 38 條符號鏈接全部指向「存在但空」的檔，所以腳本自帶的斷鏈檢查也照過。
+  # 那就是「CI 全綠、用戶裝到一整包空固件」的真實路徑，只有大小擋得住。
+  # （實測基準：用戶機 /usr/lib/firmware/netronome 共 5.6M、0 字節檔 0 顆、
+  #   最小的一顆 119026 bytes，所以這道檢查不會誤傷正規產物。）
+  { [ -d "$_fwdir/netronome" ] && [ -n "$(find "$_fwdir/netronome" -type f -print -quit)" ]; } \
+    || { echo "==> ERROR: 沒裝出任何 netronome 固件（源目錄改名或 WHENCE 與源檔失配）" >&2; return 1; }
+  _empty=$(find "$_fwdir" -type f -size 0 -print -quit)
+  [ -z "$_empty" ] \
+    || { echo "==> ERROR: 裝出 0 字節的固件檔，源檔缺失：$_empty" >&2; return 1; }
+
+  # 防呆三：最後一道 belt——本包只准含 netronome/。
+  # （實測順序上多半輪不到它：stage 裡只接了 netronome/，別家路徑的源檔在 stage
+  #   找不到，會先在防呆二以 0 字節被抓到。這條守的是「日後有人多接幾個目錄」之類
+  #   的改動，成本 3 行，留當不變式。）
+  [ -z "$(find "$_fwdir" -mindepth 1 -maxdepth 1 ! -name netronome -print -quit)" ] \
+    || { echo "==> ERROR: 裝出了 netronome 以外的頂層目錄，WHENCE 過濾失靈" >&2; return 1; }
+
+  # 與官方每顆子包相同的 dedup（重復固件轉相對符號鏈接）；Makefile 的 dedup 目標
+  # 用 ./dedup-firmware.sh $(DESTDIR)$(FIRMWAREDIR)，DESTDIR 留空即可
+  make -C "$_src" FIRMWAREDIR="$_fwdir" dedup
+
+  # 授權檔：上游已把 LICENCE.Netronome 搬進 LICENSES/（run #426 那關的真因）
+  install -Dm644 "$_src/LICENSES/LICENCE.Netronome" \
+    -t "$pkgdir/usr/share/licenses/$pkgname"
+  install -Dm644 "$_src/WHENCE" \
+    -t "$pkgdir/usr/share/licenses/$pkgname"
+}
+
+# vim:set sw=2 sts=-1 et:

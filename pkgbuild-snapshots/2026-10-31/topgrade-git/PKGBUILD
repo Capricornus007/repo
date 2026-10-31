@@ -1,0 +1,111 @@
+# Maintainer: Capricornus007 <Capricornus007 at proton dot me>
+#
+# 本倉 in-tree 維護（2026-10-21，使用者裁定「你直接復刻然後給我修理出來不就完了，
+# 同時兼容 sudo 跟 doas」——不要繞路、不要關掉功能、不要只去 issue 下留言）。
+#
+# 存在的唯一理由：上游把 doas 判死，讓 topgrade 在 doas 機器上少一個功能。
+#   實測（本機 doas 1.6.1，`/etc/doas.conf` 只有 `permit nopass :wheel`）：
+#     topgrade --only config_update --dry-run
+#     → config-update failed: 0: doas does not support the preserve_env_list option
+#   根因在 src/sudo.rs：`SudoKind::Doas` 跟 WinSudo/Gsudo/Pkexec 同組，遇到
+#   preserve_env_list 一律回 UnsupportedSudo——**是用戶端自己拒的，根本沒去 exec doas**，
+#   所以改 /etc/doas.conf 的 setenv/keepenv 也救不了（這條查過才敢下結論）。
+#   全倉只有一個呼叫點會碰到它：src/steps/os/linux.rs:1070 的
+#   `pacdiff` 要帶 `DIFFPROG`。也就是壞掉的具體東西是「用 doas 時 pacdiff
+#   認不到自備的 diff 工具」，而且整個 Configuration update 直接判紅。
+#
+# 修法（补丁就在本目錄，同步推在 fork 的 fix/doas-preserve-env 分支）：
+#   doas 沒有「呼叫當下指定保留哪些變數」的能力，它一律清洗環境——實測
+#     DIFFPROG=meld doas /usr/bin/printenv DIFFPROG   → 空，rc=1
+#   所以自己模擬：把目標包一層 `env VAR=value …`，doas 以 root 身份 exec 它。實測放行
+#     doas /usr/sbin/env 'DIFFPROG=meld' /usr/bin/printenv DIFFPROG → meld，rc=0
+#   未設定的變數就跳過；一個都帶不過去時連 env 那層都不塞，維持原本的命令外形。
+#   `SudoKind::Sudo` 那段完全沒動，仍走 --preserve-env=，**sudo 與 doas 兩邊都支援**。
+#   打完之後本機實跑對照：舊版 FAILED → 新版 `Dry running: /usr/sbin/doas /usr/sbin/env
+#   'DIFFPROG=meld' /usr/sbin/pacdiff`，Summary 為 OK。
+#
+# ⚠️ 上游一旦自己修掉，這個补丁會打不上而讓構建變紅（不是靜默失靈）。那時就把
+#    patch 來源與這整段註解一起刪掉，退回純 AUR／上游版；那是預期的退場方式。
+
+_pkgname=topgrade
+pkgname="${_pkgname}-git"
+# epoch=1：這顆**不是**新包，feed 早就在出它（實查 current-repo release 有資產
+# topgrade-git-17.14.1.r0.gc082f17-1-x86_64.pkg.tar.zst，本機 2026-10-21 卸掉前裝的
+# 就是同版號）。版號由 pkgver() 從上游 HEAD 現算，上游沒動的話資產名一模一樣
+# → 被 plan 的「已在 release 裡」永久跳過（本倉契約 1），這次修的 doas 行為永遠
+# 上不了車。抬 pkgrel 對 -git 無效（本倉 pre-commit 的 bump-pkgrel 把它歸 1），
+# 只有 epoch 進版號比較與資產名（實查 spirv-llvm-translator-git 本機 `2:7.0.1…`
+# → 資產 `…-2.7.0.1…`，冒號攤平成點），所以吃 1! 讓它真的重建、也讓其他吃 feed
+# 的機器從 17.14.1.r0… 升上来拿到修補。
+epoch=1
+pkgver=17.14.1.r0.gc082f17
+pkgrel=1
+pkgdesc='Upgrade all the things (git, with a doas preserve_env_list fix)'
+arch=('x86_64')
+url='https://topgrade-rs.github.io'
+license=('GPL-3.0-or-later')
+depends=('libgcc')
+makedepends=('cargo' 'git')
+provides=("${_pkgname}")
+conflicts=("${_pkgname}")
+source=(
+  "git+https://github.com/topgrade-rs/topgrade.git"
+  '0001-fix-sudo-emulate-preserve_env_list-for-doas.patch'
+)
+sha256sums=('SKIP' 'SKIP')
+
+pkgver() {
+  cd "${_pkgname}"
+  git describe --long --tags --abbrev=7 | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd "${_pkgname}"
+  # 補丁一律**顯式**打，不吃 makepkg 的自動套補丁：實測這份的 git clone 落在
+  # $srcdir/topgrade/，makepkg 的自動套用是在 $srcdir 跑 `patch -p1`，路徑對不上時
+  # 它只是「假成功」——2026-10-21 第一次構建就這麼產出一顆**未修**的包（實查
+  # src/topgrade 仍乾淨在 c082f174，裝機後 `--only config_update --dry-run` 照樣 FAILED）。
+  # -N 讓它對「已套過」變成跳過而不是反向套，隨後用 grep 硬驗內容真的進了源碼。
+  patch -N -p1 -i "${srcdir}/0001-fix-sudo-emulate-preserve_env_list-for-doas.patch"
+  grep -q 'skipping unset' src/sudo.rs \
+    || { echo '::error::補丁沒打上（上游 src/sudo.rs 的 preserve_env_list 分支變了）'; exit 1; }
+
+  # 不設 RUSTUP_TOOLCHAIN=stable（AUR 那份設了）：本機 rustup 只裝了
+  # nightly 與 1.99.1，沒有 stable，那行会让 proxy 直接報「toolchain not installed」。
+  # 上游倉根目錄有 rust-toolchain.toml 釘 `channel = "1.99.1"`，让它自己生效：
+  # rustup 環境走 1.99.1，CI 容器那种非 rustup 的 cargo 會忽略該檔而用系統 rust
+  # （實查 Arch 倉 rust = 1.99.1，與釘選同版）。兩條路都落在同一個編譯器上。
+  cargo fetch --locked --target "$(rustc --print host-tuple)"
+}
+
+build() {
+  cd "${_pkgname}"
+  # 把環境 CFLAGS/CXXFLAGS 裡的 -O* 拿掉（加固旗標 -D_FORTIFY_SOURCE、
+  # -fstack-clash-protection、-fcf-protection 全部保留），優化等級交給 crate 與
+  # cargo profile 自己決定。這不是潔癖，是這條依賴鏈的實測紅燈：aws-lc-sys 0.45
+  # 要編 jitterentropy-base.c，那顆檔自帶硬性 #error 不準最佳化（必須 -O0）；
+  # crate 確實給了 -O0，但 cc-rs 把環境 CFLAGS 附加在它**後面**，makepkg 的 -O2
+  # 在最後面生效。原 run #360 的實物命令行：
+  #   "cc" "-O3" … "-O0" … "-O2" "-O2" … -c …/jitterentropy-base.c → #error …
+  CFLAGS="$(printf %s "$CFLAGS" | sed -E 's/-O[0-9s]+//g')"; export CFLAGS
+  CXXFLAGS="$(printf %s "$CXXFLAGS" | sed -E 's/-O[0-9s]+//g')"; export CXXFLAGS
+  CFLAGS+=' -ffat-lto-objects'
+  export CARGO_TARGET_DIR=target
+  cargo build --frozen --release
+
+  for shell in bash fish zsh; do
+    "./target/release/${_pkgname}" --gen-completion "${shell}" > "${pkgname}.${shell}"
+  done
+  "./target/release/${_pkgname}" --gen-manpage > "${pkgname}.1"
+}
+
+package() {
+  cd "${_pkgname}"
+  install -Dm755 "target/release/${_pkgname}" -t "${pkgdir}/usr/bin/"
+  install -Dm644 "${pkgname}.1" -t "${pkgdir}/usr/share/man/man1/"
+  install -Dm644 "${pkgname}.bash" "${pkgdir}/usr/share/bash-completion/completions/${_pkgname}"
+  install -Dm644 "${pkgname}.fish" -t "${pkgdir}/usr/share/fish/vendor_completions.d/"
+  install -Dm644 "${pkgname}.zsh" "${pkgdir}/usr/share/zsh/site-functions/_${_pkgname}"
+  install -Dm644 config.example.toml -t "${pkgdir}/usr/share/doc/${_pkgname}/"
+  install -Dm644 LICENSE -t "${pkgdir}/usr/share/licenses/${pkgname}/"
+}

@@ -1,0 +1,43 @@
+diff --git a/src/gui.c b/src/gui.c
+index 91b050e..286aeb2 100644
+--- a/src/gui.c
++++ b/src/gui.c
+@@ -122,7 +122,7 @@ void draw_cursor(struct cursor *cursor) {
+ 
+ void erase_card(struct card *card) {
+   werase(card->frame->window);
+-  wbkgd(card->frame->window, WHITE_ON_GREEN);
++  wbkgd(card->frame->window, COLOR_PAIR(WHITE_ON_GREEN));
+   wrefresh(card->frame->window);
+ }
+ 
+diff --git a/src/keyboard.c b/src/keyboard.c
+index b6ff806..c505418 100644
+--- a/src/keyboard.c
++++ b/src/keyboard.c
+@@ -171,13 +171,22 @@ static void handle_card_movement(struct cursor *cursor) {
+           /* If they only had one card selected... */
+           if (*origin == *destination && ((maneuvre_stack(*origin)  && _marked_cards_count == 1) || waste_pile_stack(*origin))) {
+             /* see if we can automatically move card to foundation */
++            struct stack **foundation = NULL;
+             for (int i = 0; i <= 3; ++i) {
+-              destination = (&(deck->foundation[i]));
+-              if (valid_move(*origin, *destination)) {
+-                move_card(origin, destination);
++              struct stack **candidate = (&(deck->foundation[i]));
++              if (valid_move(*origin, *candidate)) {
++                move_card(origin, candidate);
++                foundation = candidate;
+                 break;
+               }
+             }
++            /* Only the stack that actually received a card is redrawn here.
++             * Reusing `destination` for that would leave it pointing at
++             * foundation[3] when no foundation accepted the card, and the
++             * stack that was really touched would never be repainted. */
++            if (foundation) {
++              draw_stack(*foundation);
++            }
+           }
+ 
+           draw_stack(*origin);

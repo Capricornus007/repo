@@ -1,0 +1,129 @@
+# Maintainer: Capricornus007 <Capricornus007 at gmail dot com>
+# Contributor: Dave Reisner <d@falconindy.com>
+
+# ── 為什麼做 -git 並收進本倉（2026-10-23）─────────────────────────────────
+# 本機 /usr/bin/expac 是 Artix 的 expac 10-13（Packager: artist，2026-08-11 建置），
+# 一跑就死（實測）：
+#   expac: symbol lookup error: expac: undefined symbol: alpm_pkg_get_md5sum
+# 原因是 pacman 7（libalpm.so.16）移除了 alpm_pkg_get_md5sum()，而那颗包是对著舊
+# libalpm 連結的——屬「裝得上、跑不動」。影響面：本倉 downgrade-git/PKGBUILD 的
+# depends 有 expac，所以 downgrade 的相關功能一起被拖累。
+#
+# ── 上游 master 修了沒有？沒有（2026-10-23 實查，證據逐條）────────────────
+#   · 真實預設分支＝`master`（`gh api repos/falconindy/expac` → default_branch=master）。
+#     `main` 不存在；而且檔名也换了：C 版在 tag 10 之前是 src/expac.c，master 已重寫成
+#     C++（src/expac.cc + src/package_formatter.cc）。所以
+#     raw.githubusercontent.com/falconindy/expac/{master,main}/src/expac.c 都回 404，
+#     這不是網路問題，是路徑本身不存在。
+#   · 最新 tag＝10；master HEAD＝8dc9ba4f2（2026-07-22「Wrap package printing in a
+#     PackageFormatter class」），tag 10 之後還領先 22 筆（git describe --long --tags
+#     → 10-22-g8dc9ba4）。
+#   · grep 實測 master **仍在呼叫**被刪掉的符號：
+#       src/package_formatter.cc:323:  out += printf(fmt, alpm_pkg_get_md5sum(pkg));
+#     tag 10 那版是同一條呼叫、只是檔案不同：src/expac.c:485。也就是 Arch/Artix 的
+#     expac 10-13 全中招（它們建的/tag 的就是 10）。
+#   · 對本機 /usr/include/alpm.h 跑 g++ -fsyntax-only，拿到的是「連編都編不過」：
+#       src/package_formatter.cc:323:30: error: ‘alpm_pkg_get_md5sum’ was not
+#       declared in this scope; did you mean ‘alpm_pkg_get_desc’?
+#     → 「expac-git 直接吃 master 就正常」這條路不存在。不打补丁做出來的只是另一顆
+#       紅的（或另一顆跑不動的）包，所以本包自帶下方補丁。
+#   · 上游也沒有可用的修正分支/PR：branches 只有 master 與 siglevel；closed PR 清單
+#     （#9/#12/#13/#21/#25/#26/#31/#33/#35/#36/#37/#39/#40/#45/#46）沒有一條沾 pacman 7
+#     或 md5。
+#
+# ── 我方補丁 pacman7-drop-md5sum.patch 改了什麼、為什麼這樣改 ──────────────
+# 1) src/package_formatter.cc 的 `case 's'`（也就是格式符 %s = md5sum）：
+#    不再呼叫 alpm_pkg_get_md5sum()，改成「該欄位印空字串 ＋ stderr 一次性提示」。
+#    為什麼不是「改用 pacman 7 還存在的對應 API 取回同一個值」：實查這個值在
+#    pacman 7 之後**根本不存在可取**——
+#      · 本地 DB：/var/lib/pacman/local/<pkg>/desc 的欄位清單實測只有
+#        %ARCH% %BASE% %BUILDDATE% %CONFLICTS% %DEPENDS% %INSTALLDATE% %LICENSE%
+#        %NAME% %OPTDEPENDS% %PACKAGER% %PROVIDES% %SIZE% %URL% %VALIDATION%
+#        %VERSION% %XDATA%，既無 md5sum 也無 sha256sum（套件層級雜湊改由 gzip 的
+#        mtree 逐檔 sha256 承擔）。
+#      · libalpm 侧剩下的相鄰 API 是 alpm_pkg_get_sha256sum()（alpm.h:2563）與
+#        alpm_pkg_get_base64_sig()（alpm.h:2671），兩者都已經分別由 %h、%g 使用；
+#        把 %s 偷渡成 sha256 會讓腳本拿到「錯誤演算法的摘要」而且看不出來，
+#        所以寧可給空值＋明講，也不給假值。
+#    空字串（而不是把提示文字塞進 stdout）是為了維持 %s 的寬度/分隔符語意：
+#    expac 的輸出 routinely 被腳本用 awk/split 解析，錯誤訊息必須走 stderr。
+#    另外 %m（modified backup files）走的是 alpm_compute_md5sum()，那條在 pacman 7
+#    還在（alpm.h:2955），沒動它、也不需要動。
+# 2) tests/test_sync.py 的 testSyncOnlyAttributes：原本斷言 %s 印 d41d8cd9…（空字串
+#    的 md5），補丁後恆為空，期望值一起改，否則 check() 必紅。（本倉 CI 對 kind=aur
+#    走 --nocheck，所以這條是留給手動跑測試的人。）
+# 效果：整支程式不再在動態載入期因未定義符號而死；除 %s 一個欄位外，其餘格式符
+# 全部照上游。
+#
+# ── 其他兩個打包面的坑（都是本倉踩過的，先寫清楚）─────────────────────────
+# 1) 源碼目錄名：CI plan 步探測 pkgver() 時只會把克隆目錄軟鏈成 ${pkgname}／
+#    ${pkgname%-git}／${_pkgname}／${_gitname}／${_base}／${_gitrepo}／${_pkgbase}／
+#    ${pkgbase} 這八個名字，所以 pkgver() 裡 cd 的「${_pkgname}」＝expac 必須有宣告
+#    （少了 _pkgname 這行就會「綠燈但零產物」，本倉 qt4-git／python2-git 剛踩過）。
+# 2) arch-meson：Arch 那份叫的是 devtools 提供的殼子，meson 本身沒有；Artix 倉裡查無
+#    devtools（實測 pacman -Q devtools → not found），寫進 makedepends 會讓本機
+#    makepkg -s 直接紅。所以這裡把 arch-meson 當本地檔進倉（內容取自本倉
+#    meson-git/arch-meson，即 devtools 那份的同一套旗標），build() 用 "$srcdir/arch-meson"
+#    按路徑叫，並在 prepare() 補 chmod ——CI 抓 in-tree 目錄檔案是用 curl 落盤，不會
+#    帶上 exec 位元（meson-git 之類是靠 install -Dm755 才沒出事），不依賴它。
+
+_pkgname=expac
+pkgname="${_pkgname}-git"
+pkgver=10.r22.g8dc9ba4
+pkgrel=1
+pkgdesc='alpm data (pacman database) extraction utility'
+arch=('x86_64' 'aarch64')
+url="https://github.com/falconindy/${_pkgname}"
+license=('MIT')
+depends=('pacman')
+makedepends=('git' 'meson' 'perl')
+provides=("${_pkgname}")
+conflicts=("${_pkgname}")
+source=("${_pkgname}::git+${url}.git#branch=master"
+        'pacman7-drop-md5sum.patch'
+        'arch-meson')
+sha256sums=('SKIP'
+            'SKIP'
+            'SKIP')
+
+# 版號演算法：git describe --long --tags 的 `<tag>-<ahead>-g<sha>` 換成本倉慣用的
+# `<base>.r<n>.g<sha>`。一定回號——倉裡一旦沒有可達 tag（實測 tag 是純數字 1..10，
+# 且 master 在 tag 10 之後），就退回 `r<總提交數>.g<sha>`，不讓 plan 靜默跳過。
+# ⚠️ 這裡假設 tag 名本身不含 `-`（expac 的 tag 全是純數字，實測成立）；若哪天上游
+#    改用 1.0-rc1 之類含連字號的 tag，這條 sed 要一起改。
+pkgver() {
+  cd "${_pkgname}" || return 1
+  _d=$(git describe --long --tags 2>/dev/null | sed 's/^v//')
+  if [ -n "$_d" ] && [ "$_d" != "$(printf '%s' "$_d" | sed 's/-//g')" ]; then
+    _base=$(printf '%s' "$_d" | cut -d- -f1)
+    _ahead=$(printf '%s' "$_d" | sed 's/^[^-]*-\([^-]*\)-g.*/\1/')
+    _sha=$(printf '%s' "$_d" | sed 's/.*-g//')
+    printf '%s.r%s.g%s' "$_base" "$_ahead" "$_sha"
+  else
+    printf 'r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+  fi
+}
+
+prepare() {
+  cd "${_pkgname}"
+  # -p1 吃 git diff 格式；--no-backup-if-mismatch 避免留 .orig 進源碼樹。
+  # 套不上就紅，不吞錯（上游動過 package_formatter.cc 時要現行修補丁，不能默示成功）。
+  patch -p1 -N --no-backup-if-mismatch -i ../pacman7-drop-md5sum.patch \
+    || { echo "::error::pacman7-drop-md5sum.patch 套不上（上游 src/package_formatter.cc 或 tests/test_sync.py 已變動）"; return 1; }
+  # CI 用 curl 落盤 in-tree 輔助檔，不帶 exec 位元。
+  chmod 755 "${srcdir}/arch-meson"
+}
+
+build() {
+  # 按路徑叫本地 arch-meson（不是 PATH 上的 devtools 那份，見檔頭說明）。
+  "${srcdir}/arch-meson" "${_pkgname}" build
+  meson compile -C build
+}
+
+check() {
+  meson test -C build --print-errorlogs
+}
+
+package() {
+  meson install -C build --destdir "${pkgdir}"
+}

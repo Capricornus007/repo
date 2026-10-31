@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Qoder <qoder@localhost>
+Date: Wed, 21 Oct 2026 19:15:00 +0800
+Subject: [PATCH] devicemonitor: Post DEVICE_MONITOR_STARTED before signalling
+ completion
+
+monitor_thread_func() cleared priv->start_thread and broadcast the
+completion condition before posting DEVICE_MONITOR_STARTED on the bus.
+gst_device_monitor_stop() steals start_thread to join it, so once the
+thread had cleared that pointer it could no longer be joined. It was
+then possible for stop() to return, the monitor to be restarted (which
+unflushes the bus), and only afterwards for the stale STARTED message
+to be posted - landing ahead of the new session's DEVICE_ADDED messages.
+
+Reproduced on upstream main (d4c1c002) by running the gst_gstdevice test
+on a single CPU: test_device_monitor got DEVICE_MONITOR_STARTED (0x80000009)
+instead of DEVICE_ADDED on its first pop.
+
+Post the message while the thread is still joinable, i.e. before clearing
+start_thread, and keep the old placement for the cancelled path.
+diff --git a/subprojects/gstreamer/gst/gstdevicemonitor.c b/subprojects/gstreamer/gst/gstdevicemonitor.c
+index 2c44936..a1c62ec 100644
+--- a/subprojects/gstreamer/gst/gstdevicemonitor.c
++++ b/subprojects/gstreamer/gst/gstdevicemonitor.c
+@@ -505,6 +505,7 @@ static gpointer
+ monitor_thread_func (gpointer data)
+ {
+   GSList *started = NULL;
++  gboolean posted = FALSE;
+   GQueue pending = G_QUEUE_INIT;
+   GstDeviceMonitor *monitor = data;
+   GstDeviceProvider *provider;
+@@ -567,14 +568,28 @@ monitor_thread_func (gpointer data)
+     monitor->priv->started = FALSE;
+   }
+ 
++  /* Post the started message before signalling completion below: otherwise
++   * gst_device_monitor_stop() can miss the thread (start_thread is cleared
++   * before the message is posted) and return to the caller, while this thread
++   * still posts a stale DEVICE_MONITOR_STARTED that ends up on the bus of a
++   * subsequent restart. */
++  GST_OBJECT_UNLOCK (monitor);
++  gst_bus_post (monitor->priv->bus,
++      gst_message_new_device_monitor_started (GST_OBJECT (monitor),
++          started != NULL));
++  GST_OBJECT_LOCK (monitor);
++  posted = TRUE;
++
+   g_clear_pointer (&monitor->priv->start_thread, g_thread_unref);
+   g_cond_broadcast (&monitor->priv->started_cond);
+   GST_OBJECT_UNLOCK (monitor);
+ 
+ done:
+-  gst_bus_post (monitor->priv->bus,
+-      gst_message_new_device_monitor_started (GST_OBJECT (monitor),
+-          started != NULL));
++  if (!posted) {
++    gst_bus_post (monitor->priv->bus,
++        gst_message_new_device_monitor_started (GST_OBJECT (monitor),
++            started != NULL));
++  }
+   gst_object_unref (monitor);
+ 
+   return NULL;

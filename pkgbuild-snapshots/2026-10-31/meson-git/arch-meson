@@ -1,0 +1,12 @@
+#!/bin/bash -ex
+# Highly opinionated wrapper for Arch Linux packaging -- feel free to edit this to your liking!
+
+exec meson setup \
+  --prefix        /usr \
+  --libexecdir    lib \
+  --sbindir       bin \
+  --buildtype     release \
+  --auto-features enabled \
+  --wrap-mode     nodownload \
+  -D              python.bytecompile=1 \
+  "$@"

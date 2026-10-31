@@ -1,0 +1,344 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# 本倉目錄版 in-tree 包（四接點之一；逐包理由寫 docs/in-tree-packages.md，
+# **不要寫回 workflow** —— 那個 step 有 21000 字元表達式上限且註解也計入）。
+#
+# 為什麼會有這顆（用戶 2026-10-12 裁定「？那你倒是讓它使用 24 版本編去啊？」）：
+#   · 目標機 `mesa/libRusticlOpenCL.so.1.0.0` 的 NEEDED 實測有兩條 LLVM 系：
+#       libLLVM.so.23.1  與  libLLVMSPIRVLib.so.23.1
+#     （`objdump -p` 直接看出來，不是推測）。所以「mesa 改吃 LLVM 24」必然把這顆
+#     一起拖上 24 —— 只換 LLVM 不換 translator，產物會同時鏈兩個 LLVM soname，
+#     裝下去是 OpenCL 靜默失效或直接崩。
+#   · ⚠️ **抬版無解，不是偷懶**：上游 `KhronosGroup/SPIRV-LLVM-Translator` 的
+#     tag 與「已發布的最大 LLVM」配對（`git ls-remote --tags` 實測最新是
+#     **v23.1.2**），分支也只到 `llvm_release_230`（`git ls-remote --heads` 查實，
+#     根本沒有 `llvm_release_240`）。LLVM 24 還沒正式版，所以「跟最新版本」這條
+#     路不存在，只能吃 `main`（那條才是配 LLVM tip 開發的分支）。
+#   · 本機另一個實測事實：`/usr/lib/libLLVMSPIRVLib.so.23.1` 目前是**孤檔**
+#     （`pacman -Qo` 回「沒有軟體包擁有它」，`pacman -Qs spirv` 查實只裝了
+#     spirv-tools、沒裝 translator）——也就是這臺的 RustiCL OpenCL 一直靠一顆
+#     沒主人管的历史残留库在跑。這顆包上了 feed 之後，該檔由包擁有，換代才不會
+#     再出現「舊 .so 留著、新 .so 沒人給」的那種靜默態。
+#
+# 版本與校驗和都由 pkgver() 從上游 HEAD 現算 ⇒ 本檔要列進「回推校驗和」的排除清單。
+
+_pkgbase=SPIRV-LLVM-Translator
+pkgbase=spirv-llvm-translator-git
+# 兩顆：64 位元本體＋32 位元那份 libLLVMSPIRVLib。
+# ⚠️ 32 位元這顆**不是點綴**：mesa-tkg 的 `_lib32=true` 那半邊，makedepends 直接點名
+#   `lib32-spirv-llvm-translator`（實查 chaotic-aur 那份 PKGBUILD 的 lib32 段），
+#   而 distro 裡那顆是配 LLVM 23.1 編的（`pacman -Sl multilib` 實測
+#   lib32-spirv-llvm-translator 23.1.2-1）。少了它，32 位元 RustiCL 只能繼續鏈 .23.1
+#   → 與 64 位元那半邊錯版，正是 2026-10-12 黑屏的同一類「裝得上、依賴滿足、實物找不到」。
+pkgname=(spirv-llvm-translator-git lib32-spirv-llvm-translator-git)
+pkgver=0.r0.g00000000000
+pkgrel=2
+# epoch=2：AUR 那顆 `spirv-llvm-translator-git` 是 epoch=1／pkgver=r2012.0838497，
+# 而且已經 908 天沒更新（2026-10-13 實測 yay 列表與 AUR PKGBUILD）。我方是 epoch 0，
+# 版本比較先比 epoch ⇒ 只要 feed 這一顆沒發佈（例如建置紅），yay 就會拿那顆兩年半前的
+# AUR 版「升級」回去，把本機 7.0.1.r454.g663ef71b7e3 換掉。給 2 才壓得住；
+# 一位數是用戶 2026-10-13 明確定的（不准再用四位數那種 epoch）。
+epoch=2
+pkgdesc='LLVM <-> SPIR-V converter for compilers targeting SPIR-V (git, 配 LLVM trunk)'
+arch=(x86_64)
+url='https://www.khronos.org/spirv/'
+license=('NCSA')
+# ⚠️ `spirv-headers-git`（不是官方的 spirv-headers）是用戶 2026-10-13 的裁定：
+#   「那讓這個也走源碼直出不就也行了？」。查實上游 `git ls-remote` 的
+#   main=86f980c7… 與最新 tag vulkan-sdk-1.4.363.0=49654312… **不是同一個 sha**
+#   （本機 makepkg 算出 r6 ⇒ main 比 tag 多 6 筆未發佈提交），而 translator main 的
+#   新 SPIR-V 能力通常先落在 headers main。釘穩定版 tag 會出現「translator 有實作、
+#   標頭沒這個 enum」的錯位，所以這條鏈整條走源碼直出。
+makedepends=(cmake git ninja spirv-headers-git llvm clang python
+             lib32-gcc-libs lib32-spirv-tools lib32-llvm-libs-git lib32-llvm-git)
+checkdepends=(clang python)
+# ⚠️ 依賴**不在這裡寫死**：LLVM 的 ABI 由 package() 從「建它時容器裡那顆 libLLVM」
+#   反推（見下方 _llvm_abi）。這是 2026-10-12 那次 GL 黑屏的直接教訓——
+#   CI 產出的 mesa 依賴只有 `llvm-libs>=8.0.0`（無上限），llvm 換代時 pacman 認為
+#   依賴仍滿足、實物卻找不到 libLLVM.so.23.1，於是「badge 全綠但裝完黑屏」。
+# ⚠️ `spirv-tools-git`（不是裸名 `spirv-tools`）：同 opencc／librime 那一課——[extra]
+#   有一顆真叫 spirv-tools 的包（實查 `1:1.4.363.0-1`，tag 版），裸名永遠解到它；而本包
+#   是拿 **trunk 的 validator 行為**驗的（那 4 條 lit 紅的根因就是 distro 的 validator
+#   太舊、少了上游 2026-10-11 的兩筆修正，見 docs/in-tree-packages.md）。
+#   發布順序也靠它：spirv-tools-git 先進 feed，plan 步的依賴閘門才放行本包。
+depends=(glibc libstdc++ spirv-tools-git)
+# ⚠️ LLVM 的 ABI 虛擬名要**寫成頂層字面值**，不能用執行期變數去拼：makepkg 7.1 對
+#   分割包的 depends/provides 走 extract_function_variable（靜態抽字串再 eval），
+#   那個上下文裡 $pkgdir／local 變數都不存在，`depends+=("llvm-libs-abi=$abi")`
+#   會被抽成 `llvm-libs-abi=`（空版本）→ makepkg 起跑 4 秒就
+#   「pkgver in provides/depends 不可以空白」（run #462 的 llvm-git 實測過一次，
+#   這顆是同個坑）。LLVM 換大版時改這個字面量，且 package() 裡有一道「與容器實際
+#   soname 比對、不對就紅」的自證兜住，不會靜默錯。
+_llvm_abi=24.0git
+# 32 位元那半邊鎖的是**另一個虛擬名**（lib32-llvm-libs-abi），不能共用 64 位元那個：
+# pacman 判依賴只看名字，共用會讓 64 位元 mesa 的 `llvm-libs-abi=` 被 32 位元包 satisfy，
+# 實物卻找不到 /usr/lib/libLLVM.so.<abi> → 又黑屏一次。值與 64 位元相同（同一棵 trunk）。
+_lib32_llvm_abi=24.0git
+options=(!emptydirs)
+# passbuilder-llvm-context.patch 的來由見 prepare() 的註解（同一個理由也寫進
+# docs/in-tree-packages.md 的 translator 條目）。校驗和是**我方自帶檔**，寫實值；
+# 上游 git 來源仍 SKIP（本檔列在「更新校验和并回推」的排除清單裡，updpkgsums 不會來動它）。
+source=("git+https://github.com/KhronosGroup/SPIRV-LLVM-Translator#branch=main"
+        "passbuilder-llvm-context.patch")
+b2sums=('SKIP'
+        'fac873be78bbcfd585200f996ead0d38f757c82645a837da95423d3631e0717a76aff740f860454f1c0c64cec27e3861b90b5ab2735376b169bcf6f3c84c622b')
+
+pkgver() {
+  cd $_pkgbase
+  # 上游 tag 長成 v23.1.2（與 LLVM 主次修配對），但 **main 上最近可達的 tag 是
+  # v7.0.1**（實測 `git describe --tags --match 'v*' HEAD` 回 `v7.0.1-454-g663ef71b`，
+  # 而 `--tags` 全列表末三筆是 v23.1.0/v23.1.1/v23.1.2 —— 那些 tag 只打在
+  # llvm_release_230 那條release 線上，main 走不到）。所以 describe 的基號代表
+  # 「這條線最後一次 cut 的版本」，是實話，不要拿它去充 LLVM 版本。
+  # ⚠️ 剝段要處理「HEAD 正好落在 tag 上」：那時 describe 只回 `v7.0.1`，由右往左剝
+  #   兩段會把 tag 名本身當 count，算出 `7.0.1.rv7.0.1.g…` 那種垃圾（而且不只难看，
+  #   repo-add 會因為不單調直接拒收——llvm-git／kew-git 都踩過同一類）。
+  #   查無 tag 可達時退回 `0.r<總數>.g<sha>`，同样全域單調。
+  local raw base count
+  raw=$(git describe --tags --match 'v*' HEAD 2>/dev/null)
+  if [ -n "$raw" ]; then
+    count=${raw##*-}
+    if [ "$count" = "$raw" ]; then
+      count=0; base=$raw
+    else
+      raw=${raw%-*}
+      count=${raw##*-}
+      base=${raw%-*}
+    fi
+    base=${base#v}
+  else
+    base=0; count=$(git rev-list --count HEAD)
+  fi
+  printf '%s.r%s.g%s\n' "$base" "$count" "$(git rev-parse --short=11 HEAD)"
+}
+
+prepare() {
+  cd $_pkgbase
+  # 那兩條 lit 測試的 RUN 行需要 `-verify-machineinstrs=0 -disable-mir-output-verify`。
+  # 2026-10-13 起**上游自己已經帶了**：commit fc137e9fb「Disable MI verification in 2
+  # tests after llvm changes」(#4083)，改的正是 test/DebugInfo/Generic/{linear-dbg-value,
+  # debug-info-eis-option}.ll 那兩行，旗標順序與內容跟我方原本那顆補丁一致。
+  # 出處：這是我 2026-10-13 提的 issue KhronosGroup/SPIRV-LLVM-Translator#4082，
+  # 上游於 09:37Z 以 COMPLETED 關閉（#4083 落 main）。
+  # → 本地補丁已刪，改成**正向斷言**：不是「刪了事」，而是留一道檢查，哪天上游把
+  #   這兩個旗標拿掉或改寫，這裡立刻紅，不會悄悄退化成「又變兩條紅」。
+  n=$(grep -c -- "-verify-machineinstrs=0" \
+        test/DebugInfo/Generic/linear-dbg-value.ll \
+        test/DebugInfo/Generic/debug-info-eis-option.ll | awk -F: '{s+=$2} END{print s+0}')
+  if [ "$n" -lt 2 ]; then
+    echo "ERROR: 上游這兩條 lit 測試少了 -verify-machineinstrs=0（實測命中 $n 處，需 ≥2）" >&2
+    echo "       代表上游又改寫了 RUN 行；去查 fc137e9fb 之後的變動，把旗標補回來源或重打補丁。" >&2
+    return 1
+  fi
+  echo "上游已內建 verifier 繞法：命中 $n 處（#4083 / issue #4082）"
+
+  # ── passbuilder-llvm-context.patch（2026-10-22）
+  # 症狀與實測證據：CI run 39721740022 的 mesa-tkg-git（job 119696129171）紅在連結期——
+  #   ld.lld: error: undefined reference:
+  #     llvm::PassBuilder::PassBuilder(TargetMachine*, PipelineTuningOptions,
+  #       std::optional<PGOOptions>, PassInstrumentationCallbacks*,
+  #       IntrusiveRefCntPtr<vfs::FileSystem>)@LLVM_24.0
+  #   >>> referenced by /usr/lib/libLLVMSPIRVLib.so (disallowed by --no-allow-shlib-undefined)
+  # 同一顆**已發布**的 translator 在本機也是死的（`ldd -r /usr/lib/libLLVMSPIRVLib.so.24.0git`
+  # 回報同一個未解符號；`/usr/lib/libRusticlOpenCL.so.1.0.0` 的 NEEDED 有它）——也就是
+  # feed 上這顆是拿「舊 LLVM」編的，LLVM 換代到帶 LLVMContext 的 ctor 之後，它的符號
+  # 在 libLLVM.so.24.0git 裡已經不存在（實測 `nm -D --defined-only` 對舊簽名的命中數=0）。
+  # 標頭現況（本機 /usr/include/llvm/Passes/PassBuilder.h:156 實讀）：
+  #   explicit PassBuilder(LLVMContext &Context, TargetMachine *TM = nullptr,
+  #                        std::optional<PipelineTuningOptions> PTO = std::nullopt, ...)
+  # 首參是引用、沒有預設值 ⇒ 上游那句 `PassBuilder PB;` 在新標頭下**既編不過、也解不到
+  # 舊符號**，所以重建 translator 是必要的、而且非補不可。全 tree 只有這個構造點
+  # （實測 `grep -rn PassBuilder --include=*.cpp --include=*.h` 於 main HEAD 3bb60b6dfc4
+  # 只有 SPIRVWriter.cpp:8086 一处 `PassBuilder PB;`，另兩處是 `PassBuilder &PB` 回調），
+  # 補丁就只動一行：把模組自己的 LLVMContext 傳進去。32 位元那棵共用同一份原始碼，
+  # 一顆補丁蓋兩邊。
+  # 上游補回之後的收尾：下面的 else 分支會印「上游已自帶」，屆時把這整段與 source／
+  # b2sums 裡的對應行一起刪掉。
+  if grep -qE '^\s*PassBuilder PB;' lib/SPIRV/SPIRVWriter.cpp; then
+    git apply -v "$srcdir/passbuilder-llvm-context.patch"
+    echo "已套 passbuilder-llvm-context.patch（舊的無參 PassBuilder 構造在新標頭下已不存在）"
+  else
+    echo "上游已自帶帶 LLVMContext 的 PassBuilder 構造，跳過補丁——請順手刪掉本補丁與 source 那一行"
+  fi
+}
+
+_llvm_abi() {
+  # 回傳「本機容器此刻真正的 libLLVM SONAME」，例如 libLLVM.so.24.0git → 24.0git。
+  # 查不到就回空字串，由呼叫端決定要不要退回不鎖（但會印出來，不會靜默）。
+  local so
+  so=$(basename "$(readlink -f /usr/lib/libLLVM.so 2>/dev/null)" 2>/dev/null | sed 's/^libLLVM\.so\.//')
+  case $so in
+    ''|libLLVM.so) printf '' ;;
+    *) printf '%s' "$so" ;;
+  esac
+}
+
+build() {
+  cd $_pkgbase
+  # ARCH 容器與本機都吃 clang 預設的 `-Werror=return-type` 等，`-W no-author` 照抄
+  # Arch 官方那份（實查 gitlab archlinux/spirv-llvm-translator 現檔），避免 cmake 把
+  # 打包作者欄位寫進产物導致每輪換代都改到檔。
+  cmake -S . -B build -G Ninja \
+    -D BUILD_SHARED_LIBS=ON \
+    -D CMAKE_BUILD_TYPE=Release \
+    -D CMAKE_INSTALL_PREFIX=/usr \
+    -D CMAKE_INSTALL_SYSCONFDIR=/etc \
+    -D CMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -D CMAKE_SKIP_RPATH=ON \
+    -D LLVM_CONFIG=llvm-config \
+    -D LLVM_EXTERNAL_LIT=/usr/bin/lit \
+    -D LLVM_EXTERNAL_SPIRV_HEADERS_SOURCE_DIR=/usr/include/spirv \
+    -D LLVM_LIBDIR_SUFFIX= \
+    -D LLVM_SPIRV_ENABLE_LIBSPIRV_DIS=ON \
+    -D LLVM_SPIRV_INCLUDE_TESTS=ON \
+    -W no-author
+  cmake --build build
+  # ── 32 位元那棵（產 /usr/lib32/libLLVMSPIRVLib.so.<abi>）
+  # 參數照 Arch 官方 lib32-spirv-llvm-translator 的做法：`-m32` 進三套 flags、
+  # `LLVM_CONFIG=llvm-config32`（由本倉 lib32-llvm-git 提供）、`LLVM_LIBDIR_SUFFIX=32`
+  # 讓它裝到 /usr/lib32。標頭是架構中立的，SPIRV-Headers 直接複用 /usr/include/spirv。
+  # ⚠️ 少這棵的後果不是「32 位元沒 OpenCL」而已：mesa 的 32 位元半邊會退回去吃
+  #   multilib 那顆 23.1 的 libLLVMSPIRVLib，於是同一個 libRusticlOpenCL 的兩個位元寬度
+  #   各自鏈不同版 LLVM——pacman 全綠、裝下去其中一邊靜默失效。
+  export CFLAGS="$CFLAGS -m32"
+  export CXXFLAGS="$CXXFLAGS -m32"
+  export LDFLAGS="$LDFLAGS -m32"
+  export PKG_CONFIG=i686-pc-linux-gnu-pkg-config
+  cmake -S . -B build32 -G Ninja \
+    -D BUILD_SHARED_LIBS=ON \
+    -D CMAKE_BUILD_TYPE=Release \
+    -D CMAKE_INSTALL_PREFIX=/usr \
+    -D CMAKE_INSTALL_SYSCONFDIR=/etc \
+    -D CMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -D CMAKE_SKIP_RPATH=ON \
+    -D LLVM_CONFIG=llvm-config32 \
+    -D LLVM_LIBDIR_SUFFIX=32 \
+    -D LLVM_EXTERNAL_SPIRV_HEADERS_SOURCE_DIR=/usr/include/spirv \
+    -D LLVM_SPIRV_ENABLE_LIBSPIRV_DIS=ON \
+    -D LLVM_SPIRV_INCLUDE_TESTS=OFF \
+    -W no-author
+  cmake --build build32
+}
+
+check() {
+  cd $_pkgbase
+  # 上游不用 ctest 佈局，照官方那個 `--target test`（跑 lit + 內建 round-trip 測試）。
+  # ⚠️ 用戶裁定「這是我們容器缺環境，補環境，不跳測試」——這裡**不准**加 --nocheck
+  #   绕过去；真紅就當待辦修或如實上報。
+  # 只跑 64 位元那棵：那 1156 條 lit 測的是 `llvm-spirv` 這支**執行檔**的行為，
+  # 32 位元那棵刻意 LLVM_SPIRV_INCLUDE_TESTS=OFF（它只產 libLLVMSPIRVLib.so 給
+  # 32 位元程式載入，同一套測試換個位元寬度再跑一遍不會多抓到東西，只會多燒一倍時間）。
+  cmake --build build --target test
+}
+
+package_spirv-llvm-translator-git() {
+  # ⚠️ 這行 cd 不能省：build()／check() 各自有 cd，但 package() 是**獨立被 makepkg
+  #   呼叫**的，預設 cwd 是 $srcdir。少了它就會在 $srcdir 找 `build`，報
+  #   `CMake Error: Not a file: …/src/build/cmake_install.cmake`
+  #   （2026-10-13 本機 makepkg 實測紅在這裡；CI 那輪先死在 LLVMgold 上，所以這個
+  #   第二個坑當時沒露出來）。
+  cd $_pkgbase
+  pkgdesc='LLVM <-> SPIR-V converter for compilers targeting SPIR-V (git)'
+  provides=('spirv-llvm-translator' 'libLLVMSPIRVLib.so')
+  conflicts=('spirv-llvm-translator')
+  replaces=('spirv-llvm-translator')
+  # ⚠️ 這裡點名 `spirv-tools-git`（不寫 `spirv-tools`）：check() 那 4 條 lit 紅的根因就是
+  #   distro 那顆 validator 停在 1.4.363.0(2026-09-10)，而修復只在 main（SPIRV-Tools
+  #   2a7f2309 #6946／47ed79f5 #6943）。寫死我方那顆才是「補環境、不跳測試」的落地；
+  #   寫 `spirv-tools` 會被 distro 的同名包 satisfy，測試就永遠還在那 4 條紅。
+  depends=(glibc libstdc++ spirv-tools-git llvm-libs)
+  # ── 把 LLVM ABI 鎖進依賴（這包存在的意義一半在這裡）
+  # 用的虛擬名是本倉 llvm-libs-git 發的 `llvm-libs-abi=<soname>`。
+  # ⚠️ 不能直接用官方那形 `libLLVM.so=23.1-64` 來钉：實測 makepkg 7.1 **拒收**
+  #   `==> 錯誤： pkgver in depends 不能有 ; 斜線、- 連字號或空白`（本輪踩到），
+  #   而把 world.db 全倉 %DEPENDS% 拆開查實沒有一筆帶 `-64` —— 那形只在 %PROVIDES% 出現。
+  #   所以自製一個不含連字號的虛擬名，provides／depends 兩邊都合法，且只在 soname
+  #   相同時成立 → LLVM 換代時 pacman 會**拒絕升級**而不是靜默弄挂 OpenCL
+  #   （教訓來源：2026-10-12 那次「CI 全綠但裝完 GL 黑屏」）。
+  local abi
+  abi=$(_llvm_abi)
+  depends+=("llvm-libs-git" "llvm-libs-abi=$_llvm_abi")
+  echo ">> $pkgname: 鎖住 LLVM ABI → llvm-libs-abi=$_llvm_abi（容器實際 soname=[$abi]）"
+  # 自證：宣告的 ABI 必須就是建它時容器裡那顆 libLLVM 的實際 soname。查不到（空）
+  # 或與鎖定值不一致都直接紅——靜默放過就是 2026-10-12 那次「CI 全綠、裝完 GL 黑屏」的重演。
+  if [ -z "$abi" ]; then
+    echo "ERROR: 容器查不到 /usr/lib/libLLVM.so 的 soname——本包必須建在自有 llvm-*-git 之上" >&2
+    exit 1
+  fi
+  if [ "$abi" != "$_llvm_abi" ]; then
+    echo "ERROR: 容器 soname=[$abi] 與本包鎖定的 _llvm_abi=$_llvm_abi 不一致" >&2
+    echo "       （LLVM 換大版了：改 _llvm_abi 那行，別放過這條）" >&2
+    exit 1
+  fi
+  DESTDIR="$pkgdir" cmake --install build
+  install -Dm644 LICENSE.TXT -t "$pkgdir/usr/share/licenses/$pkgname"
+}
+
+package_lib32-spirv-llvm-translator-git() {
+  pkgdesc='LLVM <-> SPIR-V converter for compilers targeting SPIR-V (git, 32-bit)'
+  # ⚠️ 這裡**不**重复 provides `libLLVMSPIRVLib.so`（64 位元那顆已經發這個虛名）：
+  #   同一個虛擬名由兩顆包發，依賴它的人會被 pacman 隨機指派到位元寬度錯的那邊。
+  provides=('lib32-spirv-llvm-translator')
+  conflicts=('lib32-spirv-llvm-translator')
+  replaces=('lib32-spirv-llvm-translator')
+  # GCC 16 起 lib32-gcc-libs 不再 Provides: lib32-libstdc++（2026-10-21 實查
+  # Arch core/lib32-gcc-libs 16.2.1 的 provides 只剩 soname 虛名），Arch 官方
+  # lib32-spirv-llvm-translator 也是直接依賴 lib32-gcc-libs。
+  depends=(lib32-glibc lib32-gcc-libs lib32-spirv-tools
+           lib32-llvm-libs-git "lib32-llvm-libs-abi=$_lib32_llvm_abi")
+  cd $_pkgbase
+  DESTDIR="$pkgdir" cmake --install build32
+  install -Dm644 LICENSE.TXT -t "$pkgdir/usr/share/licenses/$pkgname"
+  # 這顆只該有 32 位元的東西：裝到 /usr/lib 就是搶 64 位元那包的檔。
+  if [ -e "$pkgdir/usr/lib/libLLVMSPIRVLib.so" ]; then
+    echo "ERROR: $pkgname 把库裝進 /usr/lib 了（LLVM_LIBDIR_SUFFIX=32 沒生效）" >&2
+    exit 1
+  fi
+  abi=$(basename "$(readlink -f "$pkgdir/usr/lib32/libLLVMSPIRVLib.so" 2>/dev/null)" 2>/dev/null \
+        | sed 's/^libLLVMSPIRVLib\.so\.//')
+  if [ ! -e "$pkgdir/usr/lib32/libLLVMSPIRVLib.so" ]; then
+    echo "ERROR: $pkgname 沒有 /usr/lib32/libLLVMSPIRVLib.so（32 位元那棵沒建出來）" >&2
+    exit 1
+  fi
+  # multilib 慣例：這顆只准帶 /usr/lib32 與自己的 license（實查官方
+  # lib32-spirv-llvm-translator 23.1.2-1 的清單＝lib32/libLLVMSPIRVLib.so* + lib32/pkgconfig + licenses，
+  # 別的一律沒有）。但 cmake --install 會把 `llvm-spirv` 執行檔與 /usr/include/LLVMSPIRVLib/*
+  # 一起塞進來，而那兩處歸 64 位元那顆 → 同機安裝直接 conflicting files（2026-10-22 本機實測：
+  # `lib32-spirv-llvm-translator-git: /usr/bin/llvm-spirv exists in filesystem (owned by spirv-llvm-translator-git)`）。
+  # 後果不只是裝不上：CI 容器同機撞同一道牆 → mesa 那步 `pacman -Q` 認定缺這顆 →
+  # 自動把 customization.cfg 的 _lib32 關掉 → 32 位元 mesa 永遠停舊版
+  # （run 39679301603 的 warning「自有 lib32 家族缺：lib32-spirv-llvm-translator-git」就是這條）。
+  rm -rf "$pkgdir/usr/bin" "$pkgdir/usr/include" "$pkgdir/usr/lib" \
+         "$pkgdir/usr/share/man" "$pkgdir/usr/share/doc"
+  # 殘留點名：/usr 下只准有 lib32 與 share，share 下只准有 licenses。
+  # ⚠️ 上一版這裡用 `find -mindepth 2 -maxdepth 2 -not -path "…/usr/lib32"`，那個
+  #   `-not -path` 只排除目錄**本身**，不排除裡面的檔 ⇒ depth 2 剛好命中
+  #   usr/lib32/libLLVMSPIRVLib.so.24.0git，把好的產物判成錯（run 39717172753 實測紅）。
+  #   改用 glob 逐層點名，深度算錯也不會誤殺正解。
+  _stray=''
+  for _d in "$pkgdir"/usr/*; do
+    [ -e "$_d" ] || continue
+    case ${_d##*/} in
+      lib32|share) ;;
+      *) _stray="$_stray ${_d##*/}" ;;
+    esac
+  done
+  for _d in "$pkgdir"/usr/share/*; do
+    [ -e "$_d" ] || continue
+    [ "${_d##*/}" = licenses ] || _stray="$_stray share/${_d##*/}"
+  done
+  [ -z "$_stray" ] || { echo "ERROR: $pkgname 還帶著非 lib32 的路徑：${_stray# }" >&2; exit 1; }
+  # 自證：這顆的**實際 NEEDED** 必須是 32 位元 LLVM 的 soname，而且與依賴鎖一致。
+  # 光看檔名不夠——上一輪的教訓就是「包裡有檔、依賴也寫了，但鏈的是另一版」。
+  local _need
+  _need=$(objdump -p "$pkgdir/usr/lib32/libLLVMSPIRVLib.so.$abi" 2>/dev/null \
+          | awk '/NEEDED.*libLLVM\.so/{print $2; exit}')
+  echo ">> $pkgname: libLLVMSPIRVLib.so.$abi 的 NEEDED libLLVM = [$_need]"
+  case $_need in
+    libLLVM.so.$_lib32_llvm_abi) ;;
+    *) echo "ERROR: NEEDED 是 [$_need]，與鎖定的 lib32-llvm-libs-abi=$_lib32_llvm_abi 不符" >&2
+       exit 1 ;;
+  esac
+  echo ">> $pkgname: 32 位元 ABI 自證通過（鎖 lib32-llvm-libs-abi=$_lib32_llvm_abi）"
+}
+
+# vim:set sw=2 sts=-1 et:

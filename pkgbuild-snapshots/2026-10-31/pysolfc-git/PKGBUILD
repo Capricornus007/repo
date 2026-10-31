@@ -1,0 +1,258 @@
+# Maintainer: Capricornus007 (auto-build via Capricornus007/repo)
+# Based on the Arch extra 'pysolfc' PKGBUILD by Jaroslav Lichtblau,
+# Carl Smedstad and Eric Bélanger; switched to the upstream git tree.
+pkgname=pysolfc-git
+pkgver=3.6.1.r23.g7a3d146
+# epoch 是這包唯一的換代開關，別用 pkgrel：本包有 pkgver()，只要它算出的版本與這裡的
+# 靜態 pkgver 不同，makepkg 就會把 pkgrel 重置為 1（CI 的 plan 步也照這個預測比對，
+# 日誌原話「pkgver() 會改版本 → makepkg 必把 pkgrel 重置為 1」）。實測 10-07：
+# 抬 pkgrel=2 之後仍「跳过构建：pysolfc-git-3.6.1.r37.gc39976f-1 已在 release 里」，
+# feed 那顆停在 13:48 的純上游版（無語系／無主題補丁）。改完補丁或語系就 +1 epoch。
+# （CI 的「產物是否已在 release 裡」比對用的 asset_prefix 確實帶 epoch——
+#  build-packages.yml 裡 `EPOCH_PART="${CUR_EPOCH}."`，所以抬 epoch 會繞過比對、
+#  真的觸發重建。10-11 加 Tk wrapper 時核過這段。）
+# epoch=3：本包內建 Tk/fcitx5 相容性 wrapper（見 package() 尾）。
+# epoch=4：那個 wrapper 的**內容**翻案了，而版本字串沒動 ⇒ 不抬 epoch 就永遠不會重建。
+# 出貨的那版在 `XMODIFIERS=@im=fcitx` 時 `env -u XMODIFIERS` 起程式，理由是「Tk 只認 XIM，
+# 而 fcitx5 的 XIM 對 Tk 一個鍵都不回傳」——**那個前提是錯的**（2026-10-12 讀源碼＋受控重測：
+# 同版本 fcitx5 5.1.23.r5 ＋ rime ＋ Tk 8.6.16 在 Xvfb 下，wish／python3-tkinter／pysol 三者
+# 都有完整 XIM_CREATE_IC → XIM_SET_IC_FOCUS → XIM_FORWARD_EVENT，中文正常入框；真會吞字母的是
+# LC_CTYPE 不是 UTF-8，實測 LANG=C 時 Entry 只剩一個數字）。剝掉 XMODIFIERS 正是
+# 「pysolfc 打不了中文」的成因，所以现在這顆包是用包體把用戶弄壞的那一個。
+# ⚠️ 本包 pkgver() 會自己算版本，makepkg 因此把 pkgrel 重置為 1 ⇒ 抬 pkgrel 無效，
+#    只有 epoch 是這顆的換代開關（CI 的 asset_prefix 帶 epoch，會繞過「已在 release 里」比對）。
+epoch=4
+pkgrel=1
+pkgdesc="PySol (Fan Club edition) is an exciting collection of more than 1000 solitaire games (git version)"
+arch=('any')
+url="https://github.com/shlomif/PySolFC"
+license=('GPL-3.0-or-later')
+depends=(
+  'pysolfc-cardsets'
+  'python'
+  'python-attrs'
+  'python-configobj'
+  'python-pillow'
+  'python-pygame'
+  'python-pysol_cards'
+  'tk'
+)
+makedepends=(
+  'git'
+  'gettext'
+  'python-build'
+  'python-installer'
+  'python-setuptools'
+  'python-wheel'
+)
+optdepends=(
+  'python-kivy: Kivy based interface'
+)
+provides=('pysolfc')
+conflicts=('pysolfc')
+# 我方語系（上游 po/ 裡沒有中文）。每個語系有三份目錄：
+#   <lang>_pysol.po  ＝ 介面字串（對應 po/pysol.pot，1324 條）
+#   <lang>_games.po  ＝ 遊戲名稱（對應 po/games.pot，1848 條）
+#   <lang>_help.po   ＝ 說明頁文字節點（localize-help.py 用，6572 段）
+# 新增語言＝把這三個檔丟進本目錄並列進 source，腳本用萬用字元掃，不用改邏輯。
+# build() 會 msgcat 把 pysol+games 合併成 po/<lang>.po 再 msgfmt（與上游 `make mo` 同一條公式）；
+# help 那份不進 locale，是打包時拿来改寫 data/html 的。
+# follow-desktop-theme.patch + systemtheme.py：讓 Tk 元件跟隨桌面調色盤（見檔內說明）。
+# localized-help.patch：讓 DataLoader 優先取 html/<語系>/ 下的翻譯說明頁。
+# package() 尾沒有額外檔案：它把 setup.py 裝出來的 /usr/bin/pysol 改名成
+# /usr/bin/pysol-real，並在原位落一個 /bin/sh 的 Tk/fcitx5 相容性 wrapper（理由與
+# 代價寫在該處註解）。所以本目錄多一個檔案都不用，CI 那個目錄掃描抓取照舊。
+source=(
+  "git+https://github.com/shlomif/PySolFC.git"
+  'zh_TW_pysol.po'
+  'zh_TW_games.po'
+  'zh_TW_help.po'
+  'zh_CN_pysol.po'
+  'zh_CN_games.po'
+  'zh_CN_help.po'
+  'systemtheme.py'
+  'localize-help.py'
+  'follow-desktop-theme.patch'
+  'localized-help.patch'
+  'fix-quit-while-busy.patch'
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+pkgver() {
+  cd PySolFC
+  # Only match release tags (pysolfc-<version>) so Android CI tags are ignored.
+  git describe --tags --long --abbrev=7 --match 'pysolfc-[0-9]*' \
+    | sed 's/^pysolfc-//; s/\([^-]*-g\)/r\1/; s/-/./g'
+}
+
+prepare() {
+  cd PySolFC
+  mv pysol.py pysol
+  sed -i 's/pysol\.py/pysol/' \
+    MANIFEST.in \
+    data/pysol.desktop \
+    setup.py \
+    tests/lib/pysol_tests/test_version_flag.py
+
+  # 官方 release tarball 自带 data/html（约1100个帮助页），但 git tree 没有：
+  # DataLoader 启动时强制读取 <datadir>/html/license.html，缺了直接
+  # "OSError: DataLoader could not find" 起不来。上游 Makefile 的
+  # `make rules` 会用 html-src/gen-html.py 现场生成整棵 data/html。
+  if [ ! -f data/html/license.html ]; then
+    make rules
+  fi
+
+  # 帶入我方語系（見上方 source 註解）。缺檔要紅：CI 的「拉取对应的套件仓库」步驟
+  # 過去對本包只 curl 了 PKGBUILD，語系檔根本沒下來，結果徽章全綠、包裡一個中文
+  # 字都沒有（10-07 實測）。靜默跳過等于騙人，所以逐檔點名。
+  for _po in "$srcdir"/zh_*_pysol.po "$srcdir"/zh_*_games.po; do
+    [ -e "$_po" ] || continue
+    install -Dm644 "$_po" "po/$(basename "$_po")"
+  done
+  for _need in zh_TW_pysol.po zh_TW_games.po zh_CN_pysol.po zh_CN_games.po; do
+    if [ ! -f "po/$_need" ]; then
+      echo "ERROR: 缺 po/$_need —— 語系檔沒被抓進 build 目錄，別發沒中文的包"
+      exit 1
+    fi
+  done
+  for _need in zh_TW_help.po zh_CN_help.po localize-help.py; do
+    if [ ! -f "$srcdir/$_need" ]; then
+      echo "ERROR: 缺 $_need —— 說明頁語系檔沒下來，包裝完會是純英文說明頁"
+      exit 1
+    fi
+  done
+
+  # in-tree 補丁：讓 Tk 元件跟隨桌面調色盤（KDE/Qt/Kvantum 的 kdeglobals，或 GTK 主題的 css）。
+  # 上游 pysollib/winsystems/x11.py 把 Listbox/Text 寫死成白底、選取色寫死 #0a5f89，
+  # 所以深色桌面下整個視窗框架還是 90 年代的灰。零新依賴——ttkthemes 在 Arch 與 AUR
+  # 都不存在（只有 PyPI 有），這裡只用 Tk 內建的 clam 主題自己上色。
+  install -Dm644 "$srcdir/systemtheme.py" pysollib/systemtheme.py
+  if ! patch -p1 -N -i "$srcdir/follow-desktop-theme.patch"; then
+    # 打不上＝上游動過 options.py / winsystems/common.py / winsystems/x11.py /
+    # ui/tktile/menubar.py / tile/menubar.py 其中之一。靜默跳過會發出一個
+    # 「看起來正常、其實沒跟隨主題」的包，所以寧可紅，別偷跑。
+    echo "ERROR: follow-desktop-theme.patch 套用失敗——照 pysollib/systemtheme.py 的文件重做補丁"
+    exit 1
+  fi
+
+  # 說明頁語系化：DataLoader.__findFile 優先試 html/<語系>/，缺檔退回英文。
+  # 只這一處收口（help_html／mHelpRules／getGameRulesFilename 全走 findFile）。
+  if ! patch -p1 -N -i "$srcdir/localized-help.patch"; then
+    echo "ERROR: localized-help.patch 套用失敗——上游動過 pysollib/util.py 的 DataLoader"
+    exit 1
+  fi
+
+  # 遊戲忙時 Ctrl+Q／Ctrl+X／Alt+F4／視窗關閉按鈕／工具列 Quit 全部「按了沒反應」的修法：
+  # 不是綁定被拆掉、也跟 fcitx5 與 Tk 版本無關——實測綁定是好的（真實 XTEST 按鍵會進
+  # mQuit），是 actions 那邊 busy 旗標把離開流程吞了。上游至今沒修這條。
+  # ⚠️ 這與「Tk 在 fcitx5 XIM 下吞按鍵」是**兩件不同的事**，別混為一談：那條的
+  #    wrapper 方案已被否決（10-12 撤掉錯的 XMODIFIERS wrapper），本補丁只治「忙時不離開」。
+  if ! patch -p1 -N -i "$srcdir/fix-quit-while-busy.patch"; then
+    echo "ERROR: fix-quit-while-busy.patch 套用失敗——上游動過 pysollib/actions.py 或 pysollib/game/__init__.py"
+    exit 1
+  fi
+}
+
+build() {
+  cd PySolFC
+  # 上游 `make mo` 的語言清單是寫死的（de fr pl it ru pt_BR），中文不在內，
+  # 所以照同一條公式（msgcat 合併 games+pysol → msgfmt）單獨編我方語系。
+  # 產物落 locale/<lang>/LC_MESSAGES/pysol.mo，由 setup.py 的
+  # get_data_files('locale', 'share/locale') 進 wheel → 裝到 /usr/share/locale。
+  for _po in po/zh_*_pysol.po; do
+    [ -e "$_po" ] || continue
+    _lng=${_po##*/}
+    _lng=${_lng%_pysol.po}
+    if [ -f "po/${_lng}_games.po" ]; then
+      msgcat --use-first "po/${_lng}_games.po" "$_po" > "po/${_lng}.po"
+    else
+      cp "$_po" "po/${_lng}.po"
+    fi
+    install -d "locale/${_lng}/LC_MESSAGES"
+    msgfmt --check -o "locale/${_lng}/LC_MESSAGES/pysol.mo" "po/${_lng}.po"
+  done
+  # 說明頁的對照表：編到 helpmo/ 給 package() 的 localize-help.py 用。
+  # 不進 /usr/share/locale——它不是 runtime gettext 目錄，是打包期改寫 HTML 的資料表。
+  install -d "$srcdir/helpmo"
+  for _po in "$srcdir"/zh_*_help.po; do
+    _lng=${_po##*/}
+    _lng=${_lng%_help.po}
+    msgfmt --check -o "$srcdir/helpmo/${_lng}.mo" "$_po"
+  done
+  python -m build --wheel --no-isolation
+}
+
+check() {
+  cd PySolFC
+  python -m unittest discover -v
+}
+
+package() {
+  cd PySolFC
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  # 依 helpmo/*.mo 生出 html/<語系>/，localized-help.patch 讓 DataLoader 優先取它。
+  _html=$(find "$pkgdir/usr/share" -maxdepth 2 -type d -name html | head -1)
+  if [ -z "$_html" ] || [ ! -f "$_html/license.html" ]; then
+    echo "ERROR: 找不到裝好的 data/html（上游改了安裝路徑？）——說明頁語系化做不了"
+    exit 1
+  fi
+  for _mo in "$srcdir"/helpmo/*.mo; do
+    _lng=${_mo##*/}
+    _lng=${_lng%.mo}
+    python "$srcdir/localize-help.py" "$_html" "$_lng" "$_mo"
+  done
+
+  # ---- Tk / fcitx5 相容性 wrapper -------------------------------------------
+  # 本包預設介面是 Tk（pysollib/winsystems/x11.py）。Tk 沒有 input-method module、
+  # 只認 XIM，而 fcitx5 的 XIM 對 Tk 客戶端**一個鍵都不回傳**：10-11 實測交叉表
+  # （有控制組）——帶 XMODIFIERS=@im=fcitx 時 Tk Entry 十鍵全吞、收到空字串，rime
+  # 活躍與非活躍都一樣；不設 XMODIFIERS 正常；@im=ibus 與 @im=xim（連不上而降級）
+  # 都正常；同環境 xterm 正常 ⇒ 壞的是 Tk 的 XIM 客戶端實作，不是 fcitx5 整體。
+  # fcitx5 端唯一相關的可調項 XIM/UseOnTheSpot 實測 True/False 兩態都全吞 ⇒ 設定層
+  # 無解，只能在客戶端繞。本機 10-11 用 /usr/local/bin/pysol 手寫同樣的繞法已驗證
+  # 可用（用戶親測能打字），這裡把它做進包，免得下次重建就掉。
+  #
+  # 代價（老實寫在包裡）：剝掉 XMODIFIERS 後 Tk 沒有別的輸入法管道，pysolfc 介面內
+  # 打不了中文——玩家名稱／自訂花色那幾個輸入框只能打英文數字。三條候選（換 ibus／
+  # 加補丁自架選字／用剪貼簿貼）尚未裁決，先這樣發。
+  #
+  # 只在 @im=fcitx 時剝：ibus／xim 的 Tk+XIM 本來就是好的，照單全剝會讓那些環境的
+  # 中文輸入一起消失。GTK_IM_MODULE／QT_IM_MODULE 原樣不動（本包只有 Tk 會讀
+  # XMODIFIERS，那兩個變數是 GTK/Qt 自己的管道，剝了只會無謂地弄壞別的介面）。
+  # ⚠️ 別指望「換個前端就救回來」：`--gtk` 不存在——TOOLKIT 是寫死在
+  # pysollib/settings.py（`TOOLKIT = 'tk'  # or 'gtk'`）的常數、沒有命令列開關，而
+  # pysollib/pysolgtk/* 吃的是 PyGTK（tkwrap.py 第 28 行 `import gtk`、
+  # `gtk.WINDOW_TOPLEVEL`），Python 3 早就沒有這個綁定 ⇒ GTK 前端是死碼。
+  # `pysol --kivy`（README.kivy）那條是真的，但 Kivy 自己畫輸入框、走 SDL 事件，不讀
+  # XMODIFIERS，所以有無中文輸入取決於 Kivy 本身的 IME 支援（本輪未實測）。
+  _bin="$pkgdir/usr/bin/pysol"
+  if [ ! -f "$_bin" ]; then
+    # 上游若改回 setup.py 的 entry_points／改腳本名，這裡必須紅——靜默跳過等於發一個
+    # 「按鍵全吞」的包（10-07 語系檔沒下來、徽章全綠那件事的同一課）。
+    echo "ERROR: 找不到 /usr/bin/pysol——Tk wrapper 做不了，別發按鍵會全吞的包"
+    exit 1
+  fi
+  mv "$_bin" "$pkgdir/usr/bin/pysol-real"
+  # pysol 腳本本身（上游 pysol.py）是 #!/usr/...python 的 Python 檔，wrapper 用 /bin/sh。
+  cat > "$_bin" <<'PYSOL_WRAPPER_EOF'
+#!/bin/sh
+# PySolFC 啟動腳本（由 pysolfc-git 包產生；真正的程式是 /usr/bin/pysol-real）。
+#
+# ⚠️ 這裡曾經有第二條 case：偵測到 XMODIFIERS=@im=fcitx 就 `env -u XMODIFIERS` 起程式，
+#    理由是「fcitx5 的 XIM 對 Tk 客戶端不回傳按鍵、會吞鍵」。**那個診斷是錯的，
+#    而這個繞法正是「pysolfc 打不了中文」的原因**（把 Tk 唯一的輸入法管道關掉了）。
+#    2026-10-12 讀源碼＋受控重測推翻前提：同版本 fcitx5（5.1.23.r5）+ rime + Tk 8.6.16
+#    在 Xvfb 下，wish／python3-tkinter／pysol 三者都出現完整的
+#    XIM_CREATE_IC → XIM_SET_IC_FOCUS → XIM_FORWARD_EVENT，中文正常入框；
+#    真正會吞字母的是 **LC_CTYPE 不是 UTF-8**（實測 LANG=C 時 Entry 只剩一個數字）。
+#    本機會話是 zh_TW.UTF-8、/etc/environment 也設了 XMODIFIERS=@im=fcitx，
+#    所以 Tk 走 XIM 是正常路徑，不該再剝。
+#    （Tk 側確實有兩處比 xterm 落後：unix/tkUnixEvent.c:399 的 XFilterEvent 用
+#     Tk 認定的焦點窗而非事件自己的視窗、以及 CreateXIC 回 NULL 時仍無條件過濾；
+#     但那是「加固」不是根因，要動 Tk 得另開 tk 自建包，不在這裡繞。）
+exec /usr/bin/pysol-real "$@"
+PYSOL_WRAPPER_EOF
+  chmod 755 "$_bin"
+  # data/pysol.desktop 的 Exec=pysol 不用改：走的還是同一個名字，只是換成腳本。
+  [ -x "$pkgdir/usr/bin/pysol-real" ] || { echo "ERROR: pysol-real 不可執行"; exit 1; }
+}

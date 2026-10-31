@@ -1,0 +1,139 @@
+# Maintainer: Capricornus007 <capricornus@outlook.com>
+# Contributor: Gustavo Alvarez <sl1pkn07@gmail.com>
+# Contributor: Levente Polyak <anthraxx[at]archlinux[dot]org>
+#
+# 為什麼本倉要有這顆（mpv-git 的依賴缺口，2026-10-28）：
+#   mpv master 的 meson.build 把 libplacebo 釘在 >= 7.387.0，而同步庫（Arch
+#   [extra]／Artix [world]）只有 7.360.1。實物證據 run 40591719745
+#   job 122497382921：
+#     Dependency libplacebo for host machine found: NO. Found 7.360.1 but need: '>=7.387.0'
+#     meson.build:30:13: ERROR: Dependency lookup for libplacebo with method 'pkg-config' failed
+#   →「云端编译」那步紅。上游已經出了 tag v7.387.0，而且 master == 該 tag
+#   （實測 refs/heads/master == refs/tags/v7.387.0 == 275f7dea），所以這顆
+#   不是「拿未發布版湊數」，是同步庫還沒跟上。
+#
+# 版號基號讀 meson.build 的 project version（Major／API／Fix 三段），不讀 tag：
+#   同一個來源就是裝出去的 /usr/lib/pkgconfig/libplacebo.pc 裡那個 Version，
+#   所以 `libplacebo>=X` 這種帶版本的依賴不會被虛報（本倉 xorg-server-git
+#   「版本號：讀 meson.build，不讀 tag 名」同一判讀，見 docs/in-tree-packages.md）。
+#
+# ⚠️ SONAME 由 apiver 決定（上游 src/meson.build: `soversion: apiver`）→ 這顆產出
+#   libplacebo.so.387，與同步庫那顆的 libplacebo.so.360 **不是同一個 ABI**：
+#   實測本機 /usr/lib/libavfilter.so 的 NEEDED 正是 libplacebo.so.360。
+#   所以照 AUR 原版保留 conflicts=('libplacebo')，兩顆不同裝是正確的，不是漏接。
+#   代價講明白：裝這顆的機器上，所有還鏈 .so.360 的包（同步庫的 ffmpeg／
+#   librewolf／opencv／qt6-webengine…）都要嘛換成本倉對應的源碼直出版，
+#   要嘛等同步庫抬版。
+pkgname=libplacebo-git
+# 佔位值：實際版號由下面 pkgver() 在構建時現算（本倉 -git 包的通例，
+# kind: aur 的回推排除讓它永遠不需要人工抬）。
+pkgver=7.387.0.r0.g275f7dea
+pkgrel=1
+pkgdesc='Reusable library for GPU-accelerated video/image rendering primitives. (GIT version)'
+url='https://code.videolan.org/videolan/libplacebo'
+arch=('x86_64')
+license=('LGPL2.1')
+depends=(
+  'gcc-libs'
+  'glibc'
+  'glslang'
+  'libdovi' 'libdovi.so'
+  'lcms2' 'liblcms2.so'
+  'shaderc' 'libshaderc_shared.so'
+  'libunwind'
+  'vulkan-icd-loader' 'libvulkan.so'
+  'xxhash' 'libxxhash.so'
+)
+makedepends=(
+  'git'
+  'meson'
+  'ninja'
+  'vulkan-headers'
+  'python-jinja'
+  'python-markupsafe'
+  'glad'      # meson 要 `python -c 'import glad'`（生成 GL loader 標頭），官方 glad 裝的是 python 模組
+)
+# provides 的版本取 pkgver 前三段 = meson 的 project version。
+# 頂層這份是給「直接 source PKGBUILD 讀元資料」的工具看的；真正進 .PKGINFO 的那份
+# 在 package() 尾段用**現算**的 pkgver 再寫一次。兩份通常一致——實測 makepkg
+# （pacman 7.1.0，2026-10-28 本機）跑完 pkgver() 之後會把新值寫回 PKGBUILD 的
+# pkgver= 行並重新 source；但那是要把正確性押在 makepkg 的內部行為上，
+# package() 裡重算一次才不依賴它。
+_pkgver="$(printf '%s' "${pkgver}" | cut -d . -f 1-3)"
+provides=(
+  "libplacebo=${_pkgver}"
+  'libplacebo.so'
+)
+conflicts=('libplacebo')
+source=(
+  'git+https://code.videolan.org/videolan/libplacebo.git'
+  'git+https://github.com/fastfloat/fast_float.git'
+)
+sha256sums=('SKIP'
+            'SKIP')
+
+pkgver() {
+  cd libplacebo || return 1
+  # 三段都從 meson.build 的 `version: '@0@.@1@.@2@'.format(...)` 區塊讀：
+  #   # Major version 的下一行是 `7,`
+  #   # API version  的下一段是字典，第一個 key 是 '387'
+  #   # Fix version  的下一行是 `0,`
+  _major="$(sed -n '/# Major version/{n;s/[^0-9]//g;p;q}' meson.build)"
+  _api="$(sed -n '/# API version/,/# Fix version/p' meson.build \
+          | grep -oE "^ *'[0-9]+" | head -n1 | tr -d " '")"
+  _fix="$(sed -n '/# Fix version/{n;s/[^0-9]//g;p;q}' meson.build)"
+  if [ -z "$_major" ] || [ -z "$_api" ] || [ -z "$_fix" ]; then
+    # 上游改了 version 區塊的寫法就報到这里。⚠️ 本倉 plan 步會把 pkgver() 的失敗
+    # 轉成「跳過本輪」——綠燈但不出包，正是 docs 禁的那類靜默失靈，所以打
+    # ::error:: 註記，讓它在工作流頁面看得見。
+    echo "::error::libplacebo-git pkgver(): 解析不到 meson.build 的 project version（major=$_major api=$_api fix=$_fix）——上游 version 區塊改寫法了，要修 pkgver()" >&2
+    return 1
+  fi
+  printf '%s.%s.%s.r%s.g%s\n' "$_major" "$_api" "$_fix" \
+    "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+  mkdir -p build
+
+  cd libplacebo
+  # fast_float 是可選的 header-only 加速（上游 src/meson.build 用
+  # fs.is_dir('../3rdparty/fast_float/include') 探；缺了只是退回內建實作）。
+  # submodule 目錄預設是空的，所以把第二條 source 克隆進來的倉指過去；
+  # protocol.file.allow 是 git 2.54 起對 file:// 子模組的預設封鎖（AUR 原版同一手法）。
+  git config submodule.3rdparty/fast_float.url "${srcdir}/fast_float"
+  git -c protocol.file.allow=always submodule update --init 3rdparty/fast_float
+}
+
+build() {
+  cd "${srcdir}/build"
+  arch-meson ../libplacebo \
+    -D vulkan=enabled \
+    -D lcms=enabled \
+    -D d3d11=disabled \
+    -D tests=true \
+    -D demos=false
+  ninja
+}
+
+check() {
+  # 不學 AUR 的 `|| true`（那是把測試紅壓成綠）。本倉 CI 在容器沒有 /dev/dri 時
+  # 一律加 --nocheck（libplacebo 的測試要真的 Vulkan/GL 裝置），所以這條只在
+  # 有裝置的環境跑，跑就老實回報。
+  ninja -C "${srcdir}/build" test
+}
+
+package() {
+  DESTDIR="${pkgdir}" ninja -C "${srcdir}/build" install
+
+  install -Dm644 libplacebo/README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+  # 上游根目錄有 LICENSE（LGPL-2.1-only）。同步庫那顆沒附（實測
+  # `pacman -Ql libplacebo | grep licenses` 回空），本倉比照 wlroots-git 老實補上，
+  # 讓 makepkg 7 的 license lint 不會一直唸這顆。
+  install -Dm644 libplacebo/LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+
+  # 見檔頭：provides 的.version 必須是這一次實際算出的 pkgver 前三段，
+  # 這樣 `libplacebo>=7.387.0` 這類帶版本的依賴才會被 pacman 判成已滿足。
+  _pkgver="$(printf '%s' "${pkgver}" | cut -d . -f 1-3)"
+  provides=("libplacebo=${_pkgver}" 'libplacebo.so')
+}

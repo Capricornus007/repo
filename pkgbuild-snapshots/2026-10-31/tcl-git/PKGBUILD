@@ -1,0 +1,114 @@
+# Maintainer: Capricornus007 <Capricornus007@users.noreply.github.com>
+# 基底：Arch 官方 packaging/tcl（Caleb Maclennan）的 configure 參數與 package() 佈局，
+# 改成吃上游 git 尖端。
+pkgname=tcl-git
+pkgver=8.6.18.r1634.g100ace3
+pkgrel=1
+pkgdesc='Powerful, easy-to-learn dynamic programming language (git, 8.6 line)'
+arch=(x86_64)
+url='https://core.tcl-lang.org/tcl/'
+license=(TCL)
+depends=(zlib)
+# -git 版要吃掉 world 的同名穩定版：provides 讓依賴方（sqlcipher 等）解析得到，
+# conflicts 讓 pacman 真的換掉它。實測兩邊依賴字串都是不帶版本的 `tcl`，
+# 所以 provides 寫 `tcl=$pkgver-$pkgrel` 就夠，不用猜對方钉的是哪個版本。
+provides=("tcl=$pkgver-$pkgrel")
+conflicts=(tcl)
+options=(staticlibs !lto)
+# ⚠️ 分支選 core-8-6-branch（8.6 maintenance 尖端），不是 master：
+# 本機實測（2026-10-12）/usr/lib/python3.14/lib-dynload/_tkinter*.so 硬鏈 libtk8.6.so、
+# 而 master 那條是 Tcl 9.0a/Tk 8.7a，庫名換成 libtcl9.x.so／libtk8.7.so，
+# 裝下去所有吃 _tkinter 的程式（pysolfc 就是）會直接 ImportError 起不來——
+# 除非連 python 一起重編，那已經超出「換 -git」的範圍。
+# 8.6 這條照樣是尖端：core-8-6-18 tag 之後還领先 1634 筆（含 2026-09/10 一大批
+# X11 修復），而且 soname 不變、是現行套件的直替。
+_BRANCH=core-8-6-branch
+source=("git+https://github.com/tcltk/tcl#branch=${_BRANCH}")
+b2sums=('SKIP')
+_dirname=tcl
+
+pkgver() {
+  # makepkg 會在 $SRCDEST、$srcdir、甚至「目錄根本不存在」三種情況下被叫到這條
+  # （librime-git 在 CI run #452 就是這樣 exit 128 的），所以先找、找不到就沿用
+  # PKGBUILD 裡寫死的 pkgver，不許讓探版變成建置失敗的原因。
+  local d v
+  for d in "$_dirname" "$SRCDEST/$_dirname" "$srcdir/$_dirname"; do
+    [[ -d $d ]] && git -C "$d" rev-parse -q --verify HEAD >/dev/null 2>&1 && break
+    d=
+  done
+  if [[ -z $d ]]; then
+    printf '%s\n' "$pkgver"
+    return 0
+  fi
+  v=$(git -C "$d" describe --tags --long --abbrev=7 --match 'core-8-6-*' HEAD 2>/dev/null |
+      sed 's/^core-//;s/\([^-]*-g\)/r\1/;s/-/./g')
+  printf '%s\n' "${v:-8.6.18.r0.g$(git -C "$d" rev-parse --short=7 HEAD)}"
+}
+
+prepare() {
+  cd "$_dirname"
+  # tdbc::sqlite3 由獨立的 sqlite-tcl 包負責（跟 Arch 一致的拆法）；
+  # 本 feed 沒有那顆包，也無人裝過，留著只會多長出沒有歸屬的檔。
+  rm -rf pkgs/sqlite3*
+}
+
+build() {
+  cd "$_dirname/unix"
+  ./configure \
+    --prefix=/usr \
+    --mandir=/usr/share/man \
+    --enable-threads \
+    --enable-64bit
+  # 上游測試前置有競態，Arch 也保守用 -j1（Tcl 本體單核 1–2 分鐘）。
+  make -j1
+}
+
+check() {
+  cd "$_dirname/unix"
+  # 跟 Arch 一樣跑整組自帶的迴歸測試（不是裝飾：上游那兩條 invocation 的依賴
+  # 由 Makefile 只覆蓋一半，平行跑會非確定性失敗，所以 -j1）。
+  make -j1 test
+}
+
+package() {
+  cd "$_dirname/unix"
+  make INSTALL_ROOT="$pkgdir" install install-private-headers
+  local _tclver=8.6
+  ln -sf tclsh${_tclver} "$pkgdir/usr/bin/tclsh"
+  ln -sf libtcl${_tclver}.so "$pkgdir/usr/lib/libtcl.so"
+  install -Dm0644 -t "$pkgdir/usr/share/licenses/$pkgname/" ../license.terms
+  install -Dm644 tcl.m4 -t "$pkgdir/usr/share/aclocal"
+  # Arch 那版寫死 libtclstub.a，實測 8.6 這條線裝出來的檔名帶版本：
+  # /tmp/build-tcl-git/pkg/tcl-git/usr/lib/libtclstub8.6.a（本輪 makepkg 就在這一步紅的）。
+  chmod 644 "$pkgdir"/usr/lib/libtclstub*.a
+
+  # 移除 buildroot 殘跡：tclConfig.sh 裡會寫死 $srcdir/... 的路徑，
+  # 下游（tk、itcl、任何 ./configure 讀 tclConfig.sh 的東西）照抄就找不到檔。
+  sed -e "s#$srcdir/$_dirname/unix#/usr/lib#" \
+      -e "s#$srcdir/$_dirname#/usr/include#" \
+      -e "s#'{/usr/lib} '#'/usr/lib/tcl$_tclver'#" \
+      -i "$pkgdir/usr/lib/tclConfig.sh"
+
+  # tdbc／itcl 的小版本會跟著上游跳（Arch 那版寫死 tdbc1.1.10／itcl4.3.2，
+  # 尖端一升級就 sed 不到、把 $srcdir 留在檔裡），改成從裝出來的目錄名反推。
+  local cfg dir v
+  for dir in "$pkgdir"/usr/lib/tdbc*/ "$pkgdir"/usr/lib/itcl*/; do
+    [[ -d $dir ]] || continue
+    v=$(basename "$dir")
+    for cfg in "$dir"/*Config.sh; do
+      [[ -f $cfg ]] || continue
+      sed -e "s#$srcdir/$_dirname/unix/pkgs/$v#/usr/lib/$v#g" \
+          -e "s#$srcdir/$_dirname/pkgs/$v/generic#/usr/include#g" \
+          -e "s#$srcdir/$_dirname/pkgs/$v/library#/usr/lib/tcl$_tclver#g" \
+          -e "s#$srcdir/$_dirname/pkgs/$v#/usr/include#g" \
+          -i "$cfg"
+    done
+  done
+
+  # 收口：裝完還留著 $srcdir 字樣就是上面哪條 sed 沒跟上，寧可現在紅。
+  if grep -rlF "$srcdir" "$pkgdir/usr/lib" --include='*Config.sh' 2>/dev/null | grep -q .; then
+    echo '==> 錯誤：還有 Config.sh 帶著 $srcdir 路徑：'
+    grep -rlF "$srcdir" "$pkgdir/usr/lib" --include='*Config.sh'
+    return 1
+  fi
+}

@@ -1,0 +1,120 @@
+# Maintainer: Capricornus007 <contact@capricornus007.com>
+#
+# ── 為什麼這顆是本倉 in-tree 而不是直接吃 AUR（2026-10-06 實測）──────────
+# 用戶要的是尖端。AUR 上確實有 pnpm-git（oech3），但它 `prepare()` 只有
+# `rm .cargo/config.toml` 然後 `cargo build --release --bin pnpm`，在當前 master
+# 上**編不過**（本倉 run #366 實測）：
+#   error: couldn't read `pnpm/crates/deps-restorer/src/cas-loader.mjs.inc`:
+#          No such file or directory (os error 2)
+#   error: could not compile `pnpm-deps-restorer` (lib)
+# 那顆 `.inc` 是上游新增的**建置期產物**：`pnpm/esm-loader/scripts/bundle-runtime.mjs`
+# 用 esbuild 把 `install-register.mjs` 打包成 `.inc`，再由 Rust `include_str!` 吃進去。
+# 實測 `git/trees/main?recursive=1` 裡 `.inc` 只有 `pnp_loader.cjs.inc` 入庫，
+# `cas-loader.mjs.inc` 不在倉裡 → cargo 自己不會生，AUR 也沒跑那一步。
+# 這也解釋了 AUR 那顆為什麼卡在 `v12.9.0.1.gbf5cdd3390`（上游早已發到 12.10.0）：
+# 它自己追不动了。
+#
+# 所以這裡把缺的那一步補上，其餘照 AUR 的可行部分（刪 cargo 源覆蓋 + cargo build）。
+#
+# 為什麼不能「照 Arch 那樣從源碼編 pnpm」：Arch 官方 pnpm 的 build() 走
+# `pnpm11/pnpm`，那是 **TypeScript 舊產品線**（實測 `git show v12.9.1:pnpm11/pnpm/
+# package.json` → version 11.28.4），pkgver 卻抄 tag → 造出「標籤 12.9.1、內容
+# 11.28.4」的包，Artix 原封不動繼承，這就是用戶那顆假 pnpm 的由來。
+_pkgname=pnpm
+pkgname="$_pkgname-git"
+pkgver=12.10.0.r1.g251582898   # 佔位值，實際由下方 pkgver() 覆寫
+pkgrel=5
+pkgdesc='Fast, disk space efficient package manager (upstream git, Rust line)'
+arch=(x86_64)
+url='https://pnpm.io'
+license=(MIT)
+depends=(node-gyp)
+optdepends=('git: for dependencies using Git URL'"'"'s')
+makedepends=(git rust nodejs npm mold)
+provides=("$_pkgname")
+conflicts=("$_pkgname")
+replaces=("$_pkgname")
+source=("$_pkgname::git+https://github.com/pnpm/pnpm.git#branch=main")
+sha256sums=('SKIP')
+
+pkgver() {
+	# 絕對路徑（CI 探測殼停在 startdir）＋ --match：倉裡同時存在
+	# `pnpr@1.2.3` 這種另一條產品的 tag，裸 describe 會被劫持（本倉第四次踩
+	# describe 病：dae-git/lastst、amd-debug-tools/debian/、npm-git/config-v11.2.0）。
+	cd "$srcdir/$_pkgname" || return 1
+	git describe --tags --long --match 'v[0-9]*' \
+		| sed -e 's/^v//' -e 's/\([^-]*-g\)/r\1/' -e 's/-/./g'
+}
+
+prepare() {
+	cd "$srcdir/$_pkgname" || return 1
+
+	# 倉內 .cargo/config.toml 有一段 `# >>> pnpm-managed cargo sources >>>`，把
+	# crates-io 整個 replace-with 到 `directory = ".pnpm/crates/crates-io"`，而那顆
+	# 目錄是由 pnpm 自己的安裝流程生成的、不在 git 裡 → 不刪掉它 cargo 找不到任何
+	# 依賴。刪掉就退回正常的 crates.io（AUR 也是這麼做的）。
+	rm -f .cargo/config.toml
+
+	# 補 AUR 漏掉的那一步：產生 deps-restorer 要 include_str! 的 esm loader bundle。
+	# 上游移除了 catalog 區塊；兩顆 bundler 依賴改由 npm latest 取得。
+	#
+	# ⚠️ 這三步是 2026-10-06 在本地逐字重跑 CI 紅的那一步測出來的，不是推上去試：
+	#   1. 只裝 esbuild 不夠。bundle-runtime.mjs 會去打包 resolver.mjs，而它
+	#      `import enhancedResolve from 'enhanced-resolve'` → 少這顆就報
+	#      `Could not resolve "enhanced-resolve"`，實測 BUNDLE_RC=1。
+	#   2. 兩顆**必須同一條 npm install**。分開跑第二條時 npm 把第一條的 esbuild
+	#      當成多餘套件拔掉（實測輸出 `added 3 packages, and removed 2 packages`）。
+	#   3. npm 12 會對 esbuild 的 postinstall 發 install-scripts 警告，但平台包
+	#      `@esbuild/linux-x64` 照裝、二進位照用 → 不需要额外放行。
+	# 兩步都過之後實測生出 `cas-loader.mjs.inc`（113K），cargo 那一步才有的吃。
+	# 2026-10-21 upstream removed the workspace `catalog:` block the old parser read.
+	# Resolve the two bundler deps from npm latest instead; this package is -git,
+	# so latest is the line we follow anyway.
+	msg "bundle 工具：esbuild/enhanced-resolve 取 npm latest"
+
+	mkdir -p "$srcdir/_bundle-tool"
+	cd "$srcdir/_bundle-tool" || return 1
+	printf '{"name":"bundle-tool","version":"1.0.0","private":true}\n' > package.json
+	npm install --no-save --no-audit --no-fund esbuild enhanced-resolve || return 1
+
+	# bundle-runtime.mjs 用 import.meta.url 定位輸入與輸出，從哪裡叫都對；而
+	# `import esbuild from 'esbuild'` 與 resolver.mjs 的 enhanced-resolve 都是
+	# 「從腳本所在目錄往上找 node_modules」→ 把裝好的那份軟鏈過去就行。
+	ln -sfn "$srcdir/_bundle-tool/node_modules" \
+		"$srcdir/$_pkgname/pnpm/esm-loader/node_modules"
+	cd "$srcdir/$_pkgname/pnpm/esm-loader" || return 1
+	node scripts/bundle-runtime.mjs || return 1
+	[ -s "$srcdir/$_pkgname/pnpm/crates/deps-restorer/src/cas-loader.mjs.inc" ] || {
+		echo "cas-loader.mjs.inc 沒生出來，cargo 一定會紅" >&2
+		return 1
+	}
+}
+
+build() {
+	cd "$srcdir/$_pkgname" || return 1
+	# ⚠️ 必須換連結器，否則 build() 必紅（run #368 實測）：
+	#   ld.lld: error: undefined symbol: aws_lc_0_45_0_SHA256 / _EVP_aead_aes_256_gcm / ...
+	#   error: could not compile `pnpm-cli` (bin "pnpm")
+	# 這倉依賴 aws-lc-sys，而 Arch 的 gcc 現在預設把 lld 當 ld 用，aws-lc 那顆
+	# 靜態庫在 ld.lld 下符號解不掉。AUR 的 pnpm-git 正是靠 mold 繞過：
+	#   export RUSTFLAGS+=" -C link-args=-fuse-ld=mold"   # needed for aws-lc ?
+	# 我上一輪看到那行註解帶問號就判定「多一個依賴、可能不需要」而沒抄，結果
+	# prepare() 我本地驗過了、build() 卻在 CI 炸——帶問號不代表沒用，實測為真。
+	export RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C link-args=-fuse-ld=mold"
+	cargo build --release --bin pnpm
+}
+
+package() {
+	cd "$srcdir/$_pkgname" || return 1
+
+	install -Dm755 target/release/pnpm -t "$pkgdir/usr/bin"
+	install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+
+	cd "$pkgdir/usr/bin" || return 1
+	# 上游只發一顆執行檔：pn 靠 argv[0] 分流，pnpx/pnx 是 `pnpm dlx` 的殼
+	# （與 AUR／Arch 的做法一致）
+	ln pnpm pn
+	printf '#!/bin/sh\nexec /usr/bin/pnpm dlx "$@"\n' > pnpx
+	chmod 755 pnpx
+	ln pnpx pnx
+}

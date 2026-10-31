@@ -1,0 +1,79 @@
+# 本倉 in-tree 維護版（用戶 2026-10-28 指定處理 lib32-glib2-git CI 紅）。
+# 來源：AUR lib32-glib2-git（維護者 shoober420，2026-10-10 用戶指定源碼直出）。
+# 與 AUR 版的唯一差異：**刪除失效的 multilib.diff**。
+# 為何能刪（2026-10-28 實證）：
+#   · AUR 那份 multilib.diff 是在舊版 gio/tests/meson.build 的 `ld -b binary` 命令
+#     插 `--oformat elf32-i386`（把 64 位元 ld 產物轉成 32 位元）。
+#   · glib 2.90.x（main）重構了 gio/tests/meson.build：`test_resources_binary` 改成
+#     `cc.cmd_array() + ['-Wl,...,-r,-Wl,-b,binary','-nostdlib',...]`，編譯命令從
+#     裸 `ld` 改成 `gcc -m32 -Wl,-b,binary`。
+#   · `gcc -m32` 會自動傳 `-m elf_i386` 給 ld → 輸出已是 ELF 32-bit。
+#     本機實證：`gcc -m32 -Wl,-z,noexecstack -r -Wl,-b,binary -nostdlib x -o x.o`
+#     → `x.o: ELF 32-bit LSB relocatable, Intel i386`。
+#   · patch 上下文（舊 598 行那段 `-b binary`）在新版已不存在 → `git apply -3` 紅
+#     （run 40720876950 實測 `Applied patch to 'gio/tests/meson.build' with conflicts`）。
+#   所以新版已不需要 --oformat，patch 整份可刪，不需改寫。
+# ⚠️ 本檔要列進 build-packages.yml 的 in-tree 攔截清單與「更新校验和并回推」排除清單。
+
+# Maintainer:  Vincent Grande <shoober420@gmail.com>
+# Contributor: Ionut Biru <ibiru@archlinux.org>
+# Contributor: Pierre Schmitz <pierre@archlinux.de>
+# Contributor: Mikko Seppälä <t-r-a-y@mbnet.fi>
+pkgname=lib32-glib2-git
+pkgver=2.64.0+250+gf733eff2e
+pkgrel=1
+pkgdesc="Low level core library (32-bit)"
+url="https://wiki.gnome.org/Projects/GLib"
+license=(LGPL2.1)
+arch=(x86_64)
+depends=(lib32-pcre2 lib32-libffi lib32-util-linux lib32-zlib glib2)
+makedepends=(gettext shared-mime-info python lib32-libelf git util-linux
+             meson lib32-dbus)
+#checkdepends=(desktop-file-utils lib32-glib2)
+source=("git+https://gitlab.gnome.org/GNOME/glib.git"
+        gio-querymodules-32.hook)
+sha256sums=('SKIP'
+            'SKIP')
+
+pkgver() {
+  cd glib
+  git describe --tags | sed 's/-/+/g'
+}
+
+# prepare() 已刪除：AUR 版在這兒 `git apply -3 ../multilib.diff`，而 multilib.diff
+# 已失效（見檔頭註解），新版 glib 用 cc.cmd_array() 含 -m32 自動產 32 位元 ELF。
+# meson 不需要 prepare()，故整段刪除。
+
+build() {
+  export CC="gcc -m32 -mstackrealign"
+  export CXX="g++ -m32 -mstackrealign"
+  export PKG_CONFIG="i686-pc-linux-gnu-pkg-config"
+
+  CFLAGS+=" -DG_DISABLE_CAST_CHECKS"
+  arch-meson glib build \
+    -D selinux=disabled \
+    --libdir=/usr/lib32
+  meson compile -C build
+}
+
+#check() {
+  # Spurious wakeups in g_cond_wait_until, only on lib32
+#  meson test -C build --no-suite flaky --no-suite slow --print-errorlogs || :
+#}
+
+package() {
+  depends+=(libmount.so)
+  conflicts=(lib32-glib2)
+  provides+=(lib32-glib2 libgio-2.0.so libglib-2.0.so libgmodule-2.0.so libgobject-2.0.so
+             libgthread-2.0.so)
+
+  DESTDIR="$pkgdir" meson install -C build
+
+  rm -r "$pkgdir"/usr/{share,include}
+  find "$pkgdir/usr/bin" -type f -not -name gio-querymodules -printf 'Removing %P\n' -delete
+  mv "$pkgdir"/usr/bin/gio-querymodules{,-32}
+
+  install -Dt "$pkgdir/usr/share/libalpm/hooks" -m644 *.hook
+}
+
+# vim:set sw=2 et:

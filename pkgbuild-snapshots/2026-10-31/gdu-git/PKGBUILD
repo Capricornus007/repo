@@ -1,0 +1,60 @@
+# 用戶 2026-10-06 指令「所有跟 go 有關的項目全去最尖端」：Artix 官方那顆是用
+# Go 1.27.1（最新**正式**版）編的穩定版，這顆改吃上游分支尖端、並由本倉 CI 用
+# 自有 go-git（1.28-devel）建置。取代穩定版靠 provides/conflicts/replaces 三件套
+# （與 lmdb-git、qt6ct-git 同一手法），用戶 `pacman -Syu` 即平順換檔。
+# ⚠️ 這是 in-tree 包：必須同時列進 build-packages.yml 的 in-tree 攔截分支，
+#    否則通用規則見 '-git$' 會去 clone AUR（這幾個 AUR 全查無對應 -git 包）。
+
+_name=gdu
+pkgname=$_name-git
+pkgver=5.38.0.r0.g0000000
+pkgrel=1
+pkgdesc="Fast disk usage analyzer"
+arch=('x86_64')
+url="https://github.com/dundee/gdu"
+license=('MIT')
+depends=('glibc')
+makedepends=('go' 'git')
+provides=('gdu')
+conflicts=('gdu')
+replaces=('gdu')
+source=("git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd $_name
+  git describe --tags --long | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd $_name
+  local _ver _DATE
+  _ver=$(git describe --tags | sed 's/^v//')
+  _DATE=$(git log -1 --pretty=%ct)   # 用 commit 日期，讓建置可重現
+  GOPATH="${srcdir}" go build \
+    -buildmode=pie \
+    -trimpath \
+    -mod=readonly \
+    -modcacherw \
+    -pgo=default.pgo \
+    -ldflags "-compressdwarf=false -linkmode external -extldflags \"${LDFLAGS}\" \
+              -X 'github.com/dundee/gdu/v5/build.Version=${_ver}' \
+              -X 'github.com/dundee/gdu/v5/build.User=${PACKAGER}' \
+              -X 'github.com/dundee/gdu/v5/build.Time=${_DATE}'" \
+    -o dist/gdu \
+    github.com/dundee/gdu/v5/cmd/gdu
+}
+
+check() {
+  cd $_name
+  # 兩個 skip 是 Arch 官方配方挑過的：一個要真實掛載表、一個會碰忽略清單，
+  # 在容器裡必紅，與代碼好壞無關。
+  go test -skip 'TestAnalyzePathWithIgnoring|TestDefaultMountTableHasFilesystemIDs' ./...
+}
+
+package() {
+  cd $_name
+  install -Dm755 dist/gdu "$pkgdir/usr/bin/gdu"
+  install -Dm644 gdu.1 -t "$pkgdir/usr/share/man/man1"
+  install -Dm644 LICENSE.md "$pkgdir/usr/share/licenses/gdu/LICENSE"
+}

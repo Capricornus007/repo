@@ -1,0 +1,13 @@
+diff --git a/lib/SPIRV/SPIRVWriter.cpp b/lib/SPIRV/SPIRVWriter.cpp
+index 66fb68d..7f82547 100644
+--- a/lib/SPIRV/SPIRVWriter.cpp
++++ b/lib/SPIRV/SPIRVWriter.cpp
+@@ -8083,7 +8083,7 @@ bool runSpirvWriterPasses(Module *M, std::ostream *OS, std::string &ErrMsg,
+   FunctionAnalysisManager FAM;
+   ModuleAnalysisManager MAM;
+ 
+-  PassBuilder PB;
++  PassBuilder PB(M->getContext());
+   PB.registerModuleAnalyses(MAM);
+   PB.registerCGSCCAnalyses(CGAM);
+   PB.registerFunctionAnalyses(FAM);
