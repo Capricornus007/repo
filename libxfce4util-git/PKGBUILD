@@ -12,7 +12,9 @@
 _pkgname=libxfce4util
 pkgname="${_pkgname}-git"
 pkgver=4.17.2.r22.ge2f2a6e
-pkgrel=1
+pkgrel=2  # 2→ 為了讓 merged-usr --sbindir 修正真的重新出貨：pkgver() 只蓋 pkgver、
+          #    不動 pkgrel，若維持 1 則資產名與既有 r3.gf12d6d6-1 相同 → 被 plan
+          #    「已在 release 裡」永久跳過（契約 1），壞包永遠換不掉。抬 2 才有新檔名。
 pkgdesc="Basic utility non-GUI functions for Xfce"
 arch=(i686 x86_64)
 url=http://gitlab.xfce.org/xfce/${_pkgname}/
@@ -32,8 +34,12 @@ pkgver() {
 
 build() {
   # 4.21 已從 autotools 搬到 meson（upstream master 已無 autogen.sh）。
+  # merged-usr 必修：meson 預設 sbindir=/usr/sbin，會把 xfce4-kiosk-query 裝進
+  # /usr/sbin 並登記該目錄 → 在 /usr/sbin→bin 符號鏈接（filesystem 持有）的 Artix
+  # 上與 filesystem 撞檔（run 41344447837 xfconf-git 實測卡死）。釘回 /usr/bin。
   meson setup "${_pkgname}" build \
-    --prefix=/usr --libdir=lib --buildtype=plain --auto-features=enabled \
+    --prefix=/usr --bindir=/usr/bin --sbindir=/usr/bin --libdir=lib \
+    --buildtype=plain --auto-features=enabled \
     -Dgtk-doc=false \
     -Dvala=disabled
   meson compile -C build
