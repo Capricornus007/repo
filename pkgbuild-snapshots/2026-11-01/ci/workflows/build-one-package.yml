@@ -1,0 +1,21 @@
+name: Build Selected Package(s)
+
+# 只重建指定套件：用 workflow_dispatch 傳入與排程相同的 JSON 矩陣，
+# 不跑 130+ 包的整輪建置。例：
+#   gh workflow run build-one-package.yml -f packages='[{"key":"u1s1-bin","repo_name":"u1s1-bin","variant":"none"}]'
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: '套件矩陣（JSON 陣列，元素含 key / repo_name / variant）'
+        required: true
+        type: string
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-packages.yml
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      packages: ${{ inputs.packages }}
