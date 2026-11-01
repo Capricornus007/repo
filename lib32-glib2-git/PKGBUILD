@@ -40,6 +40,13 @@ pkgver() {
   git describe --tags | sed 's/-/+/g'
 }
 
+# 2026-11-01：glib 2.90 把 subprojects/gvdb 拆成 git submodule，makepkg 不會自動
+# init → meson 報「Subproject gvdb is buildable: NO / git submodule failed to init」。
+# 重新加回 prepare()，只 init gvdb 這一個子模塊。
+prepare() {
+  git -C "$srcdir/glib" submodule update --init --depth 1 subprojects/gvdb
+}
+
 # prepare() 已刪除：AUR 版在這兒 `git apply -3 ../multilib.diff`，而 multilib.diff
 # 已失效（見檔頭註解），新版 glib 用 cc.cmd_array() 含 -m32 自動產 32 位元 ELF。
 # meson 不需要 prepare()，故整段刪除。
