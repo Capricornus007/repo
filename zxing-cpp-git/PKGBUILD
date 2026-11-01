@@ -16,6 +16,13 @@ conflicts=("$_pkgname")
 source=("$_pkgname"::"git+$url.git")
 sha256sums=('SKIP')
 
+prepare() {
+  # zint 是 git submodule；makepkg 只 clone 主倉，不 init 子模組，
+  # 編到 core/src/libzint/*.c 會找不到 ../../../zint/backend/*。
+  cd "$_pkgname"
+  git submodule update --init --recursive
+}
+
 pkgver() {
   cd "$_pkgname"
   git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'

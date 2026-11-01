@@ -29,6 +29,7 @@ build() {
   meson setup zbar build \
     --prefix=/usr --buildtype=plain --auto-features=enabled \
     -Dgtk=gtk3 \
+    -Dgraphicsmagick=disabled \
     -Dqt=false \
     -Dpython=no \
     -Djava=disabled \
