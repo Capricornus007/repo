@@ -110,7 +110,18 @@ package_xorg-server-git() {
            dbus libgl xf86-input-libinput nettle
            libxdmcp sh glibc libxau libtirpc
            libpciaccess libdrm libxshmfence libxcvt)
-  provides=('X-ABI-VIDEODRV_VERSION=25.2' 'X-ABI-XINPUT_VERSION=24.4'
+  # ⚠️ ABI 宣告必須是**上游真值**，不能沿用穩定版的 25.2／24.4（2026-11-01 查明）。
+  # 實查 git master 的 hw/xfree86/common/xf86Module.h：
+  #   ABI_VIDEODRV_VERSION   = SET_ABI_VERSION(27, 0)   （第 77 行）
+  #   ABI_XINPUT_VERSION     = SET_ABI_VERSION(25, 0)   （第 78 行）
+  #   ABI_EXTENSION_VERSION  = SET_ABI_VERSION(10, 0)   （第 79 行）
+  # 舊宣告 25.2／24.4 是從 xorg-server 21.1.x 抄來的假值：那等於對 pacman 說
+  # 「本機模組 ABI 仍是 25.2」，於是所有照 25.2 建的驅動（nvidia 615、
+  # xf86-input-libinput、modesetting、vesa）會被當成相容而留著，實際開機時
+  # Xorg 一律拒載（"module ABI major version (25) doesn't match the server's (27)"）
+  # → 沒影像是小事，**鍵盤滑鼠全滅**才是代價。改對之後這條依賴會直接顯性紅，
+  # 這是我們要的結果；要裝這顆得先等驅動端跟上 27.0。
+  provides=('X-ABI-VIDEODRV_VERSION=27.0' 'X-ABI-XINPUT_VERSION=25.0'
             'X-ABI-EXTENSION_VERSION=10.0' 'x-server' "xorg-server=${pkgver}")
   conflicts=('xorg-server' 'nvidia-utils<=331.20' 'glamor-egl' 'xf86-video-modesetting')
   replaces=('glamor-egl' 'xf86-video-modesetting')
