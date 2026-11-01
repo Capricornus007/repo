@@ -118,11 +118,28 @@ package_xorg-server-git() {
   # 舊宣告 25.2／24.4 是從 xorg-server 21.1.x 抄來的假值：那等於對 pacman 說
   # 「本機模組 ABI 仍是 25.2」，於是所有照 25.2 建的驅動（nvidia 615、
   # xf86-input-libinput、modesetting、vesa）會被當成相容而留著，實際開機時
-  # Xorg 一律拒載（"module ABI major version (25) doesn't match the server's (27)"）
-  # → 沒影像是小事，**鍵盤滑鼠全滅**才是代價。改對之後這條依賴會直接顯性紅，
-  # 這是我們要的結果；要裝這顆得先等驅動端跟上 27.0。
-  provides=('X-ABI-VIDEODRV_VERSION=27.0' 'X-ABI-XINPUT_VERSION=25.0'
-            'X-ABI-EXTENSION_VERSION=10.0' 'x-server' "xorg-server=${pkgver}")
+  # Xorg 一律拒載（"module ABI major version (25) doesn't match the server's (28)"）
+  # → 沒影像是小事，**鍵盤滑鼠全滅**才是代價。
+  #
+  # 2026-11-01 對 master HEAD eae2c2107（gitlab xorg/xserver）的
+  # hw/xfree86/common/xf86Module.h 逐行讀過的實值：
+  #   ABI_VIDEODRV_VERSION   = SET_ABI_VERSION(28, 0)   ← ecb6644fd 2026-08-09 抬的
+  #   ABI_XINPUT_VERSION     = SET_ABI_VERSION(26, 0)
+  #   ABI_EXTENSION_VERSION  = SET_ABI_VERSION(11, 0)   ← bbe30db5c 同日抬的
+  # （先前那筆「27.0／25.0／10.0」也是抄的、不是讀的，一樣是錯的，這裡一併改對。）
+  #
+  # 為什麼不能靠 IgnoreABI 或改戳記混過去：21.1.24→master 之間動到
+  # include/scrnintstr.h 的提交只有三筆，其中 3cb3024fe「dix: Remove
+  # pScratchPixmap」把 `PixmapPtr pScratchPixmap;` 這個**欄位整個刪掉**（結構體
+  # 中間少一個指標 → 它後面所有欄位的偏移全部位移 8 bytes）。二進位驅動是照
+  # 舊偏移去取 pScreen-> 的東西，標籤對不對根本不重要，IgnoreABI 只關掉比對、
+  # 不會把欄位還回來。另兩筆（6ee937b3b 只改註解、7e7d1f027 只改 typedef 名字
+  # Curser→Cursor、欄位名與函式指標型別都不變）不影響佈局。
+  # → 真要「新舊通吃」，可行方向是在新 server 裡於同一偏移補一個 padding 欄位，
+  #   把 25.2 的佈局還原；但符號層（nvidia_drv.so 未定義符號 vs 新 server 導出）
+  #   還沒驗，得先建出這顆再拿 Xvfb 離線載一次才算數。
+  provides=('X-ABI-VIDEODRV_VERSION=28.0' 'X-ABI-XINPUT_VERSION=26.0'
+            'X-ABI-EXTENSION_VERSION=11.0' 'x-server' "xorg-server=${pkgver}")
   conflicts=('xorg-server' 'nvidia-utils<=331.20' 'glamor-egl' 'xf86-video-modesetting')
   replaces=('glamor-egl' 'xf86-video-modesetting')
 
