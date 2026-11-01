@@ -32,9 +32,18 @@ inputs:
     required: false
     default: v2.14.0
   xtools:
-    description: 換成的 golang.org/x/tools 版本（< v0.51.0 讀不了 go tip 的 export data）
+    description: 換成的 golang.org/x/tools 版本（讀得了 go tip export data 的最小條件見下方註解）
     required: false
-    default: v0.51.0
+    # 2026-11-01：預設從 v0.51.0 改成 master 偽版本。理由（實測，不是推）：
+    #   · go tip 現在寫的 iexport 是 **v4**；x/tools 各版 internal/gcimporter/iimport.go 裡
+    #     認得的上限是 v0.52.0 → iexportVersionCurrent=3（讀 v4 直接
+    #     「unstable iexport format version 4, just rebuild compiler and std library」）、
+    #     v0.52.1-0.20261030190145-0f433775b36d → 加進 iexportVersionRationalFloats=4（讀得到）。
+    #   · v0.52.0（2026-10-10）是**最新正式版**，也就是「發出來的版本全都太舊」，
+    #     只能指 master 偽版本；等 x/tools 發 v0.53.0 再換回 tag。
+    #   · 本地驗證：拿這版重組 golangci-lint v2.15.0，`go version -m` 確認 replace 有吃到，
+    #     再對 go tip（go1.28-devel_9dd31ba8ff）的 std 實跑一次探針 → 0 issues、無 typecheck 錯。
+    default: v0.52.1-0.20261030190145-0f433775b36d
   goos:
     description: 要分析的 GOOS（留空＝不預先建 std）
     required: false
