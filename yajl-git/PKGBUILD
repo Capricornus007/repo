@@ -20,6 +20,16 @@ source=("git+https://github.com/lloyd/yajl.git")
 sha256sums=('SKIP')
 
 
+prepare() {
+  # CMake 4.x 不再允許 GET_TARGET_PROPERTY(... LOCATION)；這兩處只是把
+  # 剛編好的工具複製到 binDir，用 $<TARGET_FILE:...> 取代即可。
+  cd "yajl"
+  sed -i 's|GET_TARGET_PROPERTY(binPath json_reformat LOCATION)|SET(binPath "$<TARGET_FILE:json_reformat>")|' \
+    reformatter/CMakeLists.txt
+  sed -i 's|GET_TARGET_PROPERTY(binPath json_verify LOCATION)|SET(binPath "$<TARGET_FILE:json_verify>")|' \
+    verify/CMakeLists.txt
+}
+
 pkgver() {
   cd "yajl"
 

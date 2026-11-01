@@ -10,7 +10,7 @@ url="https://github.com/zxing-cpp/zxing-cpp"
 license=('Apache-2.0')
 arch=('x86_64')
 depends=(gcc-libs)
-makedepends=(cmake git ninja stb)
+makedepends=(cmake git ninja)
 provides=("$_pkgname=${pkgver%%.r*}")
 conflicts=("$_pkgname")
 source=("$_pkgname"::"git+$url.git")
@@ -28,7 +28,7 @@ build() {
     -G Ninja \
     -DCMAKE_BUILD_TYPE=None \
     -DCMAKE_INSTALL_PREFIX=/usr \
-    -DZXING_DEPENDENCIES=LOCAL \
+    -DZXING_DEPENDENCIES=GITHUB \
     -DZXING_EXAMPLES=OFF \
     -DZXING_UNIT_TESTS=OFF \
     -Wno-dev
