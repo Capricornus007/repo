@@ -78,7 +78,7 @@ package_colord-git() {
 
 	cd "$pkgdir"
 
-	_pick sane usr/lib/colord-sane
+	_pick sane usr/libexec/colord-sane
 	_pick sane usr/lib/colord-plugins/libcolord_sensor_sane.so
 
 	_pick lib usr/include/colord-1/colord{,.h}
