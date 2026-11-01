@@ -1299,7 +1299,8 @@
     "key": "capstone-git",
     "repo_name": "capstone-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "chrony-git",
@@ -1311,7 +1312,8 @@
     "key": "chrpath-git",
     "repo_name": "chrpath-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "cinnamon-desktop-git",
