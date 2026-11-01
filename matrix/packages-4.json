@@ -1,11 +1,5 @@
 [
   {
-    "key": "xfce4-fsguard-plugin-git",
-    "repo_name": "xfce4-fsguard-plugin-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "xfce4-netload-plugin-git",
     "repo_name": "xfce4-netload-plugin-git",
     "variant": "none",
@@ -18,26 +12,8 @@
     "kind": "aur"
   },
   {
-    "key": "xfce4-panel-git",
-    "repo_name": "xfce4-panel-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "xfce4-power-manager-git",
-    "repo_name": "xfce4-power-manager-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "xfce4-pulseaudio-plugin-git",
     "repo_name": "xfce4-pulseaudio-plugin-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "xfce4-screensaver-git",
-    "repo_name": "xfce4-screensaver-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -48,32 +24,8 @@
     "kind": "aur"
   },
   {
-    "key": "xfce4-session-git",
-    "repo_name": "xfce4-session-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "xfce4-settings-git",
-    "repo_name": "xfce4-settings-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "xfce4-smartbookmark-plugin-git",
-    "repo_name": "xfce4-smartbookmark-plugin-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "xfce4-systemload-plugin-git",
     "repo_name": "xfce4-systemload-plugin-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "xfce4-taskmanager-git",
-    "repo_name": "xfce4-taskmanager-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -90,24 +42,6 @@
     "kind": "aur"
   },
   {
-    "key": "xfce4-whiskermenu-plugin-git",
-    "repo_name": "xfce4-whiskermenu-plugin-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "xfconf-git",
-    "repo_name": "xfconf-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "xfdesktop-git",
-    "repo_name": "xfdesktop-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "xfwm4-git",
     "repo_name": "xfwm4-git",
     "variant": "none",
@@ -116,36 +50,6 @@
   {
     "key": "xkeyboard-config-git",
     "repo_name": "xkeyboard-config-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "xorg-server-common-git",
-    "repo_name": "xorg-server-common-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "xorg-server-devel-git",
-    "repo_name": "xorg-server-devel-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "xorg-server-xephyr-git",
-    "repo_name": "xorg-server-xephyr-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "xorg-server-xnest-git",
-    "repo_name": "xorg-server-xnest-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "xorg-server-xvfb-git",
-    "repo_name": "xorg-server-xvfb-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -278,12 +182,6 @@
   {
     "key": "zxing-cpp-git",
     "repo_name": "zxing-cpp-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "ly-git",
-    "repo_name": "ly-git",
     "variant": "none",
     "kind": "aur"
   },
