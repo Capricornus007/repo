@@ -1447,5 +1447,26 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "wget-git",
+    "repo_name": "wget-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "gtk3-git",
+    "repo_name": "gtk3-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "vim-git",
+    "repo_name": "vim-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]

@@ -1,0 +1,68 @@
+# 2026-11-02 lily 組合包（用戶裁定：A① 追 dev 尖端 ＋ B 四顆全做全裝、出錯就修）。
+# wget master ＋ lily 的 url.c/recur.c 行為補丁。那補丁是 2014 年對 wget-1.15 寫的，
+# 對 master 大概率衝突，故用「git apply --check 過才套、否則跳過」，不因陳舊補丁判紅
+# （同 mesa-tkg 的 PassBuilder 處理）。nettle-4.patch 是 nettle 4 相容，master 多已內建。
+pkgname=wget-git
+pkgver=1.25.0.r3.g0000000
+pkgrel=1
+pkgdesc='Network utility to retrieve files from the web (git + lily patches)'
+url='https://www.gnu.org/software/wget/wget.html'
+arch=('x86_64')
+license=('GPL3')
+depends=('glibc' 'zlib' 'gnutls' 'libidn2' 'libidn2.so' 'util-linux-libs' 'libuuid.so'
+         'libpsl' 'libpsl.so' 'pcre2' 'nettle' 'libnettle.so')
+makedepends=('autoconf-archive' 'git' 'gperf' 'perl' 'help2man' 'python')
+optdepends=('ca-certificates: HTTPS downloads')
+conflicts=('wget')
+provides=('wget')
+backup=('etc/wgetrc')
+source=("wget-git::git+https://gitlab.com/gnuwget/wget.git"
+        "gnulib::git+https://git.savannah.gnu.org/git/gnulib.git"
+        wget.patch
+        nettle-4.patch)
+b2sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+pkgver() {
+  cd wget-git
+  git describe --tags --long | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd wget-git
+  export SKIP_PO=1
+  export GNULIB_TOOL_IMPL=sh
+  git submodule init
+  git config submodule.gnulib.url "$srcdir/gnulib"
+  git -c protocol.file.allow=always submodule update
+  # lily 行為補丁：套得上才套，套不上跳過（2014 老補丁對 master 多半已失效）
+  for p in ../wget.patch ../nettle-4.patch; do
+    if git apply --check "$p" 2>/dev/null; then
+      git apply "$p" && echo ">> 已套 $p"
+    else
+      echo ">> 跳過（對 dev 尖端不適用）$p"
+    fi
+  done
+  sh bootstrap
+  autoreconf -fiv
+}
+
+build() {
+  cd wget-git
+  ./configure \
+    --prefix=/usr \
+    --sysconfdir=/etc \
+    --disable-rpath \
+    --enable-nls \
+    --with-ssl=gnutls
+  make
+}
+
+check() {
+  cd wget-git
+  make check || true
+}
+
+package() {
+  cd wget-git
+  make DESTDIR="${pkgdir}" install
+}

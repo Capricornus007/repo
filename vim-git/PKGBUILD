@@ -1,0 +1,185 @@
+# 2026-11-02 lily 組合包（用戶裁定 A① 追 dev 尖端＋B 全做全裝）。源=lilydjwg/vim 的 all 分支
+# （即 vim 上游＋lily 自帶補丁，取代 archlinuxcn 構建機的 git://localhost/vim 鏡像）。
+# split 出 gvim-git／vim-runtime-git／vim-git。provides/conflicts vim、不 replaces。
+# Maintainer: lilydjwg <lilydjwg@gmail.com>
+
+pkgbase=vim-lily
+pkgname=(gvim-git vim-runtime-git vim-git)
+pkgver=9.2.1254
+_versiondir="vim$(echo $pkgver | awk -F. '{print $1$2}')"
+pkgrel=1
+arch=('i686' 'x86_64')
+license=('VIM')
+url="http://www.vim.org"
+makedepends=('gpm' 'gtk3' 'python' 'ruby' 'gettext' 'wayland'
+             'pkg-config' 'sed' 'luajit' 'git' 'tar' 'desktop-file-utils' 'libxt')
+source=('vimdoc.hook'
+        "vim-repo::git+https://github.com/lilydjwg/vim.git#branch=all")
+sha1sums=('adc4c82b6c4097944e5a767270a772721455eb8c'
+          'SKIP')
+options=('debug' 'strip')
+
+pkgver() {
+  cd vim-repo
+  echo $(awk '/^#define VIM_VERSION_(MAJOR|MINOR)\>/ {print $3}' src/version.h | tr '\n' '.')$(sed -n '/ included_patches\[\]/,+3p' src/version.c | sed '/[^,]$/d;s/\s*\|,//g')
+}
+
+build() {
+  cd vim-repo
+
+  # define the place for the global (g)vimrc file (set to /etc/vimrc)
+  sed -i 's|^.*\(#define SYS_.*VIMRC_FILE.*"\) .*$|\1|' \
+    src/feature.h
+  sed -i 's|^.*\(#define VIMRC_FILE.*"\) .*$|\1|' \
+    src/feature.h
+
+  local vim_options='--without-x --with-wayland=no --disable-canberra --disable-gui --disable-xsmp --disable-pixman'
+  local gvim_options='--enable-xsmp --enable-gui=gtk3'
+
+  for name in vim gvim; do
+    local _dir="${srcdir}"/$pkgbase
+    rm -rf $_dir
+    mkdir $_dir
+    git archive all | tar x -C ../$pkgbase
+
+    pushd $_dir
+    STRIP=true ./configure \
+      --prefix=/usr \
+      --localstatedir=/var/lib/vim \
+      --mandir=/usr/share/man \
+      --enable-acl \
+      --enable-cscope \
+      --enable-luainterp=dynamic \
+      --enable-multibyte \
+      --enable-python3interp=dynamic \
+      --enable-rubyinterp=dynamic \
+      --enable-terminal \
+      --with-features=huge \
+      --with-luajit \
+      --enable-socketserver \
+      --disable-icon-cache-update --disable-desktop-database-update \
+      $(eval "echo \$${name}_options") --enable-fail-if-missing \
+      --with-compiledby=百合仙子 --with-modified-by=百合仙子
+
+    msg2 "Building $name-lily..."
+    make
+
+    sleep 1
+    msg2 "Rebuilding $name-lily..."
+    sed -i 's/compiled_sys.*/compiled_sys = (char_u *)"次美好的百合森林";/' src/auto/pathdef.c
+    make
+
+    popd
+    mv $_dir "${srcdir}"/$name-build
+  done
+
+}
+
+package_vim-git() {
+  pkgdesc='Vi Improved, a highly configurable, improved version of the vi text editor with additional scripting support'
+  depends=('gpm' 'vim-runtime-lily' 'acl')
+  optdepends=('luajit' 'ruby' 'python')
+  conflicts=('vim' 'gvim' 'vim-minimal')
+  provides=(vim xxd vim-minimal vim-plugin-runtime)
+
+  rm -f "${srcdir}"/$pkgbase
+  ln -sr "${srcdir}"/vim-build "${srcdir}"/$pkgbase
+  cd "${srcdir}"/vim-build
+  make -j1 VIMRCLOC=/etc DESTDIR="${pkgdir}" install
+
+  # provided by (n)vi in core
+  rm ${pkgdir}/usr/bin/{ex,view}
+
+  # delete some manpages
+  find ${pkgdir}/usr/share/man -type d -name 'man1' 2>/dev/null | \
+    while read _mandir; do
+    cd ${_mandir}
+    rm -f ex.1 view.1 # provided by (n)vi
+  done
+
+  # Runtime provided by runtime package
+  rm -r "${pkgdir}"/usr/share/vim
+
+  # license
+  install -Dm644 "${srcdir}"/vim-repo/runtime/doc/uganda.txt \
+    "${pkgdir}"/usr/share/licenses/${pkgname}/license.txt
+}
+
+package_gvim-git() {
+  pkgdesc='Vi Improved, a highly configurable, improved version of the vi text editor (with advanced features, such as a GUI) with additional scripting support'
+  depends=('gpm' 'gtk3' 'vim-runtime-lily' 'desktop-file-utils' 'libxt' 'wayland' 'libwayland-client.so')
+  optdepends=('luajit' 'ruby' 'python')
+  conflicts=('vim' 'gvim' 'vim-minimal')
+  provides=(vim xxd vim-minimal vim-plugin-runtime)
+
+  rm -f "${srcdir}"/$pkgbase
+  ln -sr "${srcdir}"/gvim-build "${srcdir}"/$pkgbase
+  cd "${srcdir}"/gvim-build
+  make -j1 VIMRCLOC=/etc DESTDIR="${pkgdir}" install
+
+  # provided by (n)vi in core
+  rm ${pkgdir}/usr/bin/{ex,view}
+
+  mv ${pkgdir}/usr/bin/{vim,gvim}
+  ln -s gvim ${pkgdir}/usr/bin/vim
+
+  # delete some manpages
+  find ${pkgdir}/usr/share/man -type d -name 'man1' 2>/dev/null | \
+    while read _mandir; do
+    cd ${_mandir}
+    rm -f ex.1 view.1 # provided by (n)vi
+  done
+
+  # Move the runtime for later packaging
+  mv "${pkgdir}"/usr/share/vim "${srcdir}"/runtime-install
+
+  # freedesktop links
+  install -Dm644 "${srcdir}"/vim-repo/runtime/vim.desktop "${pkgdir}"/usr/share/applications/vim.desktop
+  install -Dm644 "${srcdir}"/vim-repo/runtime/gvim.desktop "${pkgdir}"/usr/share/applications/gvim.desktop
+  install -Dm644 "${srcdir}"/vim-repo/runtime/vim48x48.png "${pkgdir}"/usr/share/pixmaps/gvim.png
+
+  # license
+  install -Dm644 "${srcdir}"/vim-repo/runtime/doc/uganda.txt \
+    "${pkgdir}"/usr/share/licenses/${pkgname}/license.txt
+}
+
+package_vim-runtime-git() {
+  if [ ! -d "${srcdir}"/runtime-install ]; then
+    package_gvim-lily
+    rm -rf "$pkgdir"
+  fi
+
+  # set variables late
+  pkgdesc='Runtime for vim and gvim'
+  arch=('any')
+  conflicts=('vim-runtime')
+  provides=("vim-runtime=${pkgver}-${pkgrel}")
+  # reset
+  depends=()
+  optdepends=()
+
+  # Install the runtime split from gvim
+  install -dm755 "${pkgdir}"/usr/share
+  mv "${srcdir}"/runtime-install "${pkgdir}"/usr/share/vim
+
+  # Don't forget logtalk.dict
+  install -Dm644 "${srcdir}"/gvim-build/runtime/ftplugin/logtalk.dict \
+    "${pkgdir}"/usr/share/vim/${_versiondir}/ftplugin/logtalk.dict
+
+  # fix FS#17216
+  sed -i 's|messages,/var|messages,/var/log/messages.log,/var|' \
+    "${pkgdir}"/usr/share/vim/${_versiondir}/filetype.vim
+
+  # license
+  install -dm755 "${pkgdir}"/usr/share/licenses/vim-runtime
+  ln -s /usr/share/vim/${_versiondir}/doc/uganda.txt \
+    "${pkgdir}"/usr/share/licenses/vim-runtime/license.txt
+
+  # The official package puts it in vim-runtime so we have to do the same to avoid conflicts
+  install -Dm644 "${srcdir}"/vimdoc.hook "${pkgdir}"/usr/share/libalpm/hooks/vimdoc.hook
+
+  # why there are two versions of them??
+  cp -lf "${pkgdir}"/usr/share/vim/vim*/lang/zh_CN.UTF-8/LC_MESSAGES/vim.mo "${pkgdir}"/usr/share/vim/vim*/lang/zh_CN/LC_MESSAGES/vim.mo
+}
+
+# vim:set sw=2 sts=2 et ft=sh:
