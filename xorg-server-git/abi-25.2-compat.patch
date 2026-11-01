@@ -1,0 +1,54 @@
+diff --git a/hw/xfree86/common/xf86Module.h b/hw/xfree86/common/xf86Module.h
+index 94bba8d..714900a 100644
+--- a/hw/xfree86/common/xf86Module.h
++++ b/hw/xfree86/common/xf86Module.h
+@@ -74,9 +74,9 @@
+  * mask is 0xFFFF0000.
+  */
+ #define ABI_ANSIC_VERSION	SET_ABI_VERSION(0, 4)
+-#define ABI_VIDEODRV_VERSION	SET_ABI_VERSION(28, 0)
+-#define ABI_XINPUT_VERSION	SET_ABI_VERSION(26, 0)
+-#define ABI_EXTENSION_VERSION	SET_ABI_VERSION(11, 0)
++#define ABI_VIDEODRV_VERSION	SET_ABI_VERSION(25, 2)
++#define ABI_XINPUT_VERSION	SET_ABI_VERSION(24, 4)
++#define ABI_EXTENSION_VERSION	SET_ABI_VERSION(10, 0)
+ 
+ #define MODINFOSTRING1	0xef23fdc5
+ #define MODINFOSTRING2	0x10dc023a
+diff --git a/include/inputstr.h b/include/inputstr.h
+index 6efc165..f219d93 100644
+--- a/include/inputstr.h
++++ b/include/inputstr.h
+@@ -627,10 +627,13 @@ typedef struct _DeviceIntRec {
+ 
+     /* XTest related master device id */
+     int xtest_master_id;
+-    DeviceSendEventsProc sendEventsProc;
+ 
+     struct _SyncCounter *idle_counter;
+ 
++    /* 下面三個是 24.4 之後新增的（aaa8d5a95 / d038d2c08）。sendEventsProc 原本
++     * 插在 idle_counter **前面**，會把 idle_counter 往後推 8 bytes；挪到全部
++     * 舊欄位之後，24.4 時代的偏移就完整保留，新欄位對舊驅動本來就是不可見的。 */
++    DeviceSendEventsProc sendEventsProc;
+     Bool ignoreXkbActionsBehaviors; /* TRUE if keys don't trigger behaviors and actions */
+     Bool hasDdxKeymap;              /* TRUE if clients cannot modify the keymap */
+ } DeviceIntRec;
+diff --git a/include/scrnintstr.h b/include/scrnintstr.h
+index 7bfbec5..01f59e3 100644
+--- a/include/scrnintstr.h
++++ b/include/scrnintstr.h
+@@ -604,6 +604,13 @@ typedef struct _Screen {
+     SetScreenPixmapProcPtr SetScreenPixmap;
+     NameWindowPixmapProcPtr NameWindowPixmap;
+ 
++    /* ABI-25.2 相容槽位：3cb3024fe「dix: Remove pScratchPixmap」把原本的
++     * `PixmapPtr pScratchPixmap;` 從結構體中間刪掉，於是它後面所有欄位偏移
++     * 位移 8 bytes，照 25.2 編的二進位驅動（nvidia 615、modesetting、vesa、
++     * libinput）讀 pScreen-> 會全部錯位。這裡補一個同名規格的指標佔回那個
++     * 位置，伺服器自己不再使用它，纯粹是佈局。 */
++    PixmapPtr abi252_pad_pScratchPixmap;
++
+     unsigned int totalPixmapSize;
+ 
+     MarkWindowProcPtr MarkWindow;

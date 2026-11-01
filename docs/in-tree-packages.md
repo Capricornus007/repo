@@ -1260,9 +1260,62 @@ doas 一律清洗環境（實測 `DIFFPROG=meld doas /usr/bin/printenv DIFFPROG`
 順帶免疫 tag 命名與分支改名。
 
 ### 退場
-本機跑的是 Artix 穩定版 xorg-server；這顆只是「尖端選項」，**不是**拿來日常替換的。
-真要裝之前先確認顯卡驅動的 ABI：`provides` 的 `X-ABI-VIDEODRV_VERSION`／`X-ABI-XINPUT_VERSION`
-會隨 master 變，驅動對不上就得一起升。
+本機跑的是 Artix 穩定版 xorg-server。2026-11-01 起這顆**變成可用的日常選項**：
+它帶 `abi-25.2-compat.patch`，把 master 的結構體佈局還原成 21.1.24 的樣子，
+所以本機照舊 ABI 編的驅動不用重編就能載（見下一節）。
+
+### 2026-11-01：abi-25.2-compat.patch —— 「新舊通吃」吃的是 ABI，不是版本並存
+
+使用者原話：「有無可能我说的新舊通喫說的是 abi？誰他媽的讓你新舊版本軟件包並存了？」
+所以這條的目標是：**一顆 server 同時載得進 25.2／24.4 標籤的二進位模組**。
+
+**上游真值（逐行讀 master HEAD `eae2c2107` 的 `hw/xfree86/common/xf86Module.h`）**
+
+| | 本機現装 `xorg-server-tearfree 21.1.24-1.1` | master 自己宣告 | 套補丁後 |
+|---|---|---|---|
+| VIDEODRV | 25.2 | **28.0**（`ecb6644fd` 2026-08-09） | 25.2 |
+| XINPUT | 24.4 | **26.0** | 24.4 |
+| EXTENSION | 10.0 | **11.0**（`bbe30db5c` 同日） | 10.0 |
+
+（我 10-31 那筆 `13f7572` 寫的 27.0／25.0／10.0 也是抄的、不是讀的，一併錯。
+教訓：`provides` 這種要给 pacman 判相容性的數字，必須從源碼讀，不能沿用。）
+
+**為什麼 `IgnoreABI` 或改戳記都不夠**：二進位驅動是照**舊偏移**去取
+`pScreen->`／`pInfo->` 的內容。標籤對不上只是被 server 拒載，把拒載關掉，
+錯位的欄位照樣讀錯。所以要做的是把佈局還原，不是把檢查關掉。
+
+**逐檔 diff 的結果（21.1.24 → master，只看會移動欄位偏移的改動）**
+
+查的檔案：`scrnintstr.h` `windowstr.h` `pixmapstr.h` `regionstr.h` `dixstruct.h`
+`inputstr.h` `input.h` `xf86Xinput.h` `xf86str.h` `colormap.h` `pixmap.h`
+`extension.h` `extensionstr.h`。**只有兩處真的動到偏移**：
+
+1. `3cb3024fe`「dix: Remove pScratchPixmap」把 `struct _Screen` 中間的
+   `PixmapPtr pScratchPixmap;` 整個刪掉 → 它後面每個欄位往前挪 8 bytes。
+   → 補丁在同一位置補一個 `PixmapPtr abi252_pad_pScratchPixmap;` 佔位，
+     server 自己不用它，纯粹是把洞留著。
+2. `aaa8d5a95` 把 `DeviceSendEventsProc sendEventsProc;` 插在
+   `struct _DeviceIntRec` 的 `idle_counter` **前面** → `idle_counter` 挪 8 bytes。
+   → 把它移到所有舊欄位之後（同結構裡另外兩個新 `Bool` 本來就在尾端，不用動）。
+
+其餘 diff 到的都不是佈局：`CurserConfinedToProcPtr → CursorConfinedToProcPtr`
+是 typedef 改名（欄位名與型別都不變）、`colormap.h` 掉的是 `#define` 與一個
+typedef（`_ColormapRec` 搬到 `screenint.h`）、`pixmap.h` 是函式宣告增減。
+**`xf86str.h`（`ScrnInfoRec`，顯示驅動最依賴的那個結構）成員級增刪為 0**，
+這是整個方案能成立的關鍵事實。
+
+**符號層也實測過，不是推測**：`nvidia_drv.so` 的未定義符號 393 個，其中 236 個
+由 X server 提供；拿 feed 建出來的 master 版 `usr/lib/Xorg` 跑
+`nm -D --defined-only` 對照，**缺 0 個**。也就是斷點只在佈局。
+
+**補丁怎麼套**：`prepare()` 用 `git apply --3way`（source 是滾動 git，純文字
+patch 只要上游在那幾行附近動過就會整批失敗；--3way 走 blob 級合併）。
+而且**套完要用看的驗證**——`--3way` 對「已經套過」也正常返回 0，所以補丁
+標記欄位與改過的 ABI 宣告各查一次 `grep`，缺任何一個就直接紅。
+
+**還沒做的一次驗證**：拿这颗 server 在**非 :0 的 VT**上載 `nvidia_drv.so`
+（或先 `xorg-server-xvfb-git` 走一遍），確認模組真的載得進來再裝機。
+不在使用者現用的桌面裡試，也不拿重開機賭。
 
 ## CI 容器掛的第三方 Arch 倉（2026-10-21，使用者「直接把我 pacman 配置挖過去」）
 
