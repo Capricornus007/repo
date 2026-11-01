@@ -132,7 +132,6 @@ jobs:
       packages: |
         [
           {"key": "linuxqq", "repo_name": "linuxqq", "variant": "none"},
-          {"key": "wechat-bin", "repo_name": "wechat-bin", "variant": "none"},
           {"key": "workbuddy-international-bin", "repo_name": "workbuddy-international-bin", "variant": "none"},
           {"key": "android-apktool-bin", "repo_name": "android-apktool-bin", "variant": "none"},
           {"key": "android-sdk-cmake-3.22", "repo_name": "android-sdk-cmake-3.22", "variant": "none"},
@@ -171,7 +170,6 @@ jobs:
           {"key": "pysolfc-git", "repo_name": "pysolfc-git", "variant": "none"},
           {"key": "android-ndk-27", "repo_name": "android-ndk-27", "variant": "none"},
           {"key": "android-ndk-30", "repo_name": "android-ndk-30", "variant": "none"},
-          {"key": "u1s1-bin", "repo_name": "u1s1-bin", "variant": "none"},
           {"key": "codex-desktop-git", "repo_name": "codex-desktop-git", "variant": "none"},
           {"key": "element-desktop-nightly-bin", "repo_name": "element-desktop-nightly-bin", "variant": "none"},
           {"key": "serein-git", "repo_name": "serein-git", "variant": "none"},

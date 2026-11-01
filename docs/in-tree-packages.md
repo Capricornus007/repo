@@ -460,8 +460,8 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
         `pacman -Qi nvidia-utils-beta` 的 Required By 已含 `nvidia-utils-openrc`。
       - 本機 `lib32-nvidia-utils 615.78.08-1`（Artix lib32，packager ndowens）depends
         `nvidia-utils=615.78.08`——**等號**，靠我們的 provides 滿足。
-      - `wlroots-git`（本倉 kind=wayland）depends `opengl-driver`，
-        `nvidia-utils-beta` 也 provides 它 → 多個提供者，合法，不破洞。
+      - `wlroots-git`（**AUR**，本倉 2026-11-01 已刪掉 in-tree 那份）depends
+        `opengl-driver`，`nvidia-utils-beta` 也 provides 它 → 多個提供者，合法，不破洞。
       - `nvidia-settings-beta` depends `nvidia-utils-beta>=615.78.08`、
         `opencl-nvidia-beta` 是 `nvidia-utils-beta` 的 optdepends
         → 三顆同 pkgbase、同一次 build 產出，不會出現「發了半組」。
