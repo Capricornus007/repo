@@ -2000,3 +2000,62 @@ omnirush-cli（原名 omnirush；2026-10-28 使用者裁定改名，理由是「
 - **觸發**：
   `gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[{"key":"omnirush","repo_name":"omnirush","variant":"none"}]'`
 
+
+---
+
+## libjpeg-turbo-git／lib32-libjpeg-turbo-git（用戶 2026-11-01 點名，本輪新增）
+
+用戶原話：「給我把 `lib32-libjpeg-turbo-git` 加去自動構建倉庫」。查實這不是一顆
+AUR 包，是**用戶機上的本地建**（實測 `~/.cache/yay/lib32-libjpeg-turbo-git/`，
+`pacman -Qi` 的 Packager 為 Unknown Packager、Build Date 2026-10-30 13:14），
+AUR 端 RPC `type=info&arg[]=lib32-libjpeg-turbo-git` 回 `resultcount=0`。
+它必須進倉的硬理由：本倉 `lib32-gst-plugins-base-libs-git` 的 depends 就寫著
+`lib32-libjpeg-turbo`（實測 `pacman -Si`），而 Artix [lib32] 的穩定版停在 3.2.0-1、
+64 位元那側機器上已是 3.2.1.r1 尖端——32/64 不同版這事只有「兩顆都由本倉現算」
+才可能長期對齊。
+
+四接點全部已接：
+  1. `build-git-packages.yml` 矩陣：`libjpeg-turbo-git`（預設 kind）＋
+     `lib32-libjpeg-turbo-git`（`kind: multilib`，緊排在 `lib32-glib2` 之後）。
+  2. `build-packages.yml`「拉取对应的套件仓库」in-tree 大 alternation 尾端加兩條
+     （`|libjpeg-turbo-git|lib32-libjpeg-turbo-git`）。不攔的話 64 位元那顆會被
+     通用規則「`-git$` → clone AUR」搶走拿到缺 `libturbojpeg.so=0-64` 的舊配方，
+     32 位元那顆會去 clone 一棵**不存在的 AUR 倉**直接紅。
+  3. 「更新校驗和並回推」的 giant if：32 位元那顆靠既有的 `matrix.kind != 'multilib'`
+     天然命中；64 位元那顆是預設 kind，**必須**另外寫 `matrix.repo_name !=
+     'libjpeg-turbo-git'`（已加）。兩顆的版號都由 `pkgver()` 從上游 HEAD 現算，
+     讓 updpkgsums 去碰純 git 源沒有意義（mesa-tkg 的撕檔教訓）。
+  4. 本檔。
+
+與基底（AUR 64 位元版／用戶本地 32 位元版）的差異，逐條都查過實物：
+  · **64 位元補 `libturbojpeg.so=0-64`**：實查 `pacman -Si libjpeg-turbo` 的
+    [world] 3.2.0-2 與 [world-goblins] 3.2.1-1 兩份都提供
+    `libjpeg.so=8-64`＋`libturbojpeg.so=0-64`，AUR 那顆只有前一個。本機現況
+    （`expac '%D'` 全量掃）是 10 顆吃 `libjpeg.so=8-64`、0 顆吃 turbojpeg，
+    所以這條是防呆、不是救火。
+  · **64 位元把 `install -Dm644 src/jpegint.h "$pkgdir/usr/include"` 改成 `-t`**：
+    原本能對只是因為 cmake 已建出該目錄、GNU install 才把末參當目錄；哪天上游
+    改裝路徑就會把 `jpegint.h` 裝成**一個名叫 /usr/include 的檔案**。
+  · **32 位元拿掉裸 `libjpeg.so`／`libturbojpeg.so` 宣告**，改用官方那對帶架構
+    後綴的 `libjpeg.so=8-32`＋`libturbojpeg.so=0-32`（實查 [lib32] 3.2.0-1 與
+    [multilib] 3.2.1-1 三份一致）。裸名是跨架構假宣告：誰要求不帶後綴的
+    `libjpeg.so`，pacman 會認為這顆 32 位元包也能滿足。本地版另外漏了
+    `libturbojpeg.so=0-32`。
+  · **32 位元 `rm -r "$pkgdir"/usr/{include,share,bin}` 換成
+    `find "$pkgdir/usr" -mindepth 1 -maxdepth 1 ! -name lib32 -exec rm -r {} +`**：
+    同一意圖（32 位元只發 `/usr/lib32`，頭檔／CLI／文件歸 64 位元那顆，兩邊都發
+    會檔衝突），但上游哪天不再裝 `bin/` 就不會變成 `No such file` 紅掉。
+  · **32 位元砍掉 `lib32-expat` 這個 makedepends**：實查上游 `CMakeLists.txt`
+    （2100 行）零個 expat 引用，是從別的包抄來的殭屍依賴。
+  · **不加官方的 `depends=(libjpeg-turbo=$pkgver)` 鎖**：兩顆的 pkgver 同輪 CI
+    由同一個上游 repo 現算、必然同值，鎖了不會更對；反而在「64 位元失敗、
+    32 位元成功」時把成功那顆變成倉裡裝不起來。本倉的一貫取捨：不製造跨 job
+    順序耦合。
+
+⚠️ 32 位元那顆的 `check()` 會實跑 ctest（kind: multilib 不在 `--nocheck` 名單裡），
+產物是 i386 測試二進位、跑在 x86-64 runner 上。若 CI 內核關掉 ia32 執行支援，
+這一步會紅——那時的正確處置是**查實原因再決定**要不要給這顆單獨 `--nocheck`，
+不准直接拿 `kind: aur` 混過去（那會連 `--skipchecksums` 一起吞掉）。
+
+- **觸發**：
+  `gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[{"key":"lib32-libjpeg-turbo-git","repo_name":"lib32-libjpeg-turbo-git","variant":"none","kind":"multilib"}]'`

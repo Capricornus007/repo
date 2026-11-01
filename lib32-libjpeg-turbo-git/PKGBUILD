@@ -1,0 +1,100 @@
+# 本倉 in-tree 維護版（用戶 2026-11-01 指令：「給我把 lib32-libjpeg-turbo-git 加去
+# 自動構建倉庫」）。
+# 來源：用戶機上那顆 2026-10-30 用 yay 本地建的 lib32-libjpeg-turbo-git
+#       （`~/.cache/yay/lib32-libjpeg-turbo-git/PKGBUILD`；**AUR 上沒有這顆**，
+#        實測 RPC `type=info&arg[]=lib32-libjpeg-turbo-git` → resultcount=0，
+#        所以它本來就是自己寫的配方，只能走本倉目錄版）。
+# 為什麼現在非進倉不可：本機 `lib32-gst-plugins-base-libs-git`（本倉 1.29.2 尖端）
+# 的 depends 就寫著 `lib32-libjpeg-turbo`；這顆一直只存在於 ~/.cache/yay，
+# 換機器／清快取就重建不出來，而且 Artix [lib32] 的穩定版 3.2.0-1 會跟 64 位元
+# 那側的 3.2.1.r1 尖端錯開（32/64 同 SONAME 才算對，見下）。
+#
+# 與用戶本地版的三處差異（逐條有實測依據，不是風格問題）：
+#   1. **provides 拿掉裸 `libjpeg.so`／`libturbojpeg.so`，改成官方那對帶架構後綴的
+#      `libjpeg.so=8-32`＋`libturbojpeg.so=0-32`**。實查 `pacman -Si lib32-libjpeg-turbo`
+#      （[lib32] 3.2.0-1 與 [multilib] 3.2.1-1 三份一致）提供的就是這兩個。
+#      裸名是**跨架構的假宣告**：誰要求 `libjpeg.so`（不帶後綴），pacman 會認為
+#      這顆 32 位元包也能滿足 → 64 位元依賴可以被 32 位元庫頂掉。
+#      本地版還漏了 `libturbojpeg.so=0-32`，那是官方有、我們該補的第二個。
+#   2. `rm -r "$pkgdir"/usr/{include,share,bin}` 換成 `find … ! -name lib32 -delete`。
+#      原本那行假設三個目錄一定都在；上游哪天不再裝 bin/ 就是 `No such file`
+#      直接紅。改法保留同一意圖（32 位元只發 /usr/lib32，頭檔與執行檔歸 64 位元
+#      那顆，重複發會檔衝突），但**缺哪個都不會紅**。
+#   3. makedepends 拿掉 `lib32-expat`：libjpeg-turbo 的 CMake 不找 expat
+#      （實查上游 `CMakeLists.txt` 無 expat 引用），那是從別的包抄來的殭屍依賴。
+#
+# ⚠️ **不加** `depends=(libjpeg-turbo=$pkgver)`（官方穩定版有這一条，用來鎖 32/64 同版）。
+# 理由：本倉兩顆的 pkgver 都由同一個上游 repo 的 HEAD 現算，同輪 CI 一定同值，
+# 鎖了不會更對；反而在「64 位元那顆構建失敗、32 位元成功」時把成功那顆變成
+# **倉裡裝不起來**（依賴解析不到）。這是本倉一贯的取舍：不製造跨 job 的順序耦合。
+#
+# ⚠️ 版號由 pkgver() 從上游 HEAD 現算 ⇒ 本檔要列進「更新校驗和並回推」的排除清單；
+#    kind 是 multilib，該步的 giant if 已有 `matrix.kind != 'multilib'` 子句，天然命中。
+
+pkgname=lib32-libjpeg-turbo-git
+_srcdir=libjpeg-turbo        # git clone 出來的目錄名，不能用 ${pkgname#lib32-}
+pkgver=3.2.1.r1.gfa224ebe    # 會被 pkgver() 覆蓋
+pkgrel=1
+pkgdesc="JPEG image codec with accelerated baseline compression and decompression (32-bit, git)"
+url="https://libjpeg-turbo.org/"
+license=(
+  BSD-3-Clause
+  IJG
+)
+arch=(x86_64)
+depends=(lib32-glibc)
+makedepends=(
+  cmake
+  git
+  nasm
+  ninja
+)
+provides=(
+  "lib32-libjpeg-turbo=$pkgver"
+  'libjpeg.so=8-32'
+  'libturbojpeg.so=0-32'
+)
+conflicts=(lib32-libjpeg-turbo)
+source=("git+https://github.com/libjpeg-turbo/libjpeg-turbo.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_srcdir"
+
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  local cmake_options=(
+    -B build
+    -D CMAKE_INSTALL_PREFIX=/usr
+    -D CMAKE_INSTALL_LIBDIR=/usr/lib32
+    -D CMAKE_BUILD_TYPE=None
+    -D ENABLE_STATIC=OFF
+    -D WITH_JAVA=OFF
+    -D WITH_JPEG8=ON
+    -G Ninja
+    -S "$_srcdir"
+    -W no-dev
+  )
+
+  export CC="gcc -m32"
+  export CXX="g++ -m32"
+  export PKG_CONFIG="i686-pc-linux-gnu-pkg-config"
+
+  cmake "${cmake_options[@]}"
+  cmake --build build
+}
+
+check() {
+  ctest --test-dir build --output-on-failure --stop-on-failure -j"$(nproc)"
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+
+  # 32 位元只發 /usr/lib32；頭檔、CLI、文件都歸 64 位元那顆（兩邊都發會檔衝突）。
+  find "$pkgdir/usr" -mindepth 1 -maxdepth 1 ! -name lib32 -exec rm -r {} +
+
+  install -Dm644 "$_srcdir"/{LICENSE.md,README.ijg} -t "$pkgdir/usr/share/licenses/$pkgname/"
+}

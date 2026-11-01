@@ -118,6 +118,17 @@ jobs:
       #   updpkgsums 回推沒有意義）、自動掛 junlin03-aur 源，並讓 check 走 CI 的
       #   無 GPU → --nocheck 常態；case 首命中即中，走本倉 libplacebo-git/ 目錄，
       #   不會去 clone AUR 那份停在 7.350.0 的舊配方。
+      # · libjpeg-turbo-git／lib32-libjpeg-turbo-git（2026-11-01，用戶點名「把
+      #   lib32-libjpeg-turbo-git 加去自動構建倉庫」）：32 位元那顆 AUR 上不存在
+      #   （RPC type=info resultcount=0），機器上那顆是 2026-10-30 用 yay 從
+      #   ~/.cache/yay 本地建的——本倉 `lib32-gst-plugins-base-libs-git` 的 depends
+      #   就要吃它，一直只活在快取目錄等於隨時會裝不出來。兩顆都走本倉目錄版，
+      #   與 AUR/官方版的差異（provides 補 `libturbojpeg.so=0-64`、拿掉跨架構的裸
+      #   `libjpeg.so` 宣告、rm 改成缺目錄不紅的寫法、砍掉殭屍 makedepends）逐條
+      #   寫在兩份 PKGBUILD 檔頭與 docs/in-tree-packages.md。
+      #   32 位元那顆 kind: multilib（借用該分支的 [multilib] 啟用＋lib32 底層鏈預裝，
+      #   並天然命中回推那步的 matrix.kind != 'multilib' 排除）；64 位元那顆走預設
+      #   kind，所以必須另外列進回推那步的名稱排除清單。
       packages: |
         [
           {"key": "linuxqq", "repo_name": "linuxqq", "variant": "none"},
@@ -310,6 +321,8 @@ jobs:
           {"key": "gstreamer-git", "repo_name": "gstreamer-git", "variant": "none"},
           {"key": "lib32-gstreamer-git", "repo_name": "lib32-gstreamer-git", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
           {"key": "lib32-glib2", "repo_name": "lib32-glib2", "variant": "none", "kind": "multilib"},
+          {"key": "libjpeg-turbo-git", "repo_name": "libjpeg-turbo-git", "variant": "none"},
+          {"key": "lib32-libjpeg-turbo-git", "repo_name": "lib32-libjpeg-turbo-git", "variant": "none", "kind": "multilib"},
           {"key": "python-cu2qu", "repo_name": "python-cu2qu", "variant": "none", "kind": "aur"},
           {"key": "python-ufonormalizer", "repo_name": "python-ufonormalizer", "variant": "none", "kind": "aur"},
           {"key": "afdko-git", "repo_name": "afdko-git", "variant": "none", "kind": "aur"},
