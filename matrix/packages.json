@@ -490,7 +490,8 @@
   {
     "key": "python-cu2qu",
     "repo_name": "python-cu2qu",
-    "variant": "none"
+    "variant": "none",
+    "kind": "aur"
   },
   {
     "key": "i3blocks-git",
@@ -1062,12 +1063,6 @@
     "repo_name": "lib32-libjpeg-turbo-git",
     "variant": "none",
     "kind": "multilib"
-  },
-  {
-    "key": "python-cu2qu",
-    "repo_name": "python-cu2qu",
-    "variant": "none",
-    "kind": "aur"
   },
   {
     "key": "python-ufonormalizer",
