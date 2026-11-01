@@ -316,5 +316,11 @@
     "repo_name": "mkinitcpio-firmware",
     "variant": "none",
     "kind": "aur"
+  },
+  {
+    "key": "pysolfc-music",
+    "repo_name": "pysolfc-music",
+    "variant": "none",
+    "kind": "aur"
   }
 ]
