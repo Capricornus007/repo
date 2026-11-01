@@ -3,7 +3,7 @@
 # split 出 gvim-git／vim-runtime-git／vim-git。provides/conflicts vim、不 replaces。
 # Maintainer: lilydjwg <lilydjwg@gmail.com>
 
-pkgbase=vim-lily
+pkgbase=vim-git
 pkgname=(gvim-git vim-runtime-git vim-git)
 pkgver=9.2.1254
 _versiondir="vim$(echo $pkgver | awk -F. '{print $1$2}')"
@@ -61,11 +61,11 @@ build() {
       $(eval "echo \$${name}_options") --enable-fail-if-missing \
       --with-compiledby=百合仙子 --with-modified-by=百合仙子
 
-    msg2 "Building $name-lily..."
+    msg2 "Building $name..."
     make
 
     sleep 1
-    msg2 "Rebuilding $name-lily..."
+    msg2 "Rebuilding $name..."
     sed -i 's/compiled_sys.*/compiled_sys = (char_u *)"次美好的百合森林";/' src/auto/pathdef.c
     make
 
@@ -77,7 +77,7 @@ build() {
 
 package_vim-git() {
   pkgdesc='Vi Improved, a highly configurable, improved version of the vi text editor with additional scripting support'
-  depends=('gpm' 'vim-runtime-lily' 'acl')
+  depends=('gpm' 'vim-runtime-git' 'acl')
   optdepends=('luajit' 'ruby' 'python')
   conflicts=('vim' 'gvim' 'vim-minimal')
   provides=(vim xxd vim-minimal vim-plugin-runtime)
@@ -107,7 +107,7 @@ package_vim-git() {
 
 package_gvim-git() {
   pkgdesc='Vi Improved, a highly configurable, improved version of the vi text editor (with advanced features, such as a GUI) with additional scripting support'
-  depends=('gpm' 'gtk3' 'vim-runtime-lily' 'desktop-file-utils' 'libxt' 'wayland' 'libwayland-client.so')
+  depends=('gpm' 'gtk3' 'vim-runtime-git' 'desktop-file-utils' 'libxt' 'wayland' 'libwayland-client.so')
   optdepends=('luajit' 'ruby' 'python')
   conflicts=('vim' 'gvim' 'vim-minimal')
   provides=(vim xxd vim-minimal vim-plugin-runtime)
@@ -145,7 +145,7 @@ package_gvim-git() {
 
 package_vim-runtime-git() {
   if [ ! -d "${srcdir}"/runtime-install ]; then
-    package_gvim-lily
+    package_gvim-git
     rm -rf "$pkgdir"
   fi
 

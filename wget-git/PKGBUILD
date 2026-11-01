@@ -18,9 +18,8 @@ provides=('wget')
 backup=('etc/wgetrc')
 source=("wget-git::git+https://gitlab.com/gnuwget/wget.git"
         "gnulib::git+https://git.savannah.gnu.org/git/gnulib.git"
-        wget.patch
-        nettle-4.patch)
-b2sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+        wget.patch)
+b2sums=('SKIP' 'SKIP' 'SKIP')
 
 pkgver() {
   cd wget-git
@@ -34,14 +33,10 @@ prepare() {
   git submodule init
   git config submodule.gnulib.url "$srcdir/gnulib"
   git -c protocol.file.allow=always submodule update
-  # lily 行為補丁：套得上才套，套不上跳過（2014 老補丁對 master 多半已失效）
-  for p in ../wget.patch ../nettle-4.patch; do
-    if git apply --check "$p" 2>/dev/null; then
-      git apply "$p" && echo ">> 已套 $p"
-    else
-      echo ">> 跳過（對 dev 尖端不適用）$p"
-    fi
-  done
+  # lily 行為補丁（url.c 空 query 處理、recur.c page-requisites 跨主機）：實測
+  # 對当前 master 仍套得上 → 硬套。nettle-4.patch 已過時（master 的 http-ntlm.c
+  # 早含 #if NETTLE_VERSION_MAJOR >= 4），故不帶。
+  git apply ../wget.patch
   sh bootstrap
   autoreconf -fiv
 }
