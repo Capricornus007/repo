@@ -286,5 +286,35 @@
     "repo_name": "zxing-cpp-git",
     "variant": "none",
     "kind": "aur"
+  },
+  {
+    "key": "ly-git",
+    "repo_name": "ly-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "yay-git",
+    "repo_name": "yay-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "rustup-git",
+    "repo_name": "rustup-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "paccache-hook",
+    "repo_name": "paccache-hook",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "mkinitcpio-firmware",
+    "repo_name": "mkinitcpio-firmware",
+    "variant": "none",
+    "kind": "aur"
   }
 ]
