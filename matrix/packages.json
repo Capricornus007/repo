@@ -1185,5 +1185,725 @@
     "variant": "none",
     "kind": "artix",
     "image": "artixlinux/artixlinux:base-devel"
+  },
+  {
+    "key": "a52dec-git",
+    "repo_name": "a52dec-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "abseil-cpp-git",
+    "repo_name": "abseil-cpp-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "accountsservice-git",
+    "repo_name": "accountsservice-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "ada-git",
+    "repo_name": "ada-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "adwaita-cursors-git",
+    "repo_name": "adwaita-cursors-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "adwaita-icon-theme-git",
+    "repo_name": "adwaita-icon-theme-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "alsa-plugins-git",
+    "repo_name": "alsa-plugins-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "alsa-ucm-conf-git",
+    "repo_name": "alsa-ucm-conf-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "alsa-utils-git",
+    "repo_name": "alsa-utils-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "android-udev-git",
+    "repo_name": "android-udev-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "aribb24-git",
+    "repo_name": "aribb24-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "asar-git",
+    "repo_name": "asar-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "asciidoc-git",
+    "repo_name": "asciidoc-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "at-spi2-core-git",
+    "repo_name": "at-spi2-core-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "avisynthplus-git",
+    "repo_name": "avisynthplus-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "bind-git",
+    "repo_name": "bind-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "binwalk-git",
+    "repo_name": "binwalk-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "blas-git",
+    "repo_name": "blas-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "blueman-git",
+    "repo_name": "blueman-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "bluez-git",
+    "repo_name": "bluez-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "brightnessctl-git",
+    "repo_name": "brightnessctl-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "btop-git",
+    "repo_name": "btop-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "bubblewrap-git",
+    "repo_name": "bubblewrap-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "bun-git",
+    "repo_name": "bun-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "bzip3-git",
+    "repo_name": "bzip3-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "c-ares-git",
+    "repo_name": "c-ares-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "cairo-git",
+    "repo_name": "cairo-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "capnproto-git",
+    "repo_name": "capnproto-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "capstone-git",
+    "repo_name": "capstone-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "chrony-git",
+    "repo_name": "chrony-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "chrpath-git",
+    "repo_name": "chrpath-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "cinnamon-desktop-git",
+    "repo_name": "cinnamon-desktop-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "cjson-git",
+    "repo_name": "cjson-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "codec2-git",
+    "repo_name": "codec2-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "colord-git",
+    "repo_name": "colord-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "cpio-git",
+    "repo_name": "cpio-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "cppdap-git",
+    "repo_name": "cppdap-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "cpuinfo-git",
+    "repo_name": "cpuinfo-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "crypto++-git",
+    "repo_name": "crypto++-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "cryptsetup-git",
+    "repo_name": "cryptsetup-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "cups-git",
+    "repo_name": "cups-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "cups-filters-git",
+    "repo_name": "cups-filters-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "cython-git",
+    "repo_name": "cython-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "davs2-git",
+    "repo_name": "davs2-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "debugedit-git",
+    "repo_name": "debugedit-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "deno-git",
+    "repo_name": "deno-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "desktop-file-utils-git",
+    "repo_name": "desktop-file-utils-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "dex-git",
+    "repo_name": "dex-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "diffutils-git",
+    "repo_name": "diffutils-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "dkms-git",
+    "repo_name": "dkms-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "dmenu-git",
+    "repo_name": "dmenu-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "dosfstools-git",
+    "repo_name": "dosfstools-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "double-conversion-git",
+    "repo_name": "double-conversion-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "dunst-git",
+    "repo_name": "dunst-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "e2fsprogs-git",
+    "repo_name": "e2fsprogs-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "efivar-git",
+    "repo_name": "efivar-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "egl-wayland-git",
+    "repo_name": "egl-wayland-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "eglexternalplatform-git",
+    "repo_name": "eglexternalplatform-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "elementary-icon-theme-git",
+    "repo_name": "elementary-icon-theme-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "elfutils-git",
+    "repo_name": "elfutils-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "ell-git",
+    "repo_name": "ell-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "ethtool-git",
+    "repo_name": "ethtool-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "exiv2-git",
+    "repo_name": "exiv2-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "exo-git",
+    "repo_name": "exo-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "expat-git",
+    "repo_name": "expat-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "faac-git",
+    "repo_name": "faac-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "faad2-git",
+    "repo_name": "faad2-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "fakechroot-git",
+    "repo_name": "fakechroot-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "fakeroot-git",
+    "repo_name": "fakeroot-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "file-git",
+    "repo_name": "file-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "file-roller-git",
+    "repo_name": "file-roller-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "findutils-git",
+    "repo_name": "findutils-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "flac-git",
+    "repo_name": "flac-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "flex-git",
+    "repo_name": "flex-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "fluidsynth-git",
+    "repo_name": "fluidsynth-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "fmt-git",
+    "repo_name": "fmt-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "fontconfig-git",
+    "repo_name": "fontconfig-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "freetype2-git",
+    "repo_name": "freetype2-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "frei0r-plugins-git",
+    "repo_name": "frei0r-plugins-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "fribidi-git",
+    "repo_name": "fribidi-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "fstrm-git",
+    "repo_name": "fstrm-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "fuse3-git",
+    "repo_name": "fuse3-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "fwupd-git",
+    "repo_name": "fwupd-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gamemode-git",
+    "repo_name": "gamemode-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "garcon-git",
+    "repo_name": "garcon-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gc-git",
+    "repo_name": "gc-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gcr-git",
+    "repo_name": "gcr-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gcr-4-git",
+    "repo_name": "gcr-4-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gdb-git",
+    "repo_name": "gdb-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gdb-common-git",
+    "repo_name": "gdb-common-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gdbm-git",
+    "repo_name": "gdbm-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gdk-pixbuf2-git",
+    "repo_name": "gdk-pixbuf2-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gettext-git",
+    "repo_name": "gettext-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gflags-git",
+    "repo_name": "gflags-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "ghostscript-git",
+    "repo_name": "ghostscript-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "giflib-git",
+    "repo_name": "giflib-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gjs-git",
+    "repo_name": "gjs-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "glew-git",
+    "repo_name": "glew-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "glfw-git",
+    "repo_name": "glfw-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "glow-git",
+    "repo_name": "glow-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "glslang-git",
+    "repo_name": "glslang-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "glu-git",
+    "repo_name": "glu-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gnome-font-viewer-git",
+    "repo_name": "gnome-font-viewer-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gnome-keyring-git",
+    "repo_name": "gnome-keyring-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gnupg-git",
+    "repo_name": "gnupg-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gnutls-git",
+    "repo_name": "gnutls-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "google-glog-git",
+    "repo_name": "google-glog-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "goverlay-git",
+    "repo_name": "goverlay-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gperftools-git",
+    "repo_name": "gperftools-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gpgme-git",
+    "repo_name": "gpgme-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gpm-git",
+    "repo_name": "gpm-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "graphene-git",
+    "repo_name": "graphene-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "graphite-git",
+    "repo_name": "graphite-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "groff-git",
+    "repo_name": "groff-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gsettings-desktop-schemas-git",
+    "repo_name": "gsettings-desktop-schemas-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gsettings-system-schemas-git",
+    "repo_name": "gsettings-system-schemas-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gst-plugin-pipewire-git",
+    "repo_name": "gst-plugin-pipewire-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gtk-layer-shell-git",
+    "repo_name": "gtk-layer-shell-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gtk-update-icon-cache-git",
+    "repo_name": "gtk-update-icon-cache-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gtk3-git",
+    "repo_name": "gtk3-git",
+    "variant": "none",
+    "kind": "aur"
   }
 ]
