@@ -85,12 +85,13 @@ b2sums=('b351d0e48b074ea0b6d75dd8b47bd5ff5897dce01b2c69894a5d20fff0205b8cfc4603c
 
 prepare() {
   cd gtk3-git
-  # lily 補丁：套得上才套（dev 尖端可能已含或行號漂移），套不上跳過不判紅
-  for p in ../0001-Allow-disabling-legacy-Tracker-search.patch \
-           ../0001-wayland-im-notify-wayland-after-set_cursor_location.patch \
-           ../0001-inhibit-hex-check.patch; do
-    if git apply --check "$p" 2>/dev/null; then git apply "$p" && echo ">> 套 $p"; else echo ">> 跳過 $p"; fi
-  done
+  # lily 補丁（3 個 0001-*）實測對 gtk-3-24 仍套得上 → 硬套。
+  # 另兩個 archlinuxcn 的 0002-*（Stop-looking-for-modules-in-cwd 安全修、
+  # gdk read_pixels 效能修）上游 gtk-3-24 早已合併（patch 報 previously applied），
+  # 屬過時，不帶。
+  git apply ../0001-Allow-disabling-legacy-Tracker-search.patch
+  git apply ../0001-wayland-im-notify-wayland-after-set_cursor_location.patch
+  git apply ../0001-inhibit-hex-check.patch
 }
 
 build() {
