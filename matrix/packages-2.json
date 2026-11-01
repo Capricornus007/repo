@@ -12,32 +12,8 @@
     "kind": "aur"
   },
   {
-    "key": "debugedit-git",
-    "repo_name": "debugedit-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "deno-git",
-    "repo_name": "deno-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "desktop-file-utils-git",
-    "repo_name": "desktop-file-utils-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "dex-git",
     "repo_name": "dex-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "diffutils-git",
-    "repo_name": "diffutils-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -62,12 +38,6 @@
   {
     "key": "double-conversion-git",
     "repo_name": "double-conversion-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "dunst-git",
-    "repo_name": "dunst-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -120,12 +90,6 @@
     "kind": "aur"
   },
   {
-    "key": "exiv2-git",
-    "repo_name": "exiv2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "exo-git",
     "repo_name": "exo-git",
     "variant": "none",
@@ -168,18 +132,6 @@
     "kind": "aur"
   },
   {
-    "key": "file-roller-git",
-    "repo_name": "file-roller-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "findutils-git",
-    "repo_name": "findutils-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "flac-git",
     "repo_name": "flac-git",
     "variant": "none",
@@ -188,12 +140,6 @@
   {
     "key": "flex-git",
     "repo_name": "flex-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "fluidsynth-git",
-    "repo_name": "fluidsynth-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -216,12 +162,6 @@
     "kind": "aur"
   },
   {
-    "key": "frei0r-plugins-git",
-    "repo_name": "frei0r-plugins-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "fribidi-git",
     "repo_name": "fribidi-git",
     "variant": "none",
@@ -240,18 +180,6 @@
     "kind": "aur"
   },
   {
-    "key": "fwupd-git",
-    "repo_name": "fwupd-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gamemode-git",
-    "repo_name": "gamemode-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "garcon-git",
     "repo_name": "garcon-git",
     "variant": "none",
@@ -260,30 +188,6 @@
   {
     "key": "gc-git",
     "repo_name": "gc-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gcr-git",
-    "repo_name": "gcr-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gcr-4-git",
-    "repo_name": "gcr-4-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gdb-git",
-    "repo_name": "gdb-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gdb-common-git",
-    "repo_name": "gdb-common-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -324,12 +228,6 @@
     "kind": "aur"
   },
   {
-    "key": "gjs-git",
-    "repo_name": "gjs-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "glew-git",
     "repo_name": "glew-git",
     "variant": "none",
@@ -366,26 +264,8 @@
     "kind": "aur"
   },
   {
-    "key": "gnome-keyring-git",
-    "repo_name": "gnome-keyring-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gnupg-git",
-    "repo_name": "gnupg-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "gnutls-git",
     "repo_name": "gnutls-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "google-glog-git",
-    "repo_name": "google-glog-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -404,12 +284,6 @@
   {
     "key": "gpgme-git",
     "repo_name": "gpgme-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gpm-git",
-    "repo_name": "gpm-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -434,60 +308,6 @@
   {
     "key": "gsettings-desktop-schemas-git",
     "repo_name": "gsettings-desktop-schemas-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gsettings-system-schemas-git",
-    "repo_name": "gsettings-system-schemas-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gst-plugin-pipewire-git",
-    "repo_name": "gst-plugin-pipewire-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gtk-layer-shell-git",
-    "repo_name": "gtk-layer-shell-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gtk-update-icon-cache-git",
-    "repo_name": "gtk-update-icon-cache-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gtk3-git",
-    "repo_name": "gtk3-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "guile-git",
-    "repo_name": "guile-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gvfs-git",
-    "repo_name": "gvfs-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "harfbuzz-git",
-    "repo_name": "harfbuzz-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "harfbuzz-icu-git",
-    "repo_name": "harfbuzz-icu-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -540,12 +360,6 @@
     "kind": "aur"
   },
   {
-    "key": "inotify-tools-git",
-    "repo_name": "inotify-tools-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "iproute2-git",
     "repo_name": "iproute2-git",
     "variant": "none",
@@ -578,12 +392,6 @@
   {
     "key": "jansson-git",
     "repo_name": "jansson-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "jasper-git",
-    "repo_name": "jasper-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -654,12 +462,6 @@
     "kind": "aur"
   },
   {
-    "key": "kdeconnect-git",
-    "repo_name": "kdeconnect-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "kdegraphics-mobipocket-git",
     "repo_name": "kdegraphics-mobipocket-git",
     "variant": "none",
@@ -708,32 +510,8 @@
     "kind": "aur"
   },
   {
-    "key": "kitty-shell-integration-git",
-    "repo_name": "kitty-shell-integration-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kitty-terminfo-git",
-    "repo_name": "kitty-terminfo-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "kjobwidgets-git",
     "repo_name": "kjobwidgets-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kmod-git",
-    "repo_name": "kmod-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "knotifications-git",
-    "repo_name": "knotifications-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -770,12 +548,6 @@
   {
     "key": "kstatusnotifieritem-git",
     "repo_name": "kstatusnotifieritem-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "ksvg-git",
-    "repo_name": "ksvg-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -822,44 +594,14 @@
     "kind": "aur"
   },
   {
-    "key": "lcms2-git",
-    "repo_name": "lcms2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "ldns-git",
     "repo_name": "ldns-git",
     "variant": "none",
     "kind": "aur"
   },
   {
-    "key": "lemonbar-git",
-    "repo_name": "lemonbar-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "less-git",
     "repo_name": "less-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "leveldb-git",
-    "repo_name": "leveldb-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libaccounts-qt-git",
-    "repo_name": "libaccounts-qt-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libadwaita-git",
-    "repo_name": "libadwaita-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -894,12 +636,6 @@
     "kind": "aur"
   },
   {
-    "key": "libatasmart-git",
-    "repo_name": "libatasmart-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libavif-git",
     "repo_name": "libavif-git",
     "variant": "none",
@@ -908,12 +644,6 @@
   {
     "key": "libb2-git",
     "repo_name": "libb2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libbluray-git",
-    "repo_name": "libbluray-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -960,18 +690,6 @@
     "kind": "aur"
   },
   {
-    "key": "libclc-git",
-    "repo_name": "libclc-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libcolord-git",
-    "repo_name": "libcolord-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libcups-git",
     "repo_name": "libcups-git",
     "variant": "none",
@@ -986,12 +704,6 @@
   {
     "key": "libdca-git",
     "repo_name": "libdca-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libde265-git",
-    "repo_name": "libde265-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -1026,32 +738,8 @@
     "kind": "aur"
   },
   {
-    "key": "libdvdnav-git",
-    "repo_name": "libdvdnav-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libdvdread-git",
-    "repo_name": "libdvdread-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libebml-git",
     "repo_name": "libebml-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libebur128-git",
-    "repo_name": "libebur128-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libei-git",
-    "repo_name": "libei-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -1092,12 +780,6 @@
     "kind": "aur"
   },
   {
-    "key": "libfm-git",
-    "repo_name": "libfm-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libfm-qt-git",
     "repo_name": "libfm-qt-git",
     "variant": "none",
@@ -1128,42 +810,6 @@
     "kind": "aur"
   },
   {
-    "key": "libgphoto2-git",
-    "repo_name": "libgphoto2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libhandy-git",
-    "repo_name": "libhandy-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libid3tag-git",
-    "repo_name": "libid3tag-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libidn-git",
-    "repo_name": "libidn-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libidn2-git",
-    "repo_name": "libidn2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libimagequant-git",
-    "repo_name": "libimagequant-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libimobiledevice-git",
     "repo_name": "libimobiledevice-git",
     "variant": "none",
@@ -1178,18 +824,6 @@
   {
     "key": "libinih-git",
     "repo_name": "libinih-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libinput-git",
-    "repo_name": "libinput-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libisl-git",
-    "repo_name": "libisl-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -1236,18 +870,6 @@
     "kind": "aur"
   },
   {
-    "key": "libmatroska-git",
-    "repo_name": "libmatroska-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libmaxminddb-git",
-    "repo_name": "libmaxminddb-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libmd-git",
     "repo_name": "libmd-git",
     "variant": "none",
@@ -1262,12 +884,6 @@
   {
     "key": "libmicrohttpd-git",
     "repo_name": "libmicrohttpd-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libmm-glib-git",
-    "repo_name": "libmm-glib-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -1290,12 +906,6 @@
     "kind": "aur"
   },
   {
-    "key": "libmpcdec-git",
-    "repo_name": "libmpcdec-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libmpd-git",
     "repo_name": "libmpd-git",
     "variant": "none",
@@ -1304,12 +914,6 @@
   {
     "key": "libmysofa-git",
     "repo_name": "libmysofa-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libnautilus-extension-git",
-    "repo_name": "libnautilus-extension-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -1356,24 +960,6 @@
     "kind": "aur"
   },
   {
-    "key": "libnma-common-git",
-    "repo_name": "libnma-common-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libnma-gtk4-git",
-    "repo_name": "libnma-gtk4-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libnotify-git",
-    "repo_name": "libnotify-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libnsl-git",
     "repo_name": "libnsl-git",
     "variant": "none",
@@ -1382,12 +968,6 @@
   {
     "key": "libogg-git",
     "repo_name": "libogg-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libp11-kit-git",
-    "repo_name": "libp11-kit-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -1410,20 +990,8 @@
     "kind": "aur"
   },
   {
-    "key": "libpipewire-git",
-    "repo_name": "libpipewire-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libplist-git",
     "repo_name": "libplist-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libpng-git",
-    "repo_name": "libpng-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -1434,32 +1002,14 @@
     "kind": "aur"
   },
   {
-    "key": "libproxy-git",
-    "repo_name": "libproxy-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libpsl-git",
     "repo_name": "libpsl-git",
     "variant": "none",
     "kind": "aur"
   },
   {
-    "key": "libpulse-git",
-    "repo_name": "libpulse-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libqmi-git",
     "repo_name": "libqmi-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libraqm-git",
-    "repo_name": "libraqm-git",
     "variant": "none",
     "kind": "aur"
   },
