@@ -366,12 +366,6 @@
     "kind": "aur"
   },
   {
-    "key": "nvme-cli-git",
-    "repo_name": "nvme-cli-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "openal-git",
     "repo_name": "openal-git",
     "variant": "none",
@@ -554,12 +548,6 @@
   {
     "key": "qca-qt6-git",
     "repo_name": "qca-qt6-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "qqc2-desktop-style-git",
-    "repo_name": "qqc2-desktop-style-git",
     "variant": "none",
     "kind": "aur"
   },

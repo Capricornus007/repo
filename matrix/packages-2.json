@@ -546,12 +546,6 @@
     "kind": "aur"
   },
   {
-    "key": "kstatusnotifieritem-git",
-    "repo_name": "kstatusnotifieritem-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "ktextwidgets-git",
     "repo_name": "ktextwidgets-git",
     "variant": "none",
