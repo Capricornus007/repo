@@ -1059,7 +1059,10 @@ jobs:
               # 檔頭（這個 step 有 21000 位元組的 GitHub 硬上限，註解也計入）。
               # 用 git apply 不用 patch：chaotic 那份 PKGBUILD 沒點名 patch，
               # 而 git 是 -git 包的硬依賴。
-              _pb_patch='  if git apply --check -p1 "$_where/passbuilder-llvm-context.patch" 2>/dev/null; then git apply -p1 "$_where/passbuilder-llvm-context.patch"; elif ! git apply --reverse --check -p1 "$_where/passbuilder-llvm-context.patch" 2>/dev/null; then echo "::error::PassBuilder 補丁套不上"; exit 1; fi'
+              # 2026-11-02：上游 mesa main 已內建 LLVM 24 的 PassBuilder context
+              # 修復（ac_llvm_helper.cpp 用 LLVM_VERSION_MAJOR >= 24 分支）；
+              # 舊補丁只在老樹上才需要，套不上就跳過，不再判紅。
+              _pb_patch='  if git apply --check -p1 "$_where/passbuilder-llvm-context.patch" 2>/dev/null; then git apply -p1 "$_where/passbuilder-llvm-context.patch"; else echo ">> mesa 上游已內建 LLVM 24 PassBuilder 修復，跳過舊補丁"; fi'
               awk -v p="$_pb_patch" '$0 ~ /msg2 "Tree cleaned"/ {print; print p; next} {print}' \
                 pkg_dir/PKGBUILD > pkg_dir/PKGBUILD.t && mv pkg_dir/PKGBUILD.t pkg_dir/PKGBUILD
               grep -q 'passbuilder-llvm-context.patch' pkg_dir/PKGBUILD \
