@@ -1,0 +1,36 @@
+# 倉內 override（2026-11-01）：AUR 原版帶 conflicts/replaces=(libevent)，會把系統的
+# libevent 2.1 頂掉——但本包是 git master（2.2.2-alpha，soname libevent-2.2.so），
+# 提供不了 links/unbound 需要的 libevent-2.1.so=7-64，頂掉即斷系統。
+# 摘掉 conflicts/replaces 後 2.1 與 2.2 檔名不重疊、可共存（新舊通吃）。
+
+pkgname=libevent-git
+pkgver=2.1.8.stable.r825.g2db55e43
+pkgrel=1
+pkgdesc="An event notification library"
+arch=('i686' 'x86_64')
+url="http://libevent.org/"
+license=('BSD')
+depends=('openssl')
+makedepends=('git')
+optdepends=('python2: to use event_rpcgen.py')
+provides=(libevent)
+source=(git+https://github.com/libevent/libevent)
+sha1sums=('SKIP')
+
+pkgver() {
+  cd libevent
+  git describe --long | sed 's/^release-//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd libevent
+  ./autogen.sh
+  ./configure --prefix=/usr --sysconfdir=/etc
+  make
+}
+
+package() {
+  cd libevent
+  make DESTDIR="${pkgdir}" install
+  install -Dm 644 LICENSE "${pkgdir}"/usr/share/licenses/libevent/LICENSE
+}

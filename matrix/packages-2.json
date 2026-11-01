@@ -750,12 +750,6 @@
     "kind": "aur"
   },
   {
-    "key": "libevent-git",
-    "repo_name": "libevent-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libexif-git",
     "repo_name": "libexif-git",
     "variant": "none",
@@ -1040,6 +1034,12 @@
   {
     "key": "libshout-git",
     "repo_name": "libshout-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "libevent-git",
+    "repo_name": "libevent-git",
     "variant": "none",
     "kind": "aur"
   }
