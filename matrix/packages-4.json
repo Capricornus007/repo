@@ -1,0 +1,290 @@
+[
+  {
+    "key": "xfce4-fsguard-plugin-git",
+    "repo_name": "xfce4-fsguard-plugin-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-genmon-plugin-git",
+    "repo_name": "xfce4-genmon-plugin-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-netload-plugin-git",
+    "repo_name": "xfce4-netload-plugin-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-notifyd-git",
+    "repo_name": "xfce4-notifyd-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-panel-git",
+    "repo_name": "xfce4-panel-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-power-manager-git",
+    "repo_name": "xfce4-power-manager-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-pulseaudio-plugin-git",
+    "repo_name": "xfce4-pulseaudio-plugin-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-screensaver-git",
+    "repo_name": "xfce4-screensaver-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-screenshooter-git",
+    "repo_name": "xfce4-screenshooter-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-session-git",
+    "repo_name": "xfce4-session-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-settings-git",
+    "repo_name": "xfce4-settings-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-smartbookmark-plugin-git",
+    "repo_name": "xfce4-smartbookmark-plugin-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-systemload-plugin-git",
+    "repo_name": "xfce4-systemload-plugin-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-taskmanager-git",
+    "repo_name": "xfce4-taskmanager-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-terminal-git",
+    "repo_name": "xfce4-terminal-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-weather-plugin-git",
+    "repo_name": "xfce4-weather-plugin-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-whiskermenu-plugin-git",
+    "repo_name": "xfce4-whiskermenu-plugin-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfconf-git",
+    "repo_name": "xfconf-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfdesktop-git",
+    "repo_name": "xfdesktop-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfwm4-git",
+    "repo_name": "xfwm4-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xkeyboard-config-git",
+    "repo_name": "xkeyboard-config-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xorg-server-common-git",
+    "repo_name": "xorg-server-common-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xorg-server-devel-git",
+    "repo_name": "xorg-server-devel-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xorg-server-xephyr-git",
+    "repo_name": "xorg-server-xephyr-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xorg-server-xnest-git",
+    "repo_name": "xorg-server-xnest-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xorg-server-xvfb-git",
+    "repo_name": "xorg-server-xvfb-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xorg-xinit-git",
+    "repo_name": "xorg-xinit-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xorg-xrandr-git",
+    "repo_name": "xorg-xrandr-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xorgproto-git",
+    "repo_name": "xorgproto-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xsel-git",
+    "repo_name": "xsel-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xterm-git",
+    "repo_name": "xterm-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xxhash-git",
+    "repo_name": "xxhash-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "yajl-git",
+    "repo_name": "yajl-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "yaml-cpp-git",
+    "repo_name": "yaml-cpp-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "yasm-git",
+    "repo_name": "yasm-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "ydotool-git",
+    "repo_name": "ydotool-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "yoga-git",
+    "repo_name": "yoga-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "yyjson-git",
+    "repo_name": "yyjson-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "zbar-git",
+    "repo_name": "zbar-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "zenity-git",
+    "repo_name": "zenity-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "zeromq-git",
+    "repo_name": "zeromq-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "zimg-git",
+    "repo_name": "zimg-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "zix-git",
+    "repo_name": "zix-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "zlib-git",
+    "repo_name": "zlib-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "zlib-ng-git",
+    "repo_name": "zlib-ng-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "zopfli-git",
+    "repo_name": "zopfli-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "zvbi-git",
+    "repo_name": "zvbi-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "zxing-cpp-git",
+    "repo_name": "zxing-cpp-git",
+    "variant": "none",
+    "kind": "aur"
+  }
+]
