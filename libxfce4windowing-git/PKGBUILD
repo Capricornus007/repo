@@ -14,7 +14,7 @@ arch=('i686' 'x86_64' 'armv7h' 'aarch64')
 url="https://docs.xfce.org/xfce/libxfce4windowing/start"
 license=('GPL-2.0-or-later')
 groups=('xfce4-git')
-depends=('libwnck3' 'wayland')
+depends=('libwnck3' 'wayland' 'libdisplay-info')
 makedepends=('gtk-doc' 'gobject-introspection' 'xfce4-dev-tools-git' 'git' 
              'wayland-protocols' 'wlr-protocols' 'vala' 'meson')
 provides=("${_pkgname}=${pkgver}")
