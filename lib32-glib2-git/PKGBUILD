@@ -43,7 +43,11 @@ pkgver() {
 # 2026-11-01：glib 2.90 把 subprojects/gvdb 拆成 git submodule，makepkg 不會自動
 # init → meson 報「Subproject gvdb is buildable: NO / git submodule failed to init」。
 # 重新加回 prepare()，只 init gvdb 這一個子模塊。
+# 2026-11-02：.gitmodules 的 gvdb URL 是相對路徑「/GNOME/gvdb.git」，在 CI 把 glib
+# clone 進本地目錄後會解析成不存在的本地路徑（run 41338311663 實測 fatal: repository
+# '/__w/repo/repo/GNOME/gvdb.git' does not exist）。init 前先把該子模組釘成絕對 URL。
 prepare() {
+  git -C "$srcdir/glib" config submodule.subprojects/gvdb.url https://gitlab.gnome.org/GNOME/gvdb.git
   git -C "$srcdir/glib" submodule update --init --depth 1 subprojects/gvdb
 }
 
