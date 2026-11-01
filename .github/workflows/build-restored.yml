@@ -1,0 +1,41 @@
+name: Build Restored Packages
+# 2026-11-02：workbuddy 在 2f00ff2 / 953a4e5 剔除的套件恢復後，主 shard 的
+# 250-job 矩陣會把恢復包排在最後（GitHub 免費併發只有 20，會等數小時）。
+# 這條 workflow 只排恢復包＋必要依賴（37 顆），可手動或改檔觸發；
+# 出包後主矩陣的 plan 會看到資產已存在而自動跳過，不會重複構建。
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - 'matrix/packages-restored.json'
+      - '.github/workflows/build-restored.yml'
+concurrency:
+  group: build-restored-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.read.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: read
+        name: 讀取 matrix/packages-restored.json 輸出為 job output
+        run: |
+          {
+            echo "packages<<__PKGS_EOF__"
+            jq '[.[] | select(.kind != "alias")]' matrix/packages-restored.json
+            echo "__PKGS_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: setup
+    uses: ./.github/workflows/build-packages.yml
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      timeout_minutes: 360
+      packages: ${{ needs.setup.outputs.packages }}
