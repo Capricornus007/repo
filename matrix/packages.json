@@ -1468,5 +1468,12 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "calibre-git",
+    "repo_name": "calibre-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]
