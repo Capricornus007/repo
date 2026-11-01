@@ -1,0 +1,32 @@
+# 2026-11-02：復活自 2f00ff2 的剔除清單。
+# 原 AUR 配方把 adwaita-cursors 當成同一棵樹的 split，但上游 master 已把
+# Adwaita/cursors 移除（51.0 標籤還在）。這裡只打圖示本體，游標另立
+# adwaita-cursors-git（tag 51.0），兩者不再互相依賴。
+pkgname=adwaita-icon-theme-git
+pkgver=51.0
+pkgrel=2
+pkgdesc='GNOME standard icons'
+arch=(any)
+url="https://gitlab.gnome.org/GNOME/adwaita-icon-theme"
+license=(LGPL3 CCPL:by-sa)
+depends=(gtk-update-icon-cache hicolor-icon-theme librsvg)
+makedepends=(git gtk3 meson)
+provides=(adwaita-icon-theme)
+conflicts=(adwaita-icon-theme)
+source=("git+$url.git")
+b2sums=('SKIP')
+
+pkgver() {
+  git -C adwaita-icon-theme describe --long --tags | sed 's/[^-]*-g/r&/;s/-/./g'
+}
+
+build() {
+  meson setup adwaita-icon-theme build \
+    --prefix=/usr --buildtype=plain --auto-features=enabled
+  meson compile -C build
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+  rm -rf "$pkgdir/usr/share/icons/Adwaita/cursors/"
+}

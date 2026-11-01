@@ -1,0 +1,38 @@
+# 2026-11-02：復活自 953a4e5 的剔除清單（Xfce 4.21 鏈）。
+# 原條目用 AUR 的裸名依賴（libxfce4ui/garcon/xfconf…），但 feed 只發 -git 包，
+# 容器裡 target not found。這裡把 Xfce 家族依賴改成對應 -git 包，並把
+# xfce4-dev-tools 改成 xfce4-dev-tools-git；plan 的 -git 依賴門檻會按 DAG
+# 自動跳過尚未發布的層，等前一層進 feed 後下一輪再建。
+# Maintainer: Igor <f2404@yandex.ru>
+_pkgname=xfce4-terminal
+pkgname=${_pkgname}-git
+pkgver=0.9.0.r53.g3e0e4534
+pkgrel=1
+pkgdesc="A modern terminal emulator primarily for the Xfce desktop environment - git checkout"
+arch=('i686' 'x86_64')
+url="https://docs.xfce.org/apps/terminal/start"
+license=('GPL2')
+groups=('xfce4')
+depends=('libxfce4ui-git' 'vte3>=0.38' 'hicolor-icon-theme')
+makedepends=('intltool' 'git' 'xfce4-dev-tools-git' 'libxslt' 'meson')
+provides=('xfce4-terminal')
+conflicts=('xfce4-terminal' 'terminal')
+replaces=('xfce4-terminal' 'terminal')
+source=("${_pkgname}::git+https://gitlab.xfce.org/apps/${_pkgname}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+	cd "$srcdir/$_pkgname"
+	git describe --long | sed -r "s/^${_pkgname}-//;s/([^-]*-g)/r\1/;s/-/./g"
+}
+
+build() {
+	# 4.21 已從 autotools 搬到 meson（upstream master 已無 autogen.sh）。
+	meson setup "$_pkgname" build \
+		--prefix=/usr --buildtype=plain --auto-features=enabled \
+		-Ddoc=false
+	meson compile -C build
+}
+package() {
+	meson install -C build --destdir "$pkgdir"
+}

@@ -1372,5 +1372,78 @@
     "repo_name": "cups-filters-git",
     "variant": "none",
     "kind": "aur"
+  },
+  {
+    "key": "mesa-tkg-git",
+    "repo_name": "mesa-tkg-git",
+    "variant": "none",
+    "kind": "tkg"
+  },
+  {
+    "key": "accountsservice-git",
+    "repo_name": "accountsservice-git",
+    "variant": "none",
+    "kind": "artix",
+    "image": "artixlinux/artixlinux:base-devel",
+    "in_tree": true
+  },
+  {
+    "key": "at-spi2-core-git",
+    "repo_name": "at-spi2-core-git",
+    "variant": "none",
+    "kind": "artix",
+    "image": "artixlinux/artixlinux:base-devel",
+    "in_tree": true
+  },
+  {
+    "key": "brightnessctl-git",
+    "repo_name": "brightnessctl-git",
+    "variant": "none",
+    "kind": "artix",
+    "image": "artixlinux/artixlinux:base-devel",
+    "in_tree": true
+  },
+  {
+    "key": "android-udev-git",
+    "repo_name": "android-udev-git",
+    "variant": "none",
+    "kind": "artix",
+    "image": "artixlinux/artixlinux:base-devel",
+    "in_tree": true
+  },
+  {
+    "key": "colord-git",
+    "repo_name": "colord-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "adwaita-icon-theme-git",
+    "repo_name": "adwaita-icon-theme-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "adwaita-cursors-git",
+    "repo_name": "adwaita-cursors-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "blas-git",
+    "repo_name": "blas-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "bun-git",
+    "repo_name": "bun-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]

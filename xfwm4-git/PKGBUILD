@@ -1,0 +1,33 @@
+# 2026-11-02：修 shard4 殘包。AUR 配方 build() 裡寫 `cd $pkgname`（= xfwm4-git），
+# 但 source 目錄是 xfwm4，直接 No such file or directory。改用 xfwm4 目錄，
+# 並把 Xfce 家族依賴改成 -git 包（與 4.21 鏈一致）。
+pkgname=xfwm4-git
+pkgver=4.20.0+151+g1163ee4a9
+pkgrel=2
+pkgdesc="Xfce window manager (git version)"
+arch=('x86_64')
+url="https://gitlab.xfce.org/xfce/xfwm4"
+license=('GPL2')
+groups=('xfce4')
+depends=('libxfce4ui-git' 'libwnck3' 'libxpresent' 'xfconf-git')
+makedepends=('git' 'xfce4-dev-tools-git' 'meson')
+provides=('xfwm4')
+conflicts=('xfwm4')
+source=("git+https://gitlab.xfce.org/xfce/xfwm4.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd xfwm4
+  git describe --long --match 'xfwm4-*' | sed 's/xfwm4-//;s/^\([[:digit:]]\)-/\1./;s/-/+/g'
+}
+
+build() {
+  # 4.21 已從 autotools 搬到 meson（upstream 已無 configure/autogen.sh）。
+  meson setup xfwm4 build \
+    --prefix=/usr --buildtype=plain --auto-features=enabled
+  meson compile -C build
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+}

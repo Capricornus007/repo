@@ -21,7 +21,10 @@
 #    真要裝之前先確認顯卡驅動的 ABI（provides 的 X-ABI-* 會隨 master 變）。
 
 pkgbase=xorg-server-git
-pkgname=('xorg-server-git' 'xorg-server-common-git' 'xorg-server-xvfb-git')
+# 2026-11-02：恢復 953a4e5 刪掉的 5 個 split 名。它們不是獨立 PKGBUILD，
+# 而是這一包的 split 產物；把 xephyr/xnest 打開，devel 一併補上。
+pkgname=('xorg-server-git' 'xorg-server-common-git' 'xorg-server-xvfb-git'
+         'xorg-server-devel-git' 'xorg-server-xephyr-git' 'xorg-server-xnest-git')
 pkgver=21.1.25.r0.g0000000
 pkgrel=1
 arch=('x86_64')
@@ -87,10 +90,10 @@ build() {
   arch-meson "${pkgbase}" build \
     -D ipv6=true \
     -D xvfb=true \
-    -D xnest=false \
+    -D xnest=true \
     -D xcsecurity=true \
     -D xorg=true \
-    -D xephyr=false \
+    -D xephyr=true \
     -D glamor=true \
     -D udev=true \
     -D dtrace=false \
@@ -190,5 +193,42 @@ package_xorg-server-xvfb-git() {
 
   _install fakeinstall/usr/bin/Xvfb
   _install fakeinstall/usr/share/man/man1/Xvfb.1
+  install -m644 -Dt "${pkgdir}/usr/share/licenses/${pkgname}" "${pkgbase}"/COPYING
+}
+
+package_xorg-server-devel-git() {
+  pkgdesc="Development files for the X.Org X server (git master)"
+  depends=(xorgproto mesa libpciaccess pixman xorg-util-macros)
+  provides=("xorg-server-devel=${pkgver}")
+  conflicts=('xorg-server-devel')
+
+  _install fakeinstall/usr/include/xorg/*
+  _install fakeinstall/usr/lib/pkgconfig/xorg-server.pc
+  _install fakeinstall/usr/share/aclocal/xorg-server.m4
+  install -m644 -Dt "${pkgdir}/usr/share/licenses/${pkgname}" "${pkgbase}"/COPYING
+}
+
+package_xorg-server-xephyr-git() {
+  pkgdesc="A nested X server that runs as an X application (git master)"
+  depends=(libxfont2 libgl libepoxy libunwind pixman xorg-server-common-git
+           xcb-util-image xcb-util-renderutil xcb-util-wm xcb-util-keysyms
+           nettle libtirpc xcb-util libxdmcp libx11 libxau libxshmfence glibc)
+  provides=("xorg-server-xephyr=${pkgver}")
+  conflicts=('xorg-server-xephyr')
+
+  _install fakeinstall/usr/bin/Xephyr
+  _install fakeinstall/usr/share/man/man1/Xephyr.1
+  install -m644 -Dt "${pkgdir}/usr/share/licenses/${pkgname}" "${pkgbase}"/COPYING
+}
+
+package_xorg-server-xnest-git() {
+  pkgdesc="A nested X server that runs as an X application (git master)"
+  depends=(libxfont2 libunwind libxext pixman xorg-server-common-git nettle
+           libtirpc libxdmcp glibc libx11 libxau)
+  provides=("xorg-server-xnest=${pkgver}")
+  conflicts=('xorg-server-xnest')
+
+  _install fakeinstall/usr/bin/Xnest
+  _install fakeinstall/usr/share/man/man1/Xnest.1
   install -m644 -Dt "${pkgdir}/usr/share/licenses/${pkgname}" "${pkgbase}"/COPYING
 }

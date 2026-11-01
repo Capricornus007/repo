@@ -1,0 +1,40 @@
+# 2026-11-02：復活自 953a4e5 的剔除清單（Xfce 4.21 鏈）。
+# 原條目用 AUR 的裸名依賴（libxfce4ui/garcon/xfconf…），但 feed 只發 -git 包，
+# 容器裡 target not found。這裡把 Xfce 家族依賴改成對應 -git 包，並把
+# xfce4-dev-tools 改成 xfce4-dev-tools-git；plan 的 -git 依賴門檻會按 DAG
+# 自動跳過尚未發布的層，等前一層進 feed 後下一輪再建。
+# Maintainer: Capricornus007 <sihaogang at gmail dot com>
+# Co-Maintainer: budRich <of budlabs>
+# Contributor: Frederic Bezies <fredbezies at gmail dot com>
+# Contributor: Kevin Hanselman <kevin.hanselman@gmail.com>
+pkgname=xfce4-genmon-plugin-git
+pkgver=r1282.778017e
+pkgrel=1
+pkgdesc="plugin that monitors customizable programs stdout for the Xfce4 panel"
+arch=('x86_64')
+license=('LGPL2')
+makedepends=('git' 'xfce4-dev-tools-git' meson)
+provides=("${pkgname%-git}")
+conflicts=("${pkgname%-git}")
+depends=('xfce4-panel-git')
+source=('git+https://gitlab.xfce.org/panel-plugins/xfce4-genmon-plugin.git')
+noextract=()
+md5sums=('SKIP')
+
+pkgver() {
+    cd "$srcdir/${pkgname%-git}" 
+    printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  # 修正：直接指定正確的源碼目錄名稱「xfce4-genmon-plugin」
+  meson setup --prefix=/usr \
+              --buildtype=plain \
+              "xfce4-genmon-plugin" build
+
+  meson compile -C build
+}
+
+package() {
+  DESTDIR="$pkgdir" meson install -C build
+}

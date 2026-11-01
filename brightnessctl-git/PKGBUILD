@@ -1,0 +1,33 @@
+# 2026-11-02：復活自 2f00ff2 的剔除清單。
+# 原 AUR 版 depends=(systemd-libs) 且 build 強制 --enable-logind，Artix 沒有
+# libsystemd.so.0。這裡改用 udev 規則（--disable-logind 會自動啟用 udev），
+# 與 Artix 官方 brightnessctl 0.5.1-3 的依賴（只有 udev）一致。
+pkgname=brightnessctl-git
+pkgver=0.5.1.r32.g3152968
+pkgrel=2
+pkgdesc="Lightweight brightness control tool"
+arch=('i686' 'x86_64')
+url="https://github.com/Hummer12007/brightnessctl"
+license=('MIT')
+depends=('udev')
+makedepends=('git')
+provides=('brightnessctl')
+conflicts=('brightnessctl')
+source=("$pkgname::git+https://github.com/Hummer12007/brightnessctl.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$pkgname"
+  git describe --long --tags | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd "$srcdir/$pkgname"
+  ./configure --prefix=/usr --disable-logind
+  make
+}
+
+package() {
+  cd "$srcdir/$pkgname"
+  make DESTDIR="$pkgdir" install
+}

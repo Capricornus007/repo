@@ -1,0 +1,27 @@
+# 2026-11-02：復活自 2f00ff2 的剔除清單。
+# AUR 已沒有獨立的 adwaita-cursors-git（它原本是 adwaita-icon-theme-git 的 split）。
+# 上游 master 刪掉 cursors 後，改用 51.0 標籤（最後含 Adwaita/cursors 的版本）
+# 單獨出包；與本機已裝的 adwaita-cursors 51.0-1 對齊。
+pkgname=adwaita-cursors-git
+pkgver=51.0
+pkgrel=1
+pkgdesc='GNOME standard cursors'
+arch=(any)
+url="https://gitlab.gnome.org/GNOME/adwaita-icon-theme"
+license=(LGPL3 CCPL:by-sa)
+depends=()
+makedepends=(git)
+provides=(adwaita-cursors)
+conflicts=(adwaita-cursors)
+source=("git+$url.git#tag=51.0")
+b2sums=('SKIP')
+
+pkgver() {
+  echo 51.0
+}
+
+package() {
+  install -dm755 "$pkgdir/usr/share/icons/Adwaita/"
+  cp -r --no-preserve=ownership adwaita-icon-theme/Adwaita/cursors \
+    "$pkgdir/usr/share/icons/Adwaita/"
+}

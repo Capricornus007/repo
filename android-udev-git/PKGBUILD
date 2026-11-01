@@ -1,0 +1,31 @@
+# 2026-11-02：復活自 2f00ff2 的剔除清單。
+# 原 AUR 版 depends=(libmtp systemd)；Artix 的 udev 是獨立套件（udev 262.1-2），
+# 與本機已裝的 Artix android-udev 依賴一致（libmtp + udev）。
+pkgname=android-udev-git
+pkgver=20260922.r0.gf45ef6c
+pkgrel=2
+pkgdesc='Udev rules to connect Android devices to your linux box'
+arch=('any')
+url="https://github.com/M0Rf30/android-udev-rules"
+license=('GPL-3.0-or-later')
+source=("${pkgname%-git}::git+https://github.com/M0Rf30/android-udev-rules.git")
+depends=('libmtp' 'udev')
+makedepends=('git')
+conflicts=("${pkgname%-git}")
+provides=("${pkgname%-git}")
+
+package() {
+  cd "${pkgname%-git}"
+
+  install -Dm 644 51-android.rules \
+    "${pkgdir}"/usr/lib/udev/rules.d/51-android.rules
+  install -Dm 644 android-udev.conf \
+    "${pkgdir}"/usr/lib/sysusers.d/android-udev.conf
+}
+
+pkgver() {
+  cd "${pkgname%-git}"
+  git describe --long --tags | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+sha256sums=('SKIP')

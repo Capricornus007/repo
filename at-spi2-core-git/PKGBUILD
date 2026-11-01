@@ -1,0 +1,68 @@
+# 2026-11-02：復活自 2f00ff2 的剔除清單。
+# 原 AUR 版 depends=(systemd)，Artix+OpenRC 沒有 libsystemd.so.0。
+# 這裡在 Artix 容器建置，改用 dbus-daemon + -Duse_systemd=false，
+# 不裝 systemd user service；docs split 拿掉（只影響文件，不影響執行）。
+pkgbase=at-spi2-core-git
+pkgname=at-spi2-core-git
+pkgver=2.62.0.1
+pkgrel=2
+pkgdesc="Protocol definitions and daemon for D-Bus at-spi"
+url="https://gitlab.gnome.org/GNOME/at-spi2-core"
+arch=(x86_64)
+license=(GPL2)
+depends=(
+  bash
+  dbus
+  glib2
+  glibc
+  gsettings-desktop-schemas
+  libgcc
+  libx11
+  libxi
+  libxml2
+  libxtst
+  xorg-xprop
+)
+makedepends=(
+  git
+  gobject-introspection
+  glib2-devel
+  meson
+)
+source=("at-spi2-core::git+https://gitlab.gnome.org/GNOME/at-spi2-core.git")
+b2sums=('SKIP')
+
+pkgver() {
+  cd at-spi2-core
+  git describe --long | sed 's/^AT_SPI2_CORE_//;s/\([^-]*-g\)/r\1/;s/_/-/g;s/-/./g'
+}
+
+build() {
+  meson setup at-spi2-core build \
+    --prefix=/usr --libdir=lib --buildtype=plain --auto-features=enabled \
+    -Ddefault_bus=dbus-daemon \
+    -Duse_systemd=false \
+    -Ddocs=false
+  meson compile -C build
+}
+
+package() {
+  optdepends=('dbus-broker: Alternative bus implementation')
+  provides=(
+    "at-spi2-atk=$pkgver-$pkgrel"
+    "atk=$pkgver-$pkgrel"
+    libatk-1.0.so
+    libatk-bridge-2.0.so
+    libatspi.so
+  )
+  conflicts=(
+    'at-spi2-atk<=2.38.0-2'
+    'atk<=2.38.0-2'
+  )
+  replaces=(
+    'at-spi2-atk<=2.38.0-2'
+    'atk<=2.38.0-2'
+  )
+
+  meson install -C build --destdir "$pkgdir"
+}

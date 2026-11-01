@@ -1,0 +1,68 @@
+# 2026-11-02：復活自 2f00ff2 的剔除清單。
+# 原 AUR 版 depends=(systemd)，在 Artix+OpenRC 上裝不了（本機沒有 libsystemd.so.0）。
+# 這裡改用 elogind（Artix 的 logind 實作，提供 libelogind.so=0-64），
+# 並用 -Dsystemdsystemunitdir=no 關掉 systemd unit 安裝；不跑上游測試（只驗打包）。
+pkg=accountsservice
+pkgname=${pkg}-git
+pkgver=26.32.44
+pkgrel=3
+pkgdesc="D-Bus interface for user account query and manipulation"
+url="https://gitlab.freedesktop.org/accountsservice/accountsservice"
+arch=(x86_64)
+license=(GPL-3.0-or-later)
+depends=(
+  gcc-libs
+  glib2
+  glibc
+  libxcrypt
+  polkit
+  shadow
+  elogind
+)
+makedepends=(
+  git
+  glib2-devel
+  gobject-introspection
+  meson
+)
+source=(
+  "git+$url.git"
+  accounts-daemon-restart.hook
+)
+b2sums=('SKIP' 'SKIP')
+
+provides=($pkg libaccountsservice.so)
+conflicts=($pkg)
+
+pkgver() {
+  cd $pkg
+  # 上游 meson.build 的 version 是 generate-version.sh 從 git describe 算的；
+  # 直接用它，避免 AUR 那份靜態 23.13.9 把本機 26.x 降級。
+  ./generate-version.sh 2>/dev/null | head -1 \
+    || git describe --tags --long | sed 's/-/.r/;s/-/./g'
+}
+
+build() {
+  meson setup $pkg build \
+    --prefix=/usr --libdir=lib --buildtype=plain --auto-features=enabled \
+    -Dadmin_group=wheel \
+    -Ddocbook=false \
+    -Dgtk_doc=false \
+    -Delogind=true \
+    -Dvapi=false \
+    -Dsystemdsystemunitdir=no
+  meson compile -C build
+}
+
+package() {
+  depends+=(
+    libcrypt.so
+    libg{lib,object,io}-2.0.so
+    libelogind.so
+  )
+
+  meson install -C build --destdir "$pkgdir"
+
+  install -Dt "$pkgdir/usr/share/libalpm/hooks" -m644 *.hook
+  install -d "$pkgdir/usr/share/accountsservice/interfaces"
+}

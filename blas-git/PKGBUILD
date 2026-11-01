@@ -1,0 +1,41 @@
+# 2026-11-02：復活自 2f00ff2 的剔除清單。
+# AUR 上沒有 blas-git（舊條目是幽靈）。這裡直接從 Reference-LAPACK 的 git
+# 建 BLAS 子專案，與 Arch 官方 blas 包的安裝內容一致（libblas + license）。
+pkgname=blas-git
+_pkgbase=lapack
+pkgver=3.12.1
+pkgrel=1
+pkgdesc='Basic Linear Algebra Subprograms'
+arch=(x86_64)
+url='https://www.netlib.org/lapack'
+license=(custom)
+depends=(glibc libgcc libgfortran)
+makedepends=(cmake gcc-fortran git)
+provides=(blas)
+conflicts=(blas)
+source=("git+https://github.com/Reference-LAPACK/lapack.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_pkgbase"
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  # 照 Arch 官方 lapack PKGBUILD：頂層 CMake 會產生 build/BLAS 子專案，
+  # 只安裝 BLAS 子目錄；不是直接 -S lapack/BLAS（那裡沒有獨立 CMakeLists）。
+  cmake -B build -S "$_pkgbase" \
+    -DCMAKE_SKIP_RPATH=ON \
+    -DBUILD_SHARED_LIBS=ON \
+    -DBUILD_TESTING=OFF \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_Fortran_COMPILER=gfortran \
+    -DLAPACKE_WITH_TMG=ON \
+    -DCBLAS=ON
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build/BLAS
+  install -Dm644 "$_pkgbase/LICENSE" -t "$pkgdir/usr/share/licenses/$pkgname/"
+}

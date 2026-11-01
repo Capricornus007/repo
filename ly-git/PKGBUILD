@@ -1,0 +1,45 @@
+# 2026-11-02：復活自 953a4e5 的剔除清單。
+# 舊配方用 `zig build --global-cache-dir`，但 CI 的 zig 已移除這個參數
+# （error: unrecognized argument: --global-cache-dir）。
+# 改用 ZIG_GLOBAL_CACHE_DIR 環境變數；目標機是 Artix+OpenRC，init_system 也改 openrc。
+_pkgname=ly
+pkgname="$_pkgname"-git
+pkgver=1.4.0.r6.g864f5f2
+pkgrel=2
+pkgdesc="TUI display manager"
+arch=(i686 x86_64 aarch64)
+url="https://codeberg.org/fairyglade/ly.git"
+license=('WTFPL')
+depends=(pam)
+makedepends=('zig>=0.17' git libxcb)
+optdepends=('xorg-xauth: for X server sessions' 'durdraw: for animations')
+conflicts=(ly)
+provides=(ly)
+backup=(etc/"$_pkgname"/{config.lua,config.ini,setup.sh})
+source=("git+$url")
+md5sums=('SKIP')
+
+pkgver() {
+    cd "$_pkgname"
+    git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+    cd "$_pkgname"
+    export ZIG_GLOBAL_CACHE_DIR="$srcdir/zig-global-cache"
+    zig build \
+        --cache-dir "$srcdir/zig-cache" \
+        -Doptimize=ReleaseSafe
+}
+
+package() {
+    cd "$_pkgname"
+    export ZIG_GLOBAL_CACHE_DIR="$srcdir/zig-global-cache"
+    zig build installexe \
+        --cache-dir "$srcdir/zig-cache" \
+        -Ddest_directory="$pkgdir" \
+        -Dname="ly-dm" \
+        -Dinit_system=openrc
+
+    install -Dm644 license.md "$pkgdir/usr/share/licenses/$pkgname/WTFPL"
+}

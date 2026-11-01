@@ -737,6 +737,31 @@ jobs:
           # mpv-git 的打包文件维护在本仓库 mpv-git/ 目录；
           # pysolfc-git / protonvpn-cli-community-git 同理只取各自目录下的 PKGBUILD
           # （protonvpn 的上游 url 改成了 jonasjancarik 的续命 fork，不能取 AUR 版）
+          #
+          # 2026-11-02：矩陣可帶 "in_tree": true，改由本倉同名目錄提供 PKGBUILD
+          # 與所有附屬檔（patch / .install / .hook）。用 Contents API 一次抓齊，
+          # 不再為每顆復活的包加一條 raw URL case；API 失敗時退回只抓 PKGBUILD。
+          if [ "${{ matrix.in_tree }}" = 'true' ]; then
+            mkdir -p pkg_dir
+            _api="https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/${{ matrix.repo_name }}?ref=master"
+            if curl -sfL -H "Accept: application/vnd.github+json" \
+                 -H "Authorization: Bearer ${{ github.token }}" \
+                 "$_api" -o /tmp/_in_tree_files.json \
+               && jq -e 'type == "array"' /tmp/_in_tree_files.json >/dev/null 2>&1; then
+              jq -r '.[] | select(.type == "file") | .download_url' /tmp/_in_tree_files.json \
+                | while IFS= read -r _u; do
+                    [ -n "$_u" ] || continue
+                    curl -sfL "$_u" -o "pkg_dir/$(basename "$_u")"
+                  done
+            else
+              echo "::warning::Contents API 取不到 ${{ matrix.repo_name }}，退回只抓 PKGBUILD"
+              curl -sfL "https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/master/${{ matrix.repo_name }}/PKGBUILD" \
+                -o pkg_dir/PKGBUILD
+            fi
+            [ -s pkg_dir/PKGBUILD ] || { echo "::error::${{ matrix.repo_name }} 的 PKGBUILD 沒抓下來"; exit 1; }
+            git config --global --add safe.directory "$PWD/pkg_dir"
+            exit 0
+          fi
           case "${{ matrix.repo_name }}" in
             ffmpeg-full-git)
               _aur_clone pkg_dir "https://aur.archlinux.org/${{ matrix.repo_name }}.git" ;;

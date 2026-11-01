@@ -1,0 +1,40 @@
+# 2026-11-02：修 shard4 殘包。AUR 配方把 ZXING_UNIT_TESTS 開著，configure 階段
+# 就要 GTest（checkdepends 不會被 makepkg -s 提前裝），導致 CMake 找不到 GTest。
+# 本倉不跑 check（kind:aur 一律 --nocheck），所以直接把單元測試關掉。
+_pkgname="zxing-cpp"
+pkgname="$_pkgname-git"
+pkgver=2.2.1.r288.g39ebe724
+pkgrel=2
+pkgdesc="A C++ library to decode QRCode"
+url="https://github.com/zxing-cpp/zxing-cpp"
+license=('Apache-2.0')
+arch=('x86_64')
+depends=(gcc-libs)
+makedepends=(cmake git ninja stb)
+provides=("$_pkgname=${pkgver%%.r*}")
+conflicts=("$_pkgname")
+source=("$_pkgname"::"git+$url.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_pkgname"
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cmake \
+    -B build \
+    -S "$_pkgname" \
+    -G Ninja \
+    -DCMAKE_BUILD_TYPE=None \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DZXING_DEPENDENCIES=LOCAL \
+    -DZXING_EXAMPLES=OFF \
+    -DZXING_UNIT_TESTS=OFF \
+    -Wno-dev
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+}

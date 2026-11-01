@@ -1,0 +1,42 @@
+# 2026-11-02：修 shard4 殘包。AUR 的 zbar-git 還停在 autotools（prepare 跑
+# autoreconf），但上游 master 已改成 meson、沒有 configure.ac/autogen.sh，
+# 所以原配方在 prepare() 直接紅。這裡照上游 INSTALL.md 改用 meson；
+# 預設關掉 Qt/Python/Java/測試，保留 GTK3 與影像解碼。
+pkgname=zbar-git
+pkgver=0.23.95
+pkgrel=2
+pkgdesc="Application and library for reading bar codes from various sources"
+arch=('x86_64')
+url="https://github.com/mchehab/zbar"
+license=(LGPL-2.1-or-later)
+depends=('glibc' 'gcc-libs' 'dbus' 'imagemagick' 'libxv' 'v4l-utils' 'gtk3')
+makedepends=('git' 'gtk3' 'imagemagick' 'gobject-introspection' 'meson')
+optdepends=('gtk3: for zbar-gtk')
+conflicts=('zbar' 'zbar-gtk' 'zbar-qt' 'python-zbar')
+provides=('zbar' 'zbar-gtk')
+source=("zbar::git+https://github.com/mchehab/zbar.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd zbar
+  local ver
+  ver=$(sed -n "s/^ *version: '\([0-9][^']*\)',*$/\1/p" meson.build | head -1)
+  [ -n "$ver" ] || ver=0
+  printf '%s.r%s.g%s\n' "$ver" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+build() {
+  meson setup zbar build \
+    --prefix=/usr --buildtype=plain --auto-features=enabled \
+    -Dgtk=gtk3 \
+    -Dqt=false \
+    -Dpython=no \
+    -Djava=disabled \
+    -Ddoc=false \
+    -Dbuild_tests=false
+  meson compile -C build
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+}

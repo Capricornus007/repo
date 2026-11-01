@@ -1,0 +1,42 @@
+# 2026-11-02：修 shard4 殘包。AUR 的 yay-git makedepends=(go>=1.26)，
+# 但容器裡已有本倉的 go-git（2:1.28.0…），go 與 go-git 在 pacman 層衝突
+# → Could not resolve all dependencies。這裡改用 go-git 當建置工具，
+# 版本更新（1.28）且不必拆掉容器裡的 go-git。
+pkgname="yay-git"
+_pkgname="yay"
+pkgver=13.1.0.r0.g0938a75e
+pkgrel=2
+pkgdesc="Yet another yogurt. Pacman wrapper and AUR helper written in go. (development version)"
+arch=('x86_64')
+url="https://github.com/Jguer/yay"
+license=('GPL-3.0-or-later')
+depends=('pacman>6.1' 'git')
+optdepends=('sudo: privilege elevation' 'doas: privilege elevation')
+makedepends=('go-git')
+options=(!lto)
+conflicts=('yay')
+provides=('yay')
+source=("yay::git+https://github.com/Jguer/yay.git#branch=next")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/$_pkgname"
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  export GOPATH="$srcdir"/gopath
+  export CGO_CPPFLAGS="${CPPFLAGS}"
+  export CGO_CFLAGS="${CFLAGS}"
+  export CGO_CXXFLAGS="${CXXFLAGS}"
+  export CGO_LDFLAGS="${LDFLAGS}"
+  export CGO_ENABLED=1
+
+  cd "$srcdir/$_pkgname"
+  make VERSION=$pkgver DESTDIR="$pkgdir" PREFIX="/usr" build
+}
+
+package() {
+  cd "$srcdir/$_pkgname"
+  make VERSION=$pkgver DESTDIR="$pkgdir" PREFIX="/usr" install
+}

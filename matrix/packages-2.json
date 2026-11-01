@@ -93,7 +93,8 @@
     "key": "exo-git",
     "repo_name": "exo-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "expat-git",
@@ -183,7 +184,8 @@
     "key": "garcon-git",
     "repo_name": "garcon-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "gc-git",
@@ -1041,6 +1043,7 @@
     "key": "libevent-git",
     "repo_name": "libevent-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   }
 ]

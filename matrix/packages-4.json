@@ -33,7 +33,8 @@
     "key": "xfce4-terminal-git",
     "repo_name": "xfce4-terminal-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "xfce4-weather-plugin-git",
@@ -45,7 +46,8 @@
     "key": "xfwm4-git",
     "repo_name": "xfwm4-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "xkeyboard-config-git",
@@ -93,7 +95,8 @@
     "key": "yajl-git",
     "repo_name": "yajl-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "yaml-cpp-git",
@@ -129,7 +132,8 @@
     "key": "zbar-git",
     "repo_name": "zbar-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "zenity-git",
@@ -183,13 +187,15 @@
     "key": "zxing-cpp-git",
     "repo_name": "zxing-cpp-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "yay-git",
     "repo_name": "yay-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "rustup-git",
@@ -214,5 +220,161 @@
     "repo_name": "pysolfc-music",
     "variant": "none",
     "kind": "aur"
+  },
+  {
+    "key": "ly-git",
+    "repo_name": "ly-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfce4-genmon-plugin-git",
+    "repo_name": "xfce4-genmon-plugin-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfce4-fsguard-plugin-git",
+    "repo_name": "xfce4-fsguard-plugin-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfce4-panel-git",
+    "repo_name": "xfce4-panel-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfce4-power-manager-git",
+    "repo_name": "xfce4-power-manager-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfce4-screensaver-git",
+    "repo_name": "xfce4-screensaver-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfce4-session-git",
+    "repo_name": "xfce4-session-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfce4-settings-git",
+    "repo_name": "xfce4-settings-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfce4-smartbookmark-plugin-git",
+    "repo_name": "xfce4-smartbookmark-plugin-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfce4-taskmanager-git",
+    "repo_name": "xfce4-taskmanager-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfce4-whiskermenu-plugin-git",
+    "repo_name": "xfce4-whiskermenu-plugin-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfconf-git",
+    "repo_name": "xfconf-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfdesktop-git",
+    "repo_name": "xfdesktop-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xfce4-dev-tools-git",
+    "repo_name": "xfce4-dev-tools-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "libxfce4util-git",
+    "repo_name": "libxfce4util-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "libxfce4windowing-git",
+    "repo_name": "libxfce4windowing-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "libxfce4ui-git",
+    "repo_name": "libxfce4ui-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "libwlembed-git",
+    "repo_name": "libwlembed-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xorg-server-common-git",
+    "repo_name": "xorg-server-common-git",
+    "variant": "none",
+    "kind": "alias"
+  },
+  {
+    "key": "xorg-server-devel-git",
+    "repo_name": "xorg-server-devel-git",
+    "variant": "none",
+    "kind": "alias"
+  },
+  {
+    "key": "xorg-server-xephyr-git",
+    "repo_name": "xorg-server-xephyr-git",
+    "variant": "none",
+    "kind": "alias"
+  },
+  {
+    "key": "xorg-server-xnest-git",
+    "repo_name": "xorg-server-xnest-git",
+    "variant": "none",
+    "kind": "alias"
+  },
+  {
+    "key": "xorg-server-xvfb-git",
+    "repo_name": "xorg-server-xvfb-git",
+    "variant": "none",
+    "kind": "alias"
   }
 ]

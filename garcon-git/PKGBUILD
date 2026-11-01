@@ -1,0 +1,46 @@
+# 2026-11-02：復活自 953a4e5 的剔除清單（Xfce 4.21 鏈）。
+# 原條目用 AUR 的裸名依賴（libxfce4ui/garcon/xfconf…），但 feed 只發 -git 包，
+# 容器裡 target not found。這裡把 Xfce 家族依賴改成對應 -git 包，並把
+# xfce4-dev-tools 改成 xfce4-dev-tools-git；plan 的 -git 依賴門檻會按 DAG
+# 自動跳過尚未發布的層，等前一層進 feed 後下一輪再建。
+# Maintainer: Capricornus007 <sihaogang at gmail dot com>
+# Co-Maintainer: Limao Luo <luolimao+AUR@gmail.com>
+#
+# (Added from garcon package)
+# Contributor: Evangelos Foutras <evangelos@foutrelis.com>
+# Contributor: Xavier Devlamynck <magicrhesus@ouranos.be>
+
+_pkgname=garcon
+pkgname=$_pkgname-git
+pkgver=4.21.0.213.g47fa625
+pkgrel=1
+pkgdesc="Freedesktop.org compliant menu library"
+arch=(i686 x86_64)
+license=(GPL2)
+url=http://wiki.xfce.org/dev/$_pkgname
+groups=(xfce4-git)
+depends=(libxfce4util-git libxfce4ui-git gtk3)
+makedepends=(git xfce4-dev-tools-git)
+provides=($_pkgname=$pkgver)
+conflicts=($_pkgname libxfce4menu{,-git})
+replaces=(libxfce4menu{,-git})
+options=(!libtool !makeflags)
+source=($pkgname::git+https://gitlab.xfce.org/xfce/$_pkgname)
+sha256sums=('SKIP')
+sha512sums=('SKIP')
+
+pkgver() {
+    cd $pkgname/
+    git describe | sed 's/^garcon-//;s/-/./g'
+}
+
+
+build() {
+    arch-meson "$pkgname" build \
+        -D b_ndebug=true
+    meson compile -C build
+}
+
+package() {
+    meson install -C build --destdir "$pkgdir"
+}

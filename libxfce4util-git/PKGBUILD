@@ -1,0 +1,44 @@
+# 2026-11-02：復活自 953a4e5 的剔除清單（Xfce 4.21 鏈）。
+# 原條目用 AUR 的裸名依賴（libxfce4ui/garcon/xfconf…），但 feed 只發 -git 包，
+# 容器裡 target not found。這裡把 Xfce 家族依賴改成對應 -git 包，並把
+# xfce4-dev-tools 改成 xfce4-dev-tools-git；plan 的 -git 依賴門檻會按 DAG
+# 自動跳過尚未發布的層，等前一層進 feed 後下一輪再建。
+# Maintainer: Limao Luo <luolimao+AUR@gmail.com>
+# Maintainer: Niko Cantero <vextium at gmail dot com>
+# (Added from libxfce4util package)
+# Contributor: Evangelos Foutras <evangelos@foutrelis.com>
+# Contributor: tobias <tobias@archlinux.org>
+
+_pkgname=libxfce4util
+pkgname="${_pkgname}-git"
+pkgver=4.17.2.r22.ge2f2a6e
+pkgrel=1
+pkgdesc="Basic utility non-GUI functions for Xfce"
+arch=(i686 x86_64)
+url=http://gitlab.xfce.org/xfce/${_pkgname}/
+license=(GPL2)
+groups=(xfce4-git)
+depends=(glib2)
+makedepends=('git' 'xfce4-dev-tools-git' 'gobject-introspection' 'meson')
+provides=("${_pkgname}=${pkgver}")
+conflicts=(${_pkgname%})
+source=(git+https://gitlab.xfce.org/xfce/${_pkgname})
+sha256sums=('SKIP')
+
+pkgver() {
+    cd ${srcdir}/${_pkgname}
+    git describe | sed 's/^libxfce4util-//;s/-/.r/;s/-/./g'
+}
+
+build() {
+  # 4.21 已從 autotools 搬到 meson（upstream master 已無 autogen.sh）。
+  meson setup "${_pkgname}" build \
+    --prefix=/usr --libdir=lib --buildtype=plain --auto-features=enabled \
+    -Dgtk-doc=false \
+    -Dvala=disabled
+  meson compile -C build
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+}

@@ -1,0 +1,45 @@
+# 2026-11-02：復活自 953a4e5 的剔除清單（Xfce 4.21 鏈）。
+# 原條目用 AUR 的裸名依賴（libxfce4ui/garcon/xfconf…），但 feed 只發 -git 包，
+# 容器裡 target not found。這裡把 Xfce 家族依賴改成對應 -git 包，並把
+# xfce4-dev-tools 改成 xfce4-dev-tools-git；plan 的 -git 依賴門檻會按 DAG
+# 自動跳過尚未發布的層，等前一層進 feed 後下一輪再建。
+# Maintainer: twa022 <twa022 at gmail dot com>
+
+_pkgname=xfdesktop
+pkgname=${_pkgname}-git
+pkgver=4.21.0+112+gdee450dc
+pkgrel=1
+pkgdesc="A desktop manager for Xfce (git checkout)"
+arch=('x86_64' 'i686' 'armv7h' 'aarch64')
+url="https://docs.xfce.org/xfce/xfdesktop/start"
+license=('GPL-2.0-or-later')
+groups=('xfce4-git')
+depends=('thunar' 'garcon-git' 'hicolor-icon-theme' 'libxfce4ui-git' 'libxfce4windowing-git' 'gtk-layer-shell' 'libyaml')
+makedepends=('git' 'meson' 'xfce4-dev-tools-git' 'glib2-devel' 'gst-plugin-gtk')
+optdepends=('gst-plugin-gtk: Video backgrounds')
+conflicts=('xfce4-menueditor' "${_pkgname}")
+provides=("${_pkgname}=${pkgver%%+*}")
+replaces=('xfce4-menueditor')
+options=('!libtool')
+source=("${_pkgname}::git+https://gitlab.xfce.org/xfce/${_pkgname}")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "${srcdir}/${_pkgname}"
+  git describe --long --tags | sed -r "s:^${_pkgname}.::;s/^v//;s/^xfce-//;s/-/+/g"
+}
+
+build() {
+  local meson_options=(
+    -D tests=false
+    -D x11=enabled
+    -D wayland=enabled
+  )
+
+  arch-meson "${_pkgname}" build "${meson_options[@]}"
+  meson compile -C build
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+}

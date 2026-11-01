@@ -1,0 +1,42 @@
+# 2026-11-02：復活自 953a4e5 的剔除清單（Xfce 4.21 鏈）。
+# 原條目用 AUR 的裸名依賴（libxfce4ui/garcon/xfconf…），但 feed 只發 -git 包，
+# 容器裡 target not found。這裡把 Xfce 家族依賴改成對應 -git 包，並把
+# xfce4-dev-tools 改成 xfce4-dev-tools-git；plan 的 -git 依賴門檻會按 DAG
+# 自動跳過尚未發布的層，等前一層進 feed 後下一輪再建。
+# Maintainer:  twa022 <twa022 at gmail dot com>
+
+_pkgname=xfce4-power-manager
+pkgname=${_pkgname}-git
+pkgver=4.21.0+139+g76f230c1
+pkgrel=1
+pkgdesc="Power manager for Xfce desktop"
+arch=('x86_64' 'i686' 'armv7h' 'aarch64')
+url="https://docs.xfce.org/xfce/xfce4-power-manager/start"
+license=('GPL-2.0-or-later')
+groups=('xfce4-git')
+depends=('libxfce4ui-git' 'upower' 'libnotify' 'xfce4-notifyd' 'hicolor-icon-theme' 'networkmanager')
+makedepends=('xfce4-panel-git' 'wayland-protocols' 'wayland' 'git' 'xfce4-dev-tools-git' 'glib2-devel' 'wlr-protocols' 'meson')
+optdepends=('xfce4-panel-git: Xfce panel plugin support')
+provides=("${_pkgname}=${pkgver%%+*}")
+conflicts=("${_pkgname}")
+source=("${_pkgname}::git+https://gitlab.xfce.org/xfce/${_pkgname}")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "${_pkgname}"
+  git describe --long --tags | sed -r "s:^${_pkgname}.::;s/^v//;s/^xfce-//;s/-/+/g"
+}
+
+build() {
+  local meson_options=(
+    -D x11=enabled
+    -D wayland=enabled
+  )
+
+  arch-meson "${_pkgname}" build "${meson_options[@]}"
+  meson compile -C build
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+}
