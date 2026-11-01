@@ -298,12 +298,6 @@
     "variant": "none"
   },
   {
-    "key": "mesa-tkg-git",
-    "repo_name": "mesa-tkg-git",
-    "variant": "none",
-    "kind": "tkg"
-  },
-  {
     "key": "extra-cmake-modules-git",
     "repo_name": "extra-cmake-modules-git",
     "variant": "none",
@@ -1194,26 +1188,8 @@
     "kind": "aur"
   },
   {
-    "key": "accountsservice-git",
-    "repo_name": "accountsservice-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "ada-git",
     "repo_name": "ada-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "adwaita-cursors-git",
-    "repo_name": "adwaita-cursors-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "adwaita-icon-theme-git",
-    "repo_name": "adwaita-icon-theme-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -1236,12 +1212,6 @@
     "kind": "aur"
   },
   {
-    "key": "android-udev-git",
-    "repo_name": "android-udev-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "aribb24-git",
     "repo_name": "aribb24-git",
     "variant": "none",
@@ -1256,12 +1226,6 @@
   {
     "key": "asciidoc-git",
     "repo_name": "asciidoc-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "at-spi2-core-git",
-    "repo_name": "at-spi2-core-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -1284,12 +1248,6 @@
     "kind": "aur"
   },
   {
-    "key": "blas-git",
-    "repo_name": "blas-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "blueman-git",
     "repo_name": "blueman-git",
     "variant": "none",
@@ -1302,12 +1260,6 @@
     "kind": "aur"
   },
   {
-    "key": "brightnessctl-git",
-    "repo_name": "brightnessctl-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "btop-git",
     "repo_name": "btop-git",
     "variant": "none",
@@ -1316,12 +1268,6 @@
   {
     "key": "bubblewrap-git",
     "repo_name": "bubblewrap-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "bun-git",
-    "repo_name": "bun-git",
     "variant": "none",
     "kind": "aur"
   },
@@ -1382,12 +1328,6 @@
   {
     "key": "codec2-git",
     "repo_name": "codec2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "colord-git",
-    "repo_name": "colord-git",
     "variant": "none",
     "kind": "aur"
   },

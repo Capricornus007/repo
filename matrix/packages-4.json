@@ -6,12 +6,6 @@
     "kind": "aur"
   },
   {
-    "key": "xfce4-genmon-plugin-git",
-    "repo_name": "xfce4-genmon-plugin-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "xfce4-netload-plugin-git",
     "repo_name": "xfce4-netload-plugin-git",
     "variant": "none",
