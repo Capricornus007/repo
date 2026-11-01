@@ -1,10 +1,10 @@
-# 倉內 override（2026-11-01）：AUR 原版帶 conflicts/replaces=(libevent)，會把系統的
-# libevent 2.1 頂掉——但本包是 git master（2.2.2-alpha，soname libevent-2.2.so），
-# 提供不了 links/unbound 需要的 libevent-2.1.so=7-64，頂掉即斷系統。
-# 摘掉 conflicts/replaces 後 2.1 與 2.2 檔名不重疊、可共存（新舊通吃）。
-
+# 倉內 override（2026-11-01，2026-11-02 修）：AUR 原版 conflicts/replaces=(libevent) 且
+# 追 master（2.2.2-alpha，soname libevent-2.2.so），頂掉系統 libevent 2.1 後，
+# links/unbound 要的 libevent-2.1.so=7-64 就斷（用戶 yay 實測炸）。
+# 修法：改釘 release-2.1 分支 → 產物就是 2.1 系，provides 明確帶 libevent-2.1.so=7-64，
+# 就算裝它也滿足 links/unbound；不寫 replaces（不主動頂掉系統 libevent，裝與否用戶決定）。
 pkgname=libevent-git
-pkgver=2.1.8.stable.r825.g2db55e43
+pkgver=2.1.12.stable.r0.g0000000
 pkgrel=1
 pkgdesc="An event notification library"
 arch=('i686' 'x86_64')
@@ -13,8 +13,9 @@ license=('BSD')
 depends=('openssl')
 makedepends=('git')
 optdepends=('python2: to use event_rpcgen.py')
-provides=(libevent)
-source=(git+https://github.com/libevent/libevent)
+provides=(libevent 'libevent-2.1.so=7-64')
+conflicts=(libevent)
+source=(git+https://github.com/libevent/libevent#branch=release-2.1)
 sha1sums=('SKIP')
 
 pkgver() {
