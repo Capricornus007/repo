@@ -50,7 +50,14 @@ build() {
     -D upower=enabled
   )
 
-  arch-meson "${_pkgname}" build "${meson_options[@]}"
+  # arch-meson 是 Arch devtools 的殼子、Artix 容器裡查無（同 garcon-git 在
+  # run 41387684219 #12 的「arch-meson: command not found」）。原樣展開本倉
+  # meson-git/arch-meson 的旗標，只換呼叫方式、不改語意。
+  meson setup "${_pkgname}" build \
+    --prefix=/usr --libexecdir=lib --sbindir=bin \
+    --buildtype=release --auto-features=enabled --wrap-mode=nodownload \
+    -D python.bytecompile=1 \
+    "${meson_options[@]}"
   meson compile -C build
 }
 
