@@ -70,7 +70,11 @@ package_colord-git() {
 	depends+=("libcolord=$pkgver")
 	optdepends=('argyllcms: color profiling'
 	            'colord-sane: SANE support')
-	provides=(colord libcolorhug.so)
+	# 2026-11-02：provides 必須帶 =$pkgver。colord-sane-git 的 depends 是
+	# "colord=$pkgver"（帶版本），而不帶版本的 provides 滿足不了版本化依賴
+	# → 實測 pacman 直接「無法滿足 colord-git 需要的依賴關係 libcolord=…」，
+	# 也就是 CI 綠但這包根本裝不上。
+	provides=("colord=$pkgver" libcolorhug.so)
 	conflicts=(colord)
 
 	DESTDIR="$pkgdir" meson install -C build
@@ -102,6 +106,7 @@ package_colord-sane-git() {
 package_libcolord-git() {
 	pkgdesc+=" (client library)"
 	depends=(glib2 lcms2 udev)
-	provides=(libcolord libcolord.so)
+	# 同上：colord-git 依賴 "libcolord=$pkgver"，這裡必須給版本。
+	provides=("libcolord=$pkgver" libcolord.so)
 	mv lib/* "$pkgdir"
 }
