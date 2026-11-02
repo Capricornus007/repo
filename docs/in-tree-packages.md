@@ -1816,7 +1816,7 @@ moregram 倉自己的 CI 做一次 Release 構建，feed 只做「取件＋落�
   造成登入 internal server error；
 * `linux.yml` 用真正 `Release` 組態、關閉 tdesktop 內建 Updater，再把
   `out/Release/artifact/Telegram` 打成
-  `moregram-desktop-7.3.3.r75.g9d667702.zip`，發到固定 tag `moregram-linux-dev`；
+  `moregram-desktop-7.3.3.r77.g93e3b2a3.zip`，發到固定 tag `moregram-linux-dev`；
 * 版號遵循 AUR VCS 慣例（上游版本＋距離＋短 commit），同一上游版本內可單調升級，
   也能由 `yay -Qi` 直接看出基線，不再拿不可排序的裸 hash 當 pkgver；
 * actions artifact 只留 1 天、下載要 token，故 rolling release 是 feed 的取件點。

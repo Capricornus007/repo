@@ -19,10 +19,10 @@
 # ⚠️ 版號由 plan 步驅動 ⇒ 本檔在「回推校驗和」排除清單（kind: aur 借道跳過，crave 同型）。
 
 pkgname=moregram-bin
-_pkgver=7.3.3.r75.g9d667702
+_pkgver=7.3.3.r77.g93e3b2a3
 _commit="${_pkgver##*.g}"
 pkgver="$_pkgver"
-pkgrel=1
+pkgrel=2
 pkgdesc="moregram 桌面端——官方 tdesktop 復刻＋64Gram 功能移植（CI 滾動構建）"
 arch=('x86_64')
 url="https://github.com/Capricornus007/moregram"

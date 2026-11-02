@@ -10,7 +10,7 @@
 #     linux.yml 加了 release job：構建完成即發 rolling release
 #     `moregram-linux-dev`，asset 名 `moregram-desktop-<版本>.r<距離>.g<sha8>.zip`（覆蓋式更新）。
 #   · 本包 source 指向該 release；版號由 release asset 現算，遵循 AUR VCS 慣例
-#     `7.3.3.r75.g9d667702`。`_pkgver` 保留完整可排序版號，`_commit` 只供 raw URL
+#     `7.3.3.r77.g93e3b2a3`。`_pkgver` 保留完整可排序版號，`_commit` 只供 raw URL
 #     精確抓取同一提交的圖標與 desktop 模板。
 #   · 產物只有 tdesktop 主程式（Telegram），沒有安裝包接縫：
 #     /opt 佈局＋/usr/bin 入口＋自寫 .desktop（模板取 lib/xdg/org.telegram.desktop.desktop
@@ -22,10 +22,10 @@
 # ⚠️ 版號由 plan 步驅動 ⇒ 本檔在「回推校驗和」排除清單（kind: aur 借道跳過，crave 同型）。
 
 pkgname=moregram-git
-_pkgver=7.3.3.r75.g9d667702
+_pkgver=7.3.3.r77.g93e3b2a3
 _commit="${_pkgver##*.g}"
 pkgver="$_pkgver"
-pkgrel=1
+pkgrel=2
 pkgdesc="moregram 桌面端——官方 tdesktop 復刻＋64Gram 功能移植（源碼滾動構建）"
 arch=('x86_64')
 url="https://github.com/Capricornus007/moregram"
