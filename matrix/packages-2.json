@@ -172,7 +172,9 @@
     "key": "fstrm-git",
     "repo_name": "fstrm-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "artix",
+    "image": "artixlinux/artixlinux:base-devel",
+    "in_tree": true
   },
   {
     "key": "fuse3-git",
@@ -1043,7 +1045,16 @@
     "key": "libevent-git",
     "repo_name": "libevent-git",
     "variant": "none",
-    "kind": "aur",
+    "kind": "artix",
+    "image": "artixlinux/artixlinux:base-devel",
+    "in_tree": true
+  },
+  {
+    "key": "libverto-git",
+    "repo_name": "libverto-git",
+    "variant": "none",
+    "kind": "artix",
+    "image": "artixlinux/artixlinux:base-devel",
     "in_tree": true
   }
 ]

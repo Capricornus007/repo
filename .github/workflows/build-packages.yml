@@ -495,6 +495,12 @@ jobs:
             for _r in system world galaxy lib32; do
               printf '\n[%s]\nInclude = /etc/pacman.d/mirrorlist\n' "$_r" >> /etc/pacman.conf
             done
+            # libevent 全鏈與宿主同用 Artix，重寫設定後仍須保留自有依賴來源。
+            case '${{ matrix.repo_name }}' in
+              libevent-git|links-git|unbound-git|fstrm-git|libverto-git)
+                printf '\n[junlin03-aur]\nSigLevel = Never\nServer = https://github.com/${{ github.repository }}/releases/download/current-repo\n' >> /etc/pacman.conf
+                ;;
+            esac
             grep -q '^\[world-gremlins\]' /etc/pacman.conf || { echo "::error::Artix 倉順序重寫失敗"; exit 1; }
             grep -q '^Architecture' /etc/pacman.conf || { echo "::error::[options] 段遺失（Architecture 沒了 → \$arch 無法展開）"; exit 1; }
             # wheaton 是唯一承載 goblins/gremlins 的 Artix 鏡像（實測 gigenet 與 dotsrc
@@ -764,7 +770,10 @@ jobs:
           fi
           case "${{ matrix.repo_name }}" in
             ffmpeg-full-git)
-              _aur_clone pkg_dir "https://aur.archlinux.org/${{ matrix.repo_name }}.git" ;;
+              _aur_clone pkg_dir "https://aur.archlinux.org/${{ matrix.repo_name }}.git"
+              # 與版本探測同用官方 GitHub mirror；git.ffmpeg.org 在 runner 連線逾時。
+              sed -i 's|git+https://git.ffmpeg.org/ffmpeg.git|git+https://github.com/FFmpeg/FFmpeg.git|' pkg_dir/PKGBUILD
+              ;;
             kew-git)
               mkdir pkg_dir
               curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/master/kew-git/PKGBUILD" \
@@ -2282,6 +2291,8 @@ jobs:
                 librime-git)               _extra_gate_deps="opencc-git" ;;
                 spirv-llvm-translator-git) _extra_gate_deps="spirv-tools-git spirv-headers-git" ;;
                 mesa-tkg-git)              _extra_gate_deps="spirv-llvm-translator-git" ;;
+                links-git|fstrm-git|libverto-git) _extra_gate_deps="libevent-git" ;;
+                unbound-git)               _extra_gate_deps="libevent-git fstrm-git" ;;
                 # shiboken6-git 的 makedepends 寫裸名 clang／llvm（同 translator 的手法：
                 # 靠「把容器 LLVM 換成自有 llvm-*-git」那步把裸名解析到我方 trunk）。
                 # 那步在 plan **之後**才跑，所以這裡先問一次兩顆進沒進 feed：
@@ -3677,6 +3688,19 @@ jobs:
             || { echo "::error::/usr/lib/libplacebo.so.387 不在，裝的不是本倉那顆"; exit 1; }
           echo "::notice::libplacebo 已換成本倉 ${_ver}，mpv 的 >=7.387.0 閘門這輪才可能過"
 
+      - name: 安裝 libevent 2.2 建置鏈
+        if: contains(fromJSON('["links-git","unbound-git","fstrm-git","libverto-git"]'), matrix.repo_name) && steps.plan.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          _event_deps='libevent-git'
+          if [ '${{ matrix.repo_name }}' = 'unbound-git' ]; then
+            _event_deps="$_event_deps fstrm-git"
+          fi
+          # 裸 libevent 會挑回同步庫 2.1；明確裝本倉 provider 並允許已宣告的頂替。
+          pacman -S --ask=20 --noconfirm --needed $_event_deps
+          pkg-config --modversion libevent
+          test -e /usr/lib/libevent-2.2.so.1
+
       - name: 云端编译 `.pkg.tar.zst`
         if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'
         env:
@@ -4043,6 +4067,28 @@ jobs:
           fi
           echo ">> 產物驗證通過：libcrypto／libssl 皆為 4，宣告與 NEEDED 一致"
 
+      - name: 驗產物：libevent 消費者必須連 2.2
+        if: contains(fromJSON('["links-git","unbound-git","fstrm-git","libverto-git"]'), matrix.repo_name) && steps.plan.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/libevent-verify
+          for _pkg in pkg_dir/*.pkg.tar.zst; do
+            bsdtar -xf "$_pkg" -C /tmp/libevent-verify
+          done
+          case '${{ matrix.repo_name }}' in
+            links-git)    _event_elf=usr/bin/links ;;
+            unbound-git)  _event_elf=usr/lib/libunbound.so ;;
+            fstrm-git)    _event_elf=usr/bin/fstrm_capture ;;
+            libverto-git) _event_elf=usr/lib/libverto-libevent.so ;;
+          esac
+          _needed=$(objdump -p "/tmp/libevent-verify/$_event_elf" | awk '$1 == "NEEDED" {print $2}')
+          printf '%s\n' "$_needed"
+          printf '%s\n' "$_needed" | grep -Eq '^libevent(_[a-z]+)?-2\.2\.so\.1$'
+          if printf '%s\n' "$_needed" | grep -q 'libevent.*-2\.1\.so'; then
+            echo '::error::產物仍需要 libevent 2.1，拒絕上架'
+            exit 1
+          fi
+
       - name: 上传产物到 artifact
         id: upload1
         continue-on-error: true
@@ -4143,6 +4189,17 @@ jobs:
           # 跟本机的 pipewire-jack 撞成无解冲突。
           # -p/--prevent-downgrade 保留了真正需要的那道保护：版本变低时拒绝写入。
           repo-add -R -p junlin03-aur.db.tar.gz ./*.pkg.tar.zst
+
+          # libevent 曾因 pkgver 多出 release. 前綴被 -p 拒收，job 卻綠、產物隨後被刪。
+          # 本輪有出包時必須真正入庫，不能把「已編好」當成「已可安裝」。
+          for _event_pkg in ./libevent-git-*.pkg.tar.zst; do
+            [ -f "$_event_pkg" ] || continue
+            if ! tar -xzOf junlin03-aur.db.tar.gz --wildcards 'libevent-git-*/desc' \
+                   | grep -Fxq "${_event_pkg##*/}"; then
+              echo "::error::libevent-git 產物被 repo-add 拒收；中止部署，不清理既有庫"
+              exit 1
+            fi
+          done
 
           # 历史遗留的 -debug 条目要从库里摘掉，否则 pacman 仍会列出它们，
           # 而对应的包文件马上就要被清理掉，变成「看得见装不上」。

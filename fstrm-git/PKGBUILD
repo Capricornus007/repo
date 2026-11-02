@@ -1,0 +1,45 @@
+# 追上游 master；fstrm_capture 必須連結本倉 libevent 2.2，不能關掉 programs。
+# 完整取代 fstrm，保留 libfstrm.so.0、工具、headers、pkg-config 與 man pages。
+pkgname=fstrm-git
+pkgver=0.6.1.r0.g1d6e11d
+pkgrel=2
+pkgdesc="C implementation of the Frame Streams data transport protocol"
+arch=('i686' 'x86_64')
+url="https://github.com/farsightsec/fstrm"
+license=('MIT')
+depends=('glibc' 'libevent-git' 'libevent-2.2.so')
+makedepends=('git' 'autoconf' 'automake' 'libtool' 'pkgconf')
+_fstrm_bits=$(getconf LONG_BIT)
+provides=("fstrm=$pkgver" "libfstrm.so=0-${_fstrm_bits}")
+conflicts=('fstrm')
+replaces=('fstrm')
+source=('git+https://github.com/farsightsec/fstrm.git#branch=master')
+sha256sums=('SKIP')
+
+pkgver() {
+  cd fstrm
+  git describe --tags --long --match 'v[0-9]*' |
+    sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd fstrm
+  ./autogen.sh
+}
+
+build() {
+  cd fstrm
+  ./configure \
+    --prefix=/usr \
+    --libdir=/usr/lib \
+    --enable-shared \
+    --disable-static \
+    --enable-programs
+  make
+}
+
+package() {
+  cd fstrm
+  make DESTDIR="$pkgdir" install
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/fstrm/LICENSE"
+}

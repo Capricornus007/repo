@@ -256,21 +256,8 @@
     "key": "libevent-git",
     "repo_name": "libevent-git",
     "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "unbound-git",
-    "repo_name": "unbound-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "links-git",
-    "repo_name": "links-git",
-    "variant": "none",
-    "kind": "aur",
+    "kind": "artix",
+    "image": "artixlinux/artixlinux:base-devel",
     "in_tree": true
   }
 ]

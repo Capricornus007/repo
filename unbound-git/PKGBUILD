@@ -5,19 +5,19 @@
 # 所以這裡只做三件事：關掉 systemd、拿掉 libsystemd.so、不裝 .service。
 # sysusers.d／tmpfiles.d／libalpm hook 三個輔助檔照留：盤上 Artix 官方 unbound
 # （pacman -Qql unbound）裝的就是同一組檔案，unbound 使用者 958 也在。
-# 依賴 libevent 保持裸名，由本倉 libevent-git（provides=libevent、replaces=libevent）
-# 供貨——這是用戶 2026-11-02「整套遷 2.2、直接頂替」裁定的一部分。
+# 明確依賴 libevent-git 與 fstrm-git，保證 CI 對本倉 2.2 重建；
+# 裸 libevent 會被同步庫 2.1 的同名實包搶走，無法完成 ABI 遷移。
 # Maintainer: Petr Špaček <pspacek@isc.org>
 
 basen=unbound
 pkgname=${basen}-git
 pkgver=1.26.2.r88.ge78d0a1c0
-pkgrel=1
+pkgrel=2
 pkgdesc="Validating, recursive, and caching DNS resolver"
 arch=(x86_64)
 url="https://unbound.net/"
 license=(BSD)
-depends=(dnssec-anchors fstrm hiredis ldns libevent libnghttp2 libsodium openssl)
+depends=(dnssec-anchors fstrm-git hiredis ldns libevent-git libevent-2.2.so libnghttp2 libsodium openssl)
 makedepends=(git expat protobuf-c python swig)
 optdepends=(
   'expat: for unbound-anchor'
@@ -26,7 +26,7 @@ optdepends=(
 )
 options=(debug)
 conflicts=(unbound)
-provides=(unbound libunbound.so)
+provides=(unbound 'libunbound.so=8-64')
 replaces=(unbound)
 backup=(etc/${basen}/${basen}.conf)
 source=(

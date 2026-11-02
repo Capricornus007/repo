@@ -1,0 +1,53 @@
+# 追上游 main；保留獨立 libevent backend，不改成 builtin 或關閉 backend。
+# 一包原子取代 Artix libverto，保留 krb5 的 libverto.so.1 與 module-base 契約。
+pkgname=libverto-git
+pkgver=0.3.2.r4.g8e944f2
+pkgrel=1
+pkgdesc="Main event loop abstraction library with the libevent backend"
+arch=('i686' 'x86_64')
+url="https://github.com/latchset/libverto"
+license=('MIT')
+depends=('glibc' 'libevent-git' 'libevent-2.2.so')
+makedepends=('git' 'autoconf' 'automake' 'libtool' 'pkgconf')
+_libverto_bits=$(getconf LONG_BIT)
+provides=("libverto=$pkgver" "libverto-libevent=$pkgver"
+          "libverto.so=1-${_libverto_bits}" "libverto-libevent.so=1-${_libverto_bits}" 'libverto-module-base')
+conflicts=('libverto' 'libverto-libevent' 'krb5<1.19.3-2')
+replaces=('libverto' 'libverto-libevent')
+source=('git+https://github.com/latchset/libverto.git#branch=main')
+sha256sums=('SKIP')
+
+pkgver() {
+  cd libverto
+  local _tag
+  # 0.3.2 的 release bump 不在 main 上；沿用 AUR fstrm 的最新標籤加
+  # tag..HEAD 提交數，避免 git describe 退回 0.3.1 而被 feed 判成降級。
+  IFS= read -r _tag < <(git tag --list '[0-9]*' --sort=-version:refname)
+  printf '%s.r%s.g%s\n' "$_tag" \
+    "$(git rev-list --count "${_tag}..HEAD")" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+  cd libverto
+  autoreconf -fiv
+}
+
+build() {
+  cd libverto
+  ./configure \
+    --prefix=/usr \
+    --libdir=/usr/lib \
+    --enable-shared \
+    --disable-static \
+    --with-pthread \
+    --without-glib \
+    --without-libev \
+    --with-libevent
+  make
+}
+
+package() {
+  cd libverto
+  make DESTDIR="$pkgdir" install
+  install -Dm644 COPYING "$pkgdir/usr/share/licenses/libverto/COPYING"
+}

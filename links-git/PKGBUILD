@@ -1,12 +1,12 @@
 # feed 版 links（用戶 2026-11-02 裁定的「libevent 整套遷 2.2」頂替方案一環）：
-# 官方 links 的 depends 釘死 `libevent-2.1.so`，一旦 libevent-git 頂替系統 libevent→2.2
-# 就斷。此版把該依賴改成裸 `libevent`（由 feed 的 libevent-git 2.2 的 provides 滿足），
-# 在 CI 容器對 libevent 2.2 重建，並 provides/conflicts/replaces=links 取代官方那顆。
+# 官方包連 libevent-2.1.so；此版明確依賴 libevent-git 與 libevent-2.2.so，
+# 必須對 2.2 重建，不能僅用裸 libevent 讓 CI 裝回同步庫 2.1。
+# provides/conflicts/replaces=links，與函式庫一併取代官方包。
 # links 無公開 git 源（twibright 的 git、github 鏡像皆 404），故取最新 release tarball。
 # 只做文字版（用戶機上裝的就是文字版 links），跳過官方分割的 xlinks 圖形版。
 pkgname=links-git
 pkgver=2.30
-pkgrel=1
+pkgrel=2
 pkgdesc='A text WWW browser, similar to Lynx'
 arch=('x86_64')
 url='http://links.twibright.com/'
@@ -15,7 +15,7 @@ depends=('brotli' 'libbrotlidec.so'
          'bzip2' 'libbz2.so'
          'glibc'
          'gpm' 'libgpm.so'
-         'libevent'
+         'libevent-git' 'libevent-2.2.so'
          'openssl' 'libcrypto.so' 'libssl.so'
          'xz' 'liblzma.so'
          'zstd' 'libzstd.so'

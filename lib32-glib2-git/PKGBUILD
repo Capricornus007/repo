@@ -64,9 +64,18 @@ build() {
   # （feature 型別、預設 auto）強制打開 → glib/meson.build 要求可執行的 dtrace
   # 程式，容器裡沒有（那是 systemtap 的 /usr/bin/dtrace）→ configure 直接紅。
   # glib 的 dtrace 只是 SystemTap 觀測探針，不影響執行期功能，這裡明確關掉。
+  # ⚠️ 只關 dtrace 還不夠（run 41408114910 實測）：
+  #   glib/meson.build:2719 → systemtap = get_option('systemtap').require(enable_dtrace)
+  #   而「systemtap」在 meson.options 裡也是 feature 型別、預設 auto，
+  #   --auto-features=enabled 把它一起強制打開 → 「Cannot enable systemtap
+  #   because dtrace feature is disabled」→ configure 再次紅。
+  #   兩顆都是純觀測探針（glib.stp tapsets），對執行期零影響，一起明確關掉。
+  #   本機實證：glib main（e09400a，與 CI 產物 2.90.1.r152.ge09400a 同源）
+  #   `meson setup -Ddtrace=disabled -Dsystemtap=disabled` → rc=0。
   arch-meson glib build \
     -D selinux=disabled \
     -D dtrace=disabled \
+    -D systemtap=disabled \
     --libdir=/usr/lib32
   meson compile -C build
 }

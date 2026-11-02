@@ -1,9 +1,34 @@
 # in-tree 包為什麼必須列進 build-packages.yml「拉取对应的套件仓库」
 
 CI 的通用規則是「名字以 `-git` 結尾 → clone AUR，否則 clone `github.com/<owner>/<repo_name>.git`」。
-本倉的目錄版（in-tree）包會被那條規則搶走，所以**必須**在那個 step 的 `case` 名稱清單裡先攔掉。
+新 in-tree 包在矩陣設 `in_tree: true`，優先取本倉目錄與附屬檔；未設者仍按既有 `case` 清單攔截。
 逐包理由原本寫在 workflow 內，但含 `${{ }}` 的 step 有 **21000 位元組**的上限（shell 註解也計入，中文 1 字算 3 bytes），故搬到這裡。精確語意與踩雷實錄見文末「21000 上限的精確語意」，本地守門＝`scripts/workflow-step-budget.py`。
-加新 in-tree 包時：清單加一行、說明寫進本檔，不要寫回 workflow。
+加新 in-tree 包時：矩陣設 `in_tree: true`、說明寫進本檔，不要把長篇說明寫回 workflow。
+
+## libevent 2.2 遷移與 CI 修正（2026-11-02）
+
+- `libevent-git` 追 master。`pkgver()` 必須去掉上游 tag 的 `release-` 前綴；
+  先前產出 `release.2.2.2.alpha.r11…`，被 `repo-add -p` 視為降級拒收，
+  然後清理步驟刪掉未登錄產物。現在產出 `2.2.2.alpha.r11…`，
+  並在部署前確認本輪 libevent 檔名確實寫入 DB，拒收就中止、保留原庫。
+- 全鏈矩陣指定 `kind: artix` 與 Artix base-devel image，使用與宿主相同的
+  goblins／gremlins 倉順序；重寫 pacman.conf 後補回自有 feed，再安裝依賴。
+- `links-git`、`unbound-git`、`fstrm-git`、`libverto-git` 明確依賴 `libevent-git`；
+  CI 建置前裝本倉 provider，不能讓裸 `libevent` 選到同步庫 2.1。
+  成品必須實際連結 2.2 的 libevent／core／extra，仍連 2.1 就拒絕上架。
+- `fstrm-git` 保留 `fstrm_capture` 與 `libfstrm.so.0`；
+  `libverto-git` 保留 `libverto.so.1`、獨立 libevent backend 與
+  `libverto-module-base`，滿足 krb5 的 `libverto.so=1-64` 契約。
+  不把 2.2 偽裝成 2.1，不留假 soname symlink。
+- 宿主驗證採 cache 內的 2.2 headers／libs 預先重建，系統 2.1 保持可用，
+  五包已在同一筆 pacman 交易替換。已實跑 2.2 事件回呼、links、unbound 的
+  DNS 查詢、libverto 後端回呼與 Kerberos CLI；不是只有 makepkg 或 CI 顯示綠燈。
+- `lib32-glib2-git` 同時關閉 dtrace 與 systemtap；只關 dtrace 會與
+  arch-meson 的 `--auto-features=enabled` 強制啟用 systemtap 衝突。
+- `calibre-git` 的 build/check/package 使用 glibc 隨包提供的 `C.UTF-8`，
+  不要求容器預先生成 `en_US.UTF-8`。Sphinx man-pages 已以此 locale 實跑成功。
+- FFmpeg 的 AUR recipe 下載後把 git 來源切到官方 GitHub mirror，
+  與版本探測用同一個來源，避開 runner 到 git.ffmpeg.org 的連線逾時。
 
 ---
 

@@ -136,7 +136,7 @@ prepare(){
 
 check() {
 	cd "${pkgname%-git}"
-	export LANG='en_US.UTF-8'
+	export LANG=C.UTF-8 LC_ALL=C.UTF-8
 	export CALIBRE_CONFIG_DIRECTORY="$(mktemp -d)"
 	python setup.py test --under-sanitize --exclude-test-name test_websocket_basic
 	python setup.py test_rs
@@ -144,7 +144,8 @@ check() {
 
 build() {
 	cd "${pkgname%-git}"
-	export LANG='en_US.UTF-8'
+	# glibc 隨包提供 C.UTF-8；精簡建置環境沒有生成 en_US.UTF-8。
+	export LANG=C.UTF-8 LC_ALL=C.UTF-8
 	python setup.py build
 	python setup.py iso639
 	python setup.py iso3166
@@ -160,7 +161,7 @@ build() {
 
 package() {
 	cd "${pkgname%-git}"
-	export LANG='en_US.UTF-8'
+	export LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 	# If this directory doesn't exist, zsh completion won't install.
 	install -d "${pkgdir}/usr/share/zsh/site-functions"

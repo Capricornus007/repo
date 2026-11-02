@@ -1487,7 +1487,8 @@
     "key": "links-git",
     "repo_name": "links-git",
     "variant": "none",
-    "kind": "aur",
+    "kind": "artix",
+    "image": "artixlinux/artixlinux:base-devel",
     "in_tree": true
   }
 ]
