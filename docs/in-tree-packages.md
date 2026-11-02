@@ -1809,13 +1809,14 @@ Electron 運行時閉包」）。chrome-sandbox 權限與桌面庫刷新走 zcod
 `moregramX`（帶 X）＝**手機版**（mgx，Android）。兩者不是同一個倉、也不是同一個包。
 
 ### 為什麼轉發而不是在 feed 裡源碼建
-tdesktop 全量構建（Rocky Linux 8 容器＋Docker Buildx＋ccache）單輪約 2 小時，
-moregram 倉自己的 CI 已經在做這件事。feed 只做「取件＋落地」：
-* moregram 的 `linux.yml` 在構建成功後把 `out/Debug/artifact/`（Telegram＋Updater
-  兩支裸二進制）打成 `moregram-desktop-<sha8>.zip`，發到固定 tag 的 rolling
-  release `moregram-linux-dev`（覆蓋式更新，舊 asset 隨本版刪）；
-* actions artifact 只留 1 天、下載要 token，feed 的 PKGBUILD 夠不着——所以需要
-  這個 release 取件點。
+tdesktop 全量構建（Rocky Linux 8 容器＋Docker Buildx＋ccache）成本高，
+moregram 倉自己的 CI 做一次 Release 構建，feed 只做「取件＋落地」：
+* 正式分發禁用 `TDESKTOP_API_TEST`，使用 Telegram Snap 公開且允許 Linux 重分發的
+  API identity（Arch 官方 telegram-desktop 配方同一組），避免 test credentials
+  造成登入 internal server error；
+* `linux.yml` 把 `out/Release/artifact/`（Telegram＋Updater）打成
+  `moregram-desktop-<sha8>.zip`，發到固定 tag `moregram-linux-dev`；
+* actions artifact 只留 1 天、下載要 token，故 rolling release 是 feed 的取件點。
 
 ### 四接點（CI 契約）
 矩陣 `{"key":"moregram-bin",...,"kind":"aur"}`；取得步 in-tree 從本倉 master 抓
@@ -1823,13 +1824,15 @@ moregram 倉自己的 CI 已經在做這件事。feed 只做「取件＋落地�
 （不猜版本）；改寫步 `sed _pkgver=`（source 四條 URL 都吃它）並自證 URL 真的換了。
 本檔在「回推校驗和」清單外（sha256 全 SKIP，crave 同型）。
 
-### 落地佈局
-`/opt/moregram/Telegram` ＋ `/usr/bin/moregram` 軟鏈；`.desktop` 由同 commit 的
-`lib/xdg/org.telegram.desktop.desktop` 改寫（Exec/Icon/Name/TryExec）；圖標取
-`Telegram/Resources/art/icon256(@2x).png` 掛 hicolor。**Updater 不裝**：更新由
-pacman 管，裝了會與 pacman 打架（zcode-ce-git 的同款考量）。provides 帶
-`telegram-desktop`、conflicts 只寫 `telegram-desktop`（頂替 64gram-desktop-bin
-等實包，不把自家 provides 寫進 conflicts）。
+### 落地佈局與單一桌面身份
+`/opt/moregram/Telegram` 是實物；`/usr/bin/moregram` 是保留全部參數的 wrapper，
+設定 `MOREGRAM_PACKAGED=1`。主實例統一使用 dotted ID
+`io.github.capricornus007.moregram`：desktop、Gio/D-Bus application ID、service 與
+256/512 圖標同名，顯示名稱為 `Moregram`。套件接手主實例的 launcher，但不關閉
+URI、通知、托盤或自動啟動整合；明確 `-workdir` 的獨立實例仍保留。
+啟動時只刪除 Exec 真正解析到目前 Moregram binary 的舊 `Telegram` launcher/service，
+不按名稱刪除真正 Telegram。**Updater 不裝**：更新由 pacman 管。provides 帶
+`telegram-desktop`、conflicts 只寫 `telegram-desktop`。
 
 ## openvpn / tcpdump / pacman-git -3（2026-10-27；ossl4 臨時倉收編）
 

@@ -21,7 +21,7 @@
 pkgname=moregram-bin
 _pkgver=00000000
 pkgver="$_pkgver"
-pkgrel=2
+pkgrel=3
 pkgdesc="moregram 桌面端——官方 tdesktop 復刻＋64Gram 功能移植（CI 滾動構建）"
 arch=('x86_64')
 url="https://github.com/Capricornus007/moregram"
@@ -44,26 +44,38 @@ package() {
     install -d "$pkgdir/opt/moregram"
     install -Dm755 "$srcdir/artifact/Telegram" "$pkgdir/opt/moregram/Telegram"
 
+    # 由套件接手主實例的桌面／D-Bus 註冊；保留所有 CLI、URI 與 -workdir 參數。
     install -d "$pkgdir/usr/bin"
-    ln -sf /opt/moregram/Telegram "$pkgdir/usr/bin/moregram"
+    cat > "$pkgdir/usr/bin/moregram" <<'EOF'
+#!/bin/sh
+export MOREGRAM_PACKAGED=1
+exec /opt/moregram/Telegram "$@"
+EOF
+    chmod 755 "$pkgdir/usr/bin/moregram"
 
-    # .desktop：模板是 tdesktop 官方條目，逐鍵改成本包身份（Exec／Icon／Name）。
-    install -Dm644 "$srcdir/moregram.desktop" \
-        "$pkgdir/usr/share/applications/moregram.desktop"
-    sed -i -e 's|^Exec=.*|Exec=/usr/bin/moregram -- %u|' \
-        -e 's|^Icon=.*|Icon=moregram|' \
-        -e 's|^Name=.*|Name=moregram|' \
+    # desktop ID 與 Gio application ID／D-Bus service 必須相同且為有效的 dotted ID。
+    local _desktop_id=io.github.capricornus007.moregram
+    local _desktop="$pkgdir/usr/share/applications/${_desktop_id}.desktop"
+    install -Dm644 "$srcdir/moregram.desktop" "$_desktop"
+    sed -i -e 's|^Exec=Telegram -- %U$|Exec=/usr/bin/moregram -- %U|' \
+        -e 's|^Exec=Telegram -quit$|Exec=/usr/bin/moregram -quit|' \
+        -e "s|^Icon=org.telegram.desktop$|Icon=${_desktop_id}|" \
+        -e 's|^Name=Telegram$|Name=Moregram|' \
+        -e 's|^Name=Quit Telegram$|Name=Quit Moregram|' \
         -e 's|^TryExec=.*|TryExec=/usr/bin/moregram|' \
-        "$pkgdir/usr/share/applications/moregram.desktop"
-    grep -q '^Exec=/usr/bin/moregram' \
-        "$pkgdir/usr/share/applications/moregram.desktop" || {
+        "$_desktop"
+    grep -q '^Exec=/usr/bin/moregram -- %U$' "$_desktop" || {
         echo "::error::.desktop 改寫沒落地（上游模板鍵名變了？）"
         return 1
     }
 
+    install -d "$pkgdir/usr/share/dbus-1/services"
+    printf '[D-BUS Service]\nName=%s\nExec=/usr/bin/moregram\n' "$_desktop_id" \
+        > "$pkgdir/usr/share/dbus-1/services/${_desktop_id}.service"
+
     # 圖標：上游 art/ 的 256 兩檔（@2x 是 512 實物）掛 hicolor
     install -Dm644 "$srcdir/icon256.png" \
-        "$pkgdir/usr/share/icons/hicolor/256x256/apps/moregram.png"
+        "$pkgdir/usr/share/icons/hicolor/256x256/apps/${_desktop_id}.png"
     install -Dm644 "$srcdir/icon256@2x.png" \
-        "$pkgdir/usr/share/icons/hicolor/512x512/apps/moregram.png"
+        "$pkgdir/usr/share/icons/hicolor/512x512/apps/${_desktop_id}.png"
 }
