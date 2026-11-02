@@ -75,6 +75,7 @@ build() {
     -D systemtap=disabled \
     -D introspection=disabled \
     -D sysprof=disabled \
+    -D man-pages=disabled \
     --libdir=/usr/lib32
   meson compile -C build
 }

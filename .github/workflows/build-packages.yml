@@ -1720,9 +1720,9 @@ jobs:
               # 版本須來自與 makepkg 相同的「上游 master＋Lily all」合併結果。
               rm -rf /tmp/vim-version
               mkdir -p /tmp/vim-version
-              git clone --quiet --filter=blob:none --branch master \
+              git clone --quiet --branch master \
                 https://github.com/vim/vim.git /tmp/vim-version/vim-repo || exit 1
-              git clone --quiet --filter=blob:none --branch all \
+              git clone --quiet --branch all \
                 https://github.com/lilydjwg/vim.git /tmp/vim-version/vim-lily || exit 1
               TARGET_PKGVER=$(srcdir=/tmp/vim-version bash -c \
                 'source ./PKGBUILD; prepare >&2 && pkgver') \

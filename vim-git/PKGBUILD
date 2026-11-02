@@ -1,48 +1,68 @@
-# 2026-11-02 lily 組合包（用戶裁定 A① 追 dev 尖端＋B 全做全裝）。源=lilydjwg/vim 的 all 分支
-# （即 vim 上游＋lily 自帶補丁，取代 archlinuxcn 構建機的 git://localhost/vim 鏡像）。
-# split 出 gvim-git／vim-runtime-git／vim-git。provides/conflicts vim、不 replaces。
+# Lily 組合包：Vim master 與 lilydjwg/vim all 合併，避免 fork 落後上游時降級。
+# 合併使用來源提交時間與固定身分，版本探測和實際構建得到相同內容與版本。
+# split 出 gvim-git／vim-runtime-git／vim-git；GVim 同時提供圖形與命令列 Vim。
 # Maintainer: lilydjwg <lilydjwg@gmail.com>
 
 pkgbase=vim-git
 pkgname=(gvim-git vim-runtime-git vim-git)
-pkgver=9.2.1254
-_versiondir="vim$(echo $pkgver | awk -F. '{print $1$2}')"
-pkgrel=1
+pkgver=9.2.1276.r24815.g546f6f4
+pkgrel=2
 arch=('i686' 'x86_64')
 license=('VIM')
 url="http://www.vim.org"
 makedepends=('gpm' 'gtk3' 'python' 'ruby' 'gettext' 'wayland'
              'pkg-config' 'sed' 'luajit' 'git' 'tar' 'desktop-file-utils' 'libxt')
+_gitname=vim-repo
 source=('vimdoc.hook'
-        "vim-repo::git+https://github.com/lilydjwg/vim.git#branch=all")
-sha1sums=('adc4c82b6c4097944e5a767270a772721455eb8c'
+        "${_gitname}::git+https://github.com/vim/vim.git#branch=master"
+        "vim-lily::git+https://github.com/lilydjwg/vim.git#branch=all")
+sha1sums=('963e8413dd067f1fcd5c500ab4c42f6e33b4e6b3'
+          'SKIP'
           'SKIP')
 options=('debug' 'strip')
 
+_merge_lily_source() {
+  local _lily_tip _stamp _lily_stamp
+  _lily_tip=$(git -C "$srcdir/vim-lily" rev-parse HEAD) || return
+  _stamp=$(git -C "$srcdir/$_gitname" show -s --format=%ct HEAD) || return
+  _lily_stamp=$(git -C "$srcdir/vim-lily" show -s --format=%ct HEAD) || return
+  if (( _lily_stamp > _stamp )); then _stamp=$_lily_stamp; fi
+  git -C "$srcdir/$_gitname" -c protocol.file.allow=always fetch --quiet --no-tags \
+    "$srcdir/vim-lily" "$_lily_tip" || return
+  GIT_AUTHOR_DATE="@$_stamp +0000" GIT_COMMITTER_DATE="@$_stamp +0000" \
+    git -C "$srcdir/$_gitname" -c commit.gpgsign=false \
+      -c user.name='Package Builder' -c user.email='builder@localhost' \
+      merge --quiet --no-ff -m 'Merge Lily changes into Vim development' "$_lily_tip"
+}
+
+prepare() {
+  _merge_lily_source
+}
+
 pkgver() {
-  cd vim-repo
-  echo $(awk '/^#define VIM_VERSION_(MAJOR|MINOR)\>/ {print $3}' src/version.h | tr '\n' '.')$(sed -n '/ included_patches\[\]/,+3p' src/version.c | sed '/[^,]$/d;s/\s*\|,//g')
+  cd "$srcdir/$_gitname"
+  local _version
+  _version="$(awk '/^#define VIM_VERSION_(MAJOR|MINOR)\>/ {print $3}' src/version.h | tr '\n' '.')$(sed -n '/ included_patches\[\]/,+3p' src/version.c | sed '/[^,]$/d;s/\s*\|,//g')"
+  printf '%s.r%s.g%s\n' "$_version" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
 }
 
 build() {
-  cd vim-repo
+  cd "$srcdir/$_gitname"
 
-  # define the place for the global (g)vimrc file (set to /etc/vimrc)
-  sed -i 's|^.*\(#define SYS_.*VIMRC_FILE.*"\) .*$|\1|' \
-    src/feature.h
-  sed -i 's|^.*\(#define VIMRC_FILE.*"\) .*$|\1|' \
-    src/feature.h
 
   local vim_options='--without-x --with-wayland=no --disable-canberra --disable-gui --disable-xsmp --disable-pixman'
   local gvim_options='--enable-xsmp --enable-gui=gtk3'
 
   for name in vim gvim; do
     local _dir="${srcdir}"/$pkgbase
-    rm -rf $_dir
-    mkdir $_dir
-    git archive all | tar x -C ../$pkgbase
+    rm -rf "$_dir" "$srcdir/$name-build"
+    mkdir -p "$_dir"
+    git archive HEAD | tar x -C "$_dir"
 
     pushd $_dir
+    # 修改實際構建副本；在 git archive 之前改來源會被 archive 忽略。
+    sed -i 's|^.*\(#define SYS_.*VIMRC_FILE.*"\) .*$|\1|' src/feature.h
+    sed -i 's|^.*\(#define VIMRC_FILE.*"\) .*$|\1|' src/feature.h
     STRIP=true ./configure \
       --prefix=/usr \
       --localstatedir=/var/lib/vim \
@@ -56,16 +76,12 @@ build() {
       --enable-terminal \
       --with-features=huge \
       --with-luajit \
-      --enable-socketserver \
       --disable-icon-cache-update --disable-desktop-database-update \
       $(eval "echo \$${name}_options") --enable-fail-if-missing \
       --with-compiledby=百合仙子 --with-modified-by=百合仙子
 
     msg2 "Building $name..."
-    make
-
-    sleep 1
-    msg2 "Rebuilding $name..."
+    make -C src auto/pathdef.c
     sed -i 's/compiled_sys.*/compiled_sys = (char_u *)"次美好的百合森林";/' src/auto/pathdef.c
     make
 
@@ -144,6 +160,7 @@ package_gvim-git() {
 }
 
 package_vim-runtime-git() {
+  _versiondir="vim$(echo "$pkgver" | awk -F. '{print $1$2}')"
   if [ ! -d "${srcdir}"/runtime-install ]; then
     package_gvim-git
     rm -rf "$pkgdir"

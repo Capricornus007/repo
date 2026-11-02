@@ -25,7 +25,7 @@ CI 的通用規則是「名字以 `-git` 結尾 → clone AUR，否則 clone `gi
   DNS 查詢、libverto 後端回呼與 Kerberos CLI；不是只有 makepkg 或 CI 顯示綠燈。
 - `lib32-glib2-git` 同時關閉 dtrace 與 systemtap；只關 dtrace 會與
   arch-meson 的 `--auto-features=enabled` 強制啟用 systemtap 衝突。
-  32 位元包另外關閉未出貨的 GIR 與 sysprof 追蹤：已以完整宿主 makepkg 建成，
+  32 位元包另外關閉未出貨的 GIR、man pages 與 sysprof 追蹤：已以完整宿主 makepkg 建成，
   並執行 ELF 32-bit 測試程式，確認指標為 4 bytes、GLib 事件回呼成功。
 - `calibre-git` 的 build/check/package 使用 glibc 隨包提供的 `C.UTF-8`，
   不要求容器預先生成 `en_US.UTF-8`。Sphinx man-pages 已以此 locale 實跑成功。
@@ -33,6 +33,23 @@ CI 的通用規則是「名字以 `-git` 結尾 → clone AUR，否則 clone `gi
   與版本探測用同一個來源，避開 runner 到 git.ffmpeg.org 的連線逾時。
   來源明確命名為 `ffmpeg::git+…`，保留 AUR prepare/pkgver 使用的小寫目錄名；
   已實跑真實 AUR prepare，Whisper 及七份補丁全部校驗與套用成功。
+
+## Lily 組合包與 Vim-only 安裝（2026-11-02）
+
+- GTK3 的 VCS 來源使用 `SKIP`，五份 hook／補丁仍逐份驗證雜湊；
+  成品精確提供 `libgtk-3.so=0-64`、`libgdk-3.so=0-64` 與 `libgailutil-3.so=0-64`。
+  已在宿主建置並安裝，實際原生視窗可顯示正體中文並完成 GTK 事件回呼。
+- Wget 已實測查詢字串不進下載檔名，以及未開 `--span-hosts` 時仍會下載跨主機的
+  inline page requisites；不是只看 patch 套用成功。
+- Vim 使用官方 master 與 Lily all 的真實合併結果，來源提交時間與合併身分固定，
+  版本包含實際提交數與合併 hash。CI 版本探測使用完整 clone，並執行相同 prepare／pkgver；
+  fetch 失敗必須中止，不能繼續拿舊資料報成功。
+- `vimdoc.hook` 的 `Type = File` 已改成 pacman 7.1 接受的 `Type = Path`，並更新來源雜湊。
+  使用者指定只留命令列 Vim：本機安裝 `vim-git`＋`vim-runtime-git`，不安裝 `gvim-git`。
+  已驗證正體中文檔案編輯、語法資源及翻譯資源；純 Vim 版本明確不使用圖形介面。
+- Calibre 已安裝；成品無 `ttf-liberation` 套件依賴，並實際完成正體中文 TXT→EPUB→PDF，
+  核對書名、正文及 PDF 詮釋資料。
+
 
 ---
 
