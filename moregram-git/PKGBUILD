@@ -24,7 +24,7 @@
 pkgname=moregram-git
 _pkgver=00000000
 pkgver="$_pkgver"
-pkgrel=5
+pkgrel=6
 pkgdesc="moregram 桌面端——官方 tdesktop 復刻＋64Gram 功能移植（源碼滾動構建）"
 arch=('x86_64')
 url="https://github.com/Capricornus007/moregram"
@@ -68,8 +68,8 @@ EOF
     sed -i -e 's|^Exec=Telegram -- %U$|Exec=/usr/bin/moregram -- %U|' \
         -e 's|^Exec=Telegram -quit$|Exec=/usr/bin/moregram -quit|' \
         -e "s|^Icon=org.telegram.desktop$|Icon=${_desktop_id}|" \
-        -e 's|^Name=Telegram$|Name=Moregram|' \
-        -e 's|^Name=Quit Telegram$|Name=Quit Moregram|' \
+        -e 's|^Name=Telegram$|Name=moregram|' \
+        -e 's|^Name=Quit Telegram$|Name=Quit moregram|' \
         -e 's|^TryExec=.*|TryExec=/usr/bin/moregram|' \
         "$_desktop"
     grep -q '^Exec=/usr/bin/moregram -- %U$' "$_desktop" || {

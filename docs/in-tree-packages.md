@@ -1828,9 +1828,9 @@ moregram 倉自己的 CI 做一次 Release 構建，feed 只做「取件＋落�
 `/opt/moregram/Telegram` 是實物；`/usr/bin/moregram` 是保留全部參數的 wrapper，
 設定 `MOREGRAM_PACKAGED=1`。主實例統一使用 dotted ID
 `io.github.capricornus007.moregram`：desktop、Gio/D-Bus application ID、service 與
-256/512 圖標同名，顯示名稱為 `Moregram`。套件接手主實例的 launcher，但不關閉
+256/512 圖標同名，顯示名稱為 `moregram`。套件接手主實例的 launcher，但不關閉
 URI、通知、托盤或自動啟動整合；明確 `-workdir` 的獨立實例仍保留。
-啟動時只刪除 Exec 真正解析到目前 Moregram binary 的舊 `Telegram` launcher/service，
+啟動時只刪除 Exec 真正解析到目前 moregram binary 的舊 `Telegram` launcher/service，
 不按名稱刪除真正 Telegram。**Updater 不裝**：更新由 pacman 管。provides 帶
 `telegram-desktop`、conflicts 只寫 `telegram-desktop`。
 
