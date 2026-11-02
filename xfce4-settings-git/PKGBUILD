@@ -16,7 +16,7 @@ license=('GPL2')
 groups=('xfce4-git')
 depends=('garcon-git' 'libxfce4ui-git' 'xfconf-git' 'libnotify' 'libcanberra' 'upower'
          'colord' 'libxklavier' 'elementary-icon-theme' 'gnome-themes-extra')
-makedepends=('git' 'glib2-devel' 'xfce4-dev-tools-git' 'xf86-input-libinput' 'wlr-protocols' meson)
+makedepends=('git' 'glib2-devel' 'xfce4-dev-tools-git' 'xf86-input-libinput' 'wlr-protocols' meson 'gobject-introspection')
 optdepends=('python: xfce4-compose-mail -- "mailto:" URI handling'
             'xiccd: for displays support in xfce4-color-settings'
             'cups: for printers support in xfce4-color-settings'

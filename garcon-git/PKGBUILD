@@ -20,7 +20,7 @@ license=(GPL2)
 url=http://wiki.xfce.org/dev/$_pkgname
 groups=(xfce4-git)
 depends=(libxfce4util-git libxfce4ui-git gtk3)
-makedepends=(git xfce4-dev-tools-git)
+makedepends=(git meson xfce4-dev-tools-git gobject-introspection)
 provides=($_pkgname=$pkgver)
 conflicts=($_pkgname libxfce4menu{,-git})
 replaces=(libxfce4menu{,-git})

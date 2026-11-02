@@ -15,7 +15,7 @@ url="https://docs.xfce.org/xfce/xfce4-power-manager/start"
 license=('GPL-2.0-or-later')
 groups=('xfce4-git')
 depends=('libxfce4ui-git' 'upower' 'libnotify' 'xfce4-notifyd' 'hicolor-icon-theme' 'networkmanager')
-makedepends=('xfce4-panel-git' 'wayland-protocols' 'wayland' 'git' 'xfce4-dev-tools-git' 'glib2-devel' 'wlr-protocols' 'meson')
+makedepends=('xfce4-panel-git' 'wayland-protocols' 'wayland' 'git' 'xfce4-dev-tools-git' 'glib2-devel' 'wlr-protocols' 'meson' 'gobject-introspection')
 optdepends=('xfce4-panel-git: Xfce panel plugin support')
 provides=("${_pkgname}=${pkgver%%+*}")
 conflicts=("${_pkgname}")

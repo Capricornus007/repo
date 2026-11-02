@@ -15,7 +15,7 @@ url="https://docs.xfce.org/xfce/xfdesktop/start"
 license=('GPL-2.0-or-later')
 groups=('xfce4-git')
 depends=('thunar' 'garcon-git' 'hicolor-icon-theme' 'libxfce4ui-git' 'libxfce4windowing-git' 'gtk-layer-shell' 'libyaml')
-makedepends=('git' 'meson' 'xfce4-dev-tools-git' 'glib2-devel' 'gst-plugin-gtk')
+makedepends=('git' 'meson' 'xfce4-dev-tools-git' 'glib2-devel' 'gst-plugin-gtk' 'gobject-introspection')
 optdepends=('gst-plugin-gtk: Video backgrounds')
 conflicts=('xfce4-menueditor' "${_pkgname}")
 provides=("${_pkgname}=${pkgver%%+*}")

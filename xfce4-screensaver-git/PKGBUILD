@@ -15,7 +15,7 @@ arch=('x86_64' 'i686' 'armv7h' 'aarch64')
 license=('GPL2')
 depends=('libxss' 'libxklavier' 'garcon-git' 'libwnck3' 'python-gobject' 'xfconf-git' 'dbus-glib'
          'libwlembed-git' 'libxfce4windowing-git')
-makedepends=( 'xfce4-dev-tools-git' 'meson' 'wayland-protocols' 'git' 'xmlto' 'docbook-xml')
+makedepends=( 'xfce4-dev-tools-git' 'meson' 'wayland-protocols' 'git' 'xmlto' 'docbook-xml' 'gobject-introspection')
 provides=("${_pkgname}=${pkgver%%+*}")
 conflicts=("${_pkgname}")
 groups=('xfce4-goodies-git')
