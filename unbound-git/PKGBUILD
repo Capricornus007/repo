@@ -1,0 +1,97 @@
+# 2026-11-02：從 junlin03-aur 的 raw 改成 in-tree，只為修一個 Artix 死結。
+# AUR 那份 --enable-systemd 並把 libsystemd.so 寫進 depends，實測（已入庫資產
+# unbound-git-1.26.2.r88 的 .PKGINFO）帶著 `depend = libsystemd.so=0-64`——
+# 這臺是 Artix+OpenRC、根本沒有 libsystemd，yay 直接「無法滿足依賴關係」。
+# 所以這裡只做三件事：關掉 systemd、拿掉 libsystemd.so、不裝 .service。
+# sysusers.d／tmpfiles.d／libalpm hook 三個輔助檔照留：盤上 Artix 官方 unbound
+# （pacman -Qql unbound）裝的就是同一組檔案，unbound 使用者 958 也在。
+# 依賴 libevent 保持裸名，由本倉 libevent-git（provides=libevent、replaces=libevent）
+# 供貨——這是用戶 2026-11-02「整套遷 2.2、直接頂替」裁定的一部分。
+# Maintainer: Petr Špaček <pspacek@isc.org>
+
+basen=unbound
+pkgname=${basen}-git
+pkgver=1.26.2.r88.ge78d0a1c0
+pkgrel=1
+pkgdesc="Validating, recursive, and caching DNS resolver"
+arch=(x86_64)
+url="https://unbound.net/"
+license=(BSD)
+depends=(dnssec-anchors fstrm hiredis ldns libevent libnghttp2 libsodium openssl)
+makedepends=(git expat protobuf-c python swig)
+optdepends=(
+  'expat: for unbound-anchor'
+  'sh: for unbound-control-setup'
+  'python: for python-bindings'
+)
+options=(debug)
+conflicts=(unbound)
+provides=(unbound libunbound.so)
+replaces=(unbound)
+backup=(etc/${basen}/${basen}.conf)
+source=(
+  "git+https://github.com/NLnetLabs/unbound.git#branch=master"
+  "${basen}-1.14.0-trust_anchor_file.patch"
+  ${basen}-sysusers.conf
+  ${basen}-tmpfiles.conf
+  ${basen}-trusted-key.hook
+)
+sha512sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+b2sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+prepare() {
+  cd ${basen}
+  # enable trusted-anchor-file and set it to an unbound specific location
+  patch -Np1 -i ../"${basen}-1.14.0-trust_anchor_file.patch"
+  autoreconf -fiv
+}
+
+pkgver() {
+    cd "${basen}"
+    git describe --long | sed -e 's/release-//' -e 's/-/.r/' -e 's/-/./'
+}
+
+build() {
+  cd ${basen}
+  ./configure --prefix=/usr \
+              --sysconfdir=/etc \
+              --localstatedir=/var \
+              --sbindir=/usr/bin \
+              --disable-rpath \
+              --enable-dnscrypt \
+              --enable-dnstap \
+              --enable-pie \
+              --enable-relro-now \
+              --enable-subnet \
+              --disable-systemd \
+              --enable-tfo-client \
+              --enable-tfo-server \
+              --enable-cachedb \
+              --with-libhiredis \
+              --with-conf-file=/etc/unbound/unbound.conf \
+              --with-pidfile=/run/unbound.pid \
+              --with-rootkey-file=/etc/trusted-key.key \
+              --with-libevent \
+              --with-libnghttp2 \
+              --with-pyunbound \
+              --enable-debug
+  sed -i -e 's/ -shared / -Wl,-O1,--as-needed\0/g' libtool
+  make
+}
+
+check() {
+  cd ${basen}
+  make -k check
+}
+
+package() {
+  depends+=(libprotobuf-c.so)
+
+  cd ${basen}
+  make DESTDIR="${pkgdir}" install
+  install -vDm 644 LICENSE -t "${pkgdir}"/usr/share/licenses/${basen}/
+  install -vDm 644 ../${basen}-sysusers.conf "${pkgdir}"/usr/lib/sysusers.d/${basen}.conf
+  install -vDm 644 ../${basen}-tmpfiles.conf "${pkgdir}"/usr/lib/tmpfiles.d/${basen}.conf
+  # libalpm hook to copy the dnssec-anchors provided key to /etc/unbound
+  install -vDm 644 ../unbound-trusted-key.hook -t "${pkgdir}"/usr/share/libalpm/hooks/
+}

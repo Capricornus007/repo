@@ -831,7 +831,8 @@
     "key": "unbound-git",
     "repo_name": "unbound-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "unixodbc-git",
