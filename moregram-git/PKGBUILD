@@ -24,7 +24,7 @@
 pkgname=moregram-git
 _pkgver=00000000
 pkgver="$_pkgver"
-pkgrel=3
+pkgrel=4
 pkgdesc="moregram 桌面端——官方 tdesktop 復刻＋64Gram 功能移植（源碼滾動構建）"
 arch=('x86_64')
 url="https://github.com/Capricornus007/moregram"
@@ -50,16 +50,19 @@ package() {
     install -d "$pkgdir/usr/bin"
     ln -sf /opt/moregram/Telegram "$pkgdir/usr/bin/moregram"
 
-    # .desktop：模板是 tdesktop 官方條目，逐鍵改成本包身份（Exec／Icon／Name）。
+    # .desktop：檔名／id 用上游的 org.telegram.desktop（tdesktop 執行期就認這個 id，
+    # 系統級有它、就不會再往 ~/.local/share/applications 寫一條 Name=Telegram 的
+    # hash 副本，避免 rofi 搜 gram 冒出「Telegram + moregram」兩條）。內容仍逐鍵
+    # 改成本包品牌（Name／Icon／Exec），StartupWMClass 維持上游值不動。
     install -Dm644 "$srcdir/moregram.desktop" \
-        "$pkgdir/usr/share/applications/moregram.desktop"
+        "$pkgdir/usr/share/applications/org.telegram.desktop.desktop"
     sed -i -e 's|^Exec=.*|Exec=/usr/bin/moregram -- %u|' \
         -e 's|^Icon=.*|Icon=moregram|' \
         -e 's|^Name=.*|Name=moregram|' \
         -e 's|^TryExec=.*|TryExec=/usr/bin/moregram|' \
-        "$pkgdir/usr/share/applications/moregram.desktop"
+        "$pkgdir/usr/share/applications/org.telegram.desktop.desktop"
     grep -q '^Exec=/usr/bin/moregram' \
-        "$pkgdir/usr/share/applications/moregram.desktop" || {
+        "$pkgdir/usr/share/applications/org.telegram.desktop.desktop" || {
         echo "::error::.desktop 改寫沒落地（上游模板鍵名變了？）"
         return 1
     }
