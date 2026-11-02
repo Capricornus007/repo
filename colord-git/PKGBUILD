@@ -34,6 +34,8 @@ makedepends=(
 )
 provides=(colord colord-sane libcolord)
 conflicts=(colord colord-sane libcolord)
+# 2026-11-02：補 replaces（同 conflicts 三顆），裝機時直接頂替。
+replaces=(colord colord-sane libcolord)
 options=(!emptydirs)
 source=("git+https://github.com/hughsie/colord")
 b2sums=('SKIP')

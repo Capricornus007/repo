@@ -12,6 +12,8 @@ source=("${pkgname%-git}::git+https://github.com/M0Rf30/android-udev-rules.git")
 depends=('libmtp' 'udev')
 makedepends=('git')
 conflicts=("${pkgname%-git}")
+# 2026-11-02：補 replaces，否則 pacman 會問「刪除 android-udev 嗎」並在 --noconfirm 下判失敗。
+replaces=("${pkgname%-git}")
 provides=("${pkgname%-git}")
 
 package() {

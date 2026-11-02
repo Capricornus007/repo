@@ -3,8 +3,8 @@
 # libsystemd.so.0。這裡改用 udev 規則（--disable-logind 會自動啟用 udev），
 # 與 Artix 官方 brightnessctl 0.5.1-3 的依賴（只有 udev）一致。
 pkgname=brightnessctl-git
-pkgver=0.5.1.r32.g3152968
-pkgrel=2
+pkgver=0.5.1.r38.ge70bc55
+pkgrel=1
 pkgdesc="Lightweight brightness control tool"
 arch=('i686' 'x86_64')
 url="https://github.com/Hummer12007/brightnessctl"
@@ -13,6 +13,8 @@ depends=('udev')
 makedepends=('git')
 provides=('brightnessctl')
 conflicts=('brightnessctl')
+# 2026-11-02：補 replaces，裝機時直接頂替 world 的 brightnessctl，不必交互確認。
+replaces=('brightnessctl')
 source=("$pkgname::git+https://github.com/Hummer12007/brightnessctl.git")
 sha256sums=('SKIP')
 
@@ -23,7 +25,11 @@ pkgver() {
 
 build() {
   cd "$srcdir/$pkgname"
-  ./configure --prefix=/usr --disable-logind
+  # 2026-11-02：--udev-dir 必須明給。上游 configure 預設 /lib/udev/rules.d，
+  # 但 Arch/Artix 的 /lib 是指向 usr/lib 的軟連結、所有權歸 filesystem 套件，
+  # 打包時就報「檔案系統中已存在 /lib（由 filesystem 擁有）」整個交易失敗
+  # （本機 makepkg -U 實測）。Arch 官方 brightnessctl 也是這樣覆寫。
+  ./configure --prefix=/usr --disable-logind --udev-dir=/usr/lib/udev/rules.d
   make
 }
 

@@ -33,6 +33,8 @@ b2sums=('SKIP' 'SKIP')
 
 provides=($pkg libaccountsservice.so)
 conflicts=($pkg)
+# 2026-11-02：補 replaces，裝機時直接頂替世界倉的 accountsservice。
+replaces=($pkg)
 
 pkgver() {
   cd $pkg
