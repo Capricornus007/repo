@@ -4,7 +4,7 @@
 _pkgbase=colord
 pkgbase="$_pkgbase-git"
 pkgname=(colord-git colord-sane-git libcolord-git)
-pkgver=1.4.6.r16.d735245
+pkgver=1.4.8.r27.3ce5d97
 pkgrel=2
 pkgdesc="System daemon for managing color devices"
 arch=(x86_64)
@@ -32,10 +32,6 @@ makedepends=(
 	sane
 	vala
 )
-provides=(colord colord-sane libcolord)
-conflicts=(colord colord-sane libcolord)
-# 2026-11-02：補 replaces（同 conflicts 三顆），裝機時直接頂替。
-replaces=(colord colord-sane libcolord)
 options=(!emptydirs)
 source=("git+https://github.com/hughsie/colord")
 b2sums=('SKIP')
@@ -66,6 +62,9 @@ _pick() {
 	done
 }
 
+# Split-package invariant: provides/conflicts/replaces belong inside each package_*().
+# Top-level values are inherited by every output, which made the three -git siblings
+# conflict with one another and made a normal pacman -Syu transaction impossible.
 package_colord-git() {
 	depends+=("libcolord=$pkgver")
 	optdepends=('argyllcms: color profiling'
@@ -76,6 +75,7 @@ package_colord-git() {
 	# 也就是 CI 綠但這包根本裝不上。
 	provides=("colord=$pkgver" libcolorhug.so)
 	conflicts=(colord)
+	replaces=(colord)
 
 	DESTDIR="$pkgdir" meson install -C build
 
@@ -99,6 +99,7 @@ package_colord-sane-git() {
 	depends=("colord=$pkgver" sane)
 	provides=(colord-sane)
 	conflicts=(colord-sane)
+	replaces=(colord-sane)
 
 	mv sane/* "$pkgdir"
 }
@@ -108,5 +109,7 @@ package_libcolord-git() {
 	depends=(glib2 lcms2 udev)
 	# 同上：colord-git 依賴 "libcolord=$pkgver"，這裡必須給版本。
 	provides=("libcolord=$pkgver" libcolord.so)
+	conflicts=(libcolord)
+	replaces=(libcolord)
 	mv lib/* "$pkgdir"
 }
