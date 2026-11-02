@@ -25,7 +25,7 @@ pkgbase=xorg-server-git
 # 而是這一包的 split 產物；把 xephyr/xnest 打開，devel 一併補上。
 pkgname=('xorg-server-git' 'xorg-server-common-git' 'xorg-server-xvfb-git'
          'xorg-server-devel-git' 'xorg-server-xephyr-git' 'xorg-server-xnest-git')
-pkgver=21.1.25.r0.g0000000
+pkgver=26.1.99.1.r19536.geae2c21
 # -1 已在 abi-25.2-compat.patch 之前發布；同一 git pkgver 必須抬 pkgrel 才不會被 plan 跳過。
 pkgrel=2
 arch=('x86_64')
