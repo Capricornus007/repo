@@ -65,8 +65,13 @@ makedepends=(
 )
 pkgver() {
   cd gtk3-git
-  # gtk-3-24 分支 tip：取最近 tag + 增量
-  git describe --tags --long | sed 's/^ubuntu-//;s/^_//;s/-/./g;s/\.\([0-9]*\)\.g/.r\1.g/'
+  # gtk-3-24 分支 tip 通常不是 tag；CI 若以 shallow／無 tag 克隆，
+  # `git describe --tags` 會回空 → makepkg「pkgver is not allowed to be empty」直接紅
+  # （run 41348871983 實測）。describe 拿不到就退回「3.24.<距頭提交數>.g<short>」，保證非空。
+  local d
+  d=$(git describe --tags --long 2>/dev/null)
+  [ -z "$d" ] && d="3.24.99-$(git rev-list --count HEAD)-g$(git rev-parse --short HEAD)"
+  printf '%s' "$d" | sed 's/^ubuntu-//;s/^_//;s/-/./g;s/\.\([0-9]*\)\.g/.r\1.g/'
 }
 
 source=(
