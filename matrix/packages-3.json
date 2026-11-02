@@ -429,7 +429,8 @@
     "key": "p11-kit-git",
     "repo_name": "p11-kit-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "pahole-git",
@@ -910,7 +911,8 @@
     "key": "wireplumber-git",
     "repo_name": "wireplumber-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "x264-git",
