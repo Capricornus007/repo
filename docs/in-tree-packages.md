@@ -1802,7 +1802,7 @@ libxtst/libnotify/alsa-lib/mesa/xdg-utils——CE 自己維護的「Arch 官方�
 Electron 運行時閉包」）。chrome-sandbox 權限與桌面庫刷新走 zcode-ce-git.install
 （改寫自其 aur/zcode-ce-bin.install）。
 
-## moregram-bin（2026-10-24；用戶點名「moregram 就是桌面版，直接 -bin」）
+## moregram-git（2026-10-24；桌面版源碼滾動包）
 
 ### 命名先立規矩
 `moregram`＝**桌面版**（tdesktop 復刻＋64Gram 功能移植，Capricornus007/moregram）；
@@ -1814,25 +1814,28 @@ moregram 倉自己的 CI 做一次 Release 構建，feed 只做「取件＋落�
 * 正式分發禁用 `TDESKTOP_API_TEST`，使用 Telegram Snap 公開且允許 Linux 重分發的
   API identity（Arch 官方 telegram-desktop 配方同一組），避免 test credentials
   造成登入 internal server error；
-* `linux.yml` 把 `out/Release/artifact/`（Telegram＋Updater）打成
-  `moregram-desktop-<sha8>.zip`，發到固定 tag `moregram-linux-dev`；
+* `linux.yml` 用真正 `Release` 組態、關閉 tdesktop 內建 Updater，再把
+  `out/Release/artifact/Telegram` 打成
+  `moregram-desktop-7.3.3.r75.g9d667702.zip`，發到固定 tag `moregram-linux-dev`；
+* 版號遵循 AUR VCS 慣例（上游版本＋距離＋短 commit），同一上游版本內可單調升級，
+  也能由 `yay -Qi` 直接看出基線，不再拿不可排序的裸 hash 當 pkgver；
 * actions artifact 只留 1 天、下載要 token，故 rolling release 是 feed 的取件點。
 
 ### 四接點（CI 契約）
-矩陣 `{"key":"moregram-bin",...,"kind":"aur"}`；取得步 in-tree 從本倉 master 抓
-`moregram-bin/PKGBUILD`；plan 步讀 rolling release 的 asset 名取 sha8 當 pkgver
-（不猜版本）；改寫步 `sed _pkgver=`（source 四條 URL 都吃它）並自證 URL 真的換了。
+矩陣 `{"key":"moregram-git",...,"kind":"aur"}`；取得步 in-tree 從本倉 master 抓
+`moregram-git/PKGBUILD`；plan 步從 rolling asset 讀完整 VCS pkgver，改寫 `_pkgver=`
+並重置 `pkgrel=1`；PKGBUILD 再拆 `.g` 後綴作 raw GitHub URL 的 commit。
 本檔在「回推校驗和」清單外（sha256 全 SKIP，crave 同型）。
 
 ### 落地佈局與單一桌面身份
 `/opt/moregram/Telegram` 是實物；`/usr/bin/moregram` 是保留全部參數的 wrapper，
 設定 `MOREGRAM_PACKAGED=1`。主實例統一使用 dotted ID
 `io.github.capricornus007.moregram`：desktop、Gio/D-Bus application ID、service 與
-256/512 圖標同名，顯示名稱為 `moregram`。套件接手主實例的 launcher，但不關閉
-URI、通知、托盤或自動啟動整合；明確 `-workdir` 的獨立實例仍保留。
-啟動時只刪除 Exec 真正解析到目前 moregram binary 的舊 `Telegram` launcher/service，
-不按名稱刪除真正 Telegram。**Updater 不裝**：更新由 pacman 管。provides 帶
-`telegram-desktop`、conflicts 只寫 `telegram-desktop`。
+256/512 圖標同名，顯示名稱為 `moregram`。套件接手主實例的 URI、通知、托盤與
+自動啟動整合；明確 `-workdir` 的獨立實例仍保留。啟動時只刪除 Exec 真正解析到
+目前 moregram binary 的舊 `Telegram` launcher/service，不按名稱刪除真正 Telegram。
+**內建 Updater 在編譯期關閉，設定頁不再出現官方 beta／檢查更新；更新唯一由 pacman
+管理。** provides 帶 `telegram-desktop`、conflicts 只寫 `telegram-desktop`。
 
 ## openvpn / tcpdump / pacman-git -3（2026-10-27；ossl4 臨時倉收編）
 

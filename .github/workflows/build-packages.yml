@@ -2014,18 +2014,17 @@ jobs:
               fi
               ;;
             moregram-git)
-              # 版號＝commit 短 sha。moregram 倉 CI 構建完成後把產物發到固定
-              # tag 的 rolling release（moregram-linux-dev），asset 名是
-              # moregram-desktop-<sha8>.zip——直接讀 asset 名，不猜版本。
+              # release asset 直接攜帶 AUR VCS 版號，例如
+              # moregram-desktop-7.3.3.r74.g504f0fcd.zip；它同時保證可讀與單調排序。
               _mgasset=$(gh_api "https://api.github.com/repos/Capricornus007/moregram/releases/tags/moregram-linux-dev" \
                 | jq -r '.assets[]?.name' 2>/dev/null \
-                | grep -oE '^moregram-desktop-[0-9a-f]{8}\.zip$' | head -1 || true)
-              [ -n "$_mgasset" ] || skip "moregram-linux-dev 尚無 asset（上游構建未完成或 release job 未推）"
+                | grep -oE '^moregram-desktop-[0-9]+\.[0-9]+\.[0-9]+\.r[0-9]+\.g[0-9a-f]{8}\.zip$' | head -1 || true)
+              [ -n "$_mgasset" ] || skip "moregram-linux-dev 尚無語意 VCS asset（上游構建未完成或 release job 未推）"
               latest="${_mgasset#moregram-desktop-}"
               latest="${latest%.zip}"
-              case "$latest" in
-                ""|*[!0-9a-f]*) skip "moregram asset 名裡的 sha 不合法（=$latest）" ;;
-              esac
+              if ! [[ "$latest" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.r[0-9]+\.g[0-9a-f]{8}$ ]]; then
+                skip "moregram asset 版號不合法（=$latest）"
+              fi
               echo "moregram rolling asset=$_mgasset → pkgver=$latest"
               TARGET_PKGVER="$latest"
               ;;
@@ -2895,16 +2894,17 @@ jobs:
               grep -n '^pkgver=' PKGBUILD
               ;;
             moregram-git)
-              # pkgver 是 "${_pkgver}" 展開的，source 四條 URL 也都吃 ${_pkgver}
-              # → 只改 _pkgver= 那行；去 sed ^pkgver= 只會改到展開式本身。
+              # `_pkgver` 是完整 VCS 版號；PKGBUILD 再由 `.g` 後綴拆出 raw URL 的 commit。
               sed -i "s/^_pkgver=.*/_pkgver=$NEW_PKGVER/" PKGBUILD
-              grep -nE '^(_pkgver|pkgver)=' PKGBUILD
-              # 自證：source URL 展開後必須帶新的 sha8（規則 71 的同款防線）。
-              _mg_url=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1; printf "%s" "${source[0]#*::}"')
-              case "$_mg_url" in
-                *"$NEW_PKGVER"*) ;;
-                *) echo "::error::moregram-git source URL 沒換到 $NEW_PKGVER（展開=$_mg_url）"; exit 1 ;;
-              esac
+              sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+              grep -nE '^(_pkgver|_commit|pkgver|pkgrel)=' PKGBUILD
+              source ./PKGBUILD >/dev/null 2>&1
+              [ "${pkgver:-}" = "$NEW_PKGVER" ] || {
+                echo "::error::moregram 改寫後 pkgver=${pkgver:-}，預期 $NEW_PKGVER"
+                exit 1
+              }
+              case "${source[0]:-}" in *"$NEW_PKGVER"*) ;; *) echo "::error::release URL 沒換到 $NEW_PKGVER"; exit 1 ;; esac
+              case "${source[1]:-}" in *"${NEW_PKGVER##*.g}"*) ;; *) echo "::error::raw URL 沒換到 ${NEW_PKGVER##*.g}"; exit 1 ;; esac
               ;;
             serein)
               # ⚠️ 這包的 pkgver 是 `${_upver/-/pre.}` 展開出來的，source 的 `#tag=v$_upver`

@@ -8,28 +8,29 @@
 # 2 小時級），本包只做「取件＋落地」：
 #   · 上游 CI 的 actions artifact 只留 1 天、下載要 token → feed 夠不着；
 #     linux.yml 加了 release job：構建完成即發 rolling release
-#     `moregram-linux-dev`，asset 名 `moregram-desktop-<sha8>.zip`（覆蓋式更新）。
-#   · 本包 source 指向該 release，版號＝commit 短 sha（plan 步從 release API 讀
-#     asset 名現算，crave／jbr21 同型的「版號由外部端點驅動」：原料 `_pkgver=`，
-#     改寫步 sed 的是 `_pkgver=` 那行）。
-#   · 產物是 tdesktop 式裸二進制（Telegram＋Updater），沒有安裝包接縫：
+#     `moregram-linux-dev`，asset 名 `moregram-desktop-<版本>.r<距離>.g<sha8>.zip`（覆蓋式更新）。
+#   · 本包 source 指向該 release；版號由 release asset 現算，遵循 AUR VCS 慣例
+#     `7.3.3.r75.g9d667702`。`_pkgver` 保留完整可排序版號，`_commit` 只供 raw URL
+#     精確抓取同一提交的圖標與 desktop 模板。
+#   · 產物只有 tdesktop 主程式（Telegram），沒有安裝包接縫：
 #     /opt 佈局＋/usr/bin 入口＋自寫 .desktop（模板取 lib/xdg/org.telegram.desktop.desktop
 #     同 commit 原件改寫）＋hicolor 圖標（Telegram/Resources/art/icon256@2x.png）。
 #
-# Updater 是 tdesktop 自帶的增量更新器；本包由 pacman 管更新，package() 不裝它、
-# 也不寫任何讓它自動跑起來的配置，避免與 pacman 打架（zcode-ce-git 的同款考量）。
+# tdesktop 內建 Updater 在 CI 編譯期關閉；本包只接受 pacman 更新，不裝 Updater，
+# 也不讓設定頁連去官方 Telegram beta 更新端點。
 #
 # ⚠️ 版號由 plan 步驅動 ⇒ 本檔在「回推校驗和」排除清單（kind: aur 借道跳過，crave 同型）。
 
 pkgname=moregram-git
-_pkgver=00000000
+_pkgver=7.3.3.r75.g9d667702
+_commit="${_pkgver##*.g}"
 pkgver="$_pkgver"
-pkgrel=6
+pkgrel=1
 pkgdesc="moregram 桌面端——官方 tdesktop 復刻＋64Gram 功能移植（源碼滾動構建）"
 arch=('x86_64')
 url="https://github.com/Capricornus007/moregram"
 license=('GPL3')
-depends=('gtk3' 'hicolor-icon-theme' 'xdg-utils')
+depends=('cairo' 'fontconfig' 'freetype2' 'glib2' 'glibc' 'gtk3' 'hicolor-icon-theme' 'pango' 'xdg-utils')
 optdepends=('libnotify: 桌面通知')
 provides=('moregram' 'telegram-desktop')
 # 只與「提供 telegram-desktop 的實包」互斥（64gram-desktop-bin 等）；
@@ -37,17 +38,20 @@ provides=('moregram' 'telegram-desktop')
 conflicts=('telegram-desktop')
 options=('!strip')
 source=("moregram-desktop-${_pkgver}.zip::https://github.com/Capricornus007/moregram/releases/download/moregram-linux-dev/moregram-desktop-${_pkgver}.zip"
-        "icon256.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/Telegram/Resources/art/icon256.png"
-        "icon256@2x.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/Telegram/Resources/art/icon256@2x.png"
+        "icon16.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/Telegram/Resources/art/icon16.png"
+        "icon32.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/Telegram/Resources/art/icon32.png"
+        "icon48.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/Telegram/Resources/art/icon48.png"
+        "icon64.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/Telegram/Resources/art/icon64.png"
+        "icon128.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/Telegram/Resources/art/icon128.png"
+        "icon256.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/Telegram/Resources/art/icon256.png"
+        "icon512.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/Telegram/Resources/art/icon512.png"
         # 2026-11-02：上游倉沒有 moregram 專屬的 .desktop，只有 tdesktop 原生的
-        # lib/xdg/org.telegram.desktop.desktop（實測 71212f86 的 lib/xdg 只有三檔：
-        # org.telegram.desktop.{desktop,metainfo.xml,service}）。原本指到
-        # io.github.capricornus007.moregram.desktop → 404、整包下載失敗。
-        # 取原生那份當模板，package() 的 sed 會把 Exec／Icon／Name／TryExec 全改成本包身份。
-        "moregram.desktop::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/lib/xdg/org.telegram.desktop.desktop")
-sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+        # lib/xdg/org.telegram.desktop.desktop；取原生那份當模板，package() 再把
+        # Exec／Icon／Name／TryExec 全改成本包身份。
+        "moregram.desktop::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/lib/xdg/org.telegram.desktop.desktop")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
-# 上游 zip 裡是裸二進制（Telegram／Updater，無目錄層）
+# 上游 zip 裡只有裸主程式 Telegram（Updater 已在編譯期關閉）
 package() {
     install -d "$pkgdir/opt/moregram"
     install -Dm755 "$srcdir/artifact/Telegram" "$pkgdir/opt/moregram/Telegram"
@@ -81,9 +85,10 @@ EOF
     printf '[D-BUS Service]\nName=%s\nExec=/usr/bin/moregram\n' "$_desktop_id" \
         > "$pkgdir/usr/share/dbus-1/services/${_desktop_id}.service"
 
-    # 圖標：上游 art/ 的 256 兩檔（@2x 是 512 實物）掛 hicolor
-    install -Dm644 "$srcdir/icon256.png" \
-        "$pkgdir/usr/share/icons/hicolor/256x256/apps/${_desktop_id}.png"
-    install -Dm644 "$srcdir/icon256@2x.png" \
-        "$pkgdir/usr/share/icons/hicolor/512x512/apps/${_desktop_id}.png"
+    # 比照成熟 Telegram fork 包，把每個 hicolor 尺寸各自安裝；不要拿 256 縮放代替。
+    local _size
+    for _size in 16 32 48 64 128 256 512; do
+        install -Dm644 "$srcdir/icon${_size}.png" \
+            "$pkgdir/usr/share/icons/hicolor/${_size}x${_size}/apps/${_desktop_id}.png"
+    done
 }
