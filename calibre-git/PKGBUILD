@@ -63,7 +63,7 @@ depends=(espeak-ng-git
          mtdev
          onnxruntime-cpu
          optipng
-         podofo
+         podofo-git
          protobuf
          "${_pydeps[@]/#/python-}"
          qt6-imageformats

@@ -1,0 +1,55 @@
+# 2026-11-02 in-tree（用戶核准加 podofo-git）：calibre-git 的 master 原始碼
+# （src/calibre/utils/podofo/outline.cpp）用 PdfMemDocument::CreateDestination /
+# PdfOutlineItem::CreateChild/CreateNext——這些是 podofo 1.0+ 才有的符號，Arch/Artix
+# 目前都停在 podofo 0.10.6（run 41348871983 實測 calibre-git 因此編不過）。
+# 全機只有 calibre-git 用 podofo、用戶機也沒裝 repo podofo，故補一顆追 master 的
+# podofo-git（provides/conflicts podofo）不影響別套件。calibre-git 的 depends 已改指
+# podofo-git，讓 CI 明確吃 1.x 而非 repo 的 0.10.6。
+# Maintainer: Marco Scarpetta <marcoscarpetta02@gmail.com>
+# Contributor: Giovanni Scafora <giovanni@archlinux.org>
+# Contributor: BlackEagle < ike DOT devolder AT gmail DOT com >
+# Contributor: Preecha Patumchareonpol <yumyai at gmail.com>
+
+pkgname=podofo-git
+pkgver=0.10.1.r2.gadfff1c
+pkgrel=1
+pkgdesc="A C++ library to work with the PDF file format"
+arch=('x86_64')
+url="https://github.com/podofo/podofo"
+license=(LGPL2.1)
+depends=(fontconfig
+         freetype2
+         libidn
+         libjpeg-turbo
+         libpng
+         libtiff
+         libxml2
+         lua
+         openssl
+         zlib)
+makedepends=('cmake' 'git')
+conflicts=('podofo')
+provides=('podofo')
+source=("$pkgname::git+$url")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$pkgname"
+  git describe --long --tags --abbrev=7 | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd "${srcdir}/${pkgname}"
+  cmake -B build \
+    -D CMAKE_INSTALL_PREFIX=/usr \
+    -D PODOFO_BUILD_TOOLS=True \
+    -D PODOFO_HAVE_JPEG_LIB=True \
+    -D PODOFO_HAVE_PNG_LIB=True \
+    -D PODOFO_HAVE_TIFF_LIB=True
+  make -C build
+}
+
+package() {
+  cd "${srcdir}/${pkgname}"
+  make -C build DESTDIR="$pkgdir" install
+}
