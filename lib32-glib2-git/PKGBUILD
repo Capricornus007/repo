@@ -59,10 +59,14 @@ build() {
   export CC="gcc -m32 -mstackrealign"
   export CXX="g++ -m32 -mstackrealign"
   export PKG_CONFIG="i686-pc-linux-gnu-pkg-config"
-
   CFLAGS+=" -DG_DISABLE_CAST_CHECKS"
+  # 2026-11-02：arch-meson 帶 --auto-features=enabled，會把 glib 的 dtrace
+  # （feature 型別、預設 auto）強制打開 → glib/meson.build 要求可執行的 dtrace
+  # 程式，容器裡沒有（那是 systemtap 的 /usr/bin/dtrace）→ configure 直接紅。
+  # glib 的 dtrace 只是 SystemTap 觀測探針，不影響執行期功能，這裡明確關掉。
   arch-meson glib build \
     -D selinux=disabled \
+    -D dtrace=disabled \
     --libdir=/usr/lib32
   meson compile -C build
 }

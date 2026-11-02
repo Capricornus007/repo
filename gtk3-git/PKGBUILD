@@ -11,6 +11,10 @@ pkgname=(
 )
 pkgrel=2
 epoch=1
+# 2026-11-02：這行原本漏了（只剩 pkgrel/epoch），makepkg 在 check_sanity 階段
+# 就報「pkgver is not allowed to be empty.」——pkgver() 函式根本輪不到執行。
+# 這裡給佔位值，實際版號由下方 pkgver() 從 git describe 覆寫。
+pkgver=3.24.52
 pkgdesc="GObject-based multi-platform GUI toolkit, with lilydjwg's patches"
 url="https://www.gtk.org/"
 arch=(x86_64)

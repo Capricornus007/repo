@@ -3,7 +3,7 @@
 pkgbase=capstone-git
 pkgname=(capstone-git python-capstone-git)
 pkgver=20250730.5302.ccbc41d3d
-pkgrel=1
+pkgrel=2
 pkgdesc="A lightweight multi-platform, multi-architecture disassembly framework."
 arch=('i686' 'x86_64')
 url="http://www.capstone-engine.org/"
@@ -53,7 +53,13 @@ package_capstone-git() {
   conflicts=(capstone)
   cd "${srcdir}/${pkgname}"
   make DESTDIR="${pkgdir}" install
-  install -Dm 644 docs/README -t "${pkgdir}/usr/share/doc/${pkgname}"
+  # 2026-11-02：上游把 docs/README 改成了 docs/README.md（實測 next 分支 docs/ 下是
+  # README.md／ARCHITECTURE.md／cs_v6_release_guide.md），照舊路徑 install 直接
+  # 「cannot stat 'docs/README'」。這裡按實際存在的那份裝，兩邊都沒有就跳過不致命。
+  local _doc
+  for _doc in docs/README.md docs/README README.md; do
+    [[ -f $_doc ]] && { install -Dm644 "$_doc" -t "${pkgdir}/usr/share/doc/${pkgname}"; break; }
+  done
   install -Dm 644 LICENSES/LICENSE.TXT -t "${pkgdir}/usr/share/licenses/${pkgname}"
 }
 

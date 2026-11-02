@@ -24,7 +24,7 @@
 pkgname=moregram-git
 _pkgver=00000000
 pkgver="$_pkgver"
-pkgrel=3
+pkgrel=4
 pkgdesc="moregram 桌面端——官方 tdesktop 復刻＋64Gram 功能移植（源碼滾動構建）"
 arch=('x86_64')
 url="https://github.com/Capricornus007/moregram"
@@ -39,7 +39,12 @@ options=('!strip')
 source=("moregram-desktop-${_pkgver}.zip::https://github.com/Capricornus007/moregram/releases/download/moregram-linux-dev/moregram-desktop-${_pkgver}.zip"
         "icon256.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/Telegram/Resources/art/icon256.png"
         "icon256@2x.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/Telegram/Resources/art/icon256@2x.png"
-        "moregram.desktop::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/lib/xdg/io.github.capricornus007.moregram.desktop")
+        # 2026-11-02：上游倉沒有 moregram 專屬的 .desktop，只有 tdesktop 原生的
+        # lib/xdg/org.telegram.desktop.desktop（實測 71212f86 的 lib/xdg 只有三檔：
+        # org.telegram.desktop.{desktop,metainfo.xml,service}）。原本指到
+        # io.github.capricornus007.moregram.desktop → 404、整包下載失敗。
+        # 取原生那份當模板，package() 的 sed 會把 Exec／Icon／Name／TryExec 全改成本包身份。
+        "moregram.desktop::https://raw.githubusercontent.com/Capricornus007/moregram/${_pkgver}/lib/xdg/org.telegram.desktop.desktop")
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 # 上游 zip 裡是裸二進制（Telegram／Updater，無目錄層）

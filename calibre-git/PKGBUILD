@@ -80,7 +80,11 @@ makedepends=(cmake
              rapydscript-ng
              sip
              xdg-utils
-             python-sphinx)
+             python-sphinx
+             # 2026-11-02：build() 的 manual/build.py --man-pages 會 import calibre，
+             # 而 calibre 的 i18n 模組硬依賴 tzlocal → 只放在 checkdepends 不夠
+             # （CI 用 --nocheck 根本不裝 checkdepends），實測 ModuleNotFoundError: tzlocal。
+             python-tzlocal)
 checkdepends=(poppler
               python-fonttools
               python-tzdata
