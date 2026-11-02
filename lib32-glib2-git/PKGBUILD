@@ -1,6 +1,6 @@
 # 本倉 in-tree 維護版（用戶 2026-10-28 指定處理 lib32-glib2-git CI 紅）。
 # 來源：AUR lib32-glib2-git（維護者 shoober420，2026-10-10 用戶指定源碼直出）。
-# 與 AUR 版的唯一差異：**刪除失效的 multilib.diff**。
+# 與 AUR 版差異：移除失效 multilib.diff，關閉本包不分發的 GIR 與觀測探針。
 # 為何能刪（2026-10-28 實證）：
 #   · AUR 那份 multilib.diff 是在舊版 gio/tests/meson.build 的 `ld -b binary` 命令
 #     插 `--oformat elf32-i386`（把 64 位元 ld 產物轉成 32 位元）。
@@ -20,7 +20,7 @@
 # Contributor: Pierre Schmitz <pierre@archlinux.de>
 # Contributor: Mikko Seppälä <t-r-a-y@mbnet.fi>
 pkgname=lib32-glib2-git
-pkgver=2.64.0+250+gf733eff2e
+pkgver=2.90.1+152+ge09400a9d
 pkgrel=1
 pkgdesc="Low level core library (32-bit)"
 url="https://wiki.gnome.org/Projects/GLib"
@@ -51,9 +51,6 @@ prepare() {
   git -C "$srcdir/glib" submodule update --init --depth 1 subprojects/gvdb
 }
 
-# prepare() 已刪除：AUR 版在這兒 `git apply -3 ../multilib.diff`，而 multilib.diff
-# 已失效（見檔頭註解），新版 glib 用 cc.cmd_array() 含 -m32 自動產 32 位元 ELF。
-# meson 不需要 prepare()，故整段刪除。
 
 build() {
   export CC="gcc -m32 -mstackrealign"
@@ -76,6 +73,8 @@ build() {
     -D selinux=disabled \
     -D dtrace=disabled \
     -D systemtap=disabled \
+    -D introspection=disabled \
+    -D sysprof=disabled \
     --libdir=/usr/lib32
   meson compile -C build
 }

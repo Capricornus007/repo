@@ -25,10 +25,14 @@ CI 的通用規則是「名字以 `-git` 結尾 → clone AUR，否則 clone `gi
   DNS 查詢、libverto 後端回呼與 Kerberos CLI；不是只有 makepkg 或 CI 顯示綠燈。
 - `lib32-glib2-git` 同時關閉 dtrace 與 systemtap；只關 dtrace 會與
   arch-meson 的 `--auto-features=enabled` 強制啟用 systemtap 衝突。
+  32 位元包另外關閉未出貨的 GIR 與 sysprof 追蹤：已以完整宿主 makepkg 建成，
+  並執行 ELF 32-bit 測試程式，確認指標為 4 bytes、GLib 事件回呼成功。
 - `calibre-git` 的 build/check/package 使用 glibc 隨包提供的 `C.UTF-8`，
   不要求容器預先生成 `en_US.UTF-8`。Sphinx man-pages 已以此 locale 實跑成功。
 - FFmpeg 的 AUR recipe 下載後把 git 來源切到官方 GitHub mirror，
   與版本探測用同一個來源，避開 runner 到 git.ffmpeg.org 的連線逾時。
+  來源明確命名為 `ffmpeg::git+…`，保留 AUR prepare/pkgver 使用的小寫目錄名；
+  已實跑真實 AUR prepare，Whisper 及七份補丁全部校驗與套用成功。
 
 ---
 

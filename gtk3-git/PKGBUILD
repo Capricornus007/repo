@@ -1,5 +1,5 @@
 # 2026-11-02 lily 組合包（用戶裁定 A① 追 dev 尖端＋B 全做全裝）。源=GNOME/gtk gtk-3-24 分支
-# ＋ lily 補丁（條件式套）。provides/conflicts gtk3、不 replaces：裝與否由用戶決定。
+# ＋三個已驗證可套用的 lily 補丁；取代 gtk3 並保留現有 soname 依賴契約。
 # Maintainer: Jan Alexander Steffens (heftig) <heftig@archlinux.org>
 # Contributor: Ionut Biru <ibiru@archlinux.org>
 
@@ -9,12 +9,12 @@ pkgname=(
   # gtk3-demos
   # gtk3-docs
 )
-pkgrel=2
+pkgrel=1
 epoch=1
 # 2026-11-02：這行原本漏了（只剩 pkgrel/epoch），makepkg 在 check_sanity 階段
 # 就報「pkgver is not allowed to be empty.」——pkgver() 函式根本輪不到執行。
 # 這裡給佔位值，實際版號由下方 pkgver() 從 git describe 覆寫。
-pkgver=3.24.52
+pkgver=3.24.52.r82.gbac4a949b1
 pkgdesc="GObject-based multi-platform GUI toolkit, with lilydjwg's patches"
 url="https://www.gtk.org/"
 arch=(x86_64)
@@ -85,7 +85,7 @@ source=(
   0001-Allow-disabling-legacy-Tracker-search.patch
   0001-wayland-im-notify-wayland-after-set_cursor_location.patch
   0001-inhibit-hex-check.patch)
-b2sums=('b351d0e48b074ea0b6d75dd8b47bd5ff5897dce01b2c69894a5d20fff0205b8cfc4603ce556331fdf3afe4f0380c58212ebac7cd832c9b6d3fd05cbf822250d8'
+b2sums=('SKIP'
         '920c797546da3a6698c86fe53872be8ccaec627cb687b163e144f65d1a6ad7cb80d2e6f53a7ba26b91642cedec5432c3f1d4ec41f8d972fb6098580b31cb43a5'
         'bec30b4a00a885b03a49d49c8cdd3be2c9c81a375478fd4358e823845f292b410e033ddf728fb52aef4a3e99bfed3ce657131f17d8d68ae0d0d32c5621a85939'
         '72075b7a95b61dacae009310f5884ea4474c2fd248f5cb65d6cc5fdfe2c0e55ea6f954f77d818ff27f531fba61baca13d178b93310a95459e629a9ec11b053c0'
@@ -137,14 +137,14 @@ package_gtk3-git() {
     'evince: legacy print previewer'
   )
   provides=(
-    gtk3
+    "gtk3=$epoch:$pkgver"
     gtk3-print-backends
-    libgailutil-3.so
-    libgdk-3.so
-    libgtk-3.so
+    'libgailutil-3.so=0-64'
+    'libgdk-3.so=0-64'
+    'libgtk-3.so=0-64'
   )
   conflicts=(gtk3-print-backends gtk3)
-  replaces=("gtk3-print-backends<=3.22.26-1")
+  replaces=(gtk3 "gtk3-print-backends<=3.22.26-1")
 
   meson install -C build --destdir "$pkgdir"
 

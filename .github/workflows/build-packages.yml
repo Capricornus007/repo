@@ -771,8 +771,8 @@ jobs:
           case "${{ matrix.repo_name }}" in
             ffmpeg-full-git)
               _aur_clone pkg_dir "https://aur.archlinux.org/${{ matrix.repo_name }}.git"
-              # 與版本探測同用官方 GitHub mirror；git.ffmpeg.org 在 runner 連線逾時。
-              sed -i 's|git+https://git.ffmpeg.org/ffmpeg.git|git+https://github.com/FFmpeg/FFmpeg.git|' pkg_dir/PKGBUILD
+              # 同用官方 GitHub mirror，並保留 prepare()/pkgver() 使用的小寫目錄名。
+              sed -i 's|git+https://git.ffmpeg.org/ffmpeg.git|ffmpeg::git+https://github.com/FFmpeg/FFmpeg.git|' pkg_dir/PKGBUILD
               ;;
             kew-git)
               mkdir pkg_dir
@@ -1714,6 +1714,19 @@ jobs:
               if [ "$TARGET_PKGVER" != "$CUR_PKGVER" ]; then
                 TARGET_PKGREL=1
               fi
+              ;;
+
+            vim-git)
+              # 版本須來自與 makepkg 相同的「上游 master＋Lily all」合併結果。
+              rm -rf /tmp/vim-version
+              mkdir -p /tmp/vim-version
+              git clone --quiet --filter=blob:none --branch master \
+                https://github.com/vim/vim.git /tmp/vim-version/vim-repo || exit 1
+              git clone --quiet --filter=blob:none --branch all \
+                https://github.com/lilydjwg/vim.git /tmp/vim-version/vim-lily || exit 1
+              TARGET_PKGVER=$(srcdir=/tmp/vim-version bash -c \
+                'source ./PKGBUILD; prepare >&2 && pkgver') \
+                || { echo '::error::Vim 開發源與 Lily 補丁合併失敗，不能以舊版代替'; exit 1; }
               ;;
 
             mpv-git|oh-my-pi-git|pysolfc-git)
