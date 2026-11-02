@@ -20,7 +20,7 @@ pkgname=(
   wireplumber-git
   libwireplumber-git
 )
-pkgver=0.5.4.r0.gdc6694f
+pkgver=0.5.19.r0.g4ab992f
 pkgrel=1
 pkgdesc="Session / policy manager implementation for PipeWire"
 url="https://gitlab.freedesktop.org/pipewire/wireplumber"
@@ -54,6 +54,11 @@ prepare() {
 build() {
   local meson_options=(
     -D doc=disabled
+    # elogind 開、systemd 關：上游 meson.build 是
+    #   systemd = dependency('systemd', required: get_option('systemd'))
+    # 而 arch-meson 帶 --auto-features=enabled，會把 feature 型別的 systemd
+    # 強制成「必須有」→ Artix 沒有 systemd 的 .pc，configure 直接紅（本機實測）。
+    -D systemd=disabled
     -D elogind=enabled
     -D system-lua=true
   )
@@ -88,7 +93,8 @@ package_wireplumber-git() {
   )
   provides=(pipewire-session-manager "wireplumber=$pkgver")
   conflicts=(pipewire-media-session wireplumber)
-  install=wireplumber.install
+  # 2026-11-02：AUR 的 .install 只做 systemctl --global enable（systemd user unit），
+  # Artix+OpenRC 沒有 systemctl，留著只會在裝機時噴錯；服務由 OpenRC 服務腳本管。
 
   meson install -C build --destdir "$pkgdir"
 

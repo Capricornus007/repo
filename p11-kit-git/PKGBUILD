@@ -19,7 +19,7 @@ pkgbase="${_pkgbase}-git"
 pkgname=(
   "${pkgbase}"
   "lib${pkgbase}")
-pkgver=0.25.0+1+g76be1cf
+pkgver=0.26.5+23+g4559b60
 pkgrel=1
 pkgdesc="Loads and enumerates PKCS#11 modules"
 _ns="${_base}-glue"
@@ -51,10 +51,18 @@ build() {
   local _etc_ts="/etc/ca-certificates/trust-source"
   local _share_ts="/usr/share/ca-certificates/trust-source"
 
+  # 2026-11-02 三處修正：
+  # 1) AUR 原文變數名打錯（宣告 _etc_ts/_share_ts，下面卻用 _etc_tp/_share_tp）
+  #    → trust_paths 實際傳進去是「:」，等於把信任路徑清空。這裡用對的名字。
+  # 2) meson 的 dependency('systemd', required: get_option('systemd')) 在
+  #    arch-meson 的 --auto-features=enabled 下變成「必須有」，Artix 沒有
+  #    systemd 的 .pc → configure 直接紅（本機 makepkg 實測）。關掉即可，
+  #    Artix 也不裝 systemd user unit。
   arch-meson "${_pkgbase}" build \
     -D gtk_doc=true \
     -D man=true \
-    -D trust_paths="${_etc_tp}:${_share_tp}"
+    -D systemd=disabled \
+    -D trust_paths="${_etc_ts}:${_share_ts}"
   meson compile -C build
 }
 
@@ -78,7 +86,8 @@ package_p11-kit-git() {
            "lib${_pkgbase}.so")
   conflicts=("${_pkgbase}")
   provides=("${_pkgbase}=${pkgver}")
-  install="${_pkgbase}.install"
+  # 2026-11-02：AUR 的 .install 只做 systemctl --global enable（systemd user unit），
+  # Artix+OpenRC 沒有 systemctl，留著只會在裝機時噴錯；服務由 OpenRC 服務腳本管。
 
   meson install -C build --destdir "${pkgdir}"
   ln -srf "${pkgdir}/usr/bin/update-ca-trust" \
