@@ -7,16 +7,18 @@
 
 _pkgname=xfdesktop
 pkgname=${_pkgname}-git
-pkgver=4.21.0+112+gdee450dc
-pkgrel=1
+pkgver=4.21.1+21+g33207b6c
+pkgrel=2
 pkgdesc="A desktop manager for Xfce (git checkout)"
 arch=('x86_64' 'i686' 'armv7h' 'aarch64')
 url="https://docs.xfce.org/xfce/xfdesktop/start"
 license=('GPL-2.0-or-later')
 groups=('xfce4-git')
-depends=('thunar' 'garcon-git' 'hicolor-icon-theme' 'libxfce4ui-git' 'libxfce4windowing-git' 'gtk-layer-shell' 'libyaml')
-makedepends=('git' 'meson' 'xfce4-dev-tools-git' 'glib2-devel' 'gst-plugin-gtk' 'gobject-introspection')
-optdepends=('gst-plugin-gtk: Video backgrounds')
+# libxfce4session-client-1.pc 由 xfce4-session-git 提供，穩定版 session 不含此 API。
+depends=('thunar' 'garcon-git' 'hicolor-icon-theme' 'libxfce4ui-git' 'libxfce4util-git'
+         'libxfce4windowing-git' 'xfconf-git' 'xfce4-session-git>=4.21.2'
+         'gtk-layer-shell>=0.7.0' 'libyaml' 'libnotify' 'gstreamer-git' 'gst-plugin-gtk-git')
+makedepends=('git' 'meson' 'xfce4-dev-tools-git' 'glib2-devel' 'gobject-introspection')
 conflicts=('xfce4-menueditor' "${_pkgname}")
 provides=("${_pkgname}=${pkgver%%+*}")
 replaces=('xfce4-menueditor')

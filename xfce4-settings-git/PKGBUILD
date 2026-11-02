@@ -8,15 +8,18 @@
 _pkgname=xfce4-settings
 pkgname=${_pkgname}-git
 pkgver=4.21.3+26+gf0b49891
-pkgrel=1
+pkgrel=2
 pkgdesc="Settings manager for xfce (git checkout)"
 arch=('x86_64' 'i686' 'armv7h' 'aarch64')
 url="https://docs.xfce.org/xfce/xfce4-settings/start"
 license=('GPL2')
 groups=('xfce4-git')
-depends=('garcon-git' 'libxfce4ui-git' 'xfconf-git' 'libnotify' 'libcanberra' 'upower'
-         'colord' 'libxklavier' 'elementary-icon-theme' 'gnome-themes-extra')
-makedepends=('git' 'glib2-devel' 'xfce4-dev-tools-git' 'xf86-input-libinput' 'wlr-protocols' meson 'gobject-introspection')
+# session-git 提供 libxfce4session-client-1；Wayland 與 xkbregistry 都是執行期連結。
+depends=('garcon-git' 'libxfce4ui-git' 'libxfce4util-git' 'xfconf-git'
+         'xfce4-session-git>=4.21.2' 'gtk-layer-shell>=0.7.0' 'wayland' 'libxkbcommon>=1.6.0'
+         'libnotify' 'libcanberra' 'upower' 'colord' 'libxklavier'
+         'elementary-icon-theme' 'gnome-themes-extra')
+makedepends=('git' 'glib2-devel' 'xfce4-dev-tools-git' 'xf86-input-libinput' 'wlr-protocols' meson 'gobject-introspection' 'libxml2')
 optdepends=('python: xfce4-compose-mail -- "mailto:" URI handling'
             'xiccd: for displays support in xfce4-color-settings'
             'cups: for printers support in xfce4-color-settings'

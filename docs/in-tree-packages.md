@@ -50,6 +50,17 @@ CI 的通用規則是「名字以 `-git` 結尾 → clone AUR，否則 clone `gi
 - Calibre 已安裝；成品無 `ttf-liberation` 套件依賴，並實際完成正體中文 TXT→EPUB→PDF，
   核對書名、正文及 PDF 詮釋資料。
 
+## Xfce 4.21 shard 4 依賴修正（2026-11-02）
+
+- `xfce4-terminal-git` 明確吃 `gtk-layer-shell>=0.7.0` 與
+  `xfce4-session-git>=4.21.2`，保留下拉視窗、Wayland 與 session client 功能。
+- `xfdesktop-git`、`xfce4-panel-git`、`xfce4-settings-git` 的
+  `libxfce4session-client-1.pc`／SONAME 由已發布的 `xfce4-session-git` 提供；
+  不造假庫、不關 session 功能。desktop 的影片背景把 `gstreamer-git` 與
+  split package `gst-plugin-gtk-git` 列為執行期依賴，而不是建完就可移除的 make 依賴。
+- 四包已在 Artix 宿主完整建置並同筆安裝；執行檔實查都可找到
+  `libxfce4session-client-1.so.0`，相關程式亦鏈到 `libgtk-layer-shell.so.0`。
+  `gtksink` 與 `gtkwaylandsink` 均用實際 `gst-inspect-1.0` 載入成功。
 
 ---
 
