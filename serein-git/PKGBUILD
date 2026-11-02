@@ -1,5 +1,5 @@
 # Maintainer: Capricornus007 <capricornus@outlook.com>
-# Serein 的「源碼直出」版：吃上游 main 尖端，讓還沒發 nightly 的改動能立刻看到。
+# Serein 的「源碼直出」版：吃自家維護 fork 的 main 尖端；該分支先合上游並跑完整 native CI。
 #
 # 為什麼是「取代」舊的 `serein` 而不是並存：
 #   `serein` 那顆按上游 nightly tag（`v1.0.0-nightly.YYYYMMDD.NN`）走，CI 從 release
@@ -19,11 +19,11 @@
 # ⚠️ provides/conflicts/replaces 列的是「安裝用的包名」`serein`（不是虛擬名）——
 #   這是 gh-git 那輪撞檔（github-cli 不提供 gh）學到的：聲稱必須對上真實包名。
 
-_upstream='ViceVerse-cz/Serein'
+_upstream='Capricornus007/Serein'
 pkgname=serein-git
 pkgver=1.0.0.nightly.20261004.54.r0.g000000000
 pkgrel=1
-pkgdesc='Unofficial native Discord client (git version, built from upstream main)'
+pkgdesc='Unofficial native Discord client (git version, built from maintained fork main)'
 arch=('x86_64')
 url="https://github.com/${_upstream}"
 license=('MIT' 'Apache-2.0')
