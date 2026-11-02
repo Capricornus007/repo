@@ -21,7 +21,7 @@ url=http://gitlab.xfce.org/xfce/${_pkgname}/
 license=(GPL2)
 groups=(xfce4-git)
 depends=(glib2)
-makedepends=('git' 'xfce4-dev-tools-git' 'gobject-introspection' 'meson')
+makedepends=('git' 'xfce4-dev-tools-git' 'gobject-introspection' 'meson' 'vala')
 provides=("${_pkgname}=${pkgver}")
 conflicts=(${_pkgname%})
 source=(git+https://gitlab.xfce.org/xfce/${_pkgname})
@@ -41,7 +41,7 @@ build() {
     --prefix=/usr --bindir=/usr/bin --sbindir=/usr/bin --libdir=lib \
     --buildtype=plain --auto-features=enabled \
     -Dgtk-doc=false \
-    -Dvala=disabled
+    -Dvala=enabled
   meson compile -C build
 }
 
