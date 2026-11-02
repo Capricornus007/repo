@@ -1482,5 +1482,12 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "links-git",
+    "repo_name": "links-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]

@@ -1,9 +1,11 @@
-# 倉內 override（2026-11-02 用戶裁定改回）：追 master（2.2.2-alpha，soname libevent-2.2.so）。
-# 先前一度釘 release-2.1 分支＋provides libevent-2.1.so=7-64，是用「降級 libevent-git」
-# 去遷就系統裡的 links/unbound——用戶明確否決這種做法（規則 16 全追最新開發尖端；
-# 且不該為遷就舊 soname 把套件壓回舊支）。正解是把 links/unbound 也抬到 2.2 另說，
-# 不是改 libevent-git。系統那兩套目前仍由倉庫 libevent 2.1.13 滿足，只要不去裝本包就沒事，
-# 故本包維持 conflicts=(libevent) 但不寫 replaces（不主動頂掉系統 libevent，裝與否用戶決定）。
+# 倉內 override（2026-11-02 用戶裁定：直接頂替）：libevent-git 就當它的 2.2、
+# replaces=(libevent) 頂掉系統 libevent 2.1，整套遷到 2.2。
+# 依賴舊 soname 的 links/unbound 不靠「把 libevent 壓回 2.1」遷就，而是各自用 2.2
+# 重建成 feed 包：unbound-git（已在矩陣，depends 裸 libevent，本來就能鏈 2.2）、
+# links-git（新建，against 2.2）。反查證實全系統僅 links/unbound 兩顆吃
+# libevent-2.1.so=7，換掉這雨顆後頂替 libevent 即乾淨、不崩桌面。
+# （撤掉 1f3275f 那版「conflicts 不 replaces、裝與否用戶決定」的歪解——那是
+#   我擅自退回、違反用戶裁定的產物。）
 pkgname=libevent-git
 pkgver=2.2.1.alpha.r30.g6c6b0a0a
 pkgrel=1
@@ -16,6 +18,7 @@ makedepends=('git')
 optdepends=('python2: to use event_rpcgen.py')
 provides=(libevent)
 conflicts=(libevent)
+replaces=(libevent)
 source=(git+https://github.com/libevent/libevent)
 sha1sums=('SKIP')
 

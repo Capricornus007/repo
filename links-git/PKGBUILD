@@ -1,0 +1,53 @@
+# feed 版 links（用戶 2026-11-02 裁定的「libevent 整套遷 2.2」頂替方案一環）：
+# 官方 links 的 depends 釘死 `libevent-2.1.so`，一旦 libevent-git 頂替系統 libevent→2.2
+# 就斷。此版把該依賴改成裸 `libevent`（由 feed 的 libevent-git 2.2 的 provides 滿足），
+# 在 CI 容器對 libevent 2.2 重建，並 provides/conflicts/replaces=links 取代官方那顆。
+# links 無公開 git 源（twibright 的 git、github 鏡像皆 404），故取最新 release tarball。
+# 只做文字版（用戶機上裝的就是文字版 links），跳過官方分割的 xlinks 圖形版。
+pkgname=links-git
+pkgver=2.30
+pkgrel=1
+pkgdesc='A text WWW browser, similar to Lynx'
+arch=('x86_64')
+url='http://links.twibright.com/'
+license=('GPL-2.0-or-later')
+depends=('brotli' 'libbrotlidec.so'
+         'bzip2' 'libbz2.so'
+         'glibc'
+         'gpm' 'libgpm.so'
+         'libevent'
+         'openssl' 'libcrypto.so' 'libssl.so'
+         'xz' 'liblzma.so'
+         'zstd' 'libzstd.so'
+         'zlib' 'libz.so')
+makedepends=('libgomp' 'libjpeg-turbo' 'libpng' 'libtiff' 'libwebp')
+provides=('links')
+conflicts=('links')
+replaces=('links')
+source=("http://links.twibright.com/download/links-${pkgver}.tar.bz2"
+        '0001-fix-build-with-recent-gcc.patch')
+sha256sums=('c4631c6b5a11527cdc3cb7872fc23b7f2b25c2b021d596be410dadb40315f166'
+            '0b3bd401d9ff6ff1354607e56647ad2cb7ed7c1258c99bef714bdd050d3c64bb')
+
+prepare() {
+  cd "links-${pkgver}"
+  patch -Np1 < ../0001-fix-build-with-recent-gcc.patch
+  # 近期 gcc 需顯式聲明 C++ 編譯器
+  sed -i '/AC_PROG_CC/a AC_PROG_CXX/' configure.in
+  autoreconf -fi
+}
+
+build() {
+  cd "links-${pkgver}"
+  ( cd intl; ./gen-intl; ./synclang )
+  # 文字版：不啟 graphics／X／framebuffer
+  ./configure \
+    --prefix=/usr --mandir=/usr/share/man --disable-javascript \
+    --disable-graphics --without-x --without-fb
+  make
+}
+
+package() {
+  cd "links-${pkgver}"
+  make DESTDIR="${pkgdir}" install
+}
