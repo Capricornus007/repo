@@ -21,7 +21,7 @@ url="https://docs.xfce.org/xfce/xfce4-session/start"
 license=('GPL-2.0-or-later')
 depends=('libxfce4ui-git' 'libxfce4windowing-git' 'xfconf-git' 'libsm' 'polkit' 'xorg-iceauth'
          'xorg-xinit' 'xorg-xrdb' 'polkit-gnome' 'hicolor-icon-theme' 'gtk-layer-shell')
-makedepends=('git' 'xfce4-dev-tools-git' 'glib2-devel' 'meson')
+makedepends=('git' 'xfce4-dev-tools-git' 'glib2-devel' 'meson' 'wayland-protocols')
 optdepends=('gnome-keyring: for keyring support when GNOME compatibility is enabled'
             'xfce4-screensaver: for locking screen with xflock4'
             'xscreensaver: for locking screen with xflock4'
@@ -47,7 +47,10 @@ build() {
     -D gtk-layer-shell=enabled
   )
 
-  arch-meson "${_pkgname}" build "${meson_options[@]}"
+  # arch-meson 是 Arch devtools 命令、Artix 容器沒有；改標准 meson setup 補 Arch 預設。
+  meson setup "${_pkgname}" build \
+    --prefix=/usr --libdir=lib --buildtype=plain \
+    "${meson_options[@]}"
   meson compile -C build
 }
 

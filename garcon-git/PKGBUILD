@@ -36,7 +36,10 @@ pkgver() {
 
 
 build() {
-    arch-meson "$pkgname" build \
+    # arch-meson 是 Arch devtools 的命令、Artix 容器裡沒有（run 41387684219 #12 實測
+    # 「arch-meson: command not found」）；改標准 meson setup 並補上 Arch 預設路徑。
+    meson setup "$pkgname" build \
+        --prefix=/usr --libdir=lib --buildtype=plain \
         -D b_ndebug=true
     meson compile -C build
 }
