@@ -7,7 +7,7 @@
 
 _pkgname=xfce4-screensaver
 pkgname=${_pkgname}-git
-pkgver=4.20.0+1+g49d1344
+pkgver=4.20.2+52+gbf7a9bb
 pkgrel=1
 pkgdesc='Screensaver for XFCE Desktop (git checkout)'
 url='https://docs.xfce.org/apps/screensaver/start'
@@ -18,6 +18,7 @@ depends=('libxss' 'libxklavier' 'garcon-git' 'libwnck3' 'python-gobject' 'xfconf
 makedepends=( 'xfce4-dev-tools-git' 'meson' 'wayland-protocols' 'git' 'xmlto' 'docbook-xml' 'gobject-introspection')
 provides=("${_pkgname}=${pkgver%%+*}")
 conflicts=("${_pkgname}")
+replaces=("${_pkgname}")
 groups=('xfce4-goodies-git')
 source=("${_pkgname}::git+https://gitlab.xfce.org/apps/${_pkgname}")
 sha256sums=('SKIP')

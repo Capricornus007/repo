@@ -7,7 +7,7 @@
 
 _pkgname=libxfce4windowing
 pkgname=${_pkgname}-git
-pkgver=4.20.6+18+g38e4af2
+pkgver=4.20.7+5+gbb42c8a
 pkgrel=1
 pkgdesc="Windowing concept abstraction library for X11 and Wayland (git checkout)"
 arch=('i686' 'x86_64' 'armv7h' 'aarch64')
@@ -19,6 +19,7 @@ makedepends=('gtk-doc' 'gobject-introspection' 'xfce4-dev-tools-git' 'git'
              'wayland-protocols' 'wlr-protocols' 'vala' 'meson')
 provides=("${_pkgname}=${pkgver}")
 conflicts=("${_pkgname}")
+replaces=("${_pkgname}")
 source=("${_pkgname}::git+https://gitlab.xfce.org/xfce/${_pkgname}")
 sha256sums=('SKIP')
 

@@ -21,6 +21,7 @@ optdepends=('mugshot: Update user details')
 groups=('xfce4-goodies-git')
 provides=("${_pkgname}=${pkgver%%+*}")
 conflicts=("${_pkgname}")
+replaces=("${_pkgname}")
 source=("${_pkgname}::git+https://gitlab.xfce.org/panel-plugins/${_pkgname}")
 sha256sums=("SKIP")
 

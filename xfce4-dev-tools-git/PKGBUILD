@@ -10,7 +10,7 @@
 _pkgname=xfce4-dev-tools
 _gitname=$_pkgname
 pkgname=${_pkgname}-git
-pkgver=4.20.0.r15.g0b950ed
+pkgver=4.21.2.r9.ge97b04c
 pkgrel=1
 pkgdesc="The Xfce development tools"
 arch=('i686' 'x86_64')
@@ -20,6 +20,7 @@ depends=('glib2' 'gtk-doc' 'pkg-config' 'make' 'intltool')
 makedepends=('git' 'meson' autoconf automake libtool)
 optdepends=('docker: xfce-build helper script')
 conflicts=($_pkgname)
+replaces=($_pkgname)
 provides=("${_pkgname}=4.21")
 source=("git+https://gitlab.xfce.org/xfce/${_pkgname}.git")
 sha256sums=('SKIP')

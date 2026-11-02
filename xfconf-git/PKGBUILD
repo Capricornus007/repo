@@ -11,7 +11,7 @@
 
 _pkgname=xfconf
 pkgname="${_pkgname}-git"
-pkgver=4.21.0+19+g549f783
+pkgver=4.21.2+195+g3aff21e
 pkgrel=1
 pkgdesc="D-Bus-based configuration storage system - git checkout"
 arch=('i686' 'x86_64')
@@ -22,6 +22,7 @@ depends=('libxfce4util-git')
 makedepends=('git' 'glib2-devel' 'intltool' 'gobject-introspection' 'vala' "xfce4-dev-tools>=${pkgver%.*}" 'meson')
 provides=("${_pkgname}=${pkgver}")
 conflicts=("${_pkgname}")
+replaces=("${_pkgname}")
 source=("git+https://gitlab.xfce.org/xfce/${_pkgname}.git")
 sha256sums=('SKIP')
 

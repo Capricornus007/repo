@@ -14,6 +14,7 @@ url='http://goodies.xfce.org/projects/panel-plugins/xfce4-fsguard-plugin'
 groups=('xfce4-goodies')
 depends=('xfce4-panel-git')
 conflicts=('xfce4-fsguard-plugin')
+replaces=('xfce4-fsguard-plugin')
 provides=('xfce4-fsguard-plugin')
 makedepends=('xfce4-dev-tools-git' 'intltool' 'git' meson)
 options=('!libtool')

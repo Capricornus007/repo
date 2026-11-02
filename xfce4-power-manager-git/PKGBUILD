@@ -19,6 +19,7 @@ makedepends=('xfce4-panel-git' 'wayland-protocols' 'wayland' 'git' 'xfce4-dev-to
 optdepends=('xfce4-panel-git: Xfce panel plugin support')
 provides=("${_pkgname}=${pkgver%%+*}")
 conflicts=("${_pkgname}")
+replaces=("${_pkgname}")
 source=("${_pkgname}::git+https://gitlab.xfce.org/xfce/${_pkgname}")
 sha256sums=('SKIP')
 

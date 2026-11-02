@@ -2,8 +2,8 @@
 # 但 source 目錄是 xfwm4，直接 No such file or directory。改用 xfwm4 目錄，
 # 並把 Xfce 家族依賴改成 -git 包（與 4.21 鏈一致）。
 pkgname=xfwm4-git
-pkgver=4.20.0+151+g1163ee4a9
-pkgrel=2
+pkgver=4.20.0+178+g30eb3437b
+pkgrel=1
 pkgdesc="Xfce window manager (git version)"
 arch=('x86_64')
 url="https://gitlab.xfce.org/xfce/xfwm4"
@@ -13,6 +13,7 @@ depends=('libxfce4ui-git' 'libwnck3' 'libxpresent' 'xfconf-git')
 makedepends=('git' 'xfce4-dev-tools-git' 'meson')
 provides=('xfwm4')
 conflicts=('xfwm4')
+replaces=('xfwm4')
 source=("git+https://gitlab.xfce.org/xfce/xfwm4.git")
 sha256sums=('SKIP')
 
