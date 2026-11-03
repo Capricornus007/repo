@@ -87,21 +87,23 @@ index ebcfe3bb7e91..d53522f1fc62 100644
      [['elements/unixfd.c'], not gio_unix_dep.found()],
      [['elements/vmaf.c'], get_option('vmaf').disabled() or not libvmaf_dep.found(), [libvmaf_dep]],
 diff --git a/subprojects/gst-plugins-bad/tests/validate/meson.build b/subprojects/gst-plugins-bad/tests/validate/meson.build
-index 25eedac14829..6dd292ea670a 100644
+index 34614c6f6d1e4cf718b7c202bc5a57b3cc1ea3d0..175dbf3118b328acd5946276c0b203dd93f1977e 100644
 --- a/subprojects/gst-plugins-bad/tests/validate/meson.build
 +++ b/subprojects/gst-plugins-bad/tests/validate/meson.build
-@@ -4,19 +4,12 @@ if not gst_tester.found()
+@@ -4,21 +4,14 @@ if not gst_tester.found()
  endif
  
  tests = [
 -    {'path': 'opencv/cvtracker'},
      {'path': 'testsrcbin/caps_spec'},
+     {'path': 'h265parse/dsc_sei'},
      {'path': 'codectimestamper/h264_propagate_caps'},
 -    {'path': 'wpe/load_bytes_first', 'skip': not building_wpe},
-     {'path': 'vtenc/vtenc_h264', 'skip': not applemedia_found_deps},
-     {'path': 'vtenc/vtenc_h264_b_frames', 'skip': not applemedia_found_deps},
-     {'path': 'vtenc/vtenc_h265', 'skip': not applemedia_found_deps},
-     {'path': 'vtenc/vtenc_h265_b_frames', 'skip': not applemedia_found_deps},
+     # VideoToolbox tests run alone to avoid contention for Apple media services.
+     {'path': 'vtenc/vtenc_h264', 'skip': not applemedia_found_deps, 'is_parallel': false},
+     {'path': 'vtenc/vtenc_h264_b_frames', 'skip': not applemedia_found_deps, 'is_parallel': false},
+     {'path': 'vtenc/vtenc_h265', 'skip': not applemedia_found_deps, 'is_parallel': false},
+     {'path': 'vtenc/vtenc_h265_b_frames', 'skip': not applemedia_found_deps, 'is_parallel': false},
 -    {'path': 'autovideoconvert/renegotiate'},
 -    {'path': 'pitch/maintain_pitch_with_variable_playback_rates', 'skip': not soundtouch_dep.found()},
 -    {'path': 'pitch/reverse.maintain_pitch_with_variable_playback_rates', 'skip': not soundtouch_dep.found()},

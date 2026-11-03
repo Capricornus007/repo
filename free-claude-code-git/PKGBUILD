@@ -23,13 +23,13 @@
 #      只剩 2 支指令可用，另 10 支（fcc-codex/-pi/-opencode/-cline/-hermes/-dsh/
 #      -grok/-muse/-aider/-desktop）被封在 /opt。除此之外 build()/package() 逐字保留。
 #
-# 本地驗證 note：本機沒有 Arch 的 uv 包（Artix 未收），build 時用解到 /tmp 的
-# uv 0.12.17 官方靜態版（與 Arch extra 同版本）頂替，未往系統裝任何東西；
-# CI 容器 makepkg -s 會直接裝 extra 的 uv。
+# 本地與 CI 都直接使用上游要求的 uv 0.13.7 官方 x86_64 發行產物；不把
+# `required-version >=0.13.7` 偷改回倉庫現有的 0.13.6，避免以舊解析器做出表面成功、
+# 鎖檔語意卻不同的包。下載物有上游 sha256.sum 的固定摘要，且只在 build() 使用。
 # Maintainer: Vitaliy VVS Star <vitaliy <dot> star <at> Gmail-DOT-Com>
 
 pkgname=free-claude-code-git
-pkgver=v6.2.71.r1.gba4b934
+pkgver=v6.18.9.r0.g1c72f5f
 pkgrel=1
 # feed 現值 `.r1125.ba4b934-1` 的版本號前綴是空的（見下方 pkgver() 註解），而
 # vercmp 把這種「r 開頭」的舊條目判得比任何 v6.x 都新（實測
@@ -38,9 +38,10 @@ epoch=1
 pkgdesc="Proxy to use Claude Code CLI with free alternative providers (NVIDIA NIM, OpenRouter, DeepSeek, etc.)"
 arch=('x86_64')
 url="https://github.com/Alishahryar1/free-claude-code"
+_uvver=0.13.7
 license=('MIT')
 depends=('python>=3.14')
-makedepends=('git' 'uv')
+makedepends=('git')
 # provides/conflicts 取捨（先讀過本倉 qoder-cli/PKGBUILD 那段 libalpm 單向命中的註解）：
 # pacman 的 conflicts 只單向命中對手的 provides 與實包名（conflict.c 的
 # check_conflict→_alpm_depcmp，無「反向衝突豁免」）。本包與 AUR 的 free-claude-code-bin
@@ -56,8 +57,10 @@ makedepends=('git' 'uv')
 provides=('free-claude-code')
 conflicts=('free-claude-code' 'free-claude-code-bin')
 install="$pkgname.install"
-source=("git+${url}.git")
-sha256sums=('SKIP')
+source=("git+${url}.git"
+        "uv-${_uvver}-x86_64.tar.gz::https://github.com/astral-sh/uv/releases/download/${_uvver}/uv-x86_64-unknown-linux-gnu.tar.gz")
+sha256sums=('SKIP'
+            'c5221ff41b7892bfc223543883600125f6a47fe845093e0f5bdff4f359196d83')
 
 # 版本演算法（2026-09-26 換掉，原因實測如下）：
 #   舊式 <pyproject.toml 的 version>.r<總提交數>.<短 hash> 依賴 `grep '^version ='`，
@@ -81,11 +84,11 @@ build() {
   # 上游 pyproject 釘死 requires-python = "==3.14.N"（2026-10-24 實測 3.14.9、
   # 2026-10-28 再漲到 3.14.10；容器只有 3.14.8 → uv 解析直接拒絕）。
   # 放寬成 >=3.14 才能裝；本地源碼改寫，不是改上游倉。
-  # 用正則吃任意 3.14.x（上游每次小版跳都改這行，別每次跟著改 PKGBUILD）。
   sed -i -E 's/^requires-python = "==3\.14\.[0-9]+"$/requires-python = ">=3.14"/' pyproject.toml
-  uv venv --python /usr/bin/python3 --python-preference only-system "$srcdir/venv"
+  local uv="$srcdir/uv-x86_64-unknown-linux-gnu/uv"
+  "$uv" venv --python /usr/bin/python3 --python-preference only-system "$srcdir/venv"
   source "$srcdir/venv/bin/activate"
-  uv pip install .
+  "$uv" pip install .
   deactivate
 }
 
