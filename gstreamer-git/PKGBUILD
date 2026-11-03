@@ -58,7 +58,7 @@ pkgname=(
   gst-editing-services-git
   gst-python-git
 )
-pkgver=1.29.2.1.r126526.g7ec607fb94a1
+pkgver=1.29.2.1.r126529.gbc2abfa7ca3c
 pkgrel=1
 pkgdesc="Multimedia graph framework"
 url="https://gstreamer.freedesktop.org/"
@@ -251,7 +251,7 @@ source=(
   0004-devicemonitor-post-started-before-completion.patch
 )
 b2sums=('SKIP'
-        '5748b88f8702b8d9a6dff1e07fb030573a211c506e615ed0577fa87998ec01a35a13cb5378fe6455111d18417600d9d17868bf8770a15b8cc28eb70f14d5e6da'
+        'c1b7b342e157e7605cd2392c09700ddb2f22cb52f434e2c34d682178f1e637c80da1b09225cedef4d7204d64c3bd537358e26fd2e78d70f9323372725fe981d9'
         '4e425222d8fd1fc3c49750ad4920433e3b298698e96e714fb9d6f887ac62509f2b187a131fa31da53dcedd2a150ca59d3bd7d7519b7df91a0cff90c65094edbc'
         'd60c16957822f98c553c009bc9f2275a3d7691a2491ec9cb37e219ec120b718457a07ab3b4ac0b1aa5f3fb6e5f6850bf62ee7690c699545039b3042a01cdf23a'
         '111c302d03fab89568cfc845b4e38f041dd81c76b999f67ce782447d84b10eaeb1ba4f6012e5343d73ade50293dda853b24d100516598a29c684a6e3d1b6ce68')

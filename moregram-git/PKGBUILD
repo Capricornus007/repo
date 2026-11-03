@@ -22,10 +22,10 @@
 # ⚠️ 版號由 plan 步驅動 ⇒ 本檔在「回推校驗和」排除清單（kind: aur 借道跳過，crave 同型）。
 
 pkgname=moregram-git
-_pkgver=7.3.3.r77.g93e3b2a3
+_pkgver=7.3.3.r4194.g7c90812a
 _commit="${_pkgver##*.g}"
 pkgver="$_pkgver"
-pkgrel=2
+pkgrel=1
 pkgdesc="moregram 桌面端——官方 tdesktop 復刻＋64Gram 功能移植（源碼滾動構建）"
 arch=('x86_64')
 url="https://github.com/Capricornus007/moregram"
@@ -45,10 +45,9 @@ source=("moregram-desktop-${_pkgver}.zip::https://github.com/Capricornus007/more
         "icon128.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/Telegram/Resources/art/icon128.png"
         "icon256.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/Telegram/Resources/art/icon256.png"
         "icon512.png::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/Telegram/Resources/art/icon512.png"
-        # 2026-11-02：上游倉沒有 moregram 專屬的 .desktop，只有 tdesktop 原生的
-        # lib/xdg/org.telegram.desktop.desktop；取原生那份當模板，package() 再把
-        # Exec／Icon／Name／TryExec 全改成本包身份。
-        "moregram.desktop::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/lib/xdg/org.telegram.desktop.desktop")
+        # Moregram 倉已提供與 Qt application ID 一致的專屬 desktop 模板；
+        # package() 只把裸構建產物的 Telegram 執行檔入口改成系統 wrapper。
+        "moregram.desktop::https://raw.githubusercontent.com/Capricornus007/moregram/${_commit}/lib/xdg/io.github.capricornus007.moregram.desktop")
 sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 # 上游 zip 裡只有裸主程式 Telegram（Updater 已在編譯期關閉）

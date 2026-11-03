@@ -20,7 +20,7 @@ pkgname=(
   wireplumber-git
   libwireplumber-git
 )
-pkgver=0.5.19.r0.g4ab992f
+pkgver=0.5.19.r1.gd7df903
 pkgrel=1
 pkgdesc="Session / policy manager implementation for PipeWire"
 url="https://gitlab.freedesktop.org/pipewire/wireplumber"
