@@ -1,0 +1,644 @@
+# Maintainer: Leonidas Spyropoulos <artafinde@archlinux.org>
+# Maintainer: Peter Jung <ptr1337@archlinux.org>
+# Contributor: Evangelos Foutras <foutrelis@archlinux.org>
+# Contributor: Jan "heftig" Steffens <jan.steffens@gmail.com>
+
+pkgbase=llvm
+pkgname=('llvm' 'llvm-libs' 'llvm-lit' 'clang' 'compiler-rt' 'lld' 'lldb' 'polly' 'openmp' 'offload' 'libc++' 'libc++abi')
+pkgver=23.1.3
+pkgrel=1
+arch=('x86_64')
+url="https://llvm.org/"
+license=('Apache-2.0 WITH LLVM-exception')
+makedepends=('cmake' 'ninja' 'zlib' 'zstd' 'curl' 'libffi' 'libedit' 'libxml2' 'python'
+             'xz' 'ncurses' 'swig' 'libelf'
+             'python-setuptools' 'python-psutil' 'python-sphinx'
+             'python-myst-parser' 'python-build' 'python-installer' 'python-wheel')
+# Build 32-bit compiler-rt libraries on x86_64 (FS#41911)
+makedepends_x86_64=('lib32-gcc-libs')
+checkdepends=('llvm-libs')
+options=('staticlibs' '!lto') # tools/llvm-shlib/typeids.test fails with LTO
+_source_base=https://github.com/llvm/llvm-project/releases/download/llvmorg-$pkgver
+source=($_source_base/llvm-project-$pkgver.src.tar.xz{,.sig}
+        0001-Revert-clang-driver-When-fveclib-ArmPL-flag-is-in-us.patch
+        enable-fstack-protector-strong-by-default.patch
+        0001-libcxx-chrono-fix-years-months-period.patch)
+sha256sums=('c44186a7762ed28954be72e5ff6df9808e0779d4f1bf014ecc4e7e211d31ee34'
+            'SKIP'
+            '94baa1ca8b7f68c2c22b4d4c429d4560f81f882c00299f6b5398ffe6dc3a3913'
+            '89e36fcc53383bbfa51da820c96d4ae136e060ac55ee53c914888a37e52be06c'
+            'e6b4c72058966ab2af0c255cad22172ff89c04a4433de5b22b16923a94936b2a')
+validpgpkeys=('474E22316ABF4785A88C6E8EA2C794A986419D8A'  # Tom Stellard <tstellar@redhat.com>
+              'D574BD5D1D0E98895E3BF90044F2485E45D59042'  # Tobias Hieta <tobias@hieta.se>
+              'FFB3368980F3E6BB5737145A316C56D064CACBA5'  # Douglas Yung <douglas.yung@sony.com>
+              '71046D1E9C6656BDD61171873E83BABF4A4F9E85'  # Cullen Rhodes <cullen.rhodes@arm.com>
+)
+
+# Utilizing LLVM_DISTRIBUTION_COMPONENTS to avoid
+# installing static libraries; inspired by Gentoo
+_llvm_components() {
+  local target
+  ninja -C "$srcdir/llvm-project-$pkgver.src/build" -t targets | grep -Po 'install-\K.*(?=-stripped:)' | while read -r target; do
+    case $target in
+      llvm-libraries|clang-libraries|distribution)
+        continue
+        ;;
+      # shared libraries
+      LLVM|LLVMgold)
+        ;;
+      # libraries needed for clang-tblgen
+      LLVMDemangle|LLVMSupport|LLVMTableGen)
+        ;;
+      # used by lldb
+      LLVMDebuginfod|LLVMHTTP)
+        ;;
+      # testing libraries
+      LLVMTestingAnnotations|LLVMTestingSupport)
+        ;;
+      # exclude static libraries
+      LLVM*)
+        continue
+        ;;
+      # exclude llvm-exegesis (doesn't seem useful without libpfm)
+      llvm-exegesis)
+        continue
+        ;;
+      # belongs to clang's scope
+      clang*|findAllSymbols)
+        continue
+        ;;
+      # also clang's scope, just not clang*-prefixed
+      libclang|libclang-headers|libclang-python-bindings|c-index-test|scan-build|scan-build-py|scan-view|bash-autocomplete)
+        continue
+        ;;
+      # clang/clang-tools-extra tools and man pages, not clang*-prefixed
+      offload-arch|amdgpu-arch|nvptx-arch|diagtool|hmaptool|modularize|pp-trace|find-all-symbols|docs-clang-man|docs-clang-tools-man|*-resource-headers)
+        continue
+        ;;
+      # belongs to lld's/lldb's scope
+      lld*|ld.lld|ld64.lld|wasm-ld|lldb*|liblldb*|yaml2macho-core|docs-lldb-man)
+        continue
+        ;;
+      # belongs to polly's scope
+      [Pp]olly*|docs-polly-man)
+        continue
+        ;;
+      # compiler-rt/openmp/offload install directly via their own
+      # package_X(); LLVM_ENABLE_RUNTIMES bundles them into one nested
+      # CMake sub-build, so invoking any of these from here (even just
+      # to exclude the file afterwards) re-triggers that sub-build's
+      # own unscoped install step and sweeps in every runtime's
+      # COMPONENT-less files (e.g. openmp's libomp.so/libarcher.so/ompd)
+      compiler-rt|builtins|runtimes|openmp|offload|libomp*|libarcher*|libompd*|libomptarget*|LLVMOffload)
+        continue
+        ;;
+      # same reasoning for libc++/libc++abi
+      cxx|cxxabi|libcxx*|libc++*|libunwind*)
+        continue
+        ;;
+    esac
+    echo $target
+  done
+}
+
+_clang_components() {
+  local target
+  ninja -C "$srcdir/llvm-project-$pkgver.src/build" -t targets | grep -Po 'install-\K.*(?=-stripped:)' | while read -r target; do
+    case $target in
+      llvm-libraries|clang-libraries|distribution)
+        continue
+        ;;
+      clang|clangd|clang-*)
+        ;;
+      # not clang*-prefixed, but still belong here (libear/libscanbuild,
+      # clang's bash completion)
+      scan-build|scan-build-py|bash-autocomplete)
+        ;;
+      libclang|libclang-headers|libclang-python-bindings|c-index-test|scan-view)
+        ;;
+      offload-arch|amdgpu-arch|nvptx-arch|diagtool|hmaptool|modularize|pp-trace|find-all-symbols|docs-clang-man|docs-clang-tools-man)
+        ;;
+      *-resource-headers)
+        ;;
+      clang*)
+        continue
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    echo $target
+  done
+}
+
+_lld_components() {
+  local target
+  ninja -C "$srcdir/llvm-project-$pkgver.src/build" -t targets | grep -Po 'install-\K.*(?=-stripped:)' | while read -r target; do
+    case $target in
+      llvm-libraries|clang-libraries|distribution)
+        continue
+        ;;
+      # lldb* also matches a bare lld* glob; exclude it first
+      lldb*|liblldb*)
+        continue
+        ;;
+      lld*)
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    echo $target
+  done
+}
+
+_lldb_components() {
+  local target
+  ninja -C "$srcdir/llvm-project-$pkgver.src/build" -t targets | grep -Po 'install-\K.*(?=-stripped:)' | while read -r target; do
+    case $target in
+      llvm-libraries|clang-libraries|distribution)
+        continue
+        ;;
+      lldb*|liblldb*|yaml2macho-core|docs-lldb-man)
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    echo $target
+  done
+}
+
+_polly_components() {
+  local target
+  ninja -C "$srcdir/llvm-project-$pkgver.src/build" -t targets | grep -Po 'install-\K.*(?=-stripped:)' | while read -r target; do
+    case $target in
+      llvm-libraries|clang-libraries|distribution)
+        continue
+        ;;
+      [Pp]olly*|docs-polly-man)
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    echo $target
+  done
+  # LLVMPolly (loadable pass-plugin .so) has no stripped component of
+  # its own, so it never shows up in the loop above
+  echo LLVMPolly
+}
+
+_get_distribution_components() {
+  { _llvm_components; _clang_components; _lld_components; _lldb_components; _polly_components; } | sort -u
+}
+
+prepare() {
+  cd llvm-project-$pkgver.src
+
+  # Fixes a GCC/i386 miscompile in years/months periods
+  # https://github.com/llvm/llvm-project/issues/223223
+  patch -Np1 -i "$srcdir"/0001-libcxx-chrono-fix-years-months-period.patch
+
+  cd clang
+  patch -Np2 -i "$srcdir/enable-fstack-protector-strong-by-default.patch"
+  # Revert always linking against libamath when -fveclib=ArmPL
+  patch -Np2 -i "$srcdir/0001-Revert-clang-driver-When-fveclib-ArmPL-flag-is-in-us.patch"
+  cd ..
+
+  cd llvm
+  # Remove CMake find module for zstd; breaks if out of sync with upstream zstd
+  rm cmake/modules/Findzstd.cmake
+  cd ..
+
+  sed -i 's/CREDITS.TXT/CREDITS/' libcxx/LICENSE.TXT libcxxabi/LICENSE.TXT
+
+  # Build lld's libraries as shared objects (liblldELF.so etc.) without
+  # making every other library shared (BUILD_SHARED_LIBS would do that)
+  sed -i 's/^  if(ARG_SHARED)$/  if(ARG_SHARED OR LLD_BUILD_SHARED)/' lld/cmake/modules/AddLLD.cmake
+}
+
+build() {
+  cd llvm-project-$pkgver.src
+
+  # Build only minimal debug info to reduce size
+  CFLAGS=${CFLAGS/-g /-g1 }
+  CXXFLAGS=${CXXFLAGS/-g /-g1 }
+
+  local cmake_args=(
+    -G Ninja
+    -DCMAKE_BUILD_TYPE=Release
+    -DCMAKE_INSTALL_DOCDIR=share/doc
+    -DCMAKE_INSTALL_PREFIX=/usr
+    -DCMAKE_SKIP_INSTALL_RPATH=ON
+    -DLLVM_BINUTILS_INCDIR=/usr/include
+    -DLLVM_BUILD_LLVM_DYLIB=ON
+    -DLLVM_BUILD_TESTS=ON
+    -DLLVM_ENABLE_BINDINGS=OFF
+    -DLLVM_ENABLE_CURL=ON
+    -DLLVM_ENABLE_FFI=ON
+    -DLLVM_ENABLE_PROJECTS='clang;clang-tools-extra;lld;lldb;polly'
+    -DLLVM_POLLY_LINK_INTO_TOOLS=OFF
+    -DLLVM_ENABLE_RTTI=ON
+    -DLLVM_ENABLE_RUNTIMES='compiler-rt;openmp;offload;libcxx;libcxxabi'
+    -DLIBOMP_INSTALL_ALIASES=OFF
+    -DLIBCXX_INSTALL_MODULES=ON
+    -DLIBCXXABI_USE_LLVM_UNWINDER=OFF
+    -DLLVM_BUILD_DOCS=ON
+    -DLLVM_ENABLE_SPHINX=ON
+    -DSPHINX_OUTPUT_HTML=OFF 
+    -DSPHINX_OUTPUT_MAN=ON
+    -DLLVM_EXTERNAL_CLANG_TOOLS_EXTRA_SOURCE_DIR="$srcdir/llvm-project-$pkgver.src/clang-tools-extra"
+    -DLLVM_HOST_TRIPLE=$CHOST
+    -DLLVM_INCLUDE_BENCHMARKS=OFF
+    -DLLVM_INCLUDE_TESTS=ON
+    -DLLVM_INSTALL_GTEST=ON
+    -DLLVM_INSTALL_UTILS=ON
+    -DLLVM_LINK_LLVM_DYLIB=ON
+    -DLLVM_THIRD_PARTY_DIR="$srcdir/llvm-project-$pkgver.src/third-party"
+    -DLLVM_USE_PERF=ON
+    -DPACKAGE_BUGREPORT=https://gitlab.archlinux.org/archlinux/packaging/packages/llvm/-/issues
+    -DSPHINX_WARNINGS_AS_ERRORS=OFF
+    -DCLANG_DEFAULT_PIE_ON_LINUX=ON
+    -DCLANG_LINK_CLANG_DYLIB=ON
+    -DLLD_BUILD_SHARED=ON
+    -DENABLE_LINKER_BUILD_ID=ON
+    -DCOMPILER_RT_INSTALL_PATH=/usr/lib/clang/${pkgver%%.*}
+  )
+
+  cmake -S llvm -B build "${cmake_args[@]}"
+  local distribution_components=$(cd build && _get_distribution_components | paste -sd\;)
+  test -n "$distribution_components"
+  cmake -S llvm -B build "${cmake_args[@]}" -DLLVM_DISTRIBUTION_COMPONENTS="$distribution_components"
+  ninja -C build
+
+  # Device runtime for offloading, built with the just-built clang/lld
+  local _target
+  for _target in amdgcn-amd-amdhsa nvptx64-nvidia-cuda; do
+    cmake -B "build-device-$_target" -S runtimes -G Ninja \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/usr \
+      -DLLVM_ENABLE_RUNTIMES=openmp \
+      -DLLVM_BINARY_DIR="$PWD/build" \
+      -DLLVM_DEFAULT_TARGET_TRIPLE=$_target \
+      -DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=ON \
+      -DCMAKE_C_COMPILER="$PWD/build/bin/clang" \
+      -DCMAKE_CXX_COMPILER="$PWD/build/bin/clang++" \
+      -DCMAKE_C_FLAGS= \
+      -DCMAKE_CXX_FLAGS= \
+      -DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=lld
+    ninja -C "build-device-$_target"
+  done
+
+  # Include lit for running lit-based tests in other projects
+  pushd llvm/utils/lit
+  python -m build --wheel --no-isolation
+  popd
+}
+
+check() {
+  cd llvm-project-$pkgver.src/build
+  LD_LIBRARY_PATH=$PWD/lib ninja check-llvm check-clang check-clang-tools check-lld check-polly
+}
+
+package_llvm() {
+  pkgdesc="Compiler infrastructure"
+  depends=('llvm-libs' 'llvm-lit' 'curl' 'perl' 'libstdc++' 'glibc' 'libgcc')
+
+  cd llvm-project-$pkgver.src
+
+  local t
+  for t in $(_llvm_components); do
+    DESTDIR="$pkgdir" ninja -C build install-$t
+  done
+
+  # lldb's public API headers get staged via a shared custom target not
+  # scoped to lldb's own install-$t targets
+  rm -rf "$pkgdir"/usr/include/lldb
+  # The whole usr/lib/clang/<ver>/ resource dir (clang headers,
+  # compiler-rt libs) leaks in via a shared install-manifest directory
+  rm -rf "$pkgdir"/usr/lib/clang
+  # The runtime libraries go into llvm-libs
+  mv -f "$pkgdir"/usr/lib/lib{LLVM,LTO,Remarks}*.so* "$srcdir"
+  mv -f "$pkgdir"/usr/lib/LLVMgold.so "$srcdir"
+
+  install -Dm644 llvm/LICENSE.TXT "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
+
+package_llvm-libs() {
+  pkgdesc="LLVM runtime libraries"
+  depends=('libgcc' 'glibc' 'libstdc++' 'zlib' 'zstd' 'libffi' 'libedit' 'libxml2')
+  provides=('libLLVM.so' 'libLTO.so' 'libRemarks.so')
+
+  install -d "$pkgdir/usr/lib"
+  cp -P \
+    "$srcdir"/lib{LLVM,LTO,Remarks}*.so* \
+    "$srcdir"/LLVMgold.so \
+    "$pkgdir/usr/lib/"
+
+  # Symlink LLVMgold.so from /usr/lib/bfd-plugins
+  # https://bugs.archlinux.org/task/28479
+  install -d "$pkgdir/usr/lib/bfd-plugins"
+  ln -s ../LLVMgold.so "$pkgdir/usr/lib/bfd-plugins/LLVMgold.so"
+
+  install -Dm644 "$srcdir/llvm-project-$pkgver.src/llvm/LICENSE.TXT" \
+    "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
+
+_python_optimize() {
+  python -m compileall "$@"
+  python -O -m compileall "$@"
+  python -OO -m compileall "$@"
+}
+
+_compat_flat_lib_symlinks() {
+  # The per-target-runtime-dir layout puts these under usr/lib/$CHOST/
+  # instead of the flat usr/lib/, symlink it into the old flat path
+  local entry name sub
+  for entry in "$pkgdir"/usr/lib/$CHOST/*; do
+    [ -e "$entry" ] || continue
+    name=$(basename "$entry")
+    if [ -d "$entry" ]; then
+      install -d "$pkgdir/usr/lib/$name"
+      for sub in "$entry"/*; do
+        ln -s "../$CHOST/$name/$(basename "$sub")" "$pkgdir/usr/lib/$name/$(basename "$sub")"
+      done
+    else
+      ln -s "$CHOST/$name" "$pkgdir/usr/lib/$name"
+    fi
+  done
+}
+
+_compat_old_resource_dir_symlinks() {
+  # compiler-rt's per-target-runtime-dir layout uses unsuffixed names
+  # under usr/lib/clang/<ver>/lib/<triple>/ instead of 
+  # usr/lib/clang/<ver>/lib/linux/ (e.g. libclang_rt.asan-x86_64.so
+  # instead of libclang_rt.asan.so). Symlink the old layout
+  local resdir="$pkgdir/usr/lib/clang/${pkgver%%.*}/lib"
+  local triple arch entry base stem ext
+  install -d "$resdir/linux"
+  for triple in x86_64-pc-linux-gnu i386-pc-linux-gnu; do
+    [ -d "$resdir/$triple" ] || continue
+    arch=${triple%%-*}
+    for entry in "$resdir/$triple"/*; do
+      [ -f "$entry" ] || continue
+      base=$(basename "$entry")
+      if [[ $base == *.syms ]]; then
+        inner=${base%.syms}
+        ext="${inner##*.}.syms"
+        stem=${inner%.*}
+      else
+        ext="${base##*.}"
+        stem="${base%.*}"
+      fi
+      ln -s "../$triple/$base" "$resdir/linux/${stem}-${arch}.${ext}"
+    done
+  done
+}
+
+package_clang() {
+  pkgdesc="C language family frontend for LLVM"
+  depends=('llvm-libs' 'llvm' 'gcc' 'compiler-rt' 'libgcc' 'libxml2')
+  optdepends=('openmp: OpenMP support in clang with -fopenmp'
+              'python: for scan-view and git-clang-format')
+  provides=("clang-analyzer=$pkgver" "clang-tools-extra=$pkgver")
+  conflicts=('clang-analyzer' 'clang-tools-extra')
+  replaces=('clang-analyzer' 'clang-tools-extra')
+
+  cd llvm-project-$pkgver.src
+
+  local t
+  for t in $(_clang_components); do
+    DESTDIR="$pkgdir" ninja -C build install-$t
+  done
+
+  install -Dm644 clang/LICENSE.TXT "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+  # compiler-rt/llvm-libs/lldb leak in via the same shared usr/lib/
+  # install-manifest directory clang's own install-$t targets touch
+  rm -rf "$pkgdir"/usr/lib/clang/*/lib
+  rm -rf "$pkgdir"/usr/lib/clang/*/share
+  rm -f "$pkgdir"/usr/lib/libLTO.so*
+  rm -f "$pkgdir"/usr/lib/libRemarks.so*
+  rm -f "$pkgdir"/usr/lib/liblldb.so*
+  rm -f "$pkgdir"/usr/bin/llvm-offload-binary
+
+
+  # Move scanbuild-py into site-packages and install Python bindings
+  local site_packages=$(python -c "import site; print(site.getsitepackages()[0])")
+  install -d "$pkgdir/$site_packages"
+  mv "$pkgdir"/usr/lib/{libear,libscanbuild} "$pkgdir/$site_packages/"
+  cp -a clang/bindings/python/clang "$pkgdir/$site_packages/"
+
+  # Move analyzer scripts out of /usr/libexec
+  mv "$pkgdir"/usr/libexec/* "$pkgdir/usr/lib/clang/"
+  rmdir "$pkgdir/usr/libexec"
+  sed -i 's|libexec|lib/clang|' \
+    "$pkgdir/usr/bin/scan-build" \
+    "$pkgdir/$site_packages/libscanbuild/analyze.py"
+
+  _python_optimize "$pkgdir/usr/share" "$pkgdir/$site_packages"
+
+  local bash_completion_destdir="$pkgdir/usr/share/bash-completion/completions"
+  install -d $bash_completion_destdir
+  mv "$pkgdir/usr/share/clang/bash-autocomplete.sh" "$bash_completion_destdir/clang"
+}
+
+package_compiler-rt() {
+  pkgdesc="Compiler runtime libraries for clang"
+  depends=('glibc' 'libgcc' 'libstdc++')
+
+  cd llvm-project-$pkgver.src
+
+  DESTDIR="$pkgdir" ninja -C build install-compiler-rt
+  # builtins (libclang_rt.builtins.a, crtbegin/crtend.o) is its own
+  # bootstrap-order CMake external-project step, separate from
+  # install-compiler-rt; needed for --rtlib=compiler-rt linking.
+  DESTDIR="$pkgdir" ninja -C build install-builtins
+  install -d "$pkgdir/usr/lib/clang/${pkgver%%.*}/include"
+  cp -a compiler-rt/include/{sanitizer,xray,fuzzer,profile} "$pkgdir/usr/lib/clang/${pkgver%%.*}/include/"
+  cp -a compiler-rt/include/orc_rt "$pkgdir/usr/lib/clang/${pkgver%%.*}/include/orc"
+  install -Dm755 compiler-rt/lib/hwasan/scripts/hwasan_symbolize "$pkgdir/usr/lib/clang/${pkgver%%.*}/bin/hwasan_symbolize"
+  install -Dm644 compiler-rt/LICENSE.TXT "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+  install -d "$pkgdir/usr/lib/clang/${pkgver%%.*}/share"
+  cat compiler-rt/lib/dfsan/done_abilist.txt compiler-rt/lib/dfsan/libc_ubuntu1404_abilist.txt \
+    > "$pkgdir/usr/lib/clang/${pkgver%%.*}/share/dfsan_abilist.txt"
+
+  local syms triple
+  while read -r syms; do
+    triple=$(basename "$(dirname "$syms")")
+    install -Dm644 "$syms" "$pkgdir/usr/lib/clang/${pkgver%%.*}/lib/$triple/$(basename "$syms")"
+  done < <(find build -path '*lib/*-pc-linux-gnu/*' \( -name '*.a.syms' -o -name '*.so.syms' \))
+
+  _compat_old_resource_dir_symlinks
+}
+
+package_llvm-lit() {
+  pkgdesc="An LLVM testing tool"
+  depends=('python')
+
+  cd llvm-project-$pkgver.src/llvm/utils/lit
+  python -m installer --destdir="$pkgdir" dist/*.whl
+}
+
+package_openmp() {
+  pkgdesc="LLVM OpenMP Runtime Library"
+  depends=('llvm-libs' 'libelf' 'libffi' 'glibc' 'libstdc++' 'libgcc')
+  optdepends=('offload: offloading to GPUs')
+
+  cd llvm-project-$pkgver.src
+
+  DESTDIR="$pkgdir" ninja -C build install-openmp
+  install -Dm644 openmp/LICENSE.TXT "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm755 "$(find build -name libompd.so -print -quit)" "$pkgdir/usr/lib/$CHOST/libompd.so"
+  rm -f "$pkgdir/usr/lib/$CHOST/libarcher_static.a"
+
+  # The runtimes build puts omp.h & co. into clang's resource dir;
+  # keep them reachable from their old /usr/include location
+  local header
+  install -d "$pkgdir/usr/include"
+  for header in "$pkgdir"/usr/lib/clang/${pkgver%%.*}/include/*.h; do
+    ln -s "../lib/clang/${pkgver%%.*}/include/${header##*/}" "$pkgdir/usr/include/${header##*/}"
+  done
+
+  # Compile Python scripts
+  python -m compileall -d /usr/share "$pkgdir/usr/share"
+  python -O -m compileall -d /usr/share "$pkgdir/usr/share"
+  python -OO -m compileall -d /usr/share "$pkgdir/usr/share"
+
+  _compat_flat_lib_symlinks
+}
+
+package_offload() {
+  pkgdesc="LLVM OpenMP Target Offloading Runtime Library"
+  depends=('llvm-libs' 'libelf' 'libffi' 'glibc' 'libstdc++' 'libgcc' "openmp>=$pkgver")
+  optdepends=('cuda: offloading to NVIDIA GPUs'
+              'hsa-rocr: offloading to AMD GPUs')
+
+  cd llvm-project-$pkgver.src
+
+  DESTDIR="$pkgdir" ninja -C build install-offload
+
+  # Device runtime bitcode (libomptarget-{amdgpu,nvptx}.bc, libompdevice.a)
+  local _target
+  for _target in amdgcn-amd-amdhsa nvptx64-nvidia-cuda; do
+    DESTDIR="$pkgdir" ninja -C "build-device-$_target" install-openmp
+  done
+
+  install -Dm644 llvm/LICENSE.TXT "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+  _compat_flat_lib_symlinks
+}
+
+package_lld() {
+  pkgdesc="Linker from the LLVM project"
+  depends=('llvm-libs' 'libstdc++' 'glibc' 'zlib' 'zstd')
+
+  cd llvm-project-$pkgver.src
+
+  local t
+  for t in $(_lld_components); do
+    DESTDIR="$pkgdir" ninja -C build install-$t
+  done
+
+  rm -rf "$pkgdir"/usr/include/lldb
+
+  install -Dm644 lld/LICENSE.TXT "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+  # https://bugs.llvm.org/show_bug.cgi?id=42455
+  install -Dm644 -t "$pkgdir/usr/share/man/man1" lld/docs/ld.lld.1
+
+}
+
+package_lldb() {
+  pkgdesc="Next generation, high-performance debugger"
+  depends=('llvm-libs' 'clang' 'zlib' 'xz' 'libedit' 'ncurses'
+           'libxml2' 'libgcc' 'libstdc++' 'python')
+
+  cd llvm-project-$pkgver.src
+
+  local t
+  for t in $(_lldb_components); do
+    DESTDIR="$pkgdir" ninja -C build install-$t
+  done
+
+  install -Dm644 lldb/LICENSE.TXT "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+  cp -a "$pkgdir"/usr/include/lldb/API/. "$pkgdir/usr/include/lldb/"
+
+  # Compile Python scripts
+  python -m compileall -d /usr/lib "$pkgdir/usr/lib"
+  python -O -m compileall -d /usr/lib "$pkgdir/usr/lib"
+  python -OO -m compileall -d /usr/lib "$pkgdir/usr/lib"
+}
+
+package_polly() {
+  pkgdesc="High-level loop and data-locality optimizer and optimization infrastructure for LLVM"
+  depends=('llvm-libs' 'libstdc++' 'glibc')
+
+  cd llvm-project-$pkgver.src
+
+  local t
+  for t in $(_polly_components); do
+    DESTDIR="$pkgdir" ninja -C build install-$t
+  done
+
+  # polly's headers/CMake package-config files install via COMPONENT-less
+  # rules upstream, so no install-X target can reach them
+  install -d "$pkgdir/usr/include"
+  cp -a polly/include/polly "$pkgdir/usr/include/"
+  if [ -d build/tools/polly/include/polly ]; then
+    cp -a build/tools/polly/include/polly/. "$pkgdir/usr/include/polly/"
+  fi
+  # Unconfigured template; the generated config.h is copied above
+  rm -f "$pkgdir/usr/include/polly/Config/config.h.cmake"
+
+  # Bundled isl headers; stdint.h is generated at build time (upstream
+  # installs *.h only, so skip its stdint.h.tmp and hmap_templ.c)
+  cp -a polly/lib/External/isl/include/isl "$pkgdir/usr/include/polly/"
+  install -Dm644 build/tools/polly/lib/External/isl/include/isl/stdint.h \
+    "$pkgdir/usr/include/polly/isl/stdint.h"
+  rm -f "$pkgdir/usr/include/polly/isl/hmap_templ.c"
+
+  install -d "$pkgdir/usr/lib/cmake/polly"
+  find build -path '*polly*/CMakeFiles/*' \
+    \( -name 'PollyConfig.cmake' -o -name 'PollyConfigVersion.cmake' -o -name 'PollyExports-*.cmake' \) \
+    -exec cp -a {} "$pkgdir/usr/lib/cmake/polly/" \;
+
+  install -Dm644 polly/LICENSE.TXT "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
+
+package_libc++ () {
+  pkgdesc="LLVM C++ standard library"
+  depends=("libc++abi=$pkgver-$pkgrel" 'libgcc' 'glibc')
+
+  cd llvm-project-$pkgver.src
+
+  DESTDIR="$pkgdir" ninja -C build install-cxx
+
+  # __config_site lives in the per-target include dir; keep it reachable
+  # from the old path for non-clang users of /usr/include/c++/v1
+  ln -s ../../$CHOST/c++/v1/__config_site "$pkgdir/usr/include/c++/v1/__config_site"
+
+  install -Dm644 libcxx/CREDITS.TXT "$pkgdir/usr/share/licenses/$pkgname/CREDITS"
+  install -Dm644 libcxx/LICENSE.TXT "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+  _compat_flat_lib_symlinks
+}
+
+package_libc++abi() {
+  pkgdesc="Low level support for the LLVM C++ standard library"
+  depends=('libgcc' 'glibc')
+
+  cd llvm-project-$pkgver.src
+
+  DESTDIR="$pkgdir" ninja -C build install-cxxabi
+
+  install -Dm644 libcxxabi/CREDITS.TXT "$pkgdir/usr/share/licenses/$pkgname/CREDITS"
+  install -Dm644 libcxxabi/LICENSE.TXT "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+
+  _compat_flat_lib_symlinks
+}
+
+# vim:set ts=2 sw=2 et:
