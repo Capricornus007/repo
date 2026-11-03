@@ -1,54 +1,35 @@
 # Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
 #
-# 為什麼是這顆包（用戶 2026-10-23 指示：「刪了 ce-bin，我要的是那種——下載官方的
-# 最新（源碼）然後用 CE 修補，然後 ce-git 進倉庫」）：
-#   · 官方 ZCode 有開源倉 zai-org/ZCode（Apache-2.0，CE README 明載「本倉庫的上遊」），
-#     最新 tag v3.15.1；Zcode-CE 3.15.1-ce.1 就是官方 v3.15.1 的**源碼級全量移植**
-#     ＋CE 修補（遙測移除、服務端重建等，台账見其 docs/development/upstream-sync.md）。
-#   · 所以「官方最新＋CE 修補」的正確實現＝構建 Zcode-CE 的 git HEAD——CE 替我們
-#     完成了官方→CE 的合併，這顆包每次構建都吃到 CE 的最新移植結果；CE 一跟上遊
-#     我們自動跟（git pkgver）。上一版 zcode-ce-bin（轉發 CE CI 產物）已按指示刪除。
-#   · 產物自帶 Electron（CE 官方立場：用系統 Electron 重組會把 Electron 大版本耦合
-#     給發行版，見其 aur/PKGBUILD 檔頭論證），所以這裡不依賴 electronNN。
+# 本包從 ZCode-CE fork 源碼構建「官方最新基線＋CE 政策」，不是把閉源 AppImage 改名重發。
+# 3.17.2 更新的可複核輸入：
+#   · 官方開源基線 zai-org/ZCode v3.17.1 = a60ba6a7；
+#   · 官方 3.17.2 Linux x64 AppImage 由官方安裝頁連到
+#     https://cdn-zcode.z.ai/zcode/electron/releases/3.17.2/linux-x64/ZCode-3.17.2-linux-x64.AppImage
+#     SHA-256 = 4a522d45727454188c56833275ae5b4d588ac3b2b87eedee5f7d98f8553a12e1；
+#   · 閉源包只用於核對 version、ASAR/native 邊界與 Electron 合同，不會被本包混入或重新分發。
+#     完整 URL/雙雜湊/空 AppImage 簽章區段/3.16.3 差量見 CE 的 upstream-sync 台帳。
+#
+# CE 3.17.2-ce.1 把開源 v3.17.1 整版合併後，保留 fork 的遙測移除、自託管遠控、
+# Source Server 自癒與快取、終端 owner、引導確認及 ToolSearch 完整鏈；根版本對齊閉源 3.17.2。
+# 桌面 dependency、electron-builder 的 electronVersion 與鎖檔都指向 Electron 44.7.0；產物
+# 自帶該 runtime，所以本包不依賴、也不另裝系統 electron41/electron42/electron44。
 #
 # 為什麼只建 pacman target（prepare() 裡 sed）：
-#   · 上游 bundle 對 linux 固定建 AppImage+deb+rpm+pacman 四份；rpm 需要 rpmbuild
-#     （Arch 容器沒有）、AppImage/deb 在本倉純屬浪費。bundle.mjs 的產物驗證
-#     （findBuiltArtifact）只要**任一**副檔名命中即過，砍到只剩 pacman 不影響門禁。
+#   · bundle 預設一次建 AppImage+deb+rpm+pacman；AUR 只需要 pacman，rpm 又要求 rpmbuild。
+#   · bundle.mjs 的產物驗證接受任一目標副檔名，所以縮成 pacman 不降低產物門禁。
 #
-# 構建環境對齊 CE 自己的 release.yml（照抄，不發明）：
-#   · ZCODE_ENV=production；
-#   · ZCODE_CDN_BASE_URL＝社區 CDN（gh variable list -R Zcode-CE/Zcode-CE 實測值，
-#     其 docs/development/remote-workspace.md 台賬確認）——不設的話 CE 版的安裝包
-#     會指向官方 CDN 取運行時資產，CE 版本在那邊不存在，開箱連線失敗；
-#   · ELECTRON_MIRROR／ELECTRON_BUILDER_BINARIES_MIRROR 蓋成 GitHub 官方下載點：
-#     bundle 腳本的默認值是 npmmirror（國內 CDN，為本地開發優化），GitHub runner
-#     訪問它慢且不穩，CE 的 release.yml 也是這樣蓋的。
-#
-# ⚠️ 版號來源目前是**用戶自己的 fork**，不是 CE 上游（用戶 2026-10-25 指示：「把
-#   zcode-ce 弄去 3.16.x」）：
-#   · 實查三條線各停在哪裡：官方開源倉 zai-org/ZCode main = `3c5b2276`（package.json
-#     3.16.2，2026-10-20 推）；CE 上游 Zcode-CE/Zcode-CE main = `7fc3bfe2`（3.15.1-ce.1，
-#     2026-10-14 之後沒再動）；官方**閉源**已發 3.16.3（CDN latest.yml releaseDate
-#     2026-10-23T03:02Z），但開源倉還沒推 3.16.3 的 sync 提交。
-#   · 所以「CE 替我們合併」這個前提現在暫時不成立，本包改吃 fork 的同步線；
-#     **CE 上游自己推上 3.16.x 的當天就把 `_giturl`／`_branch` 改回 Zcode-CE/Zcode-CE
-#     的 main**（不要讓 fork 變成長期平行分叉）。
-#   · fork 的同步線是怎麼做的（可複現，不是手工擺平）：以 CE 自己裁決過的
-#     `refs/pull/5/head`（3.16.1 整版合併、typecheck 0 錯誤、141 件衝突有台賬）當 oracle，
-#     對「上游 3.15.1→3.16.2」的 4579 顆變動檔逐檔做二段三方合併，零衝突的機械採用、
-#     有衝突的按台賬裁決人工解；並把 CE 政策不帶的上游測試／文件／雲端件（10401 檔）剪掉。
-#
-# ⚠️ 版本由 pkgver() 從 package.json＋git 現算 ⇒ 本檔列進「回推校驗和」排除清單
-#   （靠矩陣 kind:aur，與 llvm-git 同一手法）。
+# 構建環境對齊 CE release workflow：production、社區 runtime CDN、GitHub Electron/runtime
+# binaries mirror；`pnpm install --frozen-lockfile` 釘住 Electron 44 與 native staging 輸入。
+# `_giturl` 暫時指向使用者 fork 的同步線；CE 上游 main 吸收 3.17.2 後應切回
+# `https://github.com/Zcode-CE/Zcode-CE`。版本由 pkgver() 從 package.json＋git 現算，
+# 因此本檔維持矩陣 kind:aur 的回推校驗和排除。
 
-# 上游 CE 自己跟上 3.16.x 後，把 _giturl 改回 'https://github.com/Zcode-CE/Zcode-CE'
-# （_branch 兩個都是 main，不用動）。
+# 同步線名稱沿用歷史名稱；內容與 package.json 才是版本事實。
 _giturl='https://github.com/Capricornus007/Zcode-CE'
 _branch='sync/v3162-pr5'
 
 pkgname=zcode-ce-git
-pkgver=3.15.1.ce.1.r1.g7fc3bfe
+pkgver=3.17.2.ce.1.r581.gdf777201
 pkgrel=1
 pkgdesc="ZCode 的開源社區版（官方 zai-org/ZCode 開源上游＋CE 修補），從源碼構建"
 arch=('x86_64')
@@ -71,7 +52,7 @@ sha256sums=('SKIP')
 
 pkgver() {
   cd "$pkgname"
-  # package.json 的 version 形如 3.15.1-ce.1；pacman 的 pkgver 不準連字號，換點號。
+  # package.json 的 version 形如 3.17.2-ce.1；pacman 的 pkgver 不準連字號，換點號。
   # ⚠️ 不能用 node -p：plan 步在 base-devel 容器裡跑，那時 makedepends 還沒裝
   #   （nodejs 是 makepkg 裝的）→ command not found → 每輪 skip、永遠不出包。
   #   sed 取第一個 "version" 欄（root package.json 的頂層 version 在最前面，
