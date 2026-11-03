@@ -6,7 +6,7 @@
 # release 產物（nashira）；這裡是獨立從源碼出包、跟著 master 走。
 
 pkgname=nashira-git
-pkgver=0.1.129.r4.gde0f6f3
+pkgver=0.1.129.r7.gdc417b3
 # pkgrel 抬到 2：本輪改的是「執行期換回 pin 死的 JBR SDK」，而 pkgver 只跟著
 # 主倉 master HEAD 動——HEAD 沒動（遠端仍是 de0f6f3）時 pkgver 一個字都不變。
 # 本倉 CI「要不要建」的最後判據是**產物檔名是否已在 release 裡**（build-packages.yml
