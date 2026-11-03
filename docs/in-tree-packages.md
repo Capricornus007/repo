@@ -50,7 +50,7 @@ CI 的通用規則是「名字以 `-git` 結尾 → clone AUR，否則 clone `gi
 - Calibre 已安裝；成品無 `ttf-liberation` 套件依賴，並實際完成正體中文 TXT→EPUB→PDF，
   核對書名、正文及 PDF 詮釋資料。
 
-## Xfce 4.21 shard 4 依賴修正（2026-11-02）
+## shard 3／4 CI 與 Xfce 4.21 修正（2026-11-02 至 11-03）
 
 - `xfce4-terminal-git` 明確吃 `gtk-layer-shell>=0.7.0` 與
   `xfce4-session-git>=4.21.2`，保留下拉視窗、Wayland 與 session client 功能。
@@ -58,6 +58,18 @@ CI 的通用規則是「名字以 `-git` 結尾 → clone AUR，否則 clone `gi
   `libxfce4session-client-1.pc`／SONAME 由已發布的 `xfce4-session-git` 提供；
   不造假庫、不關 session 功能。desktop 的影片背景把 `gstreamer-git` 與
   split package `gst-plugin-gtk-git` 列為執行期依賴，而不是建完就可移除的 make 依賴。
+- `wireplumber-git` 必須用 Artix base-devel 建置：配方明確啟用 elogind、關閉
+  systemd；Arch 容器沒有 `libelogind.pc`，改裝 Artix 的 system 倉進 Arch 又會混換
+  glibc／工具鏈。矩陣因此直接選與目標機相同的 Artix 基座。
+- `xfce4-cpufreq-plugin-git` 改由本倉 Meson 配方建置。上游 master 已移除
+  `autogen.sh`，AUR 仍呼叫舊 Autotools 入口；新配方保留 epoch，並明確使用
+  `xfce4-panel-git`、`libxfce4ui-git`、`libxfce4util-git`。
+- `xcb-util-cursor-git` 的兩個 anongit 來源已下線，下載重試不可能自行恢復；
+  本倉改收 in-tree 配方，直接使用 freedesktop GitLab 的 `libxcb-cursor` 與
+  `xcb-util-m4` 官方倉，並保留 `util-common-m4` 本地名稱供既有 submodule 設定使用。
+- `xfce4-power-manager-git` 把通知 daemon 恢復為上游同樣的 optional dependency。
+  先把 `xfce4-notifyd-git` 當硬依賴安裝會帶入穩定版 `xfce4-panel`，下一階段再裝
+  `xfce4-panel-git` 時 pacman 因衝突預設拒絕；必要的 panel 建置依賴仍完整保留。
 - 四包已在 Artix 宿主完整建置並同筆安裝；執行檔實查都可找到
   `libxfce4session-client-1.so.0`，相關程式亦鏈到 `libgtk-layer-shell.so.0`。
   `gtksink` 與 `gtkwaylandsink` 均用實際 `gst-inspect-1.0` 載入成功。

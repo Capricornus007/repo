@@ -912,7 +912,8 @@
     "key": "wireplumber-git",
     "repo_name": "wireplumber-git",
     "variant": "none",
-    "kind": "aur",
+    "kind": "artix",
+    "image": "artixlinux/artixlinux:base-devel",
     "in_tree": true
   },
   {
@@ -949,7 +950,8 @@
     "key": "xcb-util-cursor-git",
     "repo_name": "xcb-util-cursor-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "xclip-git",
@@ -979,7 +981,8 @@
     "key": "xfce4-cpufreq-plugin-git",
     "repo_name": "xfce4-cpufreq-plugin-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "xfce4-diskperf-plugin-git",

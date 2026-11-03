@@ -14,13 +14,14 @@ arch=('x86_64' 'i686' 'armv7h' 'aarch64')
 url="https://docs.xfce.org/xfce/xfce4-power-manager/start"
 license=('GPL-2.0-or-later')
 groups=('xfce4-git')
-depends=('libxfce4ui-git' 'upower' 'libnotify' 'xfce4-notifyd-git' 'hicolor-icon-theme')
+depends=('libxfce4ui-git' 'upower' 'libnotify' 'hicolor-icon-theme')
 # networkmanager 從 depends 移到 makedepends：本機 Artix 不跑 NM（pacman.conf 的
 # IgnorePkg 裡有 networkmanager 與 wpa_supplicant，兩顆都沒裝），寫成執行期依賴
 # 會讓這顆包在用戶機器上永遠裝不上（實測 makepkg 紅在「無法解決 wpa_supplicant」）。
 # NM 集成照常編譯進去，只是沒裝 NM 時那段功能不啟用——跟 unbound 去 libsystemd 同理。
 makedepends=('xfce4-panel-git' 'wayland-protocols' 'wayland' 'git' 'xfce4-dev-tools-git' 'glib2-devel' 'wlr-protocols' 'meson' 'gobject-introspection' 'networkmanager')
 optdepends=('xfce4-panel-git: Xfce panel plugin support'
+            'xfce4-notifyd-git: 顯示電源狀態通知'
             'networkmanager: 休眠／喚醒時協調網路連線（NM 集成）')
 provides=("${_pkgname}=${pkgver%%+*}")
 conflicts=("${_pkgname}")
