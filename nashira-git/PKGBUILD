@@ -13,9 +13,13 @@ arch=('x86_64')
 url="https://github.com/Capricornus007/nashira"
 license=('AGPL-3.0-only')
 depends=('xdg-utils')
-# Compose jlink uses the JDK running Gradle, so pin the distribution explicitly to Arch's stock
-# OpenJDK 27. Candidate placement is implemented by Nashira's Xlib XIM bridge, not by the JVM.
-makedepends=('git' 'jdk-openjdk' 'unzip' 'python3' 'zip')
+# 構建用哪顆 JDK，直接決定裝機後跑的是什麼 JVM：app image 的執行期是 jpackage
+# 現場 jlink 出來的（取 $JAVA_HOME/jmods），不是依賴系統 java。
+# 換 JBR 的理由見主倉 #62：OpenJDK 沒有 sun.awt.X11.XInputMethod$ClientComponentCaretPositionTracker，
+# 輸入法候選窗就不會跟光標。JBR 只有 **sdk** 變體帶 jmods（runtime 變體的 jmods/ 是空的）。
+# jbr21 與 jbr25 都要：用哪顆是**讀倉庫自己宣告的 jvmToolchain(N)** 決定的（見下面 nashira_jbr_home），
+# 所以兩條版本線都得能建。這兩個包是分版本可共裝的（jbrNN），不會互相踢掉。
+makedepends=('git' 'jbr21' 'jbr25' 'unzip' 'python3' 'zip')
 provides=('nashira')
 conflicts=('nashira')
 options=('!strip' '!debug')
@@ -35,22 +39,32 @@ pkgver() {
   printf '%s.r%s\n' "$base" "$rev" | tr '-' '.'             # 例：0.1.45.r1.g8fb9a30
 }
 
-# Keep the build and jlink inputs identical to upstream release.yml. A fixed stock path is
-# intentional: silently accepting another JAVA_HOME could put a vendor runtime in the package.
-nashira_openjdk_home=/usr/lib/jvm/java-27-openjdk
+# 該用哪顆 JBR，由倉庫自己宣告的 `jvmToolchain(N)` 決定，不寫死在本檔。
+# 寫死的下場剛剛發生過：上游把 toolchain 從 21 升到 25，本機這條路若還釘死 /opt/jbr21，
+# 做出來的包用的執行期就跟 CI 不是同一顆（規則 71「配置寫了不等於套上」的同一類坑）。
+nashira_jbr_home() {
+  local need
+  need=$(grep -oE 'jvmToolchain\(([0-9]+)\)' desktopApp/build.gradle.kts | grep -oE '[0-9]+' | tail -1)
+  if [ -z "$need" ]; then
+    echo "讀不到 desktopApp/build.gradle.kts 裡的 jvmToolchain(N)，不知道该用哪顆 JBR——拒絕瞎猜預設值" >&2
+    return 1
+  fi
+  printf '/opt/jbr%s' "$need"
+}
 
 build() {
   cd nashira
-  export JAVA_HOME="$nashira_openjdk_home"
+  # 只建桌面 app image（不碰 androidApp；configuration 階段不需要 Android
+  # SDK——上游 release.yml 同一條命令在無 SDK 的 runner 上驗證過可行）。
+  # 缺 JBR 就直接紅，**不要靜默退回系統 OpenJDK**：退回去做出來的包照樣能裝能跑，
+  # 只是輸入法候選窗又不跟光標，而 CI 全綠——這正是規則 71「配置寫了不等於套上」那個坑。
+  local jbr
+  jbr="$(nashira_jbr_home)" || return 1
+  export JAVA_HOME="$jbr"
+  echo "構建用 $JAVA_HOME（倉庫宣告的 jvmToolchain 版本）"
+  [ -x "$JAVA_HOME/bin/jlink" ] && [ -n "$(ls "$JAVA_HOME/jmods"/*.jmod 2>/dev/null)" ] \
+    || { echo "找不到 $JAVA_HOME（含 jmods）；對應的 jbrNN 沒裝成？" >&2; return 1; }
   export PATH="$JAVA_HOME/bin:$PATH"
-  if [ ! -x "$JAVA_HOME/bin/jlink" ] \
-      || [ ! -f "$JAVA_HOME/release" ] \
-      || ! grep -q '^JAVA_VERSION="27\.' "$JAVA_HOME/release" \
-      || [ -z "$(ls "$JAVA_HOME/jmods"/*.jmod 2>/dev/null)" ]; then
-    echo "需要含 jlink/jmods 的 stock OpenJDK 27：$JAVA_HOME" >&2
-    return 1
-  fi
-  echo "構建與 jlink 使用 $JAVA_HOME"
   # --no-daemon：容器/CI 友好，不留常駐 JVM
   ./gradlew :desktopApp:createDistributable --no-daemon --console=plain
 }
@@ -92,21 +106,24 @@ Type=Application
 Categories=Network;InstantMessaging;Chat;
 EOF
 
-  # X11 opens（WM 修復＋stock OpenJDK XIM bridge）已進 app image 的設定。
-  # app image 自帶 jlink runtime，裝機後不依賴系統 java-runtime。
+  # hicolor 全尺寸（16–512＋scalable SVG）：桌面環境按 DPI 挑最佳尺寸，
+  # 不會拿 512 硬縮成 16 的糊圖。X11 --add-opens（平鋪 WM 修復）已進
+  # app image 的 lib/app/nashira.cfg，app image 自帶 JRE，無需 java-runtime
   install -dm755 "${pkgdir}/usr/share/icons/hicolor"
   cp -a desktopApp/packaging/hicolor/hicolor/. "${pkgdir}/usr/share/icons/hicolor/"
 
   install -dm755 "${pkgdir}/usr/bin"
   ln -s /opt/nashira/bin/nashira "${pkgdir}/usr/bin/nashira"
 
-  # 驗收裝機後真正執行的映像：OpenJDK 27，且沒有 optional vendor API classes。
-  # 候選窗功能由 app 內的 XimCandidatePosition 提供。
-  local runtime="${pkgdir}/opt/nashira/lib/runtime"
-  grep -q '^JAVA_VERSION="27\.' "$runtime/release" \
-    || { echo "::error:: 包裡不是 OpenJDK 27 runtime" >&2; return 1; }
-  if find "${pkgdir}/opt/nashira/lib/app" -iname 'jbr-api*.jar' | grep -q .; then
-    echo "::error:: 包裡混入 vendor runtime API classes" >&2
+  # 產物收口（規則 71）：驗「裝機後真的會跑的那個 runtime」有沒有光標上報類，
+  # 而不是驗 build 環境用了哪顆 JDK——後者綠了不代表包裡是 JBR。
+  # jpackage 的 app image 佈局是 lib/runtime（不是頂層 runtime/）。
+  local modules="${pkgdir}/opt/nashira/lib/runtime/lib/modules"
+  local jbr
+  jbr="$(nashira_jbr_home)" || return 1
+  if ! "$jbr/bin/jimage" list "$modules" 2>/dev/null \
+       | grep -qi 'ClientComponentCaretPositionTracker'; then
+    echo "::error:: 包裡的 runtime 不是 JBR（$modules 查不到光標上報類），拒絕出貨" >&2
     return 1
   fi
 }
