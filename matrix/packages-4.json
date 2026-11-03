@@ -376,5 +376,275 @@
     "repo_name": "xorg-server-xvfb-git",
     "variant": "none",
     "kind": "alias"
+  },
+  {
+    "key": "dunst-git",
+    "repo_name": "dunst-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "fcitx5-configtool-git",
+    "repo_name": "fcitx5-configtool-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "fcitx5-gtk-git",
+    "repo_name": "fcitx5-gtk-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "file-roller-git",
+    "repo_name": "file-roller-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gtk-layer-shell-git",
+    "repo_name": "gtk-layer-shell-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gvfs-git",
+    "repo_name": "gvfs-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "kdeconnect-git",
+    "repo_name": "kdeconnect-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "kitty-shell-integration-git",
+    "repo_name": "kitty-shell-integration-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "kitty-terminfo-git",
+    "repo_name": "kitty-terminfo-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "lemonbar-git",
+    "repo_name": "lemonbar-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "libfm-git",
+    "repo_name": "libfm-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "libhandy-git",
+    "repo_name": "libhandy-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "lxsession-git",
+    "repo_name": "lxsession-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "mangohud-git",
+    "repo_name": "mangohud-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "nemo-git",
+    "repo_name": "nemo-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "pcmanfm-git",
+    "repo_name": "pcmanfm-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "playerctl-git",
+    "repo_name": "playerctl-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "polkit-gnome-git",
+    "repo_name": "polkit-gnome-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "sccache-git",
+    "repo_name": "sccache-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "seahorse-git",
+    "repo_name": "seahorse-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "thunar-git",
+    "repo_name": "thunar-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "thunar-volman-git",
+    "repo_name": "thunar-volman-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfburn-git",
+    "repo_name": "xfburn-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xfce4-appfinder-git",
+    "repo_name": "xfce4-appfinder-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "cargo-nextest-git",
+    "repo_name": "cargo-nextest-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "dex2jar-git",
+    "repo_name": "dex2jar-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gamemode-git",
+    "repo_name": "gamemode-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "vapoursynth-git",
+    "repo_name": "vapoursynth-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xdg-desktop-portal-git",
+    "repo_name": "xdg-desktop-portal-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "tesseract-data-chi_sim-git",
+    "repo_name": "tesseract-data-chi_sim-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "tesseract-data-chi_tra-git",
+    "repo_name": "tesseract-data-chi_tra-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "tesseract-data-eng-git",
+    "repo_name": "tesseract-data-eng-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "tesseract-data-jpn-git",
+    "repo_name": "tesseract-data-jpn-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "tesseract-data-osd-git",
+    "repo_name": "tesseract-data-osd-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "vala-git",
+    "repo_name": "vala-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xmlto-git",
+    "repo_name": "xmlto-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "gjs-git",
+    "repo_name": "gjs-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "efibootmgr-git",
+    "repo_name": "efibootmgr-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "usbutils-git",
+    "repo_name": "usbutils-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "nvme-cli-git",
+    "repo_name": "nvme-cli-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "tcpdump-git",
+    "repo_name": "tcpdump-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "parted-git",
+    "repo_name": "parted-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "upower-git",
+    "repo_name": "upower-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "fwupd-git",
+    "repo_name": "fwupd-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "openvpn-git",
+    "repo_name": "openvpn-git",
+    "variant": "none",
+    "kind": "aur"
   }
 ]
