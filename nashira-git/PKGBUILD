@@ -7,24 +7,80 @@
 
 pkgname=nashira-git
 pkgver=0.1.129.r4.gde0f6f3
-pkgrel=1
+# pkgrel 抬到 2：本輪改的是「執行期換回 pin 死的 JBR SDK」，而 pkgver 只跟著
+# 主倉 master HEAD 動——HEAD 沒動（遠端仍是 de0f6f3）時 pkgver 一個字都不變。
+# 本倉 CI「要不要建」的最後判據是**產物檔名是否已在 release 裡**（build-packages.yml
+# 末尾的 `^${asset_prefix}${TARGET_PKGVER}-${TARGET_PKGREL}-`），而實查
+# `nashira-git-0.1.129.r4.gde0f6f3-1-x86_64.pkg.tar.zst` **已發布**：不抬 pkgrel
+# 就會被「已在 release 里」永久跳過，這輪的 JBR 修正永遠上不了車
+# （同一條教訓寫在該檔 2127 行「換檔 ⇒ pkgrel 抬一，產物檔名才變」）。
+# ⚠️ 靜態 pkgver 本來就是會陳舊的佔位值：主倉 master 一推上去，plan 步算出的
+#    pkgver 就變成 `0.1.129.r7.gdc417b3`、與本行不同 → makepkg 依規則把 pkgrel
+#    重置回 1、照樣重建，並由「回推 in-tree 套件的 PKGBUILD」步把 ^pkgver= 寫回本檔。
+pkgrel=2
 pkgdesc="Nashira — Matrix messenger for Android and Linux (Kotlin/Compose Multiplatform, built from master)"
 arch=('x86_64')
 url="https://github.com/Capricornus007/nashira"
 license=('AGPL-3.0-only')
 depends=('xdg-utils')
+# ── 執行期：JetBrains Runtime（JBR），不是 stock OpenJDK ──────────────────────
 # 構建用哪顆 JDK，直接決定裝機後跑的是什麼 JVM：app image 的執行期是 jpackage
 # 現場 jlink 出來的（取 $JAVA_HOME/jmods），不是依賴系統 java。
-# 換 JBR 的理由見主倉 #62：OpenJDK 沒有 sun.awt.X11.XInputMethod$ClientComponentCaretPositionTracker，
-# 輸入法候選窗就不會跟光標。JBR 只有 **sdk** 變體帶 jmods（runtime 變體的 jmods/ 是空的）。
-# jbr21 與 jbr25 都要：用哪顆是**讀倉庫自己宣告的 jvmToolchain(N)** 決定的（見下面 nashira_jbr_home），
-# 所以兩條版本線都得能建。這兩個包是分版本可共裝的（jbrNN），不會互相踢掉。
-makedepends=('git' 'jbr21' 'jbr25' 'unzip' 'python3' 'zip')
+#
+# 用戶 2026-11-03 真機（fcitx5 + X11）實測裁定：上一輪那條「去 JBR、改用 stock
+# OpenJDK 自建 XIM bridge」的路（主倉 a2ee238／本倉 7f3e8b2）**候選窗位置不對**、
+# 只有 JBR 才對；兩條提交已各自 revert（主倉 852aea0／本倉 13ce69e），該 bridge 的
+# 兩個檔案（XimCandidatePosition.kt 與其座標契約測試）也隨 revert 從源碼中消失。
+# 換 JBR 的理由見主倉 #62：只有 JBR 會在 XIM 回調之內上報游標矩形
+# （sun.awt.X11.XInputMethod$ClientComponentCaretPositionTracker；OpenJDK 沒這個類，
+# 實測 ClassNotFoundException）→ 少了它 fcitx5 的候選窗只能退回「焦點窗口幾何」，
+# 永遠釘在視窗左下角。
+#
+# 本版**不再吃系統 jbrNN 套件**（舊寫法是 makedepends=('jbr21' 'jbr25')，再按倉庫
+# 宣告的 jvmToolchain(N) 去 /opt/jbrN 撿），改成把 SDK pin 成具體檔案：
+#   · 吃系統套件有兩個毛病。一是「用哪顆」取決於建置容器裝了什麼，版號不由本檔說了算；
+#     二是舊探測抓的是 `jvmToolchain(25)` 這種字面形式，而主倉 dc417b3 已把 toolchain 改写成
+#     `jvmToolchain { languageVersion.set(JavaLanguageVersion.of(25)); vendor.set(...) }`
+#     ——那條 grep 會讀到空字串，構建卡在「拒絕瞎猜預設值」直接紅（本輪實查 build.gradle.kts）。
+#   · pin 成 tarball 後，feed 與主倉 CI（tools/setup-jbr.sh + gradle.properties 的
+#     jbrVersion/jbrBuild/jbrLinuxX64Url/jbrLinuxX64Sha512）吃同一個 URL、同一個 sha512——
+#     兩邊同一顆 JVM 才叫對齊（規則 21「照 CI 算一遍」）。
+# 25.0.4.1+1-b635.79 同時等於本機 jbr25 套件的實裝版（實查
+# /var/lib/pacman/local/jbr25-25.0.4.1.635.79-2/desc）。系統那兩顆 jbrNN 未動、未卸載。
+# 變體必須是 **jbrsdk**：只有 SDK 變體帶 jmods（runtime-only 的 jmods/ 是空的，
+# jpackage 的 jlink 生不出執行期）。實查這個檔解壓後 jmods/ 有 69 個 .jmod。
+_jbr_version=25.0.4.1
+_jbr_build=b635.79
+_jbr_variant=jbrsdk
+_jbr_dir="${_jbr_variant}-${_jbr_version}-linux-x64-${_jbr_build}"
+# ⚠️ 這裡**不**拼 ${srcdir}：makepkg 是「先 source PKGBUILD、之後才設 srcdir」，
+#    實測（`makepkg --printsrcinfo` 探測）頂層取 ${srcdir} 得到空字串，寫成
+#    `${srcdir}/${_jbr_dir}` 會展開成 `/jbrsdk-…` 這種根目錄假路徑、build() 必紅。
+#    所以延後到函式呼叫時才組路徑（jbr25/PKGBUILD 也是同樣的延後寫法）。
+nashira_jbr_home() {
+  [ -n "${srcdir:-}" ] \
+    || { echo "::error:: srcdir 未設定——這函式只能在 makepkg 的 build()/package() 裡呼叫" >&2; return 1; }
+  printf '%s/%s' "${srcdir}" "${_jbr_dir}"
+}
+makedepends=('git' 'unzip' 'python3' 'zip')
 provides=('nashira')
 conflicts=('nashira')
 options=('!strip' '!debug')
-source=('git+https://github.com/Capricornus007/nashira.git')
-sha256sums=('SKIP')
+source=('git+https://github.com/Capricornus007/nashira.git'
+        "https://cache-redirector.jetbrains.com/intellij-jbr/${_jbr_dir}.tar.gz")
+# 第二條的 sha512 是 2026-11-03 在這臺機器**實抓實算**得來的（250,882,118 bytes）：
+#   curl --fail -L -o jbrsdk-25.0.4.1-linux-x64-b635.79.tar.gz "<上面同一個 URL>"
+#   sha512sum jbrsdk-25.0.4.1-linux-x64-b635.79.tar.gz
+# 算出的值與主倉 gradle.properties 的 jbrLinuxX64Sha512 逐字相同（兩邊獨立對上了）；
+# 解壓後實查 release 檔 JAVA_RUNTIME_VERSION="25.0.4.1+1-b635.79"、
+# IMPLEMENTOR="JetBrains s.r.o."，且 lib/modules 內有
+# sun/awt/X11/XInputMethod$ClientComponentCaretPositionTracker.class。
+# ⚠️ 沒有第二來源可抄：JetBrainsRuntime 的 GitHub release（tag jbr-release-25.0.4.1b635.79）
+# 實查 **assets 為空**，官方 CDN 也不發目錄清單／校驗檔，所以雜湊只能靠實算——
+# 換版號時必須重抓重算，不准憑印象填。
+# 第一條是 git 源、沒有單一檔案可算，沿用本倉 -git 包的 SKIP 慣例。
+sha512sums=('SKIP'
+            '1ad3ba2aef8bb417cb3c15e51fda53a7f7fd3a53db44e55902e926541cbf170c53b241832136ad4ca78e4098cd328f7c59ffeb59ac86e230816fd4f9a0a5b097')
 
 pkgver() {
   cd nashira
@@ -39,34 +95,71 @@ pkgver() {
   printf '%s.r%s\n' "$base" "$rev" | tr '-' '.'             # 例：0.1.45.r1.g8fb9a30
 }
 
-# 該用哪顆 JBR，由倉庫自己宣告的 `jvmToolchain(N)` 決定，不寫死在本檔。
-# 寫死的下場剛剛發生過：上游把 toolchain 從 21 升到 25，本機這條路若還釘死 /opt/jbr21，
-# 做出來的包用的執行期就跟 CI 不是同一顆（規則 71「配置寫了不等於套上」的同一類坑）。
-nashira_jbr_home() {
-  local need
-  need=$(grep -oE 'jvmToolchain\(([0-9]+)\)' desktopApp/build.gradle.kts | grep -oE '[0-9]+' | tail -1)
-  if [ -z "$need" ]; then
-    echo "讀不到 desktopApp/build.gradle.kts 裡的 jvmToolchain(N)，不知道该用哪顆 JBR——拒絕瞎猜預設值" >&2
+# 主倉若已自己宣告 JBR pin（dc417b3 起的 gradle.properties），本檔必須跟它一致。
+# 不一致＝兩邊 pin 漂移，做出來的包與 CI 用的不是同一顆 JVM，寧可紅也不要出貨
+# （規則 71「配置寫了不等於套上」；主倉 gradle.properties 檔頭也明令 downstream
+# packaging 要 consume the same pin）。遠端 master 還沒那幾行時跳過——不能假設它一定在。
+nashira_check_repo_pin() {
+  local kv kb
+  kv=$(sed -n 's/^jbrVersion=//p' gradle.properties 2>/dev/null)
+  kb=$(sed -n 's/^jbrBuild=//p' gradle.properties 2>/dev/null)
+  if [ -z "$kv" ] && [ -z "$kb" ]; then
+    echo "主倉尚未宣告 jbrVersion/jbrBuild，跳過交叉比對（本檔 pin ${_jbr_version}/${_jbr_build}）"
+    return 0
+  fi
+  if [ "$kv" != "$_jbr_version" ] || [ "$kb" != "${_jbr_build#b}" ]; then
+    echo "::error:: 主倉 gradle.properties pin 的是 JBR ${kv}/b${kb}，本檔 pin ${_jbr_version}/${_jbr_build}——兩邊漂移，拒絕出包" >&2
     return 1
   fi
-  printf '/opt/jbr%s' "$need"
+  echo "主倉 pin 一致：JBR ${kv}+1-b${kb}"
+}
+
+# 驗「解壓出來的這顆真的是 pin 的那個 JBR，而且真帶游標追蹤類」。
+# 查實物而不是查檔名：CDN 上同檔名被重傳修復版、或變體選錯（runtime-only 沒 jmods），
+# 檔名都一樣，只有 release／jmods／jimage 三項攔得住。主倉 tools/setup-jbr.sh 問的是同三題。
+# 舊版的 nashira_jbr_home()（grep jvmToolchain(N) 再去 /opt/jbrN）已淘汰：主倉改成
+# block 式 toolchain 宣告後那條 grep 讀空，而且「用容器裡恰好裝著的那顆」本來就不是 pin。
+nashira_check_jbr_sdk() {
+  local home n
+  home="$(nashira_jbr_home)" || return 1
+  [ -d "${home}" ] \
+    || { echo "::error:: 找不到解壓後的 JBR SDK：${home}（source 抓取或解壓沒跑？）" >&2; return 1; }
+  grep -qx "JAVA_RUNTIME_VERSION=\"${_jbr_version}+1-b${_jbr_build#b}\"" "${home}/release" \
+    || { echo "::error:: SDK 的 JAVA_RUNTIME_VERSION 不是 pin 的 ${_jbr_version}+1-b${_jbr_build#b}" >&2
+         head -5 "${home}/release" | sed 's/^/    /' >&2; return 1; }
+  [ -x "${home}/bin/jlink" ] \
+    || { echo "::error:: SDK 裡沒有可用的 bin/jlink" >&2; return 1; }
+  [ -n "$(ls "${home}"/jmods/*.jmod 2>/dev/null)" ] \
+    || { echo "::error:: SDK 的 jmods/ 是空的——變體要 jbrsdk，不是 runtime-only" >&2; return 1; }
+  n="$("${home}/bin/jimage" list "${home}/lib/modules" 2>/dev/null \
+        | grep -c 'ClientComponentCaretPositionTracker' || true)"
+  if [ "${n:-0}" -lt 1 ]; then
+    echo "::error:: 這顆 JBR SDK 查不到游標上報類 ClientComponentCaretPositionTracker（見主倉 #62）" >&2
+    return 1
+  fi
+  echo "JBR SDK 驗證通過：${home}（游標上報類命中 ${n} 筆、jmods $(ls "${home}"/jmods/*.jmod | wc -l) 個）"
 }
 
 build() {
   cd nashira
   # 只建桌面 app image（不碰 androidApp；configuration 階段不需要 Android
   # SDK——上游 release.yml 同一條命令在無 SDK 的 runner 上驗證過可行）。
-  # 缺 JBR 就直接紅，**不要靜默退回系統 OpenJDK**：退回去做出來的包照樣能裝能跑，
-  # 只是輸入法候選窗又不跟光標，而 CI 全綠——這正是規則 71「配置寫了不等於套上」那個坑。
+  # 執行期一律是上面 pin 死的那顆 JBR SDK，**沒有退回路徑**：撿系統 OpenJDK 做出來的
+  # 包照樣能裝能跑，只是輸入法候選窗又不跟光標，而 CI 全綠——這正是規則 71「配置寫了
+  # 不等於套上」那個坑，也是上一輪 a2ee238／7f3e8b2 被真機證偽的走法。
+  nashira_check_repo_pin || return 1
+  nashira_check_jbr_sdk || return 1
   local jbr
   jbr="$(nashira_jbr_home)" || return 1
   export JAVA_HOME="$jbr"
-  echo "構建用 $JAVA_HOME（倉庫宣告的 jvmToolchain 版本）"
-  [ -x "$JAVA_HOME/bin/jlink" ] && [ -n "$(ls "$JAVA_HOME/jmods"/*.jmod 2>/dev/null)" ] \
-    || { echo "找不到 $JAVA_HOME（含 jmods）；對應的 jbrNN 沒裝成？" >&2; return 1; }
-  export PATH="$JAVA_HOME/bin:$PATH"
+  export PATH="${JAVA_HOME}/bin:${PATH}"
+  echo "構建用 pin 的 JBR SDK：${JAVA_HOME}"
   # --no-daemon：容器/CI 友好，不留常駐 JVM
-  ./gradlew :desktopApp:createDistributable --no-daemon --console=plain
+  # installations.paths：主倉 pin 後宣告的是 `jvmToolchain { vendor matching JetBrains }`；
+  # 除了 JAVA_HOME，再明確把這顆餵給 Gradle 的 toolchain 探測，免得容器裡其他 JDK 搶走
+  # （被搶走的下場是編譯綠、執行期却不是 JBR——同上面那個坑）。
+  ./gradlew :desktopApp:createDistributable --no-daemon --console=plain \
+    -Porg.gradle.java.installations.paths="${JAVA_HOME}"
 }
 
 package() {
@@ -115,15 +208,27 @@ EOF
   install -dm755 "${pkgdir}/usr/bin"
   ln -s /opt/nashira/bin/nashira "${pkgdir}/usr/bin/nashira"
 
-  # 產物收口（規則 71）：驗「裝機後真的會跑的那個 runtime」有沒有光標上報類，
-  # 而不是驗 build 環境用了哪顆 JDK——後者綠了不代表包裡是 JBR。
-  # jpackage 的 app image 佈局是 lib/runtime（不是頂層 runtime/）。
+  # ── 產物收口（規則 71）：驗「裝機後真的會跑的那個 runtime」，而不是驗 build 環境 ──
+  # 三道都要過，缺一道就拒絕出貨：
+  #   1) jlink 出來的 runtime 模組集合裡有游標上報類——這才是「候選窗跟光標」的本體；
+  #   2) runtime 的 release 檔 JAVA_VERSION 等於 pin 的版本（防拿著舊 artifact 照樣出包）；
+  #   3) nashira.cfg 帶 JBR 的新 XIM 客戶端開關（缺這行，就算是 JBR 也不會上報游標）。
+  # ⚠️ 判「是不是 JBR」不能 grep release 裡的 "JetBrains"：jlink 產物的 release 檔只有
+  #    JAVA_VERSION 與 MODULES 兩行、沒有 implementor 字串，那樣寫在 CI 上必然紅（實測踩過）。
+  # jpackage 的 app image 佈局是 lib/runtime 與 lib/app（不是頂層 runtime/）。
   local modules="${pkgdir}/opt/nashira/lib/runtime/lib/modules"
-  local jbr
-  jbr="$(nashira_jbr_home)" || return 1
-  if ! "$jbr/bin/jimage" list "$modules" 2>/dev/null \
-       | grep -qi 'ClientComponentCaretPositionTracker'; then
+  local cfg="${pkgdir}/opt/nashira/lib/app/nashira.cfg"
+  local jbr_home
+  jbr_home="$(nashira_jbr_home)" || return 1
+  nashira_check_jbr_sdk || return 1
+  if ! "${jbr_home}/bin/jimage" list "$modules" 2>/dev/null \
+        | grep -qi 'ClientComponentCaretPositionTracker'; then
     echo "::error:: 包裡的 runtime 不是 JBR（$modules 查不到光標上報類），拒絕出貨" >&2
     return 1
   fi
+  grep -qx "JAVA_VERSION=\"${_jbr_version}\"" "${pkgdir}/opt/nashira/lib/runtime/release" \
+    || { echo "::error:: 包裡的 runtime 不是 pin 的 JBR ${_jbr_version}，拒絕出貨" >&2; return 1; }
+  grep -q '^java-options=-Djb.awt.newXimClient.enabled=true$' "$cfg" \
+    || { echo "::error:: nashira.cfg 沒開 JBR XIM client（-Djb.awt.newXimClient.enabled=true），拒絕出貨" >&2; return 1; }
+  echo "==> 產物驗收：JBR ${_jbr_version}+1-b${_jbr_build#b} 的游標追蹤類與 XIM 開關都在"
 }
