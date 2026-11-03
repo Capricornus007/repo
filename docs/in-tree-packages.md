@@ -2187,3 +2187,32 @@ AUR 端 RPC `type=info&arg[]=lib32-libjpeg-turbo-git` 回 `resultcount=0`。
 
 - **觸發**：
   `gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[{"key":"lib32-libjpeg-turbo-git","repo_name":"lib32-libjpeg-turbo-git","variant":"none","kind":"multilib"}]'`
+
+## svt-jpeg-xs-git（用戶 2026-11-04 點名：「這個你沒搬上去自動構建倉庫以及我電腦上嗎？」）
+
+用戶機上那顆 `svt-jpeg-xs-git 0.10.0.r7.g93f1f20-1` 一直只存在 `~/.cache/yay/svt-jpeg-xs-git/`，
+**feed 裡沒有、任何官方倉也沒有**（`pacman -Si` 查無；AUR 有同名倉但本倉的
+`ffmpeg-full-git` 兄弟依賴閘門是拿 feed 名稱去 `pacman -Si`，所以它一天不進 feed，
+`ffmpeg-full-git` 就一天被「svt-jpeg-xs-git 尚未發佈」擋住不重編）。
+
+- **配方來源**：逐字取機上那份 PKGBUILD（基底 AUR 維護者 Daniel Bermond），連同
+  `010-svt-jpeg-xs-remove-werror.patch` 一起進目錄；不改內容、不加「自己發明」的欄位。
+- **接線三處**：`matrix/packages.json` 加條目、`build-packages.yml` 的 in-tree 目錄版
+  case 清單加包名、以及「跳過回推校驗和」那條 giant if 加 `repo_name != 'svt-jpeg-xs-git'`
+  （`pkgver()` 由上游 HEAD 現算，回推校驗和無意義，與 libjpeg-turbo-git 同一類）。
+- ⚠️ 靜態 `pkgver=0.9.0.r169.g0479ba1` 是佔位值，實際版號由 `pkgver()` 現算；
+  機上已裝的那顆是 0.10.0.r7，所以進 feed 後第一輪就會把裝機的版號推上去（正常）。
+- 觸發：`gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[{"key":"svt-jpeg-xs-git","repo_name":"svt-jpeg-xs-git","variant":"none"}]'`
+
+## jbr21 退役（用戶 2026-11-04 指令：「那就上最新尖端 jbr 的同時讓 nashira 搭配最新尖端 jbr？然後刪了 jbr21？」）
+
+JetBrains 只把 `jbr-release-*` 當正式發布（GitHub release 的 assets 是空的，tarball 走
+cache-redirector），實查最新那顆就是 `jbr-release-25.0.4.1b635.79`；`jdk-27+23` 這類 tag
+**沒有 SDK 資產**，抓不到也不能 pin。所以 nashira 的「最新尖端 JBR」＝ `25.0.4.1+1-b635.79`，
+`repo/nashira-git/PKGBUILD` 已把它 pin 死（source + sha512sums 實算）。
+
+jbr21 因此沒有存在理由：`matrix/packages.json` 移除條目、目錄 `jbr21/` 刪除、
+`build-packages.yml` 的 in-tree case 清單與 `jbr21|jbr25)` 兩處 pkgver 特例都收斂成 `jbr25`，
+nashira-git 的掛源點名也一併拿掉（它不再吃本倉的 jbr21）。**注意 jbr21 是本倉自己出的包，
+`Capricornus007/jbr21` 這種倉不存在也不需要存在**；卸載機上那顆 `jbr21` 系統套件要用
+`doas pacman -Rns jbr21`，卸前 `pactree -r jbr21` 實查只有它自己。
