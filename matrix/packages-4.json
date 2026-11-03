@@ -423,13 +423,15 @@
     "key": "kitty-shell-integration-git",
     "repo_name": "kitty-shell-integration-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "pkgbase": "kitty-git"
   },
   {
     "key": "kitty-terminfo-git",
     "repo_name": "kitty-terminfo-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "pkgbase": "kitty-git"
   },
   {
     "key": "lemonbar-git",
@@ -555,31 +557,36 @@
     "key": "tesseract-data-chi_sim-git",
     "repo_name": "tesseract-data-chi_sim-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "pkgbase": "tesseract-data-git"
   },
   {
     "key": "tesseract-data-chi_tra-git",
     "repo_name": "tesseract-data-chi_tra-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "pkgbase": "tesseract-data-git"
   },
   {
     "key": "tesseract-data-eng-git",
     "repo_name": "tesseract-data-eng-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "pkgbase": "tesseract-data-git"
   },
   {
     "key": "tesseract-data-jpn-git",
     "repo_name": "tesseract-data-jpn-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "pkgbase": "tesseract-data-git"
   },
   {
     "key": "tesseract-data-osd-git",
     "repo_name": "tesseract-data-osd-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "pkgbase": "tesseract-data-git"
   },
   {
     "key": "vala-git",
