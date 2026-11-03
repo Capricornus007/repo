@@ -120,7 +120,6 @@ jobs:
           # 重複的 [arch4edu] 區段（pacman 會直接報 duplicate repository）。
 
           if [ "${{ matrix.kind }}" = 'kde' ] || [ "${{ matrix.kind }}" = 'wayland' ] || [ "${{ matrix.kind }}" = 'aur' ] \
-             || [ "${{ matrix.repo_name }}" = 'nashira-git' ] \
              || [ "${{ matrix.repo_name }}" = 'tk-git' ] \
              || [ "${{ matrix.repo_name }}" = 'mesa-tkg-git' ] \
              || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ] \
@@ -144,10 +143,9 @@ jobs:
             # …/current-repo/junlin03-aur.db 與包檔均 HTTP 200）。冷啟動時
             # 依賴尚未發布 → plan 步跳過，靠每小時排程按依賴 DAG 逐層收斂。
             #
-            # nashira-git 也點名掛進來（2026-10-07）：它的 makedepends 現在是
-            # `jbr21`，而 jbr21 是本倉自己出的包、不在任何官方倉。不掛源就
-            # `package not found` → makepkg -s 紅。它不屬於 kde/wayland/aur 任何
-            # 一類，所以只能按包名點名，別指望改 kind。
+            # nashira-git 原本也點名掛源（2026-10-07，因為 makedepends 要吃本倉的
+            # jbr21）；2026-11-04 起它改從 JBR SDK tarball 直接取建置用 JDK，
+            # jbr21 也退役了，所以這條掛源已拿掉。
             #
             # 2026-10-12 再點名三顆，同一個理由（兄弟包只存在於本倉）：
             #   · tk-git  depends=tcl-git → run #462 實測
@@ -855,7 +853,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr21|jbr25|serein-git|qt6ct-git|brotli-git|nodejs-git|nodejs-better-sqlite3-git|npm-git|pnpm-git|fcitx5-chinese-addons-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git|htop-git|chafa-git|xtitle-git|downgrade-git|pacman-git|meson-git|python2-git|qt4-git|expac-git|shiboken6-git|zcode-ce-git|openvpn|tcpdump|libplacebo-git|omnirush-cli|libjpeg-turbo-git|lib32-libjpeg-turbo-git)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr25|serein-git|qt6ct-git|brotli-git|nodejs-git|nodejs-better-sqlite3-git|npm-git|pnpm-git|fcitx5-chinese-addons-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git|htop-git|chafa-git|xtitle-git|downgrade-git|pacman-git|meson-git|python2-git|qt4-git|expac-git|shiboken6-git|zcode-ce-git|openvpn|tcpdump|libplacebo-git|omnirush-cli|libjpeg-turbo-git|lib32-libjpeg-turbo-git|svt-jpeg-xs-git)
               # 這批包為什麼走本倉目錄版（逐包理由）：見 docs/in-tree-packages.md。
               # 那個 step 的表達式有 21000 字元上限、註解也計入，加包只加清單、
               # 說明寫進該檔，別寫回這裡。
@@ -1586,7 +1584,7 @@ jobs:
           TARGET_PKGVER=""
           TARGET_PKGREL="$CUR_PKGREL"
           CACHY_TAG=""
-          # 只有 jbr21／jbr25 會填：pkgver 是 ${_pkgver}.${_build#b} 算出來的，
+          # 只有 jbr25 會填（jbr21 已於 2026-11-04 退役）：pkgver 是 ${_pkgver}.${_build#b} 算出來的，
           # 改寫步要動的是那兩個原料變數，不是 pkgver 那行。
           NEW_JBR_VER=""
           NEW_JBR_BUILD=""
@@ -1833,7 +1831,7 @@ jobs:
               TARGET_PKGVER="$CUR_PKGVER"
               ;;
 
-            jbr21|jbr25)
+            jbr25)
               # JBR 分版本包（用戶 2026-09-30 指令：命名走 `jbr21` 這種、不參考 AUR）。
               # 版號權威來源只有 tag 名 `jbr-release-<ver>b<build>`：JetBrains 的 GitHub
               # release 頁**一個資產都沒有**（隔壁 09-30 實測 assets=0），二進位只在自家
@@ -2989,7 +2987,7 @@ jobs:
               echo "==== $PKG 改寫結果 ===="
               grep -nE '^(pkgver|sha256sums_x86_64|sha256sums_aarch64)=' PKGBUILD
               ;;
-            jbr21|jbr25)
+            jbr25)
               # ⚠️ 這包的 pkgver 是**算出來的**（pkgver=${_pkgver}.${_build#b}），
               # source URL 也由 _pkgver／_build 展開。只 sed ^pkgver= 會做出
               # 「新版號、舊檔名」的包——正是 09-26「6b3fe1f 只改探測那半邊」同一類坑。
@@ -3072,7 +3070,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'android-ndk-30' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'libjpeg-turbo-git' && matrix.repo_name != 'jbr21' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'nodejs-git' && matrix.repo_name != 'brotli-git' && matrix.repo_name != 'nodejs-better-sqlite3-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.repo_name != 'htop-git' && matrix.repo_name != 'chafa-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'android-ndk-30' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'libjpeg-turbo-git' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'svt-jpeg-xs-git' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'nodejs-git' && matrix.repo_name != 'brotli-git' && matrix.repo_name != 'nodejs-better-sqlite3-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.repo_name != 'htop-git' && matrix.repo_name != 'chafa-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}

@@ -50,7 +50,7 @@ CI 的通用規則是「名字以 `-git` 結尾 → clone AUR，否則 clone `gi
 - Calibre 已安裝；成品無 `ttf-liberation` 套件依賴，並實際完成正體中文 TXT→EPUB→PDF，
   核對書名、正文及 PDF 詮釋資料。
 
-## Xfce 4.21 shard 4 依賴修正（2026-11-02）
+## shard 3／4 CI 與 Xfce 4.21 修正（2026-11-02 至 11-03）
 
 - `xfce4-terminal-git` 明確吃 `gtk-layer-shell>=0.7.0` 與
   `xfce4-session-git>=4.21.2`，保留下拉視窗、Wayland 與 session client 功能。
@@ -58,6 +58,18 @@ CI 的通用規則是「名字以 `-git` 結尾 → clone AUR，否則 clone `gi
   `libxfce4session-client-1.pc`／SONAME 由已發布的 `xfce4-session-git` 提供；
   不造假庫、不關 session 功能。desktop 的影片背景把 `gstreamer-git` 與
   split package `gst-plugin-gtk-git` 列為執行期依賴，而不是建完就可移除的 make 依賴。
+- `wireplumber-git` 必須用 Artix base-devel 建置：配方明確啟用 elogind、關閉
+  systemd；Arch 容器沒有 `libelogind.pc`，改裝 Artix 的 system 倉進 Arch 又會混換
+  glibc／工具鏈。矩陣因此直接選與目標機相同的 Artix 基座。
+- `xfce4-cpufreq-plugin-git` 改由本倉 Meson 配方建置。上游 master 已移除
+  `autogen.sh`，AUR 仍呼叫舊 Autotools 入口；新配方保留 epoch，並明確使用
+  `xfce4-panel-git`、`libxfce4ui-git`、`libxfce4util-git`。
+- `xcb-util-cursor-git` 的兩個 anongit 來源已下線，下載重試不可能自行恢復；
+  本倉改收 in-tree 配方，直接使用 freedesktop GitLab 的 `libxcb-cursor` 與
+  `xcb-util-m4` 官方倉，並保留 `util-common-m4` 本地名稱供既有 submodule 設定使用。
+- `xfce4-power-manager-git` 把通知 daemon 恢復為上游同樣的 optional dependency。
+  先把 `xfce4-notifyd-git` 當硬依賴安裝會帶入穩定版 `xfce4-panel`，下一階段再裝
+  `xfce4-panel-git` 時 pacman 因衝突預設拒絕；必要的 panel 建置依賴仍完整保留。
 - 四包已在 Artix 宿主完整建置並同筆安裝；執行檔實查都可找到
   `libxfce4session-client-1.so.0`，相關程式亦鏈到 `libgtk-layer-shell.so.0`。
   `gtksink` 與 `gtkwaylandsink` 均用實際 `gst-inspect-1.0` 載入成功。
@@ -2175,3 +2187,32 @@ AUR 端 RPC `type=info&arg[]=lib32-libjpeg-turbo-git` 回 `resultcount=0`。
 
 - **觸發**：
   `gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[{"key":"lib32-libjpeg-turbo-git","repo_name":"lib32-libjpeg-turbo-git","variant":"none","kind":"multilib"}]'`
+
+## svt-jpeg-xs-git（用戶 2026-11-04 點名：「這個你沒搬上去自動構建倉庫以及我電腦上嗎？」）
+
+用戶機上那顆 `svt-jpeg-xs-git 0.10.0.r7.g93f1f20-1` 一直只存在 `~/.cache/yay/svt-jpeg-xs-git/`，
+**feed 裡沒有、任何官方倉也沒有**（`pacman -Si` 查無；AUR 有同名倉但本倉的
+`ffmpeg-full-git` 兄弟依賴閘門是拿 feed 名稱去 `pacman -Si`，所以它一天不進 feed，
+`ffmpeg-full-git` 就一天被「svt-jpeg-xs-git 尚未發佈」擋住不重編）。
+
+- **配方來源**：逐字取機上那份 PKGBUILD（基底 AUR 維護者 Daniel Bermond），連同
+  `010-svt-jpeg-xs-remove-werror.patch` 一起進目錄；不改內容、不加「自己發明」的欄位。
+- **接線三處**：`matrix/packages.json` 加條目、`build-packages.yml` 的 in-tree 目錄版
+  case 清單加包名、以及「跳過回推校驗和」那條 giant if 加 `repo_name != 'svt-jpeg-xs-git'`
+  （`pkgver()` 由上游 HEAD 現算，回推校驗和無意義，與 libjpeg-turbo-git 同一類）。
+- ⚠️ 靜態 `pkgver=0.9.0.r169.g0479ba1` 是佔位值，實際版號由 `pkgver()` 現算；
+  機上已裝的那顆是 0.10.0.r7，所以進 feed 後第一輪就會把裝機的版號推上去（正常）。
+- 觸發：`gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[{"key":"svt-jpeg-xs-git","repo_name":"svt-jpeg-xs-git","variant":"none"}]'`
+
+## jbr21 退役（用戶 2026-11-04 指令：「那就上最新尖端 jbr 的同時讓 nashira 搭配最新尖端 jbr？然後刪了 jbr21？」）
+
+JetBrains 只把 `jbr-release-*` 當正式發布（GitHub release 的 assets 是空的，tarball 走
+cache-redirector），實查最新那顆就是 `jbr-release-25.0.4.1b635.79`；`jdk-27+23` 這類 tag
+**沒有 SDK 資產**，抓不到也不能 pin。所以 nashira 的「最新尖端 JBR」＝ `25.0.4.1+1-b635.79`，
+`repo/nashira-git/PKGBUILD` 已把它 pin 死（source + sha512sums 實算）。
+
+jbr21 因此沒有存在理由：`matrix/packages.json` 移除條目、目錄 `jbr21/` 刪除、
+`build-packages.yml` 的 in-tree case 清單與 `jbr21|jbr25)` 兩處 pkgver 特例都收斂成 `jbr25`，
+nashira-git 的掛源點名也一併拿掉（它不再吃本倉的 jbr21）。**注意 jbr21 是本倉自己出的包，
+`Capricornus007/jbr21` 這種倉不存在也不需要存在**；卸載機上那顆 `jbr21` 系統套件要用
+`doas pacman -Rns jbr21`，卸前 `pactree -r jbr21` 實查只有它自己。

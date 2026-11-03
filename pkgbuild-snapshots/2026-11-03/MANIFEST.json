@@ -1,6 +1,6 @@
 {
  "ci": {
-  "ci/docs/in-tree-packages.md": "879d94ac78c02b1c1fe4f268382e478070662b160f9b87ecfccacf10ef4f0a06",
+  "ci/docs/in-tree-packages.md": "f2aa0a76e652a9c37d957960761da47a8f73ebef5db093ef01afc4a0c868ea4b",
   "ci/docs/upstream-pkgbuilds/clang.PKGBUILD": "3b569b3f056c6a857c285f7a6c2415ab8bdf9bdd40f4a46e4de2c76b273c7875",
   "ci/docs/upstream-pkgbuilds/compiler-rt.PKGBUILD": "825464ccac403e26ef5a35b06029c59809605beb751abfa832c6cff3ee9515b5",
   "ci/docs/upstream-pkgbuilds/doxygen.PKGBUILD": "cd7c1369450dd9b7de316d2b48644e1b90fea22542fd376bf048fab3826740e0",
@@ -23,7 +23,7 @@
   "ci/workflows/build-git-packages.yml": "439d04e52605cc6d4cf80fac9817c6e8564dc7c9198d0b6c14833f4cdc8dce62",
   "ci/workflows/build-kernels.yml": "27c87e8dba28a2e12522d5a83dd592c15045c3be0434c9e501a6dbe9d7081a4b",
   "ci/workflows/build-one-package.yml": "dac687388bcc1f63814c8bbb7b1f298e9d24d3438b558dec944dd08d58129115",
-  "ci/workflows/build-packages.yml": "a748386e2b9537f7d8ccecf95b7b9b2cdab3d1e935a3d373312c7f69fa22dcdd",
+  "ci/workflows/build-packages.yml": "19a76e3e4c6351127c9e559de9d2b8e97c0c42f103adaea842c7fe3e791b9aad",
   "ci/workflows/build-restored.yml": "d9b8bf801357f1c466e99757510937af9c7fd181462451aef8ff5a333b8f71a4"
  },
  "date": "2026-11-03",
@@ -51,9 +51,9 @@
   },
   "linux-zencjk": {
    "files": {
-    ".SRCINFO": "12efebe566cdc408c55ab67294242e6aff2b3c5d1f015cf03b5e7ad18eb04e49",
+    ".SRCINFO": "661d1cef2cc454657bb84c2570426ce1c00dc65790405b0cd31a2213c83c281c",
     ".gitignore": "416362d171fbd84c0ec2f3c04a00b8786bf1edb2b5fae14412b174a02a9c7921",
-    "PKGBUILD": "671dc7b6ad63034581d9c28e8853710c51419c5dd6888e32cef6fe6aea7ce4ed",
+    "PKGBUILD": "d47d1a562d18910b69e8497dbc61215c5dfbcbeb65e22340c439513cb6806576",
     "config": "f9be7d01ba92cef1522660994d2e0ccd53c1e1013107d1be421a9df5d53ae750"
    },
    "kind": "",
