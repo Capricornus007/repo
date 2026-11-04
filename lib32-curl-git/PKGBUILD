@@ -24,7 +24,7 @@
 
 pkgbase=lib32-curl-git
 pkgname=(lib32-curl-git lib32-libcurl-compat-git lib32-libcurl-gnutls-git)
-pkgver=8.23.0
+pkgver=8.23.0.r259.g7e1b6b518b
 pkgrel=1
 pkgdesc='command line tool and library for transferring data with URLs (32-bit, git)'
 arch=('x86_64')
@@ -64,6 +64,24 @@ prepare() {
 }
 
 build() {
+  # 自給自足：不依賴 CI 其他 job 的產物。先從上游 openssl master 編出 32 位 openssl4，
+  # 安裝到 ${srcdir}/ossl4-sysroot，後面 curl 只鏈這份（避開系統 openssl3 與 .so.3 兼容庫）。
+  if [ ! -f "${srcdir}/ossl4-sysroot/usr/lib32/libssl.so.4" ]; then
+    git clone --depth 1 https://github.com/openssl/openssl.git "${srcdir}/openssl-src"
+    ( cd "${srcdir}/openssl-src" && export CC='gcc -m32' CXX='g++ -m32' && \
+      ./Configure linux-x86 --prefix=/usr --openssldir=/etc/ssl --libdir=lib32 shared no-ssl3 no-tests && \
+      make -j"$(nproc)" && make DESTDIR="${srcdir}/ossl4-sysroot" install_sw )
+  fi
+  if [ ! -f "${srcdir}/ossl4-sysroot/usr/lib32/libngtcp2.so" ]; then
+    git clone --depth 1 https://github.com/ngtcp2/ngtcp2.git "${srcdir}/ngtcp2-src"
+    ( cd "${srcdir}/ngtcp2-src" && export CC="gcc -m32" CXX="g++ -m32" \
+      LD_LIBRARY_PATH="${srcdir}/ossl4-sysroot/usr/lib32${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+      PKG_CONFIG_LIBDIR="${srcdir}/ossl4-sysroot/usr/lib32/pkgconfig" PKG_CONFIG_PATH="" \
+      CPPFLAGS="-I${srcdir}/ossl4-sysroot/usr/include" LDFLAGS="-L${srcdir}/ossl4-sysroot/usr/lib32 -Wl,-rpath-link,${srcdir}/ossl4-sysroot/usr/lib32" && \
+      autoreconf -fi && ./configure --prefix=/usr --libdir=/usr/lib32 --disable-static --with-openssl \
+        --without-gnutls --without-libev --without-libbrotli --without-jemalloc && \
+      make -j"$(nproc)" && make DESTDIR="${srcdir}/ossl4-sysroot" install )
+  fi
   export CC="gcc -m32"
   export CXX="g++ -m32"
   export PKG_CONFIG_PATH="/usr/lib32/pkgconfig"
@@ -98,6 +116,16 @@ build() {
     --with-openssl
   sed -i -e 's/ -shared / -Wl,-O1,--as-needed\0/g' libtool
   make -C lib
+  # 重新 relink libcurl.so：libtool 的 -lssl/-L/usr/lib32 會把 NEEDED 鎖到系統 openssl 3
+  # （/etc/ld.so.conf.d/openssl3-compat.conf 也會讓 -lssl 落到 .so.3）。這裡用 sysroot 的
+  # openssl 4 絕對路徑，並保留 curl 自己的 -version-info 12:0:8。
+  _ossl4="${srcdir}/ossl4-sysroot/usr/lib32"
+  _ossl4_inc="${srcdir}/ossl4-sysroot/usr/include"
+  _objs=$(cd lib && ls *.lo curlx/libcurl_la-*.lo vauth/libcurl_la-*.lo vtls/libcurl_la-*.lo vquic/libcurl_la-*.lo 2>/dev/null | grep -v libcurlu_la | tr "\n" " ")
+  (cd lib && /bin/sh ../libtool --tag=CC --mode=link gcc -m32 -shared -o libcurl.la -rpath /usr/lib32 \
+    -version-info 12:0:8 -no-undefined $_objs -lnghttp3 $_ossl4/libngtcp2_crypto_ossl.so \
+    $_ossl4/libngtcp2.so -lnghttp2 -lidn2 -lssh2 -lpsl $_ossl4/libssl.so.4 $_ossl4/libcrypto.so.4 \
+    -lgssapi_krb5 -lzstd -lbrotlidec -lz -L$_ossl4 -Wl,-rpath-link,$_ossl4)
   make libcurl.pc
 
   # build lib32-libcurl-compat(-git)

@@ -1,0 +1,40 @@
+# lib32-openssl-git：與 openssl-git 同源（上游 master），32 位版裝到 /usr/lib32。
+# soname 為 libssl.so.4 / libcrypto.so.4，供 lib32-curl-git 解開 libssl.so=4-32。
+pkgname=lib32-openssl-git
+_pkgname=openssl
+pkgver=4.1.0.beta2.r516.ga1c7d645d5
+pkgrel=1
+pkgdesc='Open Source toolkit for SSL/TLS (32-bit, git)'
+arch=(x86_64)
+url='https://www.openssl.org'
+license=(Apache-2.0)
+depends=(lib32-glibc lib32-zlib)
+makedepends=(git perl)
+provides=(lib32-openssl=${pkgver%%.r*} libcrypto.so libssl.so)
+conflicts=(lib32-openssl)
+source=("git+https://github.com/openssl/openssl.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd openssl
+  local base n
+  base=$(git tag -l 'openssl-4.*' | sort -V | tail -1)
+  base=${base#openssl-}
+  n=$(git rev-list --count "openssl-${base}..HEAD" 2>/dev/null || echo 0)
+  printf '%s.r%s.g%s' "$(printf '%s' "$base" | tr '-' '.')" "$n" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd openssl
+  export CC="gcc -m32" CXX="g++ -m32"
+  export PKG_CONFIG_LIBDIR=/usr/lib32/pkgconfig
+  ./Configure linux-x86 --prefix=/usr --openssldir=/etc/ssl --libdir=lib32 shared no-ssl3 no-tests
+  make
+}
+
+package() {
+  cd openssl
+  make DESTDIR="$pkgdir" install_sw install_ssldirs
+  rm -rf "$pkgdir/usr/bin" "$pkgdir/usr/include" "$pkgdir/usr/share/man"
+  install -Dm644 LICENSE.txt "$pkgdir/usr/share/licenses/$pkgname/LICENSE.txt"
+}

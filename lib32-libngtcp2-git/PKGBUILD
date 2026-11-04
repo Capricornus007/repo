@@ -1,0 +1,42 @@
+# lib32-libngtcp2-git：上游 ngtcp2 master，32 位版裝到 /usr/lib32。
+# 目的：libngtcp2_crypto_ossl 改鏈 openssl 4（libssl.so.4），讓 lib32-curl-git 不再間接帶入 openssl 3。
+pkgname=lib32-libngtcp2-git
+_pkgname=libngtcp2
+pkgver=1.26.0.r6758.ge82176c8
+pkgrel=1
+pkgdesc='IETF QUIC protocol library (32-bit, git)'
+arch=(x86_64)
+url='https://github.com/ngtcp2/ngtcp2'
+license=(MIT)
+depends=(lib32-glibc 'libcrypto.so' 'libssl.so')
+makedepends=(git autoconf automake libtool pkgconf)
+provides=(lib32-libngtcp2 libngtcp2.so libngtcp2_crypto_ossl.so)
+conflicts=(lib32-libngtcp2)
+source=("git+https://github.com/ngtcp2/ngtcp2.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd ngtcp2
+  printf '1.26.0.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd ngtcp2
+  : "${OPENSSL4_LIBDIR:=/tmp/lib32-openssl-git-build/sysroot/usr/lib32}"
+  export CC="gcc -m32" CXX="g++ -m32"
+  autoreconf -fi
+  ./configure --prefix=/usr --libdir=/usr/lib32 --disable-static \
+    --with-openssl --without-gnutls --without-libev --without-libbrotli --without-jemalloc
+  # libtool install 會 relink libngtcp2_crypto_ossl.la；relink 時 -lssl 若搜到系統的
+  # openssl 3（/usr/lib32/libssl.so -> .so.3）就會把 NEEDED 鎖成 .so.3。
+  # 這裡把 LDFLAGS 固定指向 openssl 4 的 sysroot（與構建期 pkg-config 一致），
+  # 讓 relink 與 make 都只看見 .so.4。
+  make LDFLAGS="-L${OPENSSL4_LIBDIR} -Wl,-rpath-link,${OPENSSL4_LIBDIR}"
+}
+
+package() {
+  cd ngtcp2
+  make DESTDIR="$pkgdir" install
+  rm -rf "$pkgdir/usr/bin" "$pkgdir/usr/include" "$pkgdir/usr/lib32/pkgconfig"
+  install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+}

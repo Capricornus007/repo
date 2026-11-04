@@ -1,0 +1,37 @@
+# openssl-git：上游 master 尖端，soname 與 openssl 4.x 同代（libssl.so.4）。
+# 隔離構建版；本機 openssl 4.1.0-1 同代，故 libssl.so=4-64 與既有 ABI 一致。
+pkgname=openssl-git
+_pkgname=openssl
+pkgver=4.1.0.r41550.ga1c7d645d5
+pkgrel=1
+pkgdesc='The Open Source toolkit for Secure Sockets Layer and Transport Layer Security (git)'
+arch=(x86_64)
+url='https://www.openssl.org'
+license=(Apache-2.0)
+depends=(glibc zlib)
+makedepends=(git perl)
+provides=(openssl=${pkgver%%.r*} libcrypto.so libssl.so)
+conflicts=(openssl)
+source=("git+https://github.com/openssl/openssl.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd openssl
+  local base n
+  base=$(git tag -l 'openssl-4.*' | sort -V | tail -1)
+  base=${base#openssl-}
+  n=$(git rev-list --count "openssl-${base}..HEAD" 2>/dev/null || echo 0)
+  printf '%s.r%s.g%s' "$(printf '%s' "$base" | tr '-' '.')" "$n" "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd openssl
+  ./Configure --prefix=/usr --openssldir=/etc/ssl --libdir=lib shared no-ssl3 no-tests
+  make
+}
+
+package() {
+  cd openssl
+  make DESTDIR="$pkgdir" install_sw install_ssldirs
+  install -Dm644 LICENSE.txt "$pkgdir/usr/share/licenses/$pkgname/LICENSE.txt"
+}
