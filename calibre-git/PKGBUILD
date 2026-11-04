@@ -132,6 +132,10 @@ prepare(){
 	rm -f resources/$pkgname-portable.*
 	# Fix ThreadPool/resource_tracker BrokenPipeError in chroot with Python 3.14
 	cp -f "$srcdir/parallel_build.py" setup/parallel_build.py
+	# 2026-11-04:容器內 glibc 的 /usr/lib/locale/C.utf8/ 存在,但
+	# locale -a 不列出 C.UTF-8 -> Python 3.14 的 locale.setlocale(LC_ALL,'')
+	# 在 sphinx-build 裡拋 locale.Error。手動生成後再跑 check/build/package。
+	locale-gen C.UTF-8
 }
 
 check() {
