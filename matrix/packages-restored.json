@@ -259,13 +259,5 @@
     "kind": "artix",
     "image": "artixlinux/artixlinux:base-devel",
     "in_tree": true
-  },
-  {
-    "key": "links-git",
-    "repo_name": "links-git",
-    "variant": "none",
-    "kind": "artix",
-    "image": "artixlinux/artixlinux:base-devel",
-    "in_tree": true
   }
 ]
