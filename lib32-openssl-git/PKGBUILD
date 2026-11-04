@@ -10,7 +10,7 @@ url='https://www.openssl.org'
 license=(Apache-2.0)
 depends=(lib32-glibc lib32-zlib)
 makedepends=(git perl)
-provides=(lib32-openssl=${pkgver%%.r*} libcrypto.so libssl.so)
+provides=(lib32-openssl=${pkgver%%.r*} libcrypto.so libssl.so libcrypto.so=4-32 libssl.so=4-32)
 conflicts=(lib32-openssl)
 source=("git+https://github.com/openssl/openssl.git")
 sha256sums=('SKIP')
@@ -34,7 +34,7 @@ build() {
 
 package() {
   cd openssl
-  make DESTDIR="$pkgdir" install_sw install_ssldirs
+  make DESTDIR="$pkgdir" install_sw
   rm -rf "$pkgdir/usr/bin" "$pkgdir/usr/include" "$pkgdir/usr/share/man"
   install -Dm644 LICENSE.txt "$pkgdir/usr/share/licenses/$pkgname/LICENSE.txt"
 }

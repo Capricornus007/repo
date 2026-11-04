@@ -10,7 +10,7 @@ url='https://www.openssl.org'
 license=(Apache-2.0)
 depends=(glibc zlib)
 makedepends=(git perl)
-provides=(openssl=${pkgver%%.r*} libcrypto.so libssl.so)
+provides=(openssl=${pkgver%%.r*} libcrypto.so libssl.so libcrypto.so=4-64 libssl.so=4-64)
 conflicts=(openssl)
 source=("git+https://github.com/openssl/openssl.git")
 sha256sums=('SKIP')
