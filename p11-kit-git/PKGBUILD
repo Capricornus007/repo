@@ -107,7 +107,10 @@ package_libp11-kit-git() {
   pkgdesc+=" (library)"
   depends=(glibc libtasn1 libffi)
   conflicts=("lib${_pkgbase}")
-  provides=("lib${_pkgbase}.so"
+  # 實測 SONAME = libp11-kit.so.0（readelf），pacman 的 soname 形式是 libp11-kit.so=0-64。
+  # p11-kit-git 依賴這條；缺它會出現「無法滿足 libp11-kit.so=0-64」。
+  provides=("lib${_pkgbase}.so=0-64"
+            "lib${_pkgbase}.so"
             "lib${_pkgbase}.so=${pkgver}"
             "lib${_pkgbase}=${pkgver}")
   mv lib/* "${pkgdir}"
