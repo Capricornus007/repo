@@ -81,7 +81,7 @@ _pick() {
 }
 
 package_p11-kit-git() {
-  depends=("lib${_pkgbase}=${pkgver}"
+  depends=("lib${_pkgbase}"
            coreutils
            "lib${_pkgbase}.so")
   conflicts=("${_pkgbase}")
