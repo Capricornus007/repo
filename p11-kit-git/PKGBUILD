@@ -107,9 +107,9 @@ package_libp11-kit-git() {
   pkgdesc+=" (library)"
   depends=(glibc libtasn1 libffi)
   conflicts=("lib${_pkgbase}")
-  provides=("lib${_pkgbase}.so=${pkgver}"
+  provides=("lib${_pkgbase}.so"
+            "lib${_pkgbase}.so=${pkgver}"
             "lib${_pkgbase}=${pkgver}")
-
   mv lib/* "${pkgdir}"
 
   install -Dt "${pkgdir}/usr/share/licenses/${pkgname}" \
