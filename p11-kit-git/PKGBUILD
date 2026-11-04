@@ -19,7 +19,7 @@ pkgbase="${_pkgbase}-git"
 pkgname=(
   "${pkgbase}"
   "lib${pkgbase}")
-pkgver=0.26.5+23+g4559b60
+pkgver=0.26.5+27+ge5ee541
 pkgrel=1
 pkgdesc="Loads and enumerates PKCS#11 modules"
 _ns="${_base}-glue"

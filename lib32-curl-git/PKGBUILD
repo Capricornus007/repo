@@ -24,7 +24,7 @@
 
 pkgbase=lib32-curl-git
 pkgname=(lib32-curl-git lib32-libcurl-compat-git lib32-libcurl-gnutls-git)
-pkgver=8.23.0.r259.g7e1b6b518b
+pkgver=8.23.0.r260.g8bfe80ec9b
 pkgrel=1
 pkgdesc='command line tool and library for transferring data with URLs (32-bit, git)'
 arch=('x86_64')
