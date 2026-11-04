@@ -167,6 +167,13 @@
     "kind": "multilib"
   },
   {
+    "key": "lib32-curl-git",
+    "repo_name": "lib32-curl-git",
+    "variant": "none",
+    "kind": "multilib",
+    "in_tree": true
+  },
+  {
     "key": "libplacebo-git",
     "repo_name": "libplacebo-git",
     "variant": "none",

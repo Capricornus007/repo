@@ -1,0 +1,42 @@
+# 本倉 in-tree 維護版（2026-11-04）。
+# 為什麼不直接用 AUR那份：AUR lemonbar-git 的 makedepends 寫了 'pod2man'——
+#   那是 /usr/bin/pod2man 這個**執行檔名**，不是包名；容器裡 pacman -S pod2man
+#   直接 `target not found`（run 41750761615 實測）。提供 pod2man 的是 perl 包。
+# 其餘與 AUR 版逐字一致。
+
+pkgname=lemonbar-git
+_pkgname=lemonbar
+pkgver=v1.5.r2.g59b0d28
+pkgrel=1
+pkgdesc="A featherweight, lemon-scented, bar based on xcb."
+arch=('i686' 'x86_64')
+url="https://github.com/LemonBoy/bar"
+license=('MIT')
+depends=('libxcb')
+makedepends=('git' 'perl')
+provides=('lemonbar')
+conflicts=('lemonbar-xft-git' 'lemonbar-ucs4-git' 'lemonbar-sm-git')
+source=("$_pkgname::git+${url}.git")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$_pkgname"
+
+	if git_version=$( git describe --long --tags 2>/dev/null ); then
+		IFS='-' read last_tag tag_rev commit <<< "$git_version"
+		printf '%s.r%s.%s' "$last_tag" "$tag_rev" "$commit"
+	else
+		printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+	fi
+}
+
+build() {
+  cd "$_pkgname"
+  make
+}
+
+package() {
+  cd "$_pkgname"
+  make PREFIX=/usr DESTDIR="$pkgdir" install
+  install -D -m644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

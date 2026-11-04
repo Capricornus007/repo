@@ -1,0 +1,225 @@
+# 本倉 in-tree 維護版（2026-11-04，用戶指令「那就上 -git 去唄？」）。
+# 來源：Arch 官方 multilib lib32-curl PKGBUILD（split：lib32-curl／
+#       lib32-libcurl-compat／lib32-libcurl-gnutls），改造成 git HEAD 版。
+#
+# 為什麼非進倉不可（2026-11-04 實測）：本機 Artix 的 lib32 世界正卡在
+#   openssl 3→4 遷移中間——[lib32] 的 lib32-curl 8.23.0-1 按 openssl 3 編，
+#   lib32-libngtcp2 卻已按 openssl 4 編；pacman -Syu 兩邊解不攏
+#   （「無法滿足 lib32-curl 需要的依賴關係 libssl.so=3-32」↔
+#    「無法滿足 lib32-libngtcp2 需要的依賴關係 libssl.so=4-32」）。
+#   AUR 上沒有 lib32-curl-git（RPC resultcount=0），唯一出路就是源碼直出：
+#   源碼編譯自然鏈當前 openssl 4，一次解開兩頭的死結。
+#
+# 與官方版的三處差異：
+#   1. source 改 git HEAD、pkgver() 從 HEAD 現算（curl 的 tag 是 curl-8_23_0
+#      下劃線形式，sed 先轉點號再轉 r.N.g）；PGP tag 校驗移除（git 直出無 tag）。
+#   2. prepare() 去掉 curlver.h 的 release 化 sed——那是 release 包把
+#      「8.23.1-DEV」洗成「8.23.1」用的；-git 版保留 -DEV 後綴才誠實。
+#   3. backports/reverts 空數組去掉（官方版當前也為空，純殼）。
+#   其餘 configure 三連構建（versioned/compat/gnutls）、depends 的 .so 帶
+#   架構後綴聲明全部原樣保留——這是官方這包最值錢的部分。
+#
+# ⚠️ 版號由 pkgver() 現算 ⇒ 矩陣該條要排除在校驗和回推清單；kind 是 multilib，
+#    該步的 giant if 已有 kind != 'multilib' 子句，天然命中。
+
+pkgbase=lib32-curl-git
+pkgname=(lib32-curl-git lib32-libcurl-compat-git lib32-libcurl-gnutls-git)
+pkgver=8.23.0
+pkgrel=1
+pkgdesc='command line tool and library for transferring data with URLs (32-bit, git)'
+arch=('x86_64')
+url='https://curl.se/'
+license=('curl')
+makedepends=(
+  # for building
+  'git'
+  'patchelf'
+  'curl'
+  # actual package dependencies
+  'lib32-brotli'
+  'lib32-gnutls'
+  'lib32-krb5'
+  'lib32-nettle'
+  'lib32-libidn2'
+  'lib32-libnghttp2'
+  'lib32-libnghttp3'
+  'lib32-libngtcp2'
+  'lib32-libpsl'
+  'lib32-libssh2'
+  'lib32-openssl'
+  'lib32-zlib'
+  'lib32-zstd')
+source=("git+https://github.com/curl/curl.git")
+sha512sums=('SKIP')
+
+pkgver() {
+  cd curl
+  git describe --long --tags --match 'curl-*' \
+    | sed 's/^curl-//;s/_/./g;s/-\([0-9]\+\)-g/.r\1.g/;s/-/./g'
+}
+
+prepare() {
+  cd curl
+  autoreconf -fi
+}
+
+build() {
+  export CC="gcc -m32"
+  export CXX="g++ -m32"
+  export PKG_CONFIG_PATH="/usr/lib32/pkgconfig"
+
+  local _configure_options=(
+    --prefix='/usr'
+    --disable-dependency-tracking
+    --disable-ldap
+    --disable-ldaps
+    --enable-ipv6
+    --enable-threaded-resolver
+    --enable-manual
+    --enable-websockets
+    --with-gssapi
+    --with-libssh2
+    --with-nghttp3
+    --with-ngtcp2
+    --with-random='/dev/urandom'
+    --with-ca-bundle='/etc/ssl/certs/ca-certificates.crt'
+    --libdir='/usr/lib32'
+  )
+
+  mkdir build-curl{,-compat,-gnutls}
+
+  # build lib32-curl(-git)
+  cd "${srcdir}"/build-curl
+
+  "${srcdir}/curl"/configure \
+    "${_configure_options[@]}" \
+    --enable-versioned-symbols \
+    --without-gnutls \
+    --with-openssl
+  sed -i -e 's/ -shared / -Wl,-O1,--as-needed\0/g' libtool
+  make -C lib
+  make libcurl.pc
+
+  # build lib32-libcurl-compat(-git)
+  cd "${srcdir}"/build-curl-compat
+
+  "${srcdir}/curl"/configure \
+    "${_configure_options[@]}" \
+    --disable-versioned-symbols \
+    --without-gnutls \
+    --with-openssl
+  sed -i -e 's/ -shared / -Wl,-O1,--as-needed\0/g' libtool
+  make -C lib
+  patchelf --set-soname 'libcurl-compat.so.4' ./lib/.libs/libcurl.so
+
+  # build lib32-libcurl-gnutls(-git)
+  cd "${srcdir}"/build-curl-gnutls
+
+  "${srcdir}/curl"/configure \
+    "${_configure_options[@]}" \
+    --disable-versioned-symbols \
+    --with-gnutls \
+    --without-openssl
+  sed -i -e 's/ -shared / -Wl,-O1,--as-needed\0/g' libtool
+  make -C lib
+  patchelf --set-soname 'libcurl-gnutls.so.4' ./lib/.libs/libcurl.so
+}
+
+package_lib32-curl-git() {
+  depends=(
+    'curl'
+    'lib32-brotli' 'libbrotlidec.so'
+    'lib32-krb5' 'libgssapi_krb5.so'
+    'lib32-libidn2' 'libidn2.so'
+    'lib32-libnghttp2' 'libnghttp2.so'
+    'lib32-libnghttp3' 'libnghttp3.so'
+    'lib32-libngtcp2' 'libngtcp2.so'
+    'lib32-libpsl' 'libpsl.so'
+    'lib32-libssh2' 'libssh2.so'
+    'lib32-openssl' 'libcrypto.so' 'libssl.so'
+    'lib32-zlib' 'libz.so'
+    'lib32-zstd' 'libzstd.so')
+  provides=('lib32-curl' 'libcurl.so')
+  conflicts=('lib32-curl')
+  replaces=('lib32-curl')
+
+  cd "${srcdir}"/build-curl
+
+  make -C lib DESTDIR="${pkgdir}" install
+  make DESTDIR="${pkgdir}" install-pkgconfigDATA
+
+  # license
+  install -d "${pkgdir}/usr/share/licenses"
+  ln -s curl "${pkgdir}/usr/share/licenses/${pkgname}"
+}
+
+package_lib32-libcurl-compat-git() {
+  pkgdesc='command line tool and library for transferring data with URLs (32-bit, no versioned symbols, git)'
+  depends=(
+    'libcurl-compat'
+    'lib32-brotli' 'libbrotlidec.so'
+    'lib32-krb5' 'libgssapi_krb5.so'
+    'lib32-libidn2' 'libidn2.so'
+    'lib32-libnghttp2' 'libnghttp2.so'
+    'lib32-libnghttp3' 'libnghttp3.so'
+    'lib32-libngtcp2' 'libngtcp2.so'
+    'lib32-libpsl' 'libpsl.so'
+    'lib32-libssh2' 'libssh2.so'
+    'lib32-openssl' 'libcrypto.so' 'libssl.so'
+    'lib32-zlib' 'libz.so'
+    'lib32-zstd' 'libzstd.so')
+  provides=('lib32-libcurl-compat' 'libcurl-compat.so')
+  conflicts=('lib32-libcurl-compat')
+  replaces=('lib32-libcurl-compat')
+
+  cd "${srcdir}"/build-curl-compat
+
+  make -C lib DESTDIR="${pkgdir}" install
+
+  mv "${pkgdir}"/usr/lib32/libcurl{,-compat}.so.4.8.0
+  rm "${pkgdir}"/usr/lib32/libcurl.{a,so}*
+  for version in 3 4.0.0 4.1.0 4.2.0 4.3.0 4.4.0 4.5.0 4.6.0 4.7.0; do
+    ln -s libcurl-compat.so.4.8.0 "${pkgdir}"/usr/lib32/libcurl.so.${version}
+    ln -s libcurl-compat.so.4.8.0 "${pkgdir}"/usr/lib32/libcurl-compat.so.${version}
+  done
+
+  # license
+  install -d "${pkgdir}/usr/share/licenses"
+  ln -s curl "${pkgdir}/usr/share/licenses/${pkgname}"
+}
+
+package_lib32-libcurl-gnutls-git() {
+  pkgdesc='command line tool and library for transferring data with URLs (32-bit, no versioned symbols, linked against gnutls, git)'
+  depends=(
+    'libcurl-gnutls'
+    'lib32-brotli' 'libbrotlidec.so'
+    'lib32-gnutls' # 'libgnutls.so'
+    'lib32-krb5' 'libgssapi_krb5.so'
+    'lib32-libidn2' 'libidn2.so'
+    'lib32-libnghttp2' 'libnghttp2.so'
+    'lib32-libnghttp3' 'libnghttp3.so'
+    'lib32-libngtcp2' 'libngtcp2.so' 'libngtcp2_crypto_gnutls.so'
+    'lib32-libpsl' 'libpsl.so'
+    'lib32-libssh2' 'libssh2.so'
+    'lib32-nettle' 'libnettle.so'
+    'lib32-zlib' 'libz.so'
+    'lib32-zstd' 'libzstd.so')
+  provides=('lib32-libcurl-gnutls' 'libcurl-gnutls.so')
+  conflicts=('lib32-libcurl-gnutls')
+  replaces=('lib32-libcurl-gnutls')
+
+  cd "${srcdir}"/build-curl-gnutls
+
+  make -C lib DESTDIR="${pkgdir}" install
+
+  mv "${pkgdir}"/usr/lib32/libcurl{,-gnutls}.so.4.8.0
+  rm "${pkgdir}"/usr/lib32/libcurl.{a,so}*
+  ln -s libcurl-gnutls.so.4 "${pkgdir}"/usr/lib32/libcurl-gnutls.so
+  for version in 3 4 4.0.0 4.1.0 4.2.0 4.3.0 4.4.0 4.5.0 4.6.0 4.7.0; do
+    ln -s libcurl-gnutls.so.4.8.0 "${pkgdir}"/usr/lib32/libcurl-gnutls.so.${version}
+  done
+
+  # license
+  install -d "${pkgdir}/usr/share/licenses"
+  ln -s curl "${pkgdir}/usr/share/licenses/${pkgname}"
+}

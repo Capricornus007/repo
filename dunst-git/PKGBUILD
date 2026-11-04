@@ -1,0 +1,43 @@
+# 本倉 in-tree 維護版（2026-11-04）。
+# 為什麼不直接用 AUR那份：AUR dunst-git 的 depends=('systemd' ...)——
+#   CI 的「Artix 血緣守門」檢查（build-packages.yml 白名單段）會攔：
+#   「產物聲明了 systemd／systemd-libs 卻不在白名單」。
+#   dunst 本體根本不需要 systemd：官方 Arch 倉（extra/dunst）的 depends
+#   就沒有 systemd，AUR 那行是抄了 dunst 對 systemd unit 的可選關係。
+#   目標機是 Artix + OpenRC，聲明 systemd 只會讓 pacman 在目標機拉
+#   「假 systemd 殼包」（artix-archlinux-support），純多餘。
+# 其餘與 AUR 版逐字一致（含 backup/ provides/ conflicts/ optdepends）。
+
+pkgname=dunst-git
+_pkgname=dunst
+pkgver=1.9.0.r3.g1ef38e5
+pkgrel=1
+pkgdesc="A highly configurable and lightweight notification daemon"
+arch=('i686' 'x86_64' 'armv7h')
+url="https://dunst-project.org/"
+license=('BSD')
+depends=('gdk-pixbuf2' 'pango' 'libxss' 'libxinerama' 'libxrandr' 'wayland')
+makedepends=('git' 'wayland-protocols' 'libnotify')
+optdepends=("libnotify: dunstify"
+            "xdg-utils: xdg-open")
+provides=('dunst' 'notification-daemon')
+conflicts=('dunst')
+backup=('etc/xdg/dunst/dunstrc')
+source=('git+https://github.com/dunst-project/dunst.git')
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$_pkgname"
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd "${_pkgname}"
+  make PREFIX=/usr SYSCONFDIR=/etc/xdg
+}
+
+package() {
+  cd "${_pkgname}"
+  make DESTDIR="${pkgdir}" PREFIX=/usr SYSCONFDIR=/etc/xdg install
+  install -Dm644 LICENSE -t "${pkgdir}"/usr/share/licenses/${pkgname}
+}

@@ -1,0 +1,42 @@
+# 本倉 in-tree 維護版（2026-11-04）。
+# 為什麼不直接用 AUR那份：AUR xfburn-git 的 makedepends 只有 (meson git)，
+#   但上游 meson.build:43 `dependency('exo-2')` 是硬依賴——exo-2.pc 由 exo 包
+#   提供，而 depends 裡的 libxfce4ui 只保證裝了它自己的 .so，不保證 exo 的
+#   pkg-config 檔在構建容器裡可見（run 41750761615 實測 NOT FOUND）。
+# 其餘與 AUR 版逐字一致。
+
+pkgname=xfburn-git
+_pkgname=xfburn
+pkgver=0.8.0+4+g59e4f19
+pkgrel=1
+pkgdesc="A simple CD/DVD burning tool based on libburnia libraries (git checkout)"
+arch=('x86_64' 'i686' 'armv7h' 'aarch64')
+url="http://goodies.xfce.org/projects/applications/xfburn"
+license=('GPL')
+groups=('xfce4-goodies')
+depends=('libburn' 'libisofs' 'gtk3' 'libxfce4ui' 'gst-plugins-base-libs'
+         'libgudev' 'desktop-file-utils')
+makedepends=('meson' 'git' 'exo')
+provides=("${_pkgname}=${pkgver%%+*}")
+conflicts=("${_pkgname}")
+source=("${_pkgname}::git+https://gitlab.xfce.org/apps/${_pkgname}")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "${_pkgname}"
+  git describe --long --tags | sed -r "s:^${_pkgname}.::;s/^v//;s/^xfce-//;s/-/+/g"
+}
+
+build() {
+  local meson_options=(
+    -D gstreamer=enabled
+    -D gudev=enabled
+  )
+
+  arch-meson "${_pkgname}" build "${meson_options[@]}"
+  meson compile -C build
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+}

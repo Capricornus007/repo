@@ -381,7 +381,8 @@
     "key": "dunst-git",
     "repo_name": "dunst-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "fcitx5-configtool-git",
@@ -405,13 +406,15 @@
     "key": "gtk-layer-shell-git",
     "repo_name": "gtk-layer-shell-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "gvfs-git",
     "repo_name": "gvfs-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "kdeconnect-git",
@@ -437,7 +440,8 @@
     "key": "lemonbar-git",
     "repo_name": "lemonbar-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "libfm-git",
@@ -455,7 +459,8 @@
     "key": "lxsession-git",
     "repo_name": "lxsession-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "mangohud-git",
@@ -497,7 +502,8 @@
     "key": "seahorse-git",
     "repo_name": "seahorse-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "thunar-git",
@@ -515,7 +521,8 @@
     "key": "xfburn-git",
     "repo_name": "xfburn-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "xfce4-appfinder-git",

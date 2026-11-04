@@ -1,0 +1,64 @@
+# 本倉 in-tree 維護版（2026-11-04）。
+# 為什麼不直接用 AUR那份：AUR lxsession-git 的 depends 引用了兩顆已從 Arch
+#   倉刪除的包——'libunique'（GTK2 的 unique，2020 年刪）與 'libkeybinder2'
+#   （2021 年刪），容器裡 pacman 直接 `target not found`（run 41750761615 實測）。
+#   lxsession 上游 master 的 configure 已不強制這兩顆（unique 側代碼 2013 年
+#   就條件化了），刪掉聲明即可；pkgconfig 同步改名 pkgconf（舊名在容器解析不到
+#   也不穩）。
+#   libappindicator-gtk2 實測仍可解析（run 日誌只報了 unique/keybinder2），保留。
+# lxclipboard-startup.desktop 一併收進本目錄（AUR source 引用的本地檔）。
+# 其餘與 AUR 版逐字一致。
+
+pkgname=lxsession-git
+pkgver=0.5.5.r1089.20240322
+pkgrel=1
+epoch=1
+pkgdesc='Lightweight X11 session manager'
+arch=('i686' 'x86_64')
+url="http://lxde.org/"
+license=('GPL2')
+groups=('lxde-git')
+depends=('polkit' 'dbus-glib'
+	'libappindicator-gtk2'
+	'libnotify'
+)
+makedepends=('git' 'pkgconf' 'intltool' 'docbook-xml' 'docbook-xsl' 'vala' 'autoconf')
+provides=('lxsession' 'lxsession-edit' 'lxpolkit' 'lxde-settings-daemon' 'lxsession-lite')
+conflicts=('lxsession' 'lxsession-edit' 'lxpolkit' 'lxde-settings-daemon' 'lxsession-lite')
+source=(
+	$pkgname::git+https://github.com/lxde/lxsession.git
+	lxclipboard-startup.desktop
+)
+sha256sums=('SKIP'
+            '0c8b776b74da5bb7b126a6bde058318ed84808c50599849ce73ada88db4d58d0')
+
+pkgver() {
+	# remove ".r*.*" from package version
+	_pkgverTriple=$(echo $pkgver | sed "s/\.r.*//g")
+	cd $pkgname
+	# get number of last git commit
+	_commitCount=$(git rev-list --count HEAD)
+	# get time of last git commit
+	_commitTime=$(git show -s --format="%ci" | grep -o "....-..-.." | sed "s/-//g")
+	# add ".r*.*" from package version
+	echo "$_pkgverTriple.r$_commitCount.$_commitTime"
+}
+
+prepare() {
+	cd $pkgname
+	#patch -Np1 -i ../Create-lock-file-to-prevent-more-than-one-logout-dialog.patch
+	rm -f *.stamp
+	autoreconf -fi
+}
+
+build() {
+	cd $pkgname
+	./configure --prefix=/usr --sysconfdir=/etc --disable-buildin-clipboard --disable-buildin-polkit
+	make
+}
+
+package() {
+	install -Dm644 'lxclipboard-startup.desktop' "${pkgdir}/etc/xdg/autostart/lxclipboard-startup.desktop"
+	cd $pkgname
+	make DESTDIR="$pkgdir" install
+}

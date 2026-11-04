@@ -1,0 +1,47 @@
+# 本倉 in-tree 維護版（2026-11-04）。
+# 為什麼不直接用 AUR那份：AUR seahorse-git 的 depends 帶 'libsoup'——
+#   libsoup 2.x 已從 Arch 倉刪除（只剩 libsoup3），容器裡 pacman 直接
+#   `target not found`（run 41750761615 實測）。seahorse master 的 meson.build
+#   早就不查 soup（pgp/ssh 密鑰管理器不聯網下載），刪掉聲明即可。
+# 其餘與 AUR 版逐字一致。
+
+pkgname=seahorse-git
+pkgver=41.0+41+g8bbc1f48
+pkgrel=1
+pkgdesc="GNOME application for managing encryption keys and passwords in the
+GNOME Keyring."
+url="https://wiki.gnome.org/Apps/Seahorse"
+arch=(x86_64)
+license=(GPL)
+options=(debug !strip)
+depends=(gtk3 gcr libsecret gpgme gnome-keyring libpwquality libhandy)
+conflicts=('seahorse')
+makedepends=(libldap yelp-tools gobject-introspection vala git meson)
+provides=(seahorse x11-ssh-askpass)
+
+source=("git+https://gitlab.gnome.org/GNOME/seahorse.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd ${pkgname%-git}
+  git describe --tags | sed 's/-/+/g'
+}
+
+prepare() {
+  cd ${pkgname%-git}
+}
+
+build() {
+  rm -rf build
+  meson --prefix /usr --buildtype=plain seahorse build -D manpage=true
+  meson compile -C build
+}
+
+check() {
+  cd build
+  meson test --print-errorlogs
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+}
