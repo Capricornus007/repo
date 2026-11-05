@@ -211,7 +211,8 @@
     "key": "gettext-git",
     "repo_name": "gettext-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "aur",
+    "in_tree": true
   },
   {
     "key": "gflags-git",
