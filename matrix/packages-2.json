@@ -1056,5 +1056,26 @@
     "kind": "artix",
     "image": "artixlinux/artixlinux:base-devel",
     "in_tree": true
+  },
+  {
+    "key": "openssl-git",
+    "repo_name": "openssl-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "lib32-openssl-git",
+    "repo_name": "lib32-openssl-git",
+    "variant": "none",
+    "kind": "multilib",
+    "in_tree": true
+  },
+  {
+    "key": "lib32-libngtcp2-git",
+    "repo_name": "lib32-libngtcp2-git",
+    "variant": "none",
+    "kind": "multilib",
+    "in_tree": true
   }
 ]
