@@ -1,0 +1,48 @@
+# 2026-11-05 in-tree 新增（用户指示）：把 BaiLuAI/BaiLu-Cli 加进自动构建仓库。
+# Node.js CLI（TypeScript → tsc 编到 dist/），bin 为 bailu / bailu-cli。
+# 构建：npm install + npm run build（tsc），产物 dist/cli.js + node_modules。
+# 无 git tag，pkgver() 用 npm version + git rev-list 距离 + hash。
+
+pkgname=bailu-cli-git
+pkgver=0.2.9.r0.g7d56fc1
+pkgrel=1
+pkgdesc='BaiLu AI command-line client (TypeScript, git build)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/BaiLuAI/BaiLu-Cli'
+license=('MIT')
+depends=('nodejs')
+makedepends=('git' 'npm')
+provides=('bailu-cli')
+conflicts=('bailu-cli')
+options=('!strip' '!lto')
+
+source=("git+https://github.com/BaiLuAI/BaiLu-Cli.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd BaiLu-Cli
+  local _ver _n _hash
+  _ver=$(node -p "require('./package.json').version" 2>/dev/null || echo '0.0.0')
+  _n=$(git rev-list --count HEAD 2>/dev/null || echo 0)
+  _hash=$(git rev-parse --short HEAD)
+  printf '%s.r%s.g%s' "$_ver" "$_n" "$_hash"
+}
+
+prepare() {
+  cd BaiLu-Cli
+}
+
+build() {
+  cd BaiLu-Cli
+  npm ci --no-audit --no-fund 2>/dev/null || npm install --no-audit --no-fund
+  npm run build
+}
+
+package() {
+  cd BaiLu-Cli
+  install -d "$pkgdir/usr/lib/$pkgname" "$pkgdir/usr/bin"
+  cp -a dist node_modules package.json package-lock.json "$pkgdir/usr/lib/$pkgname/"
+  chmod 755 "$pkgdir/usr/lib/$pkgname/dist/cli.js"
+  ln -s "../lib/$pkgname/dist/cli.js" "$pkgdir/usr/bin/bailu"
+  ln -s "../lib/$pkgname/dist/cli.js" "$pkgdir/usr/bin/bailu-cli"
+}

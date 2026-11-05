@@ -1077,5 +1077,12 @@
     "variant": "none",
     "kind": "multilib",
     "in_tree": true
+  },
+  {
+    "key": "bailu-cli-git",
+    "repo_name": "bailu-cli-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]
