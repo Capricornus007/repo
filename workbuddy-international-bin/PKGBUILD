@@ -4,14 +4,15 @@
 # project (see LICENSE.port-tool). Not affiliated with Tencent. See DISCLAIMER.
 
 pkgname=workbuddy-international-bin
-_pkgver=5.8.4.41366630
-_build=73952edb
+_pkgver=5.9.4.42593613
+_build=fa0a0901
 _electronver=37.10.3
 pkgver=${_pkgver}_${_build}
-# pkgrel 2: the shipped app.asar now carries the workbuddyStorage at-rest shim
-# (Fix 7 in lib-apply-linux-patches.js). Without it every agent session child
-# exits within ~400ms on 5.8.x and the app looks "installed but unusable".
-pkgrel=2
+# pkgrel 3: 5.9.4 payload verification sync — upstream dropped better-sqlite3
+# entirely (zero references left in app.asar / cli tree), so the check list
+# loses that line and gains the @lydell node-pty Linux prebuild that 5.9.x
+# actually ships; pkgrel 2 was the workbuddyStorage at-rest shim (Fix 7).
+pkgrel=3
 pkgdesc="AI Agent for everyday office work (international edition, unofficial Linux port)"
 arch=('x86_64')
 url="https://www.workbuddy.ai"
@@ -31,7 +32,7 @@ _electronzip="electron-v${_electronver}-linux-x64.zip"
 source=("${_dmg}::https://codebuddy-1328495429.cos.accelerate.myqcloud.com/workbuddy/saas/darwin-x64/WorkBuddy-darwin-x64-${_pkgver}-${_build}.dmg"
         "${_electronzip}::https://github.com/electron/electron/releases/download/v${_electronver}/${_electronzip}"
         "workbuddy-international.desktop")
-sha256sums=('8404d7eeb2653ec49ca3f3bce4b69fd101ecf60bd1fd9f8472181108a11aa63e'
+sha256sums=('435e3990168b5dbe1eed9ebd5e141f93085a29510bc2dd60ffd0bd63a219f0b2'
             'c0b4edd6bd9858cda4cf7ab299e69a2d3ecd2e5fcca78507bc0851ba35614660'
             '6fcbfa4cba8e730e603b68fcca484c7963aacdaf56a3f6c5c47ff320a5189e85')
 
@@ -183,9 +184,12 @@ _verify_package_payload() {
     # Every native module the app loads must exist as a Linux ELF binary
     # (os-bridge is new in 5.8.x: the vendor prebuilds it per platform and the
     # darwin copy is deleted by the toolchain, so it is easy to lose silently).
+    # 5.9.x: better-sqlite3 is gone upstream (zero references in app.asar /
+    # cli tree — verified against the 5.9.4.42593613 dmg), and the pty stack
+    # additionally ships the @lydell fork prebuilds, so both are verified.
     for rel in \
-        resources/app.asar.unpacked/node_modules/better-sqlite3/build/Release/better_sqlite3.node \
         resources/app.asar.unpacked/node_modules/node-pty/build/Release/pty.node \
+        resources/app.asar.unpacked/node_modules/@lydell/node-pty-linux-x64/prebuilds/linux-x64/pty.node \
         resources/app.asar.unpacked/node_modules/koffi/build/koffi/linux_x64/koffi.node \
         resources/app.asar.unpacked/node_modules/@ban-dal/os-bridge-linux-x64-gnu/os-bridge.linux-x64-gnu.node \
         resources/app.asar.unpacked/cli/vendor/ripgrep/x64-linux/rg
