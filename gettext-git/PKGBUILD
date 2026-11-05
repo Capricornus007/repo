@@ -25,7 +25,10 @@ prepare() {
   # 头 → package() 阶段 make install 重编 xgettext 直接 fatal error。
   # 从 gnulib master 取标准内容内联生成源码树那一份；autogen.sh 若跑 gnulib
   # 会覆盖成同样内容，没跑也保证不缺。
-  cat > "$PWD/gettext-tools/lib/optional.h" <<'GNULIB_OPTIONAL_EOF'
+  # 2026-11-06 勘誤：gettext-tools/ 下沒有 lib/ 目錄（實查上游 master 樹：
+  # gnulib 頭的落點是 gnulib-lib/），寫 lib/ 會直接 No such file or directory。
+  mkdir -p "$PWD/gettext-tools/gnulib-lib"
+  cat > "$PWD/gettext-tools/gnulib-lib/optional.h" <<'GNULIB_OPTIONAL_EOF'
 /* An Optional type wrapper.
    Copyright (C) 2026 Free Software Foundation, Inc.
 
