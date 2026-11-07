@@ -1627,7 +1627,7 @@ jobs:
               #
               # ⚠️ AUR RPC 的 .Version 是**含 pkgrel 的整串**（實測 615.78.08-1），必須
               # 拆成兩段再賦值：pkgver 進 TARGET_PKGVER、pkgrel 進 TARGET_PKGREL
-              # （與上面 linux-cachyos-cjktty「tag 尾號即 pkgrel」同一手法）。把 `-1`
+              # （與上面 linux-zenith「tag 尾號即 pkgrel」同一手法）。把 `-1`
               # 整串塞進 TARGET_PKGVER 會拼出
               # `nvidia-utils-beta-615.78.08-1-1-x86_64.pkg.tar.zst` 這種資產名，
               # 下方「已在 release 裡」永不命中 → 每天白下 530MB＋409MB 重編一次。
@@ -1664,7 +1664,7 @@ jobs:
               fi
               ;;
 
-            linux-cachyos-cjktty)
+            linux-zenith)
               all_tags=$(gh_api "https://api.github.com/repos/CachyOS/linux/releases?per_page=100" \
                          | jq -r '.[].tag_name | select(test("^cachyos-[0-9]+\\."))' || true)
               [ -n "$all_tags" ] || skip "拿不到 CachyOS/linux release 列表"
@@ -2648,7 +2648,7 @@ jobs:
           cp PKGBUILD /tmp/PKGBUILD.orig
           gh_api() { curl -sfL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$@"; }
           # 只有使用者点名的这两个内核要强制改 config；ltscjk / dkms 套件保持原样
-          case "$PKG" in linux-zencjk|linux-cachyos-cjktty) INJECT=1 ;; *) INJECT=0 ;; esac
+          case "$PKG" in linux-zencjk|linux-zenith) INJECT=1 ;; *) INJECT=0 ;; esac
 
           # ---------- 共用：把 CJK + dae 需要的内核选项强制写进 config ----------
           # 用「先删同名行再追加」而不是单纯 >> ，避免 config 里出现
@@ -2741,7 +2741,7 @@ jobs:
               sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
               ;;
 
-            linux-cachyos-cjktty)
+            linux-zenith)
               tag_part="${CACHY_TAG#cachyos-}"
               base="${tag_part%-*}"
               if [ "$VARIANT" = "rc" ]; then
@@ -3070,7 +3070,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'android-ndk-30' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'libjpeg-turbo-git' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'svt-jpeg-xs-git' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'nodejs-git' && matrix.repo_name != 'brotli-git' && matrix.repo_name != 'nodejs-better-sqlite3-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.repo_name != 'htop-git' && matrix.repo_name != 'chafa-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-zenith' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'android-ndk-30' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'libjpeg-turbo-git' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'svt-jpeg-xs-git' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'nodejs-git' && matrix.repo_name != 'brotli-git' && matrix.repo_name != 'nodejs-better-sqlite3-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.repo_name != 'htop-git' && matrix.repo_name != 'chafa-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -3733,7 +3733,7 @@ jobs:
           echo "工作目錄: $(pwd)  PKGBUILD mtime=$(stat -c %y PKGBUILD 2>/dev/null)"
           echo "::endgroup::"
           flags="-s --noconfirm -f"
-          if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ]; then
+          if [ "${{ matrix.repo_name }}" = "linux-zenith" ]; then
             # CachyOS 的 config / 补丁是 CI 现抓的，校验和对不上，跳过完整性检查
             flags="$flags --skipinteg"
           elif [ "${{ matrix.repo_name }}" = "element-desktop-nightly-bin" ]; then
@@ -3825,19 +3825,19 @@ jobs:
             _backoff=$((_mp * 25)); [ "$_backoff" -gt 120 ] && _backoff=120
             sleep $_backoff
           done
-          if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ] && [ "${{ matrix.variant }}" = "rc" ]; then
-            # RC 產物檔名插入 -rc（如 linux-cachyos-cjktty-rc-7.3.rc1-1-…），
-            # 包內 pkgname 保持 linux-cachyos-cjktty 不變：repo-add 條目照常
+          if [ "${{ matrix.repo_name }}" = "linux-zenith" ] && [ "${{ matrix.variant }}" = "rc" ]; then
+            # RC 產物檔名插入 -rc（如 linux-zenith-rc-7.3.rc1-1-…），
+            # 包內 pkgname 保持 linux-zenith 不變：repo-add 條目照常
             # 以版本號換代（vercmp 7.3.rc1 < 7.3.0，正式版發佈後自然回位），
             # 而清理步驟據檔名區分 rc/正式兩類，各自保留最新一份。
-            for f in linux-cachyos-cjktty*-*.pkg.tar.zst; do
+            for f in linux-zenith*-*.pkg.tar.zst; do
               [ -e "$f" ] || continue
               case "$f" in *-rc-*) continue ;; esac
-              base="${f%%-[0-9]*}"   # linux-cachyos-cjktty 或 …-headers
+              base="${f%%-[0-9]*}"   # linux-zenith 或 …-headers
               rest="${f#"$base"}"
               mv -v "$f" "${base}-rc${rest}"
             done
-            ls -lh linux-cachyos-cjktty*.pkg.tar.zst
+            ls -lh linux-zenith*.pkg.tar.zst
           fi
           if [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ]; then
             # ── LLVM soname 守門（防止上面的「鎖 ABI」改動被靜默回退）

@@ -17,7 +17,7 @@ AUR_SSH = "ssh://aur@aur.archlinux.org/{base}.git"
 NV_LISTING = "https://download.nvidia.com/XFree86/Linux-x86_64/"
 
 # 內容級規則：某些包的 PKGBUILD 裡有寫死的上游版本，光跑 pkgver() 抓不到。
-# linux-cachyos-cjktty:211 的 _nv_ver 就是這種——它同時決定 source URL 與 sums，
+# linux-zenith:211 的 _nv_ver 就是這種——它同時決定 source URL 與 sums，
 # 而且預設空轉（:118 `_build_nvidia_open:=no`），所以落後時不會報錯、只會過期。
 CONTENT_RULES = {
     # flutter-beta 的 pkgver 是靜態的，而且 URL 與 sums 都綁在它身上。
@@ -31,13 +31,13 @@ CONTENT_RULES = {
         {"kind": "arch_pkg", "pkg": "linux", "repo": "core"},
     ],
     # zencjk / cachyos 的內核線一律走上游本體（zen-kernel tags、CachyOS/linux releases），
-    # 使用者明確說明 Capricornus007/linux-cachyos-cjktty 那幾個 GitHub 倉因為有自動
+    # 使用者明確說明 Capricornus007/linux-zenith 那幾個 GitHub 倉因為有自動
     # 構建倉就基本沒在更新，**不能当真值來源**，所以這裡不去鏡射它們
     #（也確認過：本工具只推 AUR，不同步那些 GitHub 倉）。
     "linux-zencjk": [
         {"kind": "zen_pkg"},
     ],
-    "linux-cachyos-cjktty": [
+    "linux-zenith": [
         {"kind": "cachy_kernel"},
         {"var": "_nv_ver", "resolver": "nvidia_newest"},
     ],
@@ -170,7 +170,7 @@ def resolve_zen():
 
 
 def resolve_cachy_kernel():
-    """linux-cachyos-cjktty 的內核版號：CachyOS/linux 的 cachyos-<ver>-<rel> release tag。
+    """linux-zenith 的內核版號：CachyOS/linux 的 cachyos-<ver>-<rel> release tag。
 
     與 build-packages.yml 同一來源。必須回 (major, minor, pkgrel) 三段，因為
     PKGBUILD 是 `_major=7.2` + `_minor=9` + `pkgver=${_major}.${_minor}`，

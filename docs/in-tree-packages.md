@@ -371,7 +371,7 @@ split：llvm-libs／llvm／llvm-lit／compiler-rt／lld／lldb／clang）：
     所以 clang-git 的 `provides` 也**拿掉** `clang-analyzer`／`clang-tools-extra`
     兩個虛名（留著等於讓 pacman 誤判依賴已滿足）。本機實查沒有任何已裝包依賴這
     兩個名字：依賴 `clang` 的是 doxygen、lldb、rust-bindgen-git、shiboken6-generator、
-    linux-cachyos-cjktty-headers 這五顆，全部走 `clang` 本體。
+    linux-zenith-headers 這五顆，全部走 `clang` 本體。
     時效證據：run #443（job 114382764499）整包 2 時 31 分，沒撞 360；裁完只會更短。
   · **六包之外為什麼還多一颗 compiler-rt（依賴關係，不是湊數）**：用戶點名的六顆是
     llvm／llvm-libs／llvm-lit／clang／lld／lldb；`docs/upstream-pkgbuilds/clang.PKGBUILD:11`
@@ -499,7 +499,7 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
     `curl 'https://aur.archlinux.org/rpc/?v=5&type=info&arg[]=<包名>'` 取
     `.results[0].Version`，AUR 回的是**含 pkgrel 的整串**（實測 `615.78.08-1`）→
     `TARGET_PKGVER="${_nvver%-*}"`、`TARGET_PKGREL="${_nvver##*-}"`，兩段分別驗形，
-    驗不過就 `skip`。手法與 linux-cachyos-cjktty「tag 尾號即 pkgrel」一致。
+    驗不過就 `skip`。手法與 linux-zenith「tag 尾號即 pkgrel」一致。
     整串不拆會拼出 `nvidia-utils-beta-615.78.08-1-1-…` 的資產名，「已在 release 裡」
     永不命中，等於每天白下 530MB＋409MB 重編。這兩顆 PKGBUILD 都**沒有** `pkgver()`，
     所以 plan 尾部「makepkg 會把 pkgrel 重置為 1」那段不生效，AUR 只抬 pkgrel 時
