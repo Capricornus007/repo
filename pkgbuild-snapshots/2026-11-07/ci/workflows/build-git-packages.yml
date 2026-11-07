@@ -1,0 +1,147 @@
+name: Build Git Packages
+
+# VCS（-git）套件：跟着上游 HEAD 走，oh-my-pi-git 一天能蹦好几个小版本号，
+# 所以每小时查一次。绝大多数轮次里「检测目标版本并决定是否需要构建」发现
+# 版本没变，几分钟就整轮跳过，开销很小。
+#
+# 这些包单个只要几分钟到二十来分钟，跟内核分开跑就不会被内核堵在队列后面。
+# 因为不存在「跑到下一个整点还没编完」的情况，cancel-in-progress 可以放心
+# 开着：真撞上了，取消旧的换新的反而更合理。
+
+on:
+  push:
+    branches:
+      - master
+  schedule:
+    # 每 3 小時一次（用戶 2026-10-03 指示再延長；此前是 90 分鐘：兩條 cron 湊成
+    # 00:00/03:00/… 加 01:30/04:30/…）。實測一輪矩陣本身就要跑 50–95 分鐘
+    # （#331 用 50 分 55 秒、#330 用 1 時 3 分 27 秒），90 分鐘節拍等於幾乎無間隙連轉，
+    # 而且 openai-codex-git 單包 release 編譯就要 60 分鐘以上。
+    # 只留一條 cron，避免「兩條錯峰」又被解讀成 90 分鐘節拍。
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: build-git-packages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.read.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: read
+        name: 讀取 matrix/packages.json 輸出為 job output
+        run: |
+          {
+            echo "packages<<__PKGS_EOF__"
+            cat matrix/packages.json
+            echo "__PKGS_EOF__"
+          } >> "$GITHUB_OUTPUT"
+  build:
+    needs: setup
+    uses: ./.github/workflows/build-packages.yml
+    permissions:
+      contents: write
+    # 可重用 workflow 默认拿不到调用方的 secrets，必须显式继承，
+    # 否则 PERSONAL_BUILD_TOKEN 为空、回推 PKGBUILD 会静默失败。
+    secrets: inherit
+    with:
+      timeout_minutes: 360
+      # glib2-git 與 linux-firmware-nfp-git 改由本倉源碼直出（用戶 2026-10-10 指定）：
+      # 這兩顆原本只從 chaotic-aur 拿，而 chaotic 那五台鏡像走 Cloudflare 的 IPv6 一律
+      # TLS 8 秒被斷（實測釘 IPv4 才 0.46 秒回 303），鏡像一抖就「無法取得」。AUR 兩顆
+      # 都在，所以 kind: aur 直接取 AUR 的 PKGBUILD 來編。
+      # 2026-10-10 更正：linux-firmware-nfp-git 不再取 AUR（AUR 那份在 CI 從沒建成功過，
+      # 用戶裁決改自己寫），PKGBUILD 維護在本倉 linux-firmware-nfp-git/ 目錄、由
+      # build-packages.yml 的 in-tree 分支攔截；矩陣仍留 kind:aur 只為借用 giant if 的
+      # `matrix.kind != 'aur'` 跳過回推校驗和（與 pnpm-git 同一手法，理由見
+      # docs/in-tree-packages.md）。
+      # ⚠️ packages 是 `packages: |` 的**純 JSON 字面塊**，下游用 fromJSON(inputs.packages)
+      # 解析——註解只能寫在這裡，寫進方括號裡面會讓整條矩陣（130+ job）一起解析失敗。
+      # （2026-10-11 真的踩過：llvm-git 那條的說明寫進方括號內，run #436 就只剩 deploy
+      #  一顆 job、build 矩陣整個沒跑。改動前後都用 python 把這塊 json.loads() 驗過。）
+      # llvm 那批（用戶 2026-10-11 點名「六個全部搬去 -git 自動構建」）：一個目錄產七顆
+      # split（llvm-libs／llvm／llvm-lit／compiler-rt／lld／lldb／clang），收集與 repo-add
+      # 兩步都是 `pkg_dir/*.pkg.tar.zst` 的 glob，所以 split 不需要額外接點。kind:aur 只為
+      # 借用回推那步的 `matrix.kind != 'aur'`（pkgver 由上游 HEAD 現算，回推校驗和無意義）；
+      # case 首命中即中，走本倉 llvm-git/PKGBUILD，不會去 clone AUR。逐包理由見
+      # docs/in-tree-packages.md。
+      # crave（2026-10-13）：不是 -git 包，但跟 u1s1-bin／jbr21／qoder-* 同一類「in-tree 維護＋
+      # 版號由外部端點驅動」，所以掛在本 workflow（3 小時節拍）。plan 只在「上游 tag ≠ PKGBUILD
+      # 的 _pkgver」時才下載算 sha（上游二進位 30MB×2、只發 md5 無簽名），平时无腦一個 API call。
+      # 它的 pkgver 是 ${_pkgver/-/.} 算出來的（連字號→點號，pacman 不準 pkgver 含 -），
+      # 而 source URL 裡是連字號版，所以 build-packages.yml 需要三個特例：plan 的 crave) case、
+      # 改寫步 sed _pkgver=、以及走 in-tree 回推而非 updpkgsums。
+      # 以下 packages 是純 JSON 塊，fromJSON 不會剝註解，所以說明只能寫在這裡：
+      # · shiboken6-git（2026-10-23 用戶點名）：本機官方 shiboken6-generator 6.12.0-1 一跑就
+      #   `error while loading shared libraries: libclang.so.23.1`——它的 NEEDED 裡 LLVM 系只有
+      #   這一條（objdump 實測），而 clang 已被本倉 clang-git 24.0git 頂替，系統沒有 .23.1。
+      #   修法是「用 24 重built 整條鏈」，不是塞假 SONAME 軟連結騙 loader（用戶否決，
+      #   同 mesa／doxygen 那兩場的裁決）。逐包理由與**實跑證據**寫 docs/in-tree-packages.md。
+      #   kind:aur 只為借用回推那步的 `matrix.kind != 'aur'`（版號由 dev HEAD 現算）＋掛上
+      #   junlin03-aur 源；case 首命中即中，走本倉 shiboken6-git/PKGBUILD，不會去 clone AUR。
+      # · zcode-ce-git（2026-10-23 用戶點名「ce-git 進倉庫」）：從 Zcode-CE git 源碼構建
+      #   （＝官方 zai-org/ZCode 開源 v3.15.1＋CE 修補的合併結果），取代已刪的
+      #   zcode-ce-bin（轉發二進位）。構建對齊 CE 自己的 release.yml（node＋pnpm＋
+      #   electron-builder 只留 pacman target），理由見 docs/in-tree-packages.md 條目。
+      #   kind:aur 同 shiboken6-git：借回推跳過＋掛 feed 源，case 走本倉目錄。
+      # · fcitx5-qt 在 AUR 已拆成 qt5/qt6 兩顆（沒有單一的 fcitx5-qt-git），
+      # · 本機的 fcitx5-qt 由這兩顆取代。
+      # · chinese-addons / rime 鏈上的 AUR 依賴，必須先進矩陣，否則跟 afdko-git
+      # · 同一型失敗（容器裡 target not found → Could not resolve all dependencies）。
+      # · fcitx5-configtool-git 刻意**不**進矩陣：AUR 那份靜態 pkgver 停在 5.1.2.r1
+      # · （比倉庫的 5.1.16 還舊），而且 depends 列了倉庫已不存在 plasma-framework5，
+      # · 裝它等於降級 + 必然解析失敗。configtool 改吃倉庫版。
+      # · afdko-git 的兩個依賴都不在官方倉庫（本機是從 archlinuxcn / chaotic-aur 裝的），
+      # · 容器裡只有官方倉庫 → run #529 就是死在 `target not found: python-cu2qu`。
+      # · 必須先讓它們進 feed，順序上跟 afdko-git 同一輪就能解析到。
+      # · kvantum-qt4-git 刻意移出矩陣：它 depends `qt4`，而 qt4 不在任何官方倉庫
+      # · （本機那顆是從 andontie-aur / arch4edu 裝的），AUR 的 qt4 是 4.8.7 那個年代的東西，
+      # · 在 base-devel 容器裡構起來動輒數小時且多半過不了 toolchain。
+      # · run #529 的失敗就是 `target not found: qt4`。要這顆請直接從第三方倉庫裝，別走 feed。
+      #
+      # 2026-10-27「ossl4 臨時倉收編」三顆（openvpn／tcpdump／pacman-git）：
+      # · 共同原因：目標機的 openssl 已由 Artix [system-goblins] 抬到 4.1.0-1（provides
+      #   libcrypto.so=4-64／libssl.so=4-64），而官方現成包抽出來的是**帶版本**的 soname
+      #   依賴（Artix [world] openvpn 2.7.8-1 → libcrypto.so=3-64；[galaxy] tcpdump
+      #   4.99.7-1 → 同；本倉已發布的 pacman-git …-2 資產 → 也同）。那種形在本機只能靠
+      #   過渡包 openssl-3 頂著才裝得上。三顆都改成「手寫不帶版本的 .so 依賴＋CI 對它們
+      #   關掉 makepkg 的 autodeps」，並改用 Artix 容器（kind: artix）讓鏈接物件與目標機
+      #   同為 openssl 4。逐包實查證據見 docs/in-tree-packages.md 與各自 PKGBUILD 頭部。
+      # · openvpn／tcpdump 是**靜態版本包**（無 pkgver()）：plan 走「靜態版本包」分支，
+      #   上游出新版要手動抬 PKGBUILD，跟 fcitx5-configtool／python-cu2qu 同一套做法。
+      # · pacman-git 從 kind: aur 改成 kind: artix，三個副作用都已核過：
+      #     (1) kind: aur 原本借的是「跳過 updpkgsums 回推」，kind: artix 同樣在回推步的
+      #         giant if 裡被排除（`matrix.kind != 'artix'`）⇒ 不會再把本倉 PKGBUILD 撕掉重算；
+      #     (2) 少了 `--skipchecksums`：本包 sha256sums 六條全是 SKIP ⇒ 等價；
+      #     (3) 少了「掛 junlin03-aur 源」：本包不依賴任何兄弟包（實查 depends 全在 Artix
+      #         [system]/[world]，pacman-mirrorlist 由 artix-mirrorlist 提供）⇒ 不需要。
+      #   ⚠️ 這三顆的 autodeps 開關**不能**寫進 PKGBUILD 的 options=()：實測 makepkg 7.1.0
+      #   的 lint_options 會回「options 陣列包含未知選項『!autodeps』」（autodeps 沒註冊進
+      #   packaging_options/build_options），所以由 build-packages.yml 的專用步驟追加到
+      #   /etc/makepkg.conf 的 OPTIONS。
+      # · libplacebo-git（2026-10-28，補 mpv-git 的依賴缺口）：mpv master 的 meson.build
+      #   把 libplacebo 釘在 >= 7.387.0，同步庫只有 7.360.1（run 40591719745 job
+      #   122497382921 實測紅在Dependency lookup ... found '7.360.1'）。上游已出
+      #   tag v7.387.0 且 master == 該 tag，所以這顆不是拿未發布版湊數。逐包理由、
+      #   SONAME 360→387 的換代影響、以及 mpv 那邊「裸名 libplacebo 會被同步庫同名實包
+      #   搶走」的處置，全部寫在 docs/in-tree-packages.md 與 libplacebo-git/PKGBUILD 頭部。
+      #   kind: aur 只為借用回推那步的 matrix.kind != 'aur'（版號由上游 HEAD 現算，
+      #   updpkgsums 回推沒有意義）、自動掛 junlin03-aur 源，並讓 check 走 CI 的
+      #   無 GPU → --nocheck 常態；case 首命中即中，走本倉 libplacebo-git/ 目錄，
+      #   不會去 clone AUR 那份停在 7.350.0 的舊配方。
+      # · libjpeg-turbo-git／lib32-libjpeg-turbo-git（2026-11-01，用戶點名「把
+      #   lib32-libjpeg-turbo-git 加去自動構建倉庫」）：32 位元那顆 AUR 上不存在
+      #   （RPC type=info resultcount=0），機器上那顆是 2026-10-30 用 yay 從
+      #   ~/.cache/yay 本地建的——本倉 `lib32-gst-plugins-base-libs-git` 的 depends
+      #   就要吃它，一直只活在快取目錄等於隨時會裝不出來。兩顆都走本倉目錄版，
+      #   與 AUR/官方版的差異（provides 補 `libturbojpeg.so=0-64`、拿掉跨架構的裸
+      #   `libjpeg.so` 宣告、rm 改成缺目錄不紅的寫法、砍掉殭屍 makedepends）逐條
+      #   寫在兩份 PKGBUILD 檔頭與 docs/in-tree-packages.md。
+      #   32 位元那顆 kind: multilib（借用該分支的 [multilib] 啟用＋lib32 底層鏈預裝，
+      #   並天然命中回推那步的 matrix.kind != 'multilib' 排除）；64 位元那顆走預設
+      #   kind，所以必須另外列進回推那步的名稱排除清單。
+      packages: ${{ needs.setup.outputs.packages }}
