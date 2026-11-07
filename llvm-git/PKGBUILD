@@ -48,7 +48,7 @@
 #      · clangd／clang-tidy／clang-format／clang-rename 等 extra 工具**不再產出**，
 #        本機 `pactree -r clang-tools-extra`／`-r clang-analyzer` 查實沒有任何已裝包
 #        依賴這兩個名字（依賴都寫在 `clang` 本體上：doxygen、lldb、rust-bindgen-git、
-#        shiboken6-generator、linux-zenith-headers），所以頂得住；
+#        shiboken6-generator、linux-zen1th-headers），所以頂得住；
 #      · 因此 clang-git 的 provides 拿掉 clang-analyzer／clang-tools-extra 兩個虛名
 #        （產物裡沒有那些程式，留著就是讓 pacman 誤判依賴已滿足）；
 #      · NVPTX 移除後 `nvptx-arch` 也不會有了（mesa 用的 AMDGPU 與 llvmpipe 用的 X86 都留著）。

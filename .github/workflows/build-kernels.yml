@@ -1,6 +1,6 @@
 name: Build Kernels
 
-# 内核套件：编译一次动辄 150 分钟以上，linux-zenith 更久。
+# 内核套件：编译一次动辄 150 分钟以上，linux-zen1th 更久。
 # 上游内核一天最多发一版，每天查一次足够，跑太勤只是重复做同样的版本检测。
 #
 # concurrency 里保留 cancel-in-progress 只对 push / 手动触发生效：推代码时正在
@@ -73,8 +73,8 @@ jobs:
           {"key": "snd-pcsp-dkms", "repo_name": "snd-pcsp-dkms", "variant": "none"},
           {"key": "linux-zencjk", "repo_name": "linux-zencjk", "variant": "none"},
           {"key": "linux-ltscjk", "repo_name": "linux-ltscjk", "variant": "none"},
-          {"key": "linux-zenith-release", "repo_name": "linux-zenith", "variant": "release"},
-          {"key": "linux-zenith-rc", "repo_name": "linux-zenith", "variant": "rc"},
+          {"key": "linux-zen1th-release", "repo_name": "linux-zen1th", "variant": "release"},
+          {"key": "linux-zen1th-rc", "repo_name": "linux-zen1th", "variant": "rc"},
           {"key": "nvidia-utils-openrc", "repo_name": "nvidia-utils-openrc", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
           {"key": "nvidia-utils-beta", "repo_name": "nvidia-utils-beta", "variant": "none", "kind": "aur"},
           {"key": "nvidia-beta-dkms", "repo_name": "nvidia-beta-dkms", "variant": "none", "kind": "aur"}
