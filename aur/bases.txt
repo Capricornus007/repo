@@ -11,8 +11,8 @@
 # --- 內核系（走內容規則跟上游：Arch core/linux、zen-kernel tag、CachyOS/linux release）---
 linux-cjktty
 linux-cjktty-headers
-linux-zen1th
-linux-zen1th-headers
+# linux-zen1th* 不在 AUR：自有 CI（Capricornus007/linux-zen1th build.yml）出包，
+# 裝法是 release current-kernel + pacman -U，列在這裡只會天天 FAIL。
 # zencjk 的 AUR Maintainer 是 eeeeei，使用者是**共同維護者**（有寫入權，
 # 實測 git push --dry-run 過）。這種擁有權 RPC 查不出來，所以工具改成實測。
 linux-zencjk
