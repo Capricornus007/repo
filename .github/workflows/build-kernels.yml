@@ -73,8 +73,10 @@ jobs:
           {"key": "snd-pcsp-dkms", "repo_name": "snd-pcsp-dkms", "variant": "none"},
           {"key": "linux-zencjk", "repo_name": "linux-zencjk", "variant": "none"},
           {"key": "linux-ltscjk", "repo_name": "linux-ltscjk", "variant": "none"},
+          # 用戶 2026-11-08：刪掉 rc 軌（原 linux-zen1th-rc），只留 release 一條——
+          # zen1th 直追源碼（本倉 zen1th 整合分支、merge-bot 每日推 next 尖端，
+          # rc 階段代碼本來就在裡面），CachyOS -rc tag 那條來源對它已無意義。
           {"key": "linux-zen1th-release", "repo_name": "linux-zen1th", "variant": "release"},
-          {"key": "linux-zen1th-rc", "repo_name": "linux-zen1th", "variant": "rc"},
           {"key": "nvidia-utils-openrc", "repo_name": "nvidia-utils-openrc", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
           {"key": "nvidia-utils-beta", "repo_name": "nvidia-utils-beta", "variant": "none", "kind": "aur"},
           {"key": "nvidia-beta-dkms", "repo_name": "nvidia-beta-dkms", "variant": "none", "kind": "aur"}
