@@ -37,7 +37,7 @@
 #   與本包無關，這邊 pkgrel 從 1 起算，不照搬。
 
 pkgname=qoder-gui-cn
-pkgver=0.5.6
+pkgver=0.5.7
 pkgrel=4
 pkgdesc="Qoder - agent workbench for human and AI software teams (GUI, China build)"
 url="https://qoder.com.cn"
@@ -87,7 +87,7 @@ sha256sums=('SKIP')
 
 source_x86_64=("Qoder-CN-linux-x86_64-${pkgver}.rpm::https://static.qoder.com.cn/qoder-app/releases/${pkgver}/Qoder-CN-linux-x86_64.rpm")
 # 校驗和取自上面 manifest.json 中 id=linux-rpm-x64 的 sha256 欄位；CI 升版時同步改寫。
-sha256sums_x86_64=('6977044e07828511a76d8ef7ab830747fa2e97fff44154219988866d9b2b8e0f')
+sha256sums_x86_64=('6543c8658232a638532b86030db4630b9d5f6babee220409e4d7ff47322ff9e1')
 
 package() {
   local rpm="Qoder-CN-linux-x86_64-${pkgver}.rpm"
