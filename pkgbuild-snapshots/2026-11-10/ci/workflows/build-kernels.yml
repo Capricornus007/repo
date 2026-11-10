@@ -33,19 +33,22 @@ jobs:
       # 解析——註解只能寫在這裡（YAML 區），寫進方括號裡面會讓整條矩陣一起解析失敗
       # （2026-10-11 在 build-git-packages.yml 真的踩過：run #436 只剩 deploy 一顆 job）。
       #
-      # NVIDIA -beta 四顆（用戶 2026-10-11 點名全部進本倉，我方追蹤 #170）：
+      # NVIDIA -beta 六顆（用戶 2026-10-11 點名四顆進本倉，我方追蹤 #170；
+      # 2026-11-10 補 lib32-nvidia-utils-beta 兩顆，見下方矩陣註解）：
       # · 為什麼要自己出：Artix 的 world／lib32 與 Arch 的 extra／testing 都**只有
       #   stable 那條 nvidia**，查 nvidia-beta* 一律查無（實測 archlinux.org API 404、
       #   pacman -Si 在本機啟用的倉裡也查無）→ -beta 分支唯一的來源是 AUR。
       #   版號追隨 AUR：plan 步用 AUR RPC 取 Version，pkgver／pkgrel 拆開用。
-      # · ⚠️ **兩條矩陣＝四顆包**：AUR 的 nvidia-utils-beta 是 **split pkgbase**
+      # · ⚠️ **三條矩陣＝六顆包**：AUR 的 nvidia-utils-beta 是 **split pkgbase**
       #   （實查 ~/.cache/yay/nvidia-utils-beta 的 PKGBUILD 與 .SRCINFO：
       #   pkgname=('nvidia-utils-beta' 'opencl-nvidia-beta' 'nvidia-settings-beta')），
-      #   一次 makepkg 就產三顆；收集與 repo-add 那兩步都是 pkg_dir/*.pkg.tar.zst 的
-      #   glob，所以 split 不需要額外接點（llvm-git／gstreamer 同形）。
-      #   ⚠️ 千萬**別**再為 opencl-nvidia-beta／nvidia-settings-beta 各加一條矩陣：
-      #   AUR 的 git 倉是以 pkgbase 命名的，拿這兩個包名去 clone 會 404，而且同
-      #   pkgbase 並行會打出兩份同版本產物互相打架。
+      #   一次 makepkg 就產三顆；lib32-nvidia-utils-beta 也是 split pkgbase
+      #   （pkgname=('lib32-nvidia-utils-beta' 'lib32-opencl-nvidia-beta')），一次產兩顆。
+      #   收集與 repo-add 那兩步都是 pkg_dir/*.pkg.tar.zst 的 glob，所以 split 不需要
+      #   額外接點（llvm-git／gstreamer 同形）。
+      #   ⚠️ 千萬**別**再為 opencl-nvidia-beta／nvidia-settings-beta／
+      #   lib32-opencl-nvidia-beta 各加一條矩陣：AUR 的 git 倉是以 pkgbase 命名的，
+      #   拿這些包名去 clone 會 404，而且同 pkgbase 並行會打出兩份同版本產物互相打架。
       # · 本機那顆「nvidia-settings」就是 nvidia-settings-beta：pacman -Qi 是靠它的
       #   provides `nvidia-settings=615.78.08` 解析到的，Name 欄實測為
       #   nvidia-settings-beta，不是另一顆包、也不是 Arch 官方那顆。
@@ -65,19 +68,31 @@ jobs:
       #       就「One or more files did not pass the validity check」（run #225 實測）；
       #   (c) 「更新校验和并回推」的 giant if 只按 kind != 'aur' 排除，改用 artix 就還
       #       要把包名再點名加進那條已經很長的字串（21000 上限的地雷區）。
+      # · lib32-nvidia-utils-beta 為什麼 kind: aur 而不是 multilib：它需要 [multilib]
+      #   （32 位依賴）**和** junlin03-aur（depends 有 nvidia-utils-beta>=620.70.06，
+      #   那顆是本倉產物、不在任何官方倉）。kind: aur 一次給齊 junlin03-aur 掛源＋
+      #   --skipchecksums --nocheck＋回推排除；[multilib] 由 build-packages.yml 的
+      #   repo_name 點名啟用（與 spirv-llvm-translator-git 同一手法）。
+      #   不收 nvidia-beta／nvidia-open-beta／nvidia-open-egpu：前兩者 depends=('linux')
+      #   釘 Arch 官方核心，本機跑自訂核心（cjktty／zencjk／zen1th）用不了；egpu 那顆
+      #   依賴 stable nvidia-utils，與 beta 衝突。
       # · 掛低频線（本檔）而不是 155 項的 -git 線：NVIDIA 的 beta 分支不像 git 那樣
       #   天天動，每天查一次 AUR RPC 足夠；單輪還要下載 530MB＋409MB 的 .run。
       #   逐包的依賴與換代分析寫進 docs/in-tree-packages.md 的 NVIDIA -beta 段。
+      # 用戶 2026-11-08：linux-zen1th 刪掉 rc 軌（原 linux-zen1th-rc），只留 release 一條——
+      # zen1th 直追源碼（本倉 zen1th 整合分支、merge-bot 每日推 next 尖端，rc 階段代碼
+      # 本來就在裡面），CachyOS -rc tag 那條來源對它已無意義。
+      # ⚠️ packages 是 `packages: |` 的**純 JSON 字面塊**，下游用 fromJSON(inputs.packages)
+      # 解析——註解只能寫在這裡（YAML 區），寫進方括號裡面會讓整條矩陣一起解析失敗
+      # （2026-10-11 build-git-packages.yml run #436 踩過；2026-11-10 本次又踩一次）。
       packages: |
         [
           {"key": "snd-pcsp-dkms", "repo_name": "snd-pcsp-dkms", "variant": "none"},
           {"key": "linux-zencjk", "repo_name": "linux-zencjk", "variant": "none"},
           {"key": "linux-ltscjk", "repo_name": "linux-ltscjk", "variant": "none"},
-          # 用戶 2026-11-08：刪掉 rc 軌（原 linux-zen1th-rc），只留 release 一條——
-          # zen1th 直追源碼（本倉 zen1th 整合分支、merge-bot 每日推 next 尖端，
-          # rc 階段代碼本來就在裡面），CachyOS -rc tag 那條來源對它已無意義。
           {"key": "linux-zen1th-release", "repo_name": "linux-zen1th", "variant": "release"},
           {"key": "nvidia-utils-openrc", "repo_name": "nvidia-utils-openrc", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
           {"key": "nvidia-utils-beta", "repo_name": "nvidia-utils-beta", "variant": "none", "kind": "aur"},
-          {"key": "nvidia-beta-dkms", "repo_name": "nvidia-beta-dkms", "variant": "none", "kind": "aur"}
+          {"key": "nvidia-beta-dkms", "repo_name": "nvidia-beta-dkms", "variant": "none", "kind": "aur"},
+          {"key": "lib32-nvidia-utils-beta", "repo_name": "lib32-nvidia-utils-beta", "variant": "none", "kind": "aur"}
         ]

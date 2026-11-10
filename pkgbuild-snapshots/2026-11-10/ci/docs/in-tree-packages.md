@@ -470,7 +470,7 @@ split：llvm-libs／llvm／llvm-lit／compiler-rt／lld／lldb／clang）：
 
 ---
 
-## NVIDIA -beta 四顆（用戶 2026-10-11 點名全部進本倉，我方追蹤 #170）
+## NVIDIA -beta 六顆（用戶 2026-10-11 點名四顆進本倉，我方追蹤 #170；2026-11-10 補 lib32 兩顆）
 
 ⚠️ 先講清楚：**這四顆不是 in-tree 包**，本倉沒有它們的同名目錄，PKGBUILD 一律現取
 AUR。列進本檔只因為「拉取对应的套件仓库」那步給它們開了**顯式分支**（按 pkgbase
@@ -479,16 +479,32 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
   · **為什麼要自己出**：Artix 的 world／lib32 與 Arch 的 extra／testing 只有 stable
     那條 nvidia（615.78.08），`nvidia-beta*` 在 Arch 端 API 實測 404、在本機啟用的倉
     裡 `pacman -Si` 也查無 → -beta 分支唯一的來源是 AUR，版號只能追 AUR。
-  · **四顆包＝兩個 pkgbase（重要）**：實查 `~/.cache/yay/nvidia-utils-beta/` 的
+  · **六顆包＝三個 pkgbase（重要）**：實查 `~/.cache/yay/nvidia-utils-beta/` 的
     PKGBUILD 與 .SRCINFO，`pkgbase=nvidia-utils-beta`、
     `pkgname=('nvidia-utils-beta' 'opencl-nvidia-beta' 'nvidia-settings-beta')`，
-    一次 makepkg 產三顆；`nvidia-beta-dkms` 是另一個 pkgbase、只產一顆。
-    AUR 的 git 倉**以 pkgbase 命名**，所以矩陣只能有 `nvidia-utils-beta` 與
-    `nvidia-beta-dkms` 兩條；拿 `opencl-nvidia-beta`／`nvidia-settings-beta` 去
-    clone 會 404（AUR RPC 實查這兩個名字的 `PackageBase` 都是 `nvidia-utils-beta`），
-    而且同 pkgbase 並行會打出兩份同版本產物在 repo-add 那裡互相打架。
-    收集與 repo-add 都是 `pkg_dir/*.pkg.tar.zst` 的 glob，split 不需要額外接點
-    （llvm-git／gstreamer 同形）。
+    一次 makepkg 產三顆；`nvidia-beta-dkms` 是另一個 pkgbase、只產一顆；
+    `lib32-nvidia-utils-beta` 也是 split pkgbase，
+    `pkgname=('lib32-nvidia-utils-beta' 'lib32-opencl-nvidia-beta')`，一次產兩顆。
+    AUR 的 git 倉**以 pkgbase 命名**，所以矩陣只能有 `nvidia-utils-beta`、
+    `nvidia-beta-dkms`、`lib32-nvidia-utils-beta` 三條；拿 `opencl-nvidia-beta`／
+    `nvidia-settings-beta`／`lib32-opencl-nvidia-beta` 去 clone 會 404（AUR RPC 實查
+    這三個名字的 `PackageBase` 分別是 `nvidia-utils-beta`、`nvidia-utils-beta`、
+    `lib32-nvidia-utils-beta`），而且同 pkgbase 並行會打出兩份同版本產物在 repo-add
+    那裡互相打架。收集與 repo-add 都是 `pkg_dir/*.pkg.tar.zst` 的 glob，split 不需要
+    額外接點（llvm-git／gstreamer 同形）。
+  · **2026-11-10 補 lib32-nvidia-utils-beta 的理由**：本機 `lib32-nvidia-utils
+    615.78.08-1`（Artix lib32，packager ndowens）depends `nvidia-utils=615.78.08`
+    ——**等號**。64 位 beta 已到 620.70.06，`nvidia-utils-beta` 只 provides
+    `nvidia-utils=620.70.06`，換代窗口一到 32 位那顆就找不到提供者（Steam 等 32 位
+    程式會裝不上）。AUR 的 `lib32-nvidia-utils-beta` 620.70.06-1 depends
+    `nvidia-utils-beta>=620.70.06`（**大於等於**，不是等號），與本倉的 beta 線對齊。
+    它需要 [multilib]（32 位依賴）**和** junlin03-aur（`nvidia-utils-beta` 是本倉
+    產物、不在任何官方倉），所以 kind: aur（借用 junlin03-aur 掛源＋
+    `--skipchecksums --nocheck`＋回推排除），[multilib] 由 build-packages.yml 的
+    repo_name 點名啟用（與 spirv-llvm-translator-git 同一手法）。
+    不收 `nvidia-beta`／`nvidia-open-beta`／`nvidia-open-egpu`：前兩者
+    `depends=('linux')` 釘 Arch 官方核心，本機跑自訂核心（cjktty／zencjk／zen1th）
+    用不了；egpu 那顆依賴 stable `nvidia-utils`，與 beta 衝突。
   · **「本機裝的叫 nvidia-settings」是誤讀**：`pacman -Qi nvidia-settings` 是靠那顆的
     `provides = nvidia-settings=615.78.08` 解析過去的，實測 `%NAME%` 欄就是
     `nvidia-settings-beta`（DB 目錄 `/var/lib/pacman/local/nvidia-settings-beta-615.78.08-1`）。
@@ -517,9 +533,11 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
     註：「artix 容器不能裝 devtools」那條是另一回事——「初始化」的代碼是
     `kind != artix` 才加 devtools（run #356 的教訓），與本組包選 aur 的理由無關。
   · **依賴就緒門檻（本輪補的，不是既有機制）**：`nvidia-beta-dkms` 的 depends 有
-    `nvidia-utils-beta=${pkgver}`（**等號硬釘版號**）。本倉 plan 步既有的家族門檻只
-    `grep -- '-git$'`，抓不到這條沒有 -git 後綴的兄弟包 → 冷啟動時 `makepkg -s` 會
-    `target not found: nvidia-utils-beta` 直接判紅。已在 plan 的這條 case 點名補上
+    `nvidia-utils-beta=${pkgver}`（**等號硬釘版號**）；`lib32-nvidia-utils-beta` 的
+    depends 有 `nvidia-utils-beta>=${pkgver}`（**大於等於**）。那顆是同矩陣另一個 job
+    的產物、不在任何官方倉，冷啟動或 utils 那輪失敗時 `makepkg -s` 會
+    `target not found: nvidia-utils-beta` 直接判紅。本倉 plan 步既有的家族門檻只
+    `grep -- '-git$'`，抓不到這條沒有 -git 後綴的兄弟包 → 在這裡點名補上
     `pacman -Si nvidia-utils-beta` 沒過就 `skip`，與 KDE／Wayland 家族同一套
     「本輪跳過、靠排程按依賴 DAG 逐層收斂」。
   · **與本倉既有包的關係（實測，不是推測）**：
@@ -528,7 +546,8 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
         `provides` 有 `nvidia-utils=615.78.08` → 那條依賴照樣解得開，本機實測
         `pacman -Qi nvidia-utils-beta` 的 Required By 已含 `nvidia-utils-openrc`。
       - 本機 `lib32-nvidia-utils 615.78.08-1`（Artix lib32，packager ndowens）depends
-        `nvidia-utils=615.78.08`——**等號**，靠我們的 provides 滿足。
+        `nvidia-utils=615.78.08`——**等號**，靠我們的 provides 滿足。換代後由本倉
+        `lib32-nvidia-utils-beta` 接手（見上條）。
       - `wlroots-git`（**AUR**，本倉 2026-11-01 已刪掉 in-tree 那份）depends
         `opengl-driver`，`nvidia-utils-beta` 也 provides 它 → 多個提供者，合法，不破洞。
       - `nvidia-settings-beta` depends `nvidia-utils-beta>=615.78.08`、
@@ -538,6 +557,8 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
       1. **等號釘依賴的換代窗口**：AUR beta 抬到 616.x 而 Artix 的 `lib32-nvidia-utils`
          仍寫 `nvidia-utils=615.78.08` 時，那顆 32 位包會一時找不到提供者，直到 Artix
          同步抬版。目前兩邊都是 615.78.08，所以是未來風險、不是現況。
+         2026-11-10 已補 `lib32-nvidia-utils-beta` 進本倉，換代後可直接改裝它
+         （`pacman -S lib32-nvidia-utils-beta`），不必等 Artix 同步。
       2. **產物是在 Arch 容器裡建的**：`kind: aur` 的容器是 `archlinux:base-devel`
          （不能換 artix 容器：見上條 kind 說明，而且 artix 容器 + kind≠artix 會去裝
          devtools 而恆紅，run #356 實測）。這四顆都是「解包 NVIDIA 官方 .run 再 install」

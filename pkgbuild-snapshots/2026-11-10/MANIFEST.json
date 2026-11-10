@@ -1,6 +1,6 @@
 {
  "ci": {
-  "ci/docs/in-tree-packages.md": "392afec9cd15eb1e60db0bba03d8579616aaa72e8dd7b41accfb74aad3fda45b",
+  "ci/docs/in-tree-packages.md": "eaf647b2d2d90c83cd90c2166a3ba288115b058c6d83f6d1769ae015f8cf1f40",
   "ci/docs/upstream-pkgbuilds/clang.PKGBUILD": "3b569b3f056c6a857c285f7a6c2415ab8bdf9bdd40f4a46e4de2c76b273c7875",
   "ci/docs/upstream-pkgbuilds/compiler-rt.PKGBUILD": "825464ccac403e26ef5a35b06029c59809605beb751abfa832c6cff3ee9515b5",
   "ci/docs/upstream-pkgbuilds/doxygen.PKGBUILD": "cd7c1369450dd9b7de316d2b48644e1b90fea22542fd376bf048fab3826740e0",
@@ -21,9 +21,9 @@
   "ci/workflows/build-git-packages-3.yml": "25ef3518e011f2c0d085ff0454805a4ff7517d0980b2f6dbbe847fcaf9e38f37",
   "ci/workflows/build-git-packages-4.yml": "b3d9e9a3e570069f7fb0706e2cda3e1b4a639153548c52a3c7b3cdd47f452538",
   "ci/workflows/build-git-packages.yml": "439d04e52605cc6d4cf80fac9817c6e8564dc7c9198d0b6c14833f4cdc8dce62",
-  "ci/workflows/build-kernels.yml": "cb4a9d2e80621e73ed5723d10b0be1a3f8a3f7b9b936ffda1434c0193984995f",
+  "ci/workflows/build-kernels.yml": "a02c2dfce1d8f458eb323603fd2318e22f9891c404d0d49efb66b13742be533b",
   "ci/workflows/build-one-package.yml": "dac687388bcc1f63814c8bbb7b1f298e9d24d3438b558dec944dd08d58129115",
-  "ci/workflows/build-packages.yml": "6b384608be0781a00432339b7ba387e8a5cd8b3b15c53e68d38166d026065263",
+  "ci/workflows/build-packages.yml": "a2f2807092cbfe848eb526ac9859ec5a64eda747c69099f158a24731ebe0ccb2",
   "ci/workflows/build-restored.yml": "d9b8bf801357f1c466e99757510937af9c7fd181462451aef8ff5a333b8f71a4"
  },
  "date": "2026-11-10",
@@ -41,6 +41,14 @@
  ],
  "note": "每日自動快照：in-tree 包取 master 現檔，AUR 包取 AUR 現檔，外加 CI 定義檔。缺的 AUR 包列在 missing_aur（幽靈／改名包）。",
  "packages": {
+  "lib32-nvidia-utils-beta": {
+   "files": {
+    ".SRCINFO": "e6d583546515bbd76d7836f47c1def531da05066498f62dffedcc34012b38b49",
+    "PKGBUILD": "1e4d982efef99d798b3bdd8128777bf38dcf3c90b4073939ae79d39e821968e9"
+   },
+   "kind": "aur",
+   "source": "aur"
+  },
   "linux-zencjk": {
    "files": {
     ".SRCINFO": "661d1cef2cc454657bb84c2570426ce1c00dc65790405b0cd31a2213c83c281c",
