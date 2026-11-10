@@ -120,6 +120,7 @@ jobs:
           # 重複的 [arch4edu] 區段（pacman 會直接報 duplicate repository）。
 
           if [ "${{ matrix.kind }}" = 'kde' ] || [ "${{ matrix.kind }}" = 'wayland' ] || [ "${{ matrix.kind }}" = 'aur' ] \
+             || [ "${{ matrix.repo_name }}" = 'lib32-nvidia-utils-beta' ] \
              || [ "${{ matrix.repo_name }}" = 'tk-git' ] \
              || [ "${{ matrix.repo_name }}" = 'mesa-tkg-git' ] \
              || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ] \
@@ -207,7 +208,8 @@ jobs:
           fi
 
           if [ "${{ matrix.kind }}" = 'multilib' ] \
-             || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ]; then
+             || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'lib32-nvidia-utils-beta' ]; then
             # spirv-llvm-translator-git 現在多切一顆 lib32-spirv-llvm-translator-git，
             # 而容器預設不啟用 [multilib]（run #471 實測 target not found: lib32-spirv-tools）。
             # lib32-* 需要 [multilib] 倉：容器預設只有 core/extra 且 [multilib] 是註解掉的。
@@ -979,13 +981,15 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            nvidia-utils-beta|nvidia-beta-dkms)
+            nvidia-utils-beta|nvidia-beta-dkms|lib32-nvidia-utils-beta)
               # NVIDIA -beta：來源就是 AUR（Artix／Arch 全部啟用的倉都沒有 -beta 這條，
-              # 實測 archlinux.org API 404）。兩條各是一個 pkgbase；nvidia-utils-beta 一顆
+              # 實測 archlinux.org API 404）。三條各是一個 pkgbase；nvidia-utils-beta 一顆
               # pkgbase 產三顆 split（nvidia-utils-beta／opencl-nvidia-beta／
-              # nvidia-settings-beta），所以這裡**只准按 pkgbase clone**——拿 split 的包名
-              # 來 clone 會 404。逐包理由與依賴／換代分析見 docs/in-tree-packages.md 的
-              # NVIDIA -beta 段（這個 step 的說明不寫在 workflow 裡）。
+              # nvidia-settings-beta），lib32-nvidia-utils-beta 一顆 pkgbase 產兩顆 split
+              # （lib32-nvidia-utils-beta／lib32-opencl-nvidia-beta），所以這裡**只准按
+              # pkgbase clone**——拿 split 的包名來 clone 會 404。逐包理由與依賴／換代
+              # 分析見 docs/in-tree-packages.md 的 NVIDIA -beta 段（這個 step 的說明不寫
+              # 在 workflow 裡）。
               _aur_clone pkg_dir "https://aur.archlinux.org/${{ matrix.repo_name }}.git" ;;
             *)
               # AUR 包或本仓库维护的 -git 包：
@@ -1620,7 +1624,7 @@ jobs:
               [ -n "$TARGET_PKGVER" ] || skip "拿不到 latest_stable 版本号"
               ;;
 
-            nvidia-utils-beta|nvidia-beta-dkms)
+            nvidia-utils-beta|nvidia-beta-dkms|lib32-nvidia-utils-beta)
               # NVIDIA -beta 四顆（用戶 2026-10-11 點名，#170）。版號權威來源只有 AUR：
               # Artix world／lib32 與 Arch extra／testing 都只有 stable 那條，查
               # nvidia-beta* 全查無 → 不能拿 Arch 打包倉當地雷版來源（實測 API 404）。
@@ -1653,15 +1657,19 @@ jobs:
               # 資產名比對，AUR 只抬 pkgrel 時我們也照樣重建。
               #
               # 依賴就緒門檻：nvidia-beta-dkms 的 depends 有 `nvidia-utils-beta=${pkgver}`
-              # （**等號硬釘**）。那顆是同矩陣另一個 job 的產物、不在任何官方倉，冷啟動
-              # 或 utils 那輪失敗時 makepkg -s 會 `target not found` 直接判紅。本倉既有的
-              # 「-git 依賴門檻」只 grep `-git$`（plan 步通用分支），抓不到這條名字沒有
-              # -git 後綴的兄弟包 → 在這裡點名補上，讓它跟 KDE／Wayland 家族一樣
-              # 「本輪跳過等下輪」，靠排程按依賴 DAG 逐層收斂。
-              if [ "$PKG" = nvidia-beta-dkms ]; then
-                pacman -Si -- nvidia-utils-beta >/dev/null 2>&1 \
-                  || skip "nvidia-utils-beta 尚未發布到 junlin03-aur（本包 depends 硬釘它），本轮跳过等下轮"
-              fi
+              # （**等號硬釘**）；lib32-nvidia-utils-beta 的 depends 有
+              # `nvidia-utils-beta>=${pkgver}`（**大於等於**）。那顆是同矩陣另一個 job 的
+              # 產物、不在任何官方倉，冷啟動或 utils 那輪失敗時 makepkg -s 會
+              # `target not found` 直接判紅。本倉既有的「-git 依賴門檻」只 grep `-git$`
+              # （plan 步通用分支），抓不到這條名字沒有 -git 後綴的兄弟包 → 在這裡點名
+              # 補上，讓它跟 KDE／Wayland 家族一樣「本輪跳過等下輪」，靠排程按依賴 DAG
+              # 逐層收斂。
+              case "$PKG" in
+                nvidia-beta-dkms|lib32-nvidia-utils-beta)
+                  pacman -Si -- nvidia-utils-beta >/dev/null 2>&1 \
+                    || skip "nvidia-utils-beta 尚未發布到 junlin03-aur（本包 depends 硬釘它），本轮跳过等下轮"
+                  ;;
+              esac
               ;;
 
             linux-zen1th)
@@ -3741,6 +3749,11 @@ jobs:
             # Element 官方 HTTPS 仓库，跳过校验和不损失信任（用户指示：
             # sums 能跳过就跳过）
             flags="$flags --skipchecksums"
+          elif [ "${{ matrix.repo_name }}" = 'lib32-nvidia-utils-beta' ]; then
+            # AUR 的輔助檔 sha256 是維護者手寫、會過時；來源本身就是 AUR 的 HTTPS git 倉，
+            # 跳過校驗和不另增信任面（與 kind:aur 同一理由）。這顆不是 kind:aur 是因為
+            # 它需要 [multilib]，所以在這裡點名給同一組旗標。
+            flags="$flags --skipchecksums --nocheck"
           elif [ "${{ matrix.kind }}" = 'aur' ]; then
             # AUR 的輔助檔 sha256 是維護者手寫、會過時：pi-coding-agent-git 的
             # pi-wrapper 聲明 3667009d…，AUR 倉裡實際檔案是 13a511a7…（實測
