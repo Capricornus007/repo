@@ -1441,7 +1441,7 @@ jobs:
             (cd "/build/aur-deps/${aur_pkg}" && su builder -c 'makepkg -si --noconfirm --needed --asdeps')
           done
 
-      - name: 把容器的 libplacebo 換成自有 libplacebo-git（ffmpeg-full-git 重鏈 387）
+      - name: 把容器的 libplacebo 換成自有 libplacebo-git（ffmpeg-full-git 重鏈）
         if: matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true'
         run: |
           set -uo pipefail
@@ -1490,9 +1490,10 @@ jobs:
             echo "::error::makepkg 的 deptest 仍認為缺：$_miss —— 裸名又被同步庫搶走了"
             exit 1
           fi
-          [ -e /usr/lib/libplacebo.so.387 ] \
-            || { echo "::error::/usr/lib/libplacebo.so.387 不在，裝的不是本倉那顆"; exit 1; }
-          echo "::notice::ffmpeg-full-git 的 libplacebo 已換成本倉（$(pkg-config --modversion libplacebo 2>/dev/null || echo 查不到)），重鏈後才是 .so.387"
+          _lpso="$(pacman -Ql libplacebo-git 2>/dev/null | awk '/\/usr\/lib\/libplacebo\.so\.[0-9]+$/ {print $2}' | head -n1)"
+          [ -n "$_lpso" ] && [ -e "$_lpso" ] \
+            || { echo "::error::libplacebo-git 沒有裝出 /usr/lib/libplacebo.so.N（上游 API version 換代了？）"; exit 1; }
+          echo "::notice::ffmpeg-full-git 的 libplacebo 已換成本倉（$(pkg-config --modversion libplacebo 2>/dev/null || echo 查不到)），重鏈後吃 $(basename "$_lpso")"
 
       - name: 云端编译 ffmpeg-full-git
         if: matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true'
@@ -3601,9 +3602,10 @@ jobs:
             echo "::error::pkg-config 回報 ${_ver:-空}，低於 mpv 要的 7.387.0——換包沒生效"
             exit 1
           fi
-          [ -e /usr/lib/libplacebo.so.387 ] \
-            || { echo "::error::/usr/lib/libplacebo.so.387 不在，裝的不是本倉那顆"; exit 1; }
-          echo "::notice::libplacebo 已換成本倉 ${_ver}，mpv 的 >=7.387.0 閘門這輪才可能過"
+          _lpso="$(pacman -Ql libplacebo-git 2>/dev/null | awk '/\/usr\/lib\/libplacebo\.so\.[0-9]+$/ {print $2}' | head -n1)"
+          [ -n "$_lpso" ] && [ -e "$_lpso" ] \
+            || { echo "::error::libplacebo-git 沒有裝出 /usr/lib/libplacebo.so.N（上游 API version 換代了？）"; exit 1; }
+          echo "::notice::libplacebo 已換成本倉 ${_ver}（$(basename "$_lpso")），mpv 的 >=7.387.0 閘門這輪才可能過"
 
       - name: 安裝 libevent 2.2 建置鏈
         if: contains(fromJSON('["links-git","unbound-git","fstrm-git","libverto-git"]'), matrix.repo_name) && steps.plan.outputs.build == 'true'
