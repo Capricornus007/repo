@@ -1326,18 +1326,20 @@ jobs:
               printf "\n%s\n" "makedepends+=('check')" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
 
-            linux-zen1th)
-              # DEBUG_INFO_BTF 在 Kconfig 裡 depends on PAHOLE_VERSION >= 122
-              # （lib/Kconfig.debug 實查），而 pahole-version.sh 對不存在的
-              # pahole 回 0 → olddefconfig 靜默把 BTF 丟掉 → PKGBUILD 的
-              # 開機自檢「config 自檢失敗：CONFIG_DEBUG_INFO_BTF=y」直接紅
-              # （run 42815488315 實測）。PKGBUILD 的 makedepends 沒列 pahole
-              # （本機裝了所以本地編譯沒事），補進去讓 makepkg -s 裝上。
-              printf "\n%s\n" "makedepends+=('pahole')" >> pkg_dir/PKGBUILD
-              tail -2 pkg_dir/PKGBUILD ;;
-
             *) : ;;
           esac
+      - name: linux-zen1th 補 pahole 進 makedepends（獨立 step——大 step 已貼著 21000 表達式上限）
+        if: matrix.repo_name == 'linux-zen1th'
+        run: |
+          set -euo pipefail
+          # DEBUG_INFO_BTF 在 Kconfig 裡 depends on PAHOLE_VERSION >= 122
+          # （lib/Kconfig.debug 實查），而 pahole-version.sh 對不存在的
+          # pahole 回 0 → olddefconfig 靜默把 BTF 丟掉 → PKGBUILD 的
+          # 開機自檢「config 自檢失敗：CONFIG_DEBUG_INFO_BTF=y」直接紅
+          # （run 42815488315 實測）。PKGBUILD 的 makedepends 沒列 pahole
+          # （本機裝了所以本地編譯沒事），補進去讓 makepkg -s 裝上。
+          printf "\n%s\n" "makedepends+=('pahole')" >> pkg_dir/PKGBUILD
+          tail -2 pkg_dir/PKGBUILD
       - name: i3lock-color-git 的 fancy×color 合一（獨立 step——大 step 已貼著 21000 表達式上限）
         if: matrix.repo_name == 'i3lock-color-git'
         run: |
