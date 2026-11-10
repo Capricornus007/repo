@@ -79,24 +79,20 @@ jobs:
       # · 掛低频線（本檔）而不是 155 項的 -git 線：NVIDIA 的 beta 分支不像 git 那樣
       #   天天動，每天查一次 AUR RPC 足夠；單輪還要下載 530MB＋409MB 的 .run。
       #   逐包的依賴與換代分析寫進 docs/in-tree-packages.md 的 NVIDIA -beta 段。
+      # 用戶 2026-11-08：linux-zen1th 刪掉 rc 軌（原 linux-zen1th-rc），只留 release 一條——
+      # zen1th 直追源碼（本倉 zen1th 整合分支、merge-bot 每日推 next 尖端，rc 階段代碼
+      # 本來就在裡面），CachyOS -rc tag 那條來源對它已無意義。
+      # ⚠️ packages 是 `packages: |` 的**純 JSON 字面塊**，下游用 fromJSON(inputs.packages)
+      # 解析——註解只能寫在這裡（YAML 區），寫進方括號裡面會讓整條矩陣一起解析失敗
+      # （2026-10-11 build-git-packages.yml run #436 踩過；2026-11-10 本次又踩一次）。
       packages: |
         [
           {"key": "snd-pcsp-dkms", "repo_name": "snd-pcsp-dkms", "variant": "none"},
           {"key": "linux-zencjk", "repo_name": "linux-zencjk", "variant": "none"},
           {"key": "linux-ltscjk", "repo_name": "linux-ltscjk", "variant": "none"},
-          # 用戶 2026-11-08：刪掉 rc 軌（原 linux-zen1th-rc），只留 release 一條——
-          # zen1th 直追源碼（本倉 zen1th 整合分支、merge-bot 每日推 next 尖端，
-          # rc 階段代碼本來就在裡面），CachyOS -rc tag 那條來源對它已無意義。
           {"key": "linux-zen1th-release", "repo_name": "linux-zen1th", "variant": "release"},
           {"key": "nvidia-utils-openrc", "repo_name": "nvidia-utils-openrc", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
           {"key": "nvidia-utils-beta", "repo_name": "nvidia-utils-beta", "variant": "none", "kind": "aur"},
           {"key": "nvidia-beta-dkms", "repo_name": "nvidia-beta-dkms", "variant": "none", "kind": "aur"},
-          # lib32-nvidia-utils-beta（2026-11-10 補）：AUR 上一個 pkgbase 產兩顆 split
-          # （lib32-nvidia-utils-beta／lib32-opencl-nvidia-beta）。kind: aur 借用
-          # junlin03-aur 掛源（depends 有 nvidia-utils-beta>=620.70.06）＋ --skipchecksums
-          # --nocheck；[multilib] 由 build-packages.yml 的 repo_name 點名啟用。
-          # 不收 nvidia-beta／nvidia-open-beta／nvidia-open-egpu：前兩者 depends=('linux')
-          # 釘 Arch 官方核心，本機跑自訂核心（cjktty／zencjk／zen1th）用不了；egpu 那顆
-          # 依賴 stable nvidia-utils，與 beta 衝突。
           {"key": "lib32-nvidia-utils-beta", "repo_name": "lib32-nvidia-utils-beta", "variant": "none", "kind": "aur"}
         ]
