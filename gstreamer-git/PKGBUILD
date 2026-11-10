@@ -239,8 +239,9 @@ source=(
   # Disable broken tests
   0001-HACK-meson-Disable-broken-tests.patch
 
-  # https://gitlab.freedesktop.org/gstreamer/gstreamer/-/merge_requests/12148
-  0002-faac-support-faac-2.0-faac_-API.patch
+  # 2026-11-10：上游 MR !12148（faac 2.0/2.2 API）已於 2026-11-05 原生合入
+  # master（d7bd5be5d8/a1a577609d/252c271a2e），本補丁反致 git apply -3 三路
+  # 衝突（run 42858743054 job 129980507105 實測），移除。
 
   # 2026-10-12：關掉 gst-editing-services 那條穩定失敗的 validate 場景（實測依據寫在檔頭）
   0003-ges-disable-regressed-complex_effect_bin_desc.patch
@@ -252,7 +253,6 @@ source=(
 )
 b2sums=('SKIP'
         'c1b7b342e157e7605cd2392c09700ddb2f22cb52f434e2c34d682178f1e637c80da1b09225cedef4d7204d64c3bd537358e26fd2e78d70f9323372725fe981d9'
-        '4e425222d8fd1fc3c49750ad4920433e3b298698e96e714fb9d6f887ac62509f2b187a131fa31da53dcedd2a150ca59d3bd7d7519b7df91a0cff90c65094edbc'
         'd60c16957822f98c553c009bc9f2275a3d7691a2491ec9cb37e219ec120b718457a07ab3b4ac0b1aa5f3fb6e5f6850bf62ee7690c699545039b3042a01cdf23a'
         '111c302d03fab89568cfc845b4e38f041dd81c76b999f67ce782447d84b10eaeb1ba4f6012e5343d73ade50293dda853b24d100516598a29c684a6e3d1b6ce68')
 validpgpkeys=(
