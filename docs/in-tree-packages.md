@@ -2313,3 +2313,17 @@ nashira-git 的掛源點名也一併拿掉（它不再吃本倉的 jbr21）。**
 - **驗證**：`bun run build` 通過、`main bundle is self-contained`；makepkg 全流程與
   `check()` 綠，成品 app.asar 內可查到 zh-TW 語系與正體字串。
 
+
+
+## perchai-cli：進 CI、不進 pacman 包（2026-11-08 用戶點名，2026-11-12 落地）
+使用者原話：「把 `npm install -g perchai-cli` 這個加進自動構建倉庫去吧？就不用加到我電腦裡了」。
+落地成 `.github/workflows/perch-cli-toolchain.yml`：`workflow_dispatch` ＋每天排程，
+`sudo npm install -g perchai-cli@latest`（版本永遠取 npm registry 的 `dist-tags.latest`），
+裝完驗證 `perch` 在 PATH 並印出實際裝到的版本。
+
+**為什麼不是一個 in-tree 包**：查官方 registry 的 `perchai-cli@2.4.129`，
+`license: SEE LICENSE IN LICENSE`，把 tarball 的 `package/LICENSE` 解開是
+「Perch AI CLI Proprietary License」，明文禁止 copy／modify／distribute／sublicense。
+做成 `current-repo` 上可下載的 `.pkg.tar.zst` 會構成再散布，所以不上矩陣、
+不進 `junlin03-aur`、不上傳任何二進位資產，也不在使用者電腦安裝。
+若上游日後換成允許再散布的授權，再照 `omnirush-cli/` 的 npm 包範本評估。

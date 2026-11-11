@@ -62,3 +62,11 @@
       原生選單／托盤／設定字典。已本機 makepkg 驗證，待首輪 CI 與實機操作確認。
 - [ ] 實機回訪：在 omp-gui 刪一個服務商，確認對話框立即關閉、CLI 仍可下指令；
       切到「繁體中文」逐頁看有無漏翻／過度翻譯／專有名詞被翻。
+- [x] `npm install -g perchai-cli` 已加進自動構建倉庫：`.github/workflows/perch-cli-toolchain.yml`
+      （CI runner 內裝 dist-tags.latest 並驗證，不裝到本機、不發布資產）。
+      **不做成 pacman 包**：上游 LICENSE 是專有授權，明文禁止 copy/modify/distribute，
+      做成可下載套件會構成再散布；若日後授權放寬再評估。
+- [x] 本機 `zcode-ce-git` 已從 3.16.2.ce.1.r523 升到 3.17.2.ce.1.r457.gdf5e6ab7
+      （junlin03-aur 既有資產）；對應 PKGBUILD 2026-11-11 已改跟 CE main。
+- [x] 單包 CI run 43084561874 的 `oh-my-pi-gui-git` build job success；
+      取消 18:41 的舊 shard2 run，避免舊版（無修補）deploy 覆蓋新版。
