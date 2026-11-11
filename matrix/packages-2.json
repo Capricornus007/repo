@@ -1087,8 +1087,8 @@
     "in_tree": true
   },
   {
-    "key": "hermes-agent-git",
-    "repo_name": "hermes-agent-git",
+    "key": "oh-my-pi-gui-git",
+    "repo_name": "oh-my-pi-gui-git",
     "variant": "none",
     "in_tree": true
   }

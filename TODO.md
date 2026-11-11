@@ -45,3 +45,15 @@
       `qoder_amd64.deb`）、CN GUI 的 manifest 根本沒有 linux arm64 產物 → 兩個 GUI 包
       `arch=('x86_64')` 如實標。CLI 兩包上游有 arm64 tarball，但 CI 矩陣只有 x86_64
       runner，實際只出 x86_64；哪天要補 aarch64，得先解決「沒有 arm64 runner」這件事。
+
+## 2026-11-12（hermes-agent-git 退役／oh-my-pi-gui-git 上線）
+- [x] 移除 `hermes-agent-git/`、`matrix/packages-2.json` 條目、`build-packages.yml` 的
+      updpkgsums 例外改名、in-tree 文件段落；release 上的舊包資產與 DB／files DB 條目一併摘掉。
+- [x] 新增 `oh-my-pi-gui-git/`（main HEAD 現場編 GUI＋官方 release 的已驗章 sidecar），
+      本機 `makepkg` 全流程、`check()` 實跑綠後 `pacman -U` 安裝。
+- [ ] 盯首輪 CI：`build-one-package.yml` 對 `oh-my-pi-gui-git` 的 plan／建置／repo-add／
+      release 資產是否全綠；CI 容器若缺 `bun`／`python` 或擋 GitHub release 下載，
+      要照容器實際環境補 makedepends，不准改成追 release tag 的 `-bin` 假 `-git`。
+- [ ] 前面 2026-09-18 那批 Qoder 待辦（首輪 CI 監視、CN CLI/GUI desktop 命名實機核對、
+      AUR 同名包 provides/conflicts 取捨、補全列屬上游命名地雷、release 體積、arm64 覆蓋）
+      維持原狀：其中有「需要用戶拍板」的項目，未經確認不擅自改。

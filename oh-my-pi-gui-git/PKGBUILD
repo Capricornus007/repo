@@ -1,0 +1,207 @@
+# Maintainer: Capricornus007
+# 2026-11-12 in-tree 新增（用戶指示）：以 -git 形式跟 nornzach/oh-my-pi-gui 的 main HEAD，
+# 取代原本的 hermes-agent-git。
+#
+# 本配方（PKGBUILD 本身）依使用者全域規則採 The Better WTFPL (TBWTFPL) v114514：
+#   https://github.com/Capricornus007/tbwtfpl/blob/main/LICENSE
+# 被打包的軟體本身仍是上游的 MIT（見 package() 裝進 /usr/share/licenses 的 LICENSE），
+# 不因打包而改授權；Electron／Chromium 的授權檔由 electron-builder 自帶在 /opt 內。
+#
+# ── 為什麼是「真 -git」而不是 -bin 改名 ───────────────────────────────────────
+# AUR 查無 oh-my-pi-gui / oh-my-pi-gui-git（2026-11-12 查 aur RPC resultcount=0），
+# 上游發 release 很勤（v0.9.40 於 2026-11-10），但 main HEAD 比 release 多提交。
+# 這裡的 GUI 本體（main／preload／renderer → app.asar）一律從 main HEAD 現場編譯：
+#   bun install --frozen-lockfile → bun run build → electron-builder --linux --dir
+# 只有「內嵌的 omp agent sidecar」取官方 Linux release 的預編二進位，理由見下。
+#
+# ── 為什麼 sidecar 不能現場編 ────────────────────────────────────────────────
+# 上游 README／AGENTS.md 明講：單獨 clone 的 GUI 倉不能編 sidecar，它必須放在
+# nornzach/oh-my-pi 這個 monorepo 的 packages/gui/ 底下（需要 packages/coding-agent、
+# packages/natives、Rust toolchain、pi-natives 的 npm leaf 或原始碼編譯）。
+# 上游自己給的合法替代路線是「把可信且相容的預編 sidecar 放到 resources/omp，
+# 再跑 build 與打包」——release-linux.yml 也是這樣組裝 Linux 產物的。
+# 因此 prepare() 從官方 release 取 omp_<ver>_amd64.deb，抽出 /opt/omp/resources/omp，
+# 並用同 release 的 latest-linux.yml 的 sha512 驗完整性（不用 AUR／第三方鏡像）。
+# 下載網址由 `/releases/latest/download/latest-linux.yml` 內的 version 現算，
+# 所以上游發新版時配方不必改；sha512 不符或資產消失就讓建置紅，絕不靜默降級。
+#
+# ── 與 oh-my-pi-git 的關係 ───────────────────────────────────────────────────
+# 本包自帶 sidecar，不依賴系統的 omp；兩者檔案不重疊（本包出 /usr/bin/omp-gui
+# 與 /opt/oh-my-pi-gui-git，oh-my-pi-git 出 /usr/bin/omp），可以同時安裝。
+# 上游 deb 的 desktop 用 /opt/omp/omp-gui；這裡改指自有安裝根，避免與日後
+# 任何 -bin 版或手動解 deb 的人互相覆蓋，也讓 pacman 能完整擁有檔案。
+
+pkgname=oh-my-pi-gui-git
+pkgver=0.9.40.r2.g6c5dfcc
+pkgrel=1
+pkgdesc='Desktop GUI for the omp coding agent (git build from upstream main HEAD)'
+arch=('x86_64')
+url='https://github.com/nornzach/oh-my-pi-gui'
+license=('MIT')
+depends=(
+  # Electron 36 執行期：映射上游 deb control 的 Depends，加上 Arch 上 Electron
+  # 會 dlopen 的庫（namcap 看不到 dlopen，但實機缺了就開不起來）。
+  'alsa-lib' 'at-spi2-core' 'cairo' 'dbus' 'expat' 'gcc-libs' 'gdk-pixbuf2'
+  'glib2' 'glibc' 'gtk3' 'hicolor-icon-theme' 'libcups' 'libdrm' 'libglvnd'
+  'libnotify' 'libsecret' 'libx11' 'libxcb' 'libxcomposite' 'libxdamage'
+  'libxext' 'libxfixes' 'libxkbcommon' 'libxrandr' 'libxss' 'libxtst'
+  'mesa' 'nspr' 'nss' 'pango' 'util-linux-libs' 'xdg-utils' 'xz'
+)
+makedepends=(
+  'git' 'bun' 'nodejs' 'npm' 'python' 'curl' 'libarchive'
+  # bun install / electron-builder 的下載與快取都導到 $srcdir，不碰家目錄。
+)
+optdepends=('libappindicator-gtk3: tray icon support')
+options=('!strip' '!debug')   # Electron 與 sidecar 是預編 ELF，strip 只會毀掉它們
+provides=('omp-gui')
+conflicts=('omp-gui')
+
+source=('git+https://github.com/nornzach/oh-my-pi-gui.git#branch=main')
+sha256sums=('SKIP')
+
+# 與上游 tag 同形：<tag 去 v>.r<距離>.g<hash>，例如 v0.9.40-2-g6c5dfcc
+# → 0.9.40.r2.g6c5dfcc。CI 的 plan 步（通用 -git 分支）會 clone 第一個 git+
+# 來源後跑同一支 pkgver()，公式必須逐字一致，否則「產物已在 release 裡」
+# 永遠比不中、每輪白編。
+pkgver() {
+  cd oh-my-pi-gui || return 1
+  git describe --tags --long --abbrev=7 | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+# 官方 release 的 Linux sidecar：網址與校驗都從官方端點現取，不寫死版本。
+_fetch_official_sidecar() {
+  local _yml="${srcdir}/latest-linux.yml" _deb="${srcdir}/omp-official.deb"
+  local _rel _debname _want _got _sha512_b64
+
+  curl -fsSL --retry 5 --retry-delay 10 --connect-timeout 30 \
+    'https://github.com/nornzach/oh-my-pi-gui/releases/latest/download/latest-linux.yml' \
+    -o "${_yml}" || {
+      echo 'FATAL: 拿不到官方 latest-linux.yml' >&2; return 1; }
+
+  _rel=$(sed -n 's/^version: //p' "${_yml}" | tr -d "'\"[:space:]" | head -n1)
+  case "${_rel}" in
+    ''|*[!0-9.]*) echo "FATAL: latest-linux.yml 的 version 不合法（=${_rel}）" >&2; return 1 ;;
+  esac
+  _debname="omp_${_rel}_amd64.deb"
+
+  # yml 裡有兩條 files（AppImage 與 deb）；從 deb 那條 url 往後取第一個 sha512。
+  _sha512_b64=$(awk -v n="${_debname}" '
+    index($0, "url: " n) { found=1 }
+    found && /sha512:/ { print $2; exit }' "${_yml}")
+  case "${_sha512_b64}" in
+    ''|*[!A-Za-z0-9+/=]*) echo "FATAL: ${_debname} 在 latest-linux.yml 裡沒有 sha512" >&2; return 1 ;;
+  esac
+
+  curl -fL --retry 5 --retry-delay 10 --connect-timeout 30 \
+    "https://github.com/nornzach/oh-my-pi-gui/releases/download/v${_rel}/${_debname}" \
+    -o "${_deb}" || {
+      echo "FATAL: 下載官方 ${_debname} 失敗（release v${_rel} 資產改變了？）" >&2; return 1; }
+
+  _got=$(sha512sum "${_deb}" | cut -d' ' -f1)
+  _want=$(printf '%s' "${_sha512_b64}" | base64 -d | od -An -tx1 | tr -d ' \n')
+  if [ "${_got}" != "${_want}" ]; then
+    echo "FATAL: ${_debname} 的 sha512 與官方 latest-linux.yml 不符" >&2
+    echo "  官方=${_want}" >&2; echo "  實得=${_got}" >&2
+    return 1
+  fi
+  echo "官方 sidecar 來源：release v${_rel} / ${_debname}（sha512 已核對）"
+
+  rm -rf "${srcdir}/debroot"
+  install -d "${srcdir}/debroot"
+  bsdtar -xOf "${_deb}" data.tar.xz \
+    | bsdtar -xf - -C "${srcdir}/debroot" ./opt/omp/resources/omp
+  [ -s "${srcdir}/debroot/opt/omp/resources/omp" ] || {
+    echo 'FATAL: 官方 deb 裡沒有 /opt/omp/resources/omp' >&2; return 1; }
+  install -Dm755 "${srcdir}/debroot/opt/omp/resources/omp" \
+    "${srcdir}/oh-my-pi-gui/resources/omp"
+  file "${srcdir}/oh-my-pi-gui/resources/omp" | grep -q 'ELF 64-bit' || {
+    echo 'FATAL: 取出的 sidecar 不是 x86-64 ELF' >&2; return 1; }
+}
+
+prepare() {
+  cd oh-my-pi-gui || return 1
+  _fetch_official_sidecar
+
+  # 所有快取留在 srcdir：CI 容器與本機都不留 ~/.bun、~/.cache/electron 殘渣。
+  export BUN_INSTALL_CACHE_DIR="${srcdir}/bun-cache"
+  export npm_config_cache="${srcdir}/npm-cache"
+  export ELECTRON_CACHE="${srcdir}/electron-cache"
+  export XDG_CACHE_HOME="${srcdir}/xdg-cache"
+  install -d "${BUN_INSTALL_CACHE_DIR}" "${npm_config_cache}" "${ELECTRON_CACHE}" "${XDG_CACHE_HOME}"
+
+  # frozen lockfile：上游 bun.lock 與 package.json 不同步時必須紅，不許偷換依賴樹。
+  bun install --frozen-lockfile
+}
+
+build() {
+  cd oh-my-pi-gui || return 1
+  export BUN_INSTALL_CACHE_DIR="${srcdir}/bun-cache"
+  export npm_config_cache="${srcdir}/npm-cache"
+  export ELECTRON_CACHE="${srcdir}/electron-cache"
+  export XDG_CACHE_HOME="${srcdir}/xdg-cache"
+
+  # electron-vite build + 上游自己的「main bundle 不得殘留裸 import」自檢。
+  bun run build
+
+  # --dir 只產 linux-unpacked，不需要 fpm／appimagetool；extraResources 會把
+  # prepare() 放好的 resources/omp 一起帶進 resources/。
+  # 用 bun 起 cli.js：上游 release-linux.yml 的註記實測 bunx shim 會退化成 Node，
+  # 在 ESM 依賴上會炸（issue #10）。
+  bun node_modules/electron-builder/cli.js \
+    --config electron-builder.yml --linux --dir --publish never
+}
+
+check() {
+  cd oh-my-pi-gui || return 1
+  [ -f dist/linux-unpacked/resources/app.asar ] || {
+    echo 'FATAL: app.asar 不存在，這包裝上去開不了視窗' >&2; return 1; }
+  [ -x dist/linux-unpacked/omp-gui ] || {
+    echo 'FATAL: Electron 主程式不存在或不可執行' >&2; return 1; }
+  # 實跑閘口：只「編得出來」不夠，內嵌 agent 必須真的能應答版本。
+  dist/linux-unpacked/resources/omp --version
+}
+
+package() {
+  cd oh-my-pi-gui || return 1
+
+  install -d "${pkgdir}/opt/oh-my-pi-gui-git"
+  cp -a dist/linux-unpacked/. "${pkgdir}/opt/oh-my-pi-gui-git/"
+  chmod 755 "${pkgdir}/opt/oh-my-pi-gui-git/omp-gui" \
+             "${pkgdir}/opt/oh-my-pi-gui-git/resources/omp"
+  # Electron 的 userns sandbox 需要 root-owned setuid helper；pacman 裝檔時會把
+  # owner 設成 root，這裡先把 mode 標好，否則一般使用者啟動會掉回 --no-sandbox。
+  chmod 4755 "${pkgdir}/opt/oh-my-pi-gui-git/chrome-sandbox"
+
+  install -d "${pkgdir}/usr/bin"
+  printf '#!/usr/bin/env bash\nexec /opt/oh-my-pi-gui-git/omp-gui "$@"\n' \
+    > "${pkgdir}/usr/bin/omp-gui"
+  chmod 755 "${pkgdir}/usr/bin/omp-gui"
+  ln -s omp-gui "${pkgdir}/usr/bin/oh-my-pi-gui"
+
+  install -Dm644 /dev/null "${pkgdir}/usr/share/applications/omp-gui.desktop"
+  cat > "${pkgdir}/usr/share/applications/omp-gui.desktop" <<'EOF'
+[Desktop Entry]
+Name=omp
+GenericName=omp GUI
+Comment=Desktop GUI for the omp coding agent
+Exec=/usr/bin/omp-gui %U
+Terminal=false
+Type=Application
+Icon=omp-gui
+StartupWMClass=omp-gui
+MimeType=x-scheme-handler/omp;
+Categories=Development;
+EOF
+
+  # resources/icons/ 下的檔名已是「<邊長>x<邊長>.png」，直接用，不要再補一次 x<邊長>。
+  local _f _size
+  for _f in resources/icons/*.png; do
+    [ -f "${_f}" ] || continue
+    _size="${_f##*/}"; _size="${_size%.png}"
+    install -Dm644 "${_f}" \
+      "${pkgdir}/usr/share/icons/hicolor/${_size}/apps/omp-gui.png"
+  done
+
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+}

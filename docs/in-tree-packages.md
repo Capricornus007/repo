@@ -2238,42 +2238,54 @@ nashira-git 的掛源點名也一併拿掉（它不再吃本倉的 jbr21）。**
 `Capricornus007/jbr21` 這種倉不存在也不需要存在**；卸載機上那顆 `jbr21` 系統套件要用
 `doas pacman -Rns jbr21`，卸前 `pactree -r jbr21` 實查只有它自己。
 
-## hermes-agent-git（2026-11-11 用戶點名：「給自動構建倉庫以及我的電腦添加並安裝 hermes-agent-git」）
+## hermes-agent-git 退役／oh-my-pi-gui-git 新增（2026-11-12 用戶點名：「在我的自動構建倉庫跟我電腦上刪了 hermes-agent-git 然後加上裝上 https://github.com/nornzach/oh-my-pi-gui 這個 oh-my-pi-gui-git」）
 
-NousResearch 的本地代理（CLI／TUI／桌面／gateway 同一棵樹）。AUR 只有追 release tag 的
-`hermes-agent`，本倉要的是跟 main HEAD 的 `-git` 版，所以配方以 AUR 那份為底、改成 git 源。
+### 退役：hermes-agent-git
+- 2026-11-11 才加進來的 in-tree 包整組移除：`hermes-agent-git/`（PKGBUILD＋3 個 patch＋2 個 py）、
+  `matrix/packages-2.json` 的條目、本文件原段落，以及 `build-packages.yml`
+  「更新校驗和並回推」giant if 尾端的 `matrix.repo_name != 'hermes-agent-git'` 例外（改名給新包）。
+- 已發佈到 `current-repo` release 的
+  `hermes-agent-git-0.23.1.r1935.g3bcd071-1-x86_64.pkg.tar.zst` 也刪掉，並用
+  `repo-remove` 從 `junlin03-aur.db.tar.gz`／`junlin03-aur.files.tar.gz` 摘掉條目，
+  四個 DB 資產（`junlin03-aur.db*`／`junlin03-aur.files*`）一併回傳。
+  不這麼做會留下「DB 看得到、下載 404」的幽靈條目，讓整包升級事務中止（2026-09-23 實測）。
+- 本機：`pacman -Q hermes-agent-git` 已查無此包，`/opt/hermes-agent-git`、`/usr/bin/hermes`
+  都不存在；清掉 `/tmp` 裡的 hermes 建置樹與兩顆舊 `*.pkg.tar.zst`。
+  `~/.hermes/` 是使用者自己的設定／資料庫，屬於個資不是套件檔案，刻意保留未動。
 
-- **配方來源與差異**：AUR `hermes-agent`（維護者 y0uCeF）的 build/check/package 流程逐段沿用，
-  三個補丁、`system-tools.py`、`hermes_agent_env.py` 與 AUR 版逐位元組相同（sha256 已比對）。
-  唯一實質差異是 `source=` 變成 `git+https://github.com/NousResearch/hermes-agent.git`，
-  安裝根改 `/opt/hermes-agent-git`（不再寫死 AUR 的 `/opt/hermes-agent`），
-  並以 `provides/conflicts=('hermes-agent' ...)` 與 AUR 版、`hermes-agent-bin` 互斥。
-- **為什麼不覆蓋 `/opt/hermes-agent`**：`hermes_agent_env.py` 會把 webapp bundle 路徑寫死；
-  共用目錄會讓兩個變體互相留下殘檔，pacman 也分不清誰擁有哪個檔。改路徑後在 package()
-  以 sed 換掉並用 grep 收口，換不到就讓建置紅。
-- **版號公式**：刻意與 upstream `hermes_cli/version_info.py` 同形——取已合併進 HEAD 的最高
-  穩定 tag（`v0.x.y`，排除 `+canary.*`）為 base，`rev-list --count base..HEAD` 為距離，
-  輸出 `<base>.r<distance>.g<hash>`。`hermes --version` 的 display version
-  （`0.23.1+1934.g79fb37f`）與 pacman 版號一一對應；plan 步跑同一支 `pkgver()` 就能判斷
-  「這輪產物是否已在 release 裡」。
-- **依賴 pin 的兩道自證**：`prepare()` 讀 `pm/lock.json` 驗 pnpm pin 與下載的 12.15.0 一致，
-  `check()` 驗 uv pin 不超過 `_uvmin`。上游換 pin 時建置必須紅，不許靜默用舊版裝出
-  「看似成功但 pm 會拒跑」的包。venv 釘在 Arch 的 python 3.14（upstream `requires-python`
-  是 `>=3.11,<3.15`），venv 只跑得起來建立它的 minor，所以 depends 同時寫上下界。
-- **接線**：`matrix/packages-2.json` 加條目（`in_tree: true`，**不標 kind**）。
-  放 shard 2 是因為 shard 1（`matrix/packages.json`）已經滿 256 條 —— GitHub Actions
-  單矩陣硬上限就是 256，再加一條整條矩陣會解析失敗；shard 2 目前 180 條還有空間。不標 `kind: aur` 是刻意的：`kind: aur` 會讓 CI 對本包加
-  `--skipchecksums --nocheck`，AUR 版那五個附屬檔的 sha256 就永遠不會被驗到；本包是自家
-  配方，附屬檔由本倉維護，校驗和必須照驗。改為在「更新校验和并回推」的 giant if 點名
-  `repo_name != 'hermes-agent-git'`（git 源的 sums 是 SKIP，updpkgsums 只會白跑；
-  in-tree 目錄也沒有獨立倉可回推）。`in_tree: true` 讓通用分支用 GitHub contents API
-  把本目錄五個附屬檔一併抓進建置。
-  AUR case 清單不必加包名——in_tree 分支在 case 之前就 exit。
-- **停止條件**：pkgver() 現算，靜態的 `pkgver=0.23.1.r1934.g79fb37f` 是佔位值；
-  本機與 CI 都由 pkgver() 覆寫。
-- **本機驗證（2026-11-11）**：`makepkg` 全流程建成 327MB 的
-  `hermes-agent-git-0.23.1.r1935.g3bcd071-1-x86_64.pkg.tar.zst`，`check()` 全過；
-  `pacman -U` 後 `hermes --version` 回 `0.23.1+1935.g3bcd071 (2026.11.11) · upstream 3bcd0712`、
-  `hermes --help`／`hermes pm doctor` 正常（pm store 的 node/npm/pnpm/ffmpeg/rg/python/uv
-  全部命中系統工具），`hermes update` 正確以「managed by pacman」拒絕。
-- 觸發：`gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[{"key":"hermes-agent-git","repo_name":"hermes-agent-git","variant":"none","in_tree":true}]'`
+### 新增：oh-my-pi-gui-git
+`nornzach/oh-my-pi-gui`（omp coding agent 的 Electron 桌面 GUI，MIT，main HEAD
+`6c5dfcc`／package.json 0.9.40）。2026-11-12 查 AUR RPC：
+`oh-my-pi-gui`、`oh-my-pi-gui-git`、`hermes-agent-git` 全部 `resultcount=0`，
+所以配方是自己寫的，不是轉發 AUR。
+
+- **為什麼不是 -bin 掛 -git 名**：GUI 本體（main／preload／renderer → `app.asar`）
+  一律從 main HEAD 現場編：`bun install --frozen-lockfile` → `bun run build`
+  （含上游自己的「main bundle 不得殘留裸 import」自檢）→
+  `electron-builder --linux --dir`。追 release tag 會比 main 少提交，不符本倉「直追源碼」。
+- **唯一取預編二進位的是內嵌 omp sidecar**：上游 README／AGENTS.md 明確寫「單獨 clone 的
+  GUI 倉編不出 sidecar」，它必須放在 `nornzach/oh-my-pi` monorepo 的 `packages/gui/`；
+  上游同時給了合法替代路線——把可信且相容的預編 sidecar 放到 `resources/omp` 再打包，
+  `release-linux.yml` 自己也是這樣組 Linux 產物。`prepare()` 因此從
+  `https://github.com/nornzach/oh-my-pi-gui/releases/latest/download/latest-linux.yml`
+  現算版本、下載同 release 的 `omp_<ver>_amd64.deb`、用 yml 的 sha512（base64→hex）驗章，
+  再從 deb 抽出 `/opt/omp/resources/omp`。網址不寫死版本，上游發新版不必改配方；
+  校驗不符或資產消失直接紅，不靜默降級。全部走官方 GitHub 端點，沒有第三方鏡像。
+- **不碰家目錄**：`BUN_INSTALL_CACHE_DIR`／`npm_config_cache`／`ELECTRON_CACHE`／
+  `XDG_CACHE_HOME` 全導到 `$srcdir`；本機與 CI 都不留 bun／Electron 快取。
+- **版號公式**：`git describe --tags --long --abbrev=7 | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'`
+  → `0.9.40.r2.g6c5dfcc`。CI plan 的通用 -git 分支會 clone 第一個 `git+` 來源、
+  軟鏈 `oh-my-pi-gui`、跑同一支 `pkgver()`，公式必須逐字一致，否則每輪白編。
+- **接線**：`matrix/packages-2.json` 換成 `oh-my-pi-gui-git`（`in_tree: true`，不標 `kind`，
+  理由同上一包：標 `kind: aur` 會被加 `--skipchecksums --nocheck`）；shard 2 未滿 256。
+  「更新校驗和並回推」的例外改名指到本包（只有 `git+` 源、`sha256sums=('SKIP')`，
+  `updpkgsums` 只會白跑，且 in-tree 目錄沒有獨立倉可回推）。
+- **本機驗證（2026-11-12）**：`makepkg -f --nodeps` 全流程通過，`check()` 裡
+  `resources/omp --version` 回 `omp/18.18.6`；成品
+  `oh-my-pi-gui-git-0.9.40.r2.g6c5dfcc-1-x86_64.pkg.tar.zst`（347MB／裝後 610MB），
+  內含 `app.asar`、Electron 主程式、`/usr/bin/omp-gui`＋`oh-my-pi-gui` symlink、
+  `omp-gui.desktop`、hicolor 圖示與上游 MIT LICENSE。
+- **授權**：本倉配方依使用者全域規則採 TBWTFPL v114514
+  （<https://github.com/Capricornus007/tbwtfpl/blob/main/LICENSE>，已放進倉庫根目錄 `LICENSE`）；
+  被打包的軟體本體仍是上游 MIT，Electron／Chromium 授權檔由 electron-builder 自帶，不因打包改授權。
+- 觸發：`gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[{"key":"oh-my-pi-gui-git","repo_name":"oh-my-pi-gui-git","variant":"none","in_tree":true}]'`
