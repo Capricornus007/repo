@@ -1085,5 +1085,11 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "hermes-agent-git",
+    "repo_name": "hermes-agent-git",
+    "variant": "none",
+    "in_tree": true
   }
 ]

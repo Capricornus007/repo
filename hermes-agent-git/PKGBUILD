@@ -1,0 +1,321 @@
+# Maintainer: Capricornus007
+# 2026-11-11 in-tree 新增（用戶指示）：把 NousResearch/hermes-agent 以 -git 形式
+# 加進自動構建倉庫並在本機安裝。
+#
+# 配方基底是 AUR 的 hermes-agent（維護者 y0uCeF，共同維護 evorster/jabla）：
+#   https://aur.archlinux.org/cgit/aur.git/tree/?h=hermes-agent
+# 那邊追的是 release tag，這裡改成追 upstream main HEAD（-git 包語意）。
+# 三個補丁、system-tools.py、hermes_agent_env.py 與 AUR 版逐位元組相同
+# （sha256 已比對），只把安裝根由 /opt/hermes-agent 換成 /opt/hermes-agent-git，
+# 避免與 AUR 版／hermes-agent-bin 互相覆蓋檔案；conflicts 仍互斥，同一時間只能裝一種。
+#
+# 版號公式刻意與 upstream 自己的版本解析器（hermes_cli/version_info.py）同形：
+#   base = 已合併進 HEAD 的最高穩定 tag（v0.x.y，排除 +canary.*）
+#   distance = git rev-list --count v<base>..HEAD
+#   => <base>.r<distance>.g<hash>
+# 這樣 `hermes --version` 的 display version（<base>+<distance>.g<hash>）與 pacman
+# 版號一一對應，plan 步複製同一公式就能判斷「產物是否已在 release 裡」。
+#
+# 為什麼不直接轉發 AUR 版：用戶要的是 hermes-agent-git；上游一天數十個提交，
+# release tag 落後 1900+ 個提交。從 main 源碼建置才能拿到當下的代理與工具鏈。
+
+pkgname=hermes-agent-git
+pkgver=0.23.1.r1934.g79fb37f
+pkgrel=1
+pkgdesc='Locally-run AI agent with tool use, web browsing, and automation (git build)'
+arch=('x86_64')
+url='https://github.com/NousResearch/hermes-agent'
+license=('MIT')
+# _pyver 是 Arch 的 python minor；venv 只能跑在建立它的 minor 上，所以 depends
+# 明確釘住上下界：Arch 換 minor 時 pacman 會壓住那次升級，直到本配方跟上。
+_pyver=3.14
+_uvmin=0.13.5      # pm/lock.json 的 uv pin 下限；上游調高時 check() 會紅
+_pnpmver=12.15.0   # pm/lock.json 的 pnpm pin；上游改 pin 時 prepare() 會紅
+_optname=hermes-agent-git
+depends=(
+  'python>=3.14' 'python<3.15'
+  # pm store 由系統工具提供（system-tools.py 逐項驗證）
+  'nodejs>=26' 'npm' 'pnpm' "uv>=${_uvmin}" 'ripgrep' 'ffmpeg'
+  # pm 的 Chromium 所需的系統庫（browser_exec 用系統瀏覽器）
+  'nss' 'atk' 'at-spi2-core' 'cups' 'libdrm' 'libxkbcommon' 'mesa' 'pango'
+  'cairo' 'alsa-lib' 'libxcomposite' 'libxdamage' 'libxrandr'
+  'git' 'curl'
+)
+optdepends=(
+  'chromium: system browser for browser_exec (browser.executable_path)'
+  'google-chrome: system browser for browser_exec (browser.executable_path, AUR)'
+  'brave-bin: system browser for browser_exec (browser.executable_path, AUR)'
+)
+makedepends=('rsync' 'cmake')   # cmake: python-olm（matrix extra）的 vendored libolm
+provides=('hermes-agent')
+conflicts=('hermes-agent' 'hermes-agent-bin')
+options=('!debug' '!strip')     # package() 自己 strip venv 內的 ELF
+
+source=(
+  "git+${url}.git"
+  'keep-venv-interpreter.patch'
+  'release-date-from-stamp.patch'
+  'system-browser-fallback.patch'
+  'system-tools.py'
+  'hermes_agent_env.py'
+)
+sha256sums=('SKIP'
+            'f6824d0250926db151b0a06043a8385a642d83048e2b73967625362076b7d818'
+            '0d7ba134037ee7565f40091262eee82b18d089a63238a6bdca7c88d7f5eb324d'
+            '196ba6f200257073a5f02bab284a11594e67bfe1e10470a83ab0fc9437ef777b'
+            'b079df6f6162180615ba92e67dae6062d7a22600462e76341d29b963aad25571'
+            'c8a782bbee797b064db590d7b6e01963e0c31db7eea7ce2be13fe33a11726b6a')
+
+# 建置用的 pnpm 必須是上游 pin 的版本（scripts/build/node-deps.mjs 會拒絕其他版本）。
+# 只下載 executable 與 launcher 兩個 tarball，裝在 $srcdir；成品仍用系統 pnpm。
+_pnpmurl="https://registry.npmjs.org"
+source_x86_64=(
+  "pnpm-exe-${_pnpmver}.tgz::${_pnpmurl}/@pnpm/exe.linux-x64/-/exe.linux-x64-${_pnpmver}.tgz"
+  "pnpm-${_pnpmver}.tgz::${_pnpmurl}/pnpm/-/pnpm-${_pnpmver}.tgz"
+)
+noextract=("pnpm-exe-${_pnpmver}.tgz" "pnpm-${_pnpmver}.tgz")
+sha256sums_x86_64=('402f7045b1e0587acb1542f18d38afbccb6babf3c7451394e6fb3d9f0160c6ca'
+                   'f5173f6127cc505cdb36ec17719fe54a8511c6fd8560c7ceb4bf7c73e3b4458b')
+
+_pnpm_dir() {
+  echo "${srcdir}/pnpm-${_pnpmver}"
+}
+
+# 固定版 pnpm 放 PATH 最前；store/cache/state 留在 $srcdir，不污染使用者家目錄。
+_pnpm_env() {
+  export PATH="$(_pnpm_dir):${PATH}"
+  export pnpm_config_store_dir="${srcdir}/pnpm-cache/store"
+  export pnpm_config_cache_dir="${srcdir}/pnpm-cache/cache"
+  export pnpm_config_state_dir="${srcdir}/pnpm-cache/state"
+  export pnpm_config_update_notifier=false
+}
+
+# 與 upstream version_info.py 同形的穩定 tag 選擇（排除 v0.x.y+canary.*）。
+_base_tag() {
+  git tag --merged HEAD --list 'v0.*' --sort=-v:refname \
+    | grep -E '^v0\.[0-9]+\.[0-9]+$' | head -n1
+}
+
+pkgver() {
+  cd hermes-agent || return 1
+  # 沒有 .git 就大聲失敗：回 0.0.0.r.g 會讓 plan 誤認版號、永久卡住不出包。
+  git rev-parse --git-dir >/dev/null 2>&1 || return 1
+  local _tag _dist
+  _tag="$(_base_tag)"
+  if [ -z "$_tag" ]; then
+    printf '0.0.0.r%s.g%s' \
+      "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+    return
+  fi
+  _dist=$(git rev-list --count "${_tag}..HEAD")
+  printf '%s.r%s.g%s' "${_tag#v}" "$_dist" "$(git rev-parse --short=7 HEAD)"
+}
+
+prepare() {
+  cd hermes-agent
+
+  # 安裝戳記的 commit date 要取 git 提交時間（clone 的檔案 mtime 是 checkout 時間，
+  # 不能像 AUR 的 release tarball 那樣靠 stat）。
+  git log -1 --format=%ct > "${srcdir}/commit-date"
+
+  # --fuzz=0：上游漂移讓 hunk 對不上時必須大聲失敗，不許套在猜的位置
+  # （offset 仍接受）。三個補丁在 2026-11-11 HEAD（79fb37f8a9）逐一套用成功。
+  patch --batch --fuzz=0 -Np1 -i "${srcdir}/keep-venv-interpreter.patch"
+  # upstream #135223（draft）：banner 日期改吃 stamp 的 commitDate，而不是
+  # 2026.9.24 字面值。上游正式合入後即可刪掉這個 hunk。
+  patch --batch --fuzz=0 -Np1 -i "${srcdir}/release-date-from-stamp.patch"
+  # 包裝環境關掉 lazy installs，pm 不會臨時抓自己的 Chromium；
+  # browser_exec 改退回系統 Chrome/Chromium/Brave。
+  patch --batch --fuzz=0 -Np1 -i "${srcdir}/system-browser-fallback.patch"
+
+  # 把上游 pin 的 pnpm 解到 $srcdir/pnpm-<ver>，佈局與 pm store 一致。
+  local pin
+  pin="$(node -p 'require("./pm/lock.json").packages.pnpm.version')"
+  if [[ "${pin}" != "${_pnpmver}" ]]; then
+    printf 'ERROR: upstream pins pnpm %s (pm/lock.json), PKGBUILD downloads %s: move _pnpmver and sha256sums_x86_64\n' \
+      "${pin}" "${_pnpmver}"
+    return 1
+  fi
+  rm -rf "$(_pnpm_dir)"
+  mkdir -p "$(_pnpm_dir)"
+  bsdtar -xf "${srcdir}/pnpm-exe-${_pnpmver}.tgz" -C "$(_pnpm_dir)" --strip-components 1
+  bsdtar -xf "${srcdir}/pnpm-${_pnpmver}.tgz" -C "$(_pnpm_dir)" --strip-components 1 package/dist
+}
+
+build() {
+  cd hermes-agent
+
+  # vite-plugin-tailwindcss 的 ignore 套件會向上找 .gitignore；先放一個空 .git
+  # 目錄讓它停止掃描。
+  [ ! -d .git ] && mkdir .git
+
+  _pnpm_env
+  # 上游自己的 workspace 安裝（scripts/build/node-deps.mjs）：frozen lockfile。
+  pnpm install --frozen-lockfile --trust-lockfile --prod=false --ignore-scripts \
+    --filter '{./web}...' --filter '{./ui-tui}...'
+  pnpm --dir web run build
+  pnpm --dir ui-tui run build:ink
+  pnpm --dir ui-tui run build
+  # 瀏覽器版 Desktop（`hermes webapp`）：上游預設會建到 root-owned 安裝根，
+  # HERMES_WEBAPP_DIST 讓它直接服務這裡的 bundle。
+  node apps/desktop/scripts/build-webapp.mjs
+
+  # venv 建在 Arch 的 python 上（upstream requires-python >=3.11,<3.15）。
+  # --relocatable 讓 makepkg 搬去 /opt 後仍可用。
+  UV_PYTHON_DOWNLOADS=never uv venv \
+    --clear \
+    --python "/usr/bin/python${_pyver}" \
+    --relocatable \
+    venv
+
+  # lazy installs 關閉，因此常用 extras 必須隨包出貨：anthropic（Anthropic
+  # provider）、edge-tts（預設 TTS）、ddgs（免費網頁搜尋）、doc-extract、
+  # keychain 與各 gateway。documents extras 不裝：skills 自帶 side environment。
+  # python-olm 的 vendored libolm 需要把 CMake 最低政策抬到 3.5。
+  CMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT="$PWD/venv" \
+    uv sync --locked --no-dev --no-install-project \
+      --extra all,messaging,anthropic,edge-tts,ddgs,doc-extract,keychain \
+      --extra feishu,matrix,dingtalk,wecom,teams,google-chat
+}
+
+check() {
+  cd hermes-agent
+
+  test -s hermes_cli/web_dist/index.html
+  test -s ui-tui/dist/entry.js
+  test -s apps/desktop/dist-webapp/index.html
+  PYTHONPATH="$PWD" venv/bin/python -c \
+    'import hermes_cli.main, anthropic, edge_tts, ddgs, keyring, lark_oapi, mautrix, dingtalk_stream, defusedxml'
+
+  # pm 用系統 uv；依賴裝得比 pm 的 pin 舊時，重解 uv.lock 會失敗。
+  local uv_pin
+  uv_pin="$(venv/bin/python -c 'import json, sys; print(json.load(open(sys.argv[1]))["packages"]["uv"]["version"])' pm/lock.json)"
+  if (( $(vercmp "${uv_pin}" "${_uvmin}") > 0 )); then
+    printf 'ERROR: pm pins uv %s, depends=() asks for uv>=%s: raise _uvmin\n' "${uv_pin}" "${_uvmin}"
+    return 1
+  fi
+}
+
+package() {
+  cd hermes-agent
+
+  local _base _dist _commit _sitedir _tuidir
+  _base="$(_base_tag)"
+  _dist=$(git rev-list --count "${_base}..HEAD")
+  _commit=$(git rev-parse HEAD)
+
+  _optdir="$pkgdir/opt/${_optname}"
+  install -d "$_optdir"
+
+  rsync -a --exclude='__pycache__' --exclude='.git' \
+    --exclude='node_modules' --exclude='web/src' \
+    --exclude='web/package.json' \
+    --exclude='web/vite.config.ts' --exclude='web/tsconfig*.json' \
+    --exclude='web/eslint.config.js' --exclude='web/README.md' \
+    --exclude='ui-tui/src' --exclude='ui-tui/node_modules' \
+    --exclude='scripts/tests' --exclude='scripts/install.*' \
+    --exclude='build' --exclude='/tests' --exclude='/.build' \
+    . "$_optdir/"
+
+  echo "console.log('skipping build, using prebuilt dist/entry.js')" > "$_optdir/ui-tui/scripts/build.mjs"
+
+  # web build 的新鮮度清單記錄的是絕對建置路徑，改成安裝後的位置。
+  sed -i "s|$PWD|/opt/${_optname}|g" "$_optdir/hermes_cli/web_dist/hermes-build.json"
+
+  # 版本戳記（v0.21.6 起 pyproject 是 0.0.0，沒有 stamp 時 `hermes --version`
+  # 會報 unknown）。"external" 讓 hermes update 不去改 root-owned 樹。
+  # 用乾淨環境啟動，避免 git 從 $srcdir 找到打包倉。
+  env -i PATH="$PATH" GIT_CEILING_DIRECTORIES="$srcdir" \
+    venv/bin/python scripts/write_install_stamp.py \
+    --output "$_optdir/install-stamp.json" \
+    --commit "$_commit" \
+    --commit-date "$(<"${srcdir}/commit-date")" \
+    --base-version "${_base#v}" \
+    --display-version "${_base#v}+${_dist}.g${_commit:0:7}" \
+    --distance "$_dist" \
+    --source aur \
+    --update-mechanism external
+  # distribution 標成 pacman，`hermes update` 才會以「managed by pacman」拒絕；
+  # runtimeDir 指到下面的 system-tools store（絕對路徑）。
+  venv/bin/python - "$_optdir/install-stamp.json" "/opt/${_optname}/system-store/tools" <<'PY'
+import json, sys
+path, store = sys.argv[1:]
+with open(path, encoding="utf-8") as f:
+    stamp = json.load(f)
+stamp["distribution"] = "pacman"
+stamp["runtimeDir"] = store
+# 打包補丁會讓 git 工作樹顯示為 DIRTY；那是包裝改動，不是上游提交的汙染，
+# 與 AUR 從 release tarball 建出來的戳記保持一致（乾淨）。
+stamp["dirty"] = False
+with open(path, "w", encoding="utf-8") as f:
+    json.dump(stamp, f, indent=2)
+    f.write("\n")
+PY
+
+  # pm store 指向 depends 提供的系統工具（system-tools.py 依 pm/lock.json 的 pin 建）。
+  venv/bin/python -B "$srcdir/system-tools.py" "$_optdir" "$_optdir/system-store/tools"
+
+  # 預建的 TUI 放進 hermes_cli/tui_dist/，讓 _find_bundled_tui() 找到並跳過
+  # 在 root-owned 樹裡 npm install（會 EACCES）。
+  _tuidir="$_optdir/hermes_cli/tui_dist"
+  install -d "$_tuidir"
+  if [ -d ui-tui/dist ]; then
+    cp -a ui-tui/dist/* "$_tuidir/"
+  fi
+  # bundle 是 ES module；缺 package.json 時 node 會向上讀到根 package.json。
+  echo '{"type":"module"}' > "$_tuidir/package.json"
+
+  _sitedir="$_optdir/venv/lib/python${_pyver}/site-packages"
+  install -d "$_sitedir"
+  # 所有 venv python 的環境預設（含沒有 launcher 的 gateway service）。
+  # AUR 的檔案把 webapp 路徑寫死成 /opt/hermes-agent，這裡換成本包路徑並驗證。
+  sed "s|/opt/hermes-agent/|/opt/${_optname}/|g" "$srcdir/hermes_agent_env.py" \
+    > "$_sitedir/hermes_agent_env.py"
+  grep -q "HERMES_WEBAPP_DIST\", \"/opt/${_optname}/apps/desktop/dist-webapp\"" \
+    "$_sitedir/hermes_agent_env.py" \
+    || { echo "ERROR: hermes_agent_env.py 的 webapp 路徑沒換到 /opt/${_optname}"; return 1; }
+  {
+    echo "import sys; sys.path.insert(0, \"/opt/${_optname}\")"
+    echo "import hermes_agent_env"
+  } > "$_sitedir/hermes.pth"
+
+  # 為整棵樹編 bytecode：使用者無權寫 __pycache__ 進 root-owned /opt。
+  # checked-hash：makepkg 會把所有 mtime 歸零，timestamp 型的 .pyc 會失效。
+  "/usr/bin/python${_pyver}" -m compileall -q -j0 \
+    --invalidation-mode checked-hash -s "$pkgdir" -p / "$_optdir"
+
+  # makepkg 自己的 strip 掃不到 root-owned /opt；只 strip venv 裡的 ELF。
+  find "$_optdir" -type f -name '*.so*' -print0 |
+    while IFS= read -r -d '' lib; do
+      if [ "$(head -c 4 "$lib")" = $'\x7fELF' ]; then
+        strip --strip-unneeded "$lib"
+      fi
+    done
+
+  # 所有使用者可讀（TUI build 會留下 700）。
+  chmod -R a+rX "$_optdir"
+  rm -f "$_optdir/venv/.lock"
+
+  install -d "$pkgdir/usr/bin"
+  {
+    echo "#!/bin/bash"
+    echo "unset PYTHONPATH"
+    echo "unset PYTHONHOME"
+    echo ': "${XDG_DATA_HOME:=$HOME/.local/share}"'
+    echo 'export HERMES_DISABLE_LAZY_INSTALLS=1'
+    echo 'export HERMES_LAZY_INSTALL_TARGET="$XDG_DATA_HOME/hermes-agent/python"'
+    echo "export HERMES_WEBAPP_DIST=/opt/${_optname}/apps/desktop/dist-webapp"
+    # 安裝型 launcher 要以 JSON 回報其樹的 interpreter，桌面 app 用它簽 gateway
+    # ticket；upstream 的 launcher 走這個模組，keep-venv-interpreter.patch 讓它
+    # 回報 venv python。
+    echo 'if [[ ${1-} == --print-runtime-command ]]; then'
+    echo "  exec /opt/${_optname}/venv/bin/python -I -B -m hermes_cli._launchers" '"$@"'
+    echo 'fi'
+    echo "exec /opt/${_optname}/venv/bin/python -m hermes_cli.main" '"$@"'
+  } > "$pkgdir/usr/bin/hermes"
+  chmod 755 "$pkgdir/usr/bin/hermes"
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

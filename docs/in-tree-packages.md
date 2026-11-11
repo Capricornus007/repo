@@ -2237,3 +2237,43 @@ jbr21 因此沒有存在理由：`matrix/packages.json` 移除條目、目錄 `j
 nashira-git 的掛源點名也一併拿掉（它不再吃本倉的 jbr21）。**注意 jbr21 是本倉自己出的包，
 `Capricornus007/jbr21` 這種倉不存在也不需要存在**；卸載機上那顆 `jbr21` 系統套件要用
 `doas pacman -Rns jbr21`，卸前 `pactree -r jbr21` 實查只有它自己。
+
+## hermes-agent-git（2026-11-11 用戶點名：「給自動構建倉庫以及我的電腦添加並安裝 hermes-agent-git」）
+
+NousResearch 的本地代理（CLI／TUI／桌面／gateway 同一棵樹）。AUR 只有追 release tag 的
+`hermes-agent`，本倉要的是跟 main HEAD 的 `-git` 版，所以配方以 AUR 那份為底、改成 git 源。
+
+- **配方來源與差異**：AUR `hermes-agent`（維護者 y0uCeF）的 build/check/package 流程逐段沿用，
+  三個補丁、`system-tools.py`、`hermes_agent_env.py` 與 AUR 版逐位元組相同（sha256 已比對）。
+  唯一實質差異是 `source=` 變成 `git+https://github.com/NousResearch/hermes-agent.git`，
+  安裝根改 `/opt/hermes-agent-git`（不再寫死 AUR 的 `/opt/hermes-agent`），
+  並以 `provides/conflicts=('hermes-agent' ...)` 與 AUR 版、`hermes-agent-bin` 互斥。
+- **為什麼不覆蓋 `/opt/hermes-agent`**：`hermes_agent_env.py` 會把 webapp bundle 路徑寫死；
+  共用目錄會讓兩個變體互相留下殘檔，pacman 也分不清誰擁有哪個檔。改路徑後在 package()
+  以 sed 換掉並用 grep 收口，換不到就讓建置紅。
+- **版號公式**：刻意與 upstream `hermes_cli/version_info.py` 同形——取已合併進 HEAD 的最高
+  穩定 tag（`v0.x.y`，排除 `+canary.*`）為 base，`rev-list --count base..HEAD` 為距離，
+  輸出 `<base>.r<distance>.g<hash>`。`hermes --version` 的 display version
+  （`0.23.1+1934.g79fb37f`）與 pacman 版號一一對應；plan 步跑同一支 `pkgver()` 就能判斷
+  「這輪產物是否已在 release 裡」。
+- **依賴 pin 的兩道自證**：`prepare()` 讀 `pm/lock.json` 驗 pnpm pin 與下載的 12.15.0 一致，
+  `check()` 驗 uv pin 不超過 `_uvmin`。上游換 pin 時建置必須紅，不許靜默用舊版裝出
+  「看似成功但 pm 會拒跑」的包。venv 釘在 Arch 的 python 3.14（upstream `requires-python`
+  是 `>=3.11,<3.15`），venv 只跑得起來建立它的 minor，所以 depends 同時寫上下界。
+- **接線**：`matrix/packages-2.json` 加條目（`in_tree: true`，**不標 kind**）。
+  放 shard 2 是因為 shard 1（`matrix/packages.json`）已經滿 256 條 —— GitHub Actions
+  單矩陣硬上限就是 256，再加一條整條矩陣會解析失敗；shard 2 目前 180 條還有空間。不標 `kind: aur` 是刻意的：`kind: aur` 會讓 CI 對本包加
+  `--skipchecksums --nocheck`，AUR 版那五個附屬檔的 sha256 就永遠不會被驗到；本包是自家
+  配方，附屬檔由本倉維護，校驗和必須照驗。改為在「更新校验和并回推」的 giant if 點名
+  `repo_name != 'hermes-agent-git'`（git 源的 sums 是 SKIP，updpkgsums 只會白跑；
+  in-tree 目錄也沒有獨立倉可回推）。`in_tree: true` 讓通用分支用 GitHub contents API
+  把本目錄五個附屬檔一併抓進建置。
+  AUR case 清單不必加包名——in_tree 分支在 case 之前就 exit。
+- **停止條件**：pkgver() 現算，靜態的 `pkgver=0.23.1.r1934.g79fb37f` 是佔位值；
+  本機與 CI 都由 pkgver() 覆寫。
+- **本機驗證（2026-11-11）**：`makepkg` 全流程建成 327MB 的
+  `hermes-agent-git-0.23.1.r1935.g3bcd071-1-x86_64.pkg.tar.zst`，`check()` 全過；
+  `pacman -U` 後 `hermes --version` 回 `0.23.1+1935.g3bcd071 (2026.11.11) · upstream 3bcd0712`、
+  `hermes --help`／`hermes pm doctor` 正常（pm store 的 node/npm/pnpm/ffmpeg/rg/python/uv
+  全部命中系統工具），`hermes update` 正確以「managed by pacman」拒絕。
+- 觸發：`gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[{"key":"hermes-agent-git","repo_name":"hermes-agent-git","variant":"none","in_tree":true}]'`
