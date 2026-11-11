@@ -34,11 +34,18 @@ jobs:
         run: |
           set -euo pipefail
           command -v perch
-          # 直接讀全域安裝目錄裡的 package.json；`npm ls -g <name>` 在不同 npm
-          # 版本會印空字串，拿它當版本來源會誤判失敗（首輪 run 43086697080 實測）。
-          root=$(npm root -g)
-          ver=$(node -p "require('${root}/perchai-cli/package.json').version")
+          # `sudo npm install -g` 用的是 runner 系統 npm（prefix /usr/local），
+          # 而 setup-node 之後的 `npm root -g` 指向 /opt/hostedtoolcache/...，
+          # 兩者不同；拿 npm root -g 去 require 會 MODULE_NOT_FOUND
+          # （run 43087224128 實測）。改從 perch 這支執行檔本身反推套件根目錄。
+          perch_bin=$(readlink -f "$(command -v perch)")
+          pkgdir=$(dirname "$(dirname "$perch_bin")")
+          if [ ! -f "$pkgdir/package.json" ]; then
+            pkgdir=/usr/local/lib/node_modules/perchai-cli
+          fi
+          [ -f "$pkgdir/package.json" ] || { echo '::error::找不到 perchai-cli 的 package.json'; exit 1; }
+          ver=$(node -p "require('${pkgdir}/package.json').version")
           echo "installed perchai-cli=${ver:-unknown}"
-          [ -n "${ver:-}" ] || { echo '::error::全域安裝目錄裡找不到 perchai-cli'; exit 1; }
+          [ -n "${ver:-}" ] || { echo '::error::讀不到 perchai-cli 版本'; exit 1; }
           # 上游 CLI 的旗標可能隨版本改，這裡只確認可執行，不拿 --version 當硬閘。
           perch --help >/dev/null 2>&1 || echo '::warning::perch --help 無輸出或非 0，僅記錄不判紅'
