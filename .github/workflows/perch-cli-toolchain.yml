@@ -34,8 +34,11 @@ jobs:
         run: |
           set -euo pipefail
           command -v perch
-          ver=$(npm ls -g --depth=0 perchai-cli 2>/dev/null | awk '/perchai-cli@/{sub(/^.*perchai-cli@/,"");print;exit}')
+          # 直接讀全域安裝目錄裡的 package.json；`npm ls -g <name>` 在不同 npm
+          # 版本會印空字串，拿它當版本來源會誤判失敗（首輪 run 43086697080 實測）。
+          root=$(npm root -g)
+          ver=$(node -p "require('${root}/perchai-cli/package.json').version")
           echo "installed perchai-cli=${ver:-unknown}"
-          [ -n "${ver:-}" ] || { echo '::error::npm 全域清單裡找不到 perchai-cli'; exit 1; }
+          [ -n "${ver:-}" ] || { echo '::error::全域安裝目錄裡找不到 perchai-cli'; exit 1; }
           # 上游 CLI 的旗標可能隨版本改，這裡只確認可執行，不拿 --version 當硬閘。
           perch --help >/dev/null 2>&1 || echo '::warning::perch --help 無輸出或非 0，僅記錄不判紅'
