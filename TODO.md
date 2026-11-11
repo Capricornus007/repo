@@ -57,3 +57,8 @@
 - [ ] 前面 2026-09-18 那批 Qoder 待辦（首輪 CI 監視、CN CLI/GUI desktop 命名實機核對、
       AUR 同名包 provides/conflicts 取捨、補全列屬上游命名地雷、release 體積、arm64 覆蓋）
       維持原狀：其中有「需要用戶拍板」的項目，未經確認不擅自改。
+- [x] omp-gui：找出「刪服務商很慢／CLI 無回應」根因（mutation 後 await forceRefresh 全量探索
+      塞住 sidecar 序列 RPC 佇列），改成背景快取讀取；補齊 zh-TW（臺灣正體）語系並接上
+      原生選單／托盤／設定字典。已本機 makepkg 驗證，待首輪 CI 與實機操作確認。
+- [ ] 實機回訪：在 omp-gui 刪一個服務商，確認對話框立即關閉、CLI 仍可下指令；
+      切到「繁體中文」逐頁看有無漏翻／過度翻譯／專有名詞被翻。

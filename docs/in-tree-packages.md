@@ -2289,3 +2289,27 @@ nashira-git 的掛源點名也一併拿掉（它不再吃本倉的 jbr21）。**
   （<https://github.com/Capricornus007/tbwtfpl/blob/main/LICENSE>，已放進倉庫根目錄 `LICENSE`）；
   被打包的軟體本體仍是上游 MIT，Electron／Chromium 授權檔由 electron-builder 自帶，不因打包改授權。
 - 觸發：`gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[{"key":"oh-my-pi-gui-git","repo_name":"oh-my-pi-gui-git","variant":"none","in_tree":true}]'`
+### 2026-11-12 追加：omp-gui 卡死修復＋zh-TW 語系（用戶回報「用 gui 刪除服務商很慢／omp cli 根本沒反應」「omp-gui 內的中文翻譯不全」）
+- **卡死根因**：`src/renderer/components/settings/ProviderConfigDialog.tsx` 在
+  `confirmDelete()` 與 `handleSubmit()` 都 `await refreshProviders(true)`，透過
+  `get_providers {forceRefresh:true}` 叫內嵌 sidecar 對**所有**已設定服務商做模型探索。
+  使用者 `~/.omp/agent/models.yml` 有 41 家服務商、約 4000 個模型；sidecar 的 RPC
+  佇列是序列的，這一等就讓對話框、整個 GUI 與內嵌 CLI 全部無回應，
+  而刪除流程還連做兩次（confirmDelete 一次＋overlay 關閉時 ProvidersWindow 的 load 一次）。
+  修法：改成不等待的快取讀取 `void refreshProviders()`，列表收斂交給
+  `model_catalog_update` push 與 `ProvidersWindow` 原有的 `refreshPending` 輪詢；
+  服務商探索只在使用者明確按重新整理時才強迫跑。**沒有降低任何功能或模型強度**。
+- **語系**：上游 `LANGUAGES` 只有 `en`／`ru`／`zh`（`zh.ts` 是簡中，且 35 個值與英文相同）。
+  補上以臺灣正體為基準的 `zh-TW`：`zh-TW.ts`（4129 鍵，與 zh.ts 鍵集合完全相同）、
+  `schema-zh-TW.ts`／`schema-option-zh-TW.ts`、Electron 原生選單 `native-zh-TW.ts`、
+  托盤 `native-tray-zh-TW.ts`，並把 `languageFromLocale()` 改成 `zh-TW/HK/Hant → zh-TW`。
+  舊的 `zh` 偏好值仍然有效（指向簡中），不會把既有使用者洗掉。
+  產生方式：OpenCC `s2twp.json` ＋臺灣用語表（服務商／設定／工作階段／重新整理／
+  檔案／程式／網路／預設…）；專有名詞（omp、OMP Core、Git、macOS、API、LSP、MCP、
+  Anthropic、models.yml…）保持原文。
+- **落地方式**：不 fork 上游、不推別人倉庫。七個附屬檔（修補腳本＋五個語系／字典檔＋
+  PKGBUILD）由本倉 in-tree 維護；`prepare()` 跑 `omp-gui-fixes.py`，它對每個上游片段
+  做「命中一次才改」的斷言並自證結果，上游改動時建置直接紅，不靜默出半修版本。
+- **驗證**：`bun run build` 通過、`main bundle is self-contained`；makepkg 全流程與
+  `check()` 綠，成品 app.asar 內可查到 zh-TW 語系與正體字串。
+

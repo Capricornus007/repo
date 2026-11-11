@@ -56,8 +56,31 @@ options=('!strip' '!debug')   # Electron 與 sidecar 是預編 ELF，strip 只�
 provides=('omp-gui')
 conflicts=('omp-gui')
 
-source=('git+https://github.com/nornzach/oh-my-pi-gui.git#branch=main')
-sha256sums=('SKIP')
+# 2026-11-12 使用者回報「omp-gui 刪服務商很慢／CLI 根本沒反應」＋「中文翻譯不全」。
+# 兩件事都在 omp-gui-fixes.py 裡以「逐字比對、命中一次才改」的方式補：
+#   (a) ProviderConfigDialog 原本在刪除／新增服務商後 `await refreshProviders(true)`，
+#       會對內嵌 sidecar 發出 forceRefresh 的全供應商探索（使用者 models.yml 有 41 家、
+#       約 4000 個模型）。sidecar 的 RPC 佇列是序列的，這一等就把整個 GUI 與 CLI 卡死。
+#       改成背景快取讀取，靠 catalog push／refreshPending 輪詢收斂。
+#   (b) 上游只有 zh（簡中）。補一套以臺灣正體為基準的 zh-TW：renderer 4129 鍵、
+#       settings schema／enum 字典、Electron 原生選單與托盤，並把語系切換接上。
+# 上游改動時腳本會直接讓建置紅，不靜默降級。
+source=(
+  'git+https://github.com/nornzach/oh-my-pi-gui.git#branch=main'
+  'omp-gui-fixes.py'
+  'zh-TW.ts'
+  'schema-zh-TW.ts'
+  'schema-option-zh-TW.ts'
+  'native-zh-TW.ts'
+  'native-tray-zh-TW.ts'
+)
+sha256sums=('SKIP'
+            '47737c58b3a4d870de5a8a2a3464394597ba56d588bed85c7fbadc466e5ea9ae'
+            'b7375853720111d1c08b1313a374c46f5f70e0d5f393c37df265b69380c667c5'
+            'a11fff5087ed1479d52582683dee3dc90363bb2eeff1d4ea49a26ffcc0295f28'
+            'c272aadaf7343da05ec26b6a3e44e2ee94c5911deecfe4ab4c0de651952f36ad'
+            'b59bf4f20885467b421f68b23976da76687f257239ccc690e92ee7f2cd57e0c0'
+            '81295a9299cc97f8d7d109f84675de95ca316d54bd3bb8961f1555c934d8418e')
 
 # 與上游 tag 同形：<tag 去 v>.r<距離>.g<hash>，例如 v0.9.40-2-g6c5dfcc
 # → 0.9.40.r2.g6c5dfcc。CI 的 plan 步（通用 -git 分支）會 clone 第一個 git+
@@ -121,6 +144,9 @@ _fetch_official_sidecar() {
 prepare() {
   cd oh-my-pi-gui || return 1
   _fetch_official_sidecar
+
+  # 卡死修復＋zh-TW 語系：腳本對每個上游片段做「命中一次」斷言，並自證結果。
+  python3 "${srcdir}/omp-gui-fixes.py" "${srcdir}/oh-my-pi-gui" "${srcdir}"
 
   # 所有快取留在 srcdir：CI 容器與本機都不留 ~/.bun、~/.cache/electron 殘渣。
   export BUN_INSTALL_CACHE_DIR="${srcdir}/bun-cache"
