@@ -68,5 +68,7 @@
       做成可下載套件會構成再散布；若日後授權放寬再評估。
 - [x] 本機 `zcode-ce-git` 已從 3.16.2.ce.1.r523 升到 3.17.2.ce.1.r457.gdf5e6ab7
       （junlin03-aur 既有資產）；對應 PKGBUILD 2026-11-11 已改跟 CE main。
-- [x] 單包 CI run 43084561874 的 `oh-my-pi-gui-git` build job success；
-      取消 18:41 的舊 shard2 run，避免舊版（無修補）deploy 覆蓋新版。
+- [x] 單包 CI run 43084561874 **build + deploy-repo 全綠**（19:20），修補版
+      `oh-my-pi-gui-git` 已進 current-repo release；CI log 可查到
+      `omp-gui-fixes: all patches applied`。取消 18:41 舊 shard2 run，避免舊版覆蓋。
+- [x] perch 工具鏈 run 43087458671 全綠（前兩輪 43086697080／43087224128 的誤判已修）。
