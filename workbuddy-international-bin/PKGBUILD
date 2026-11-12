@@ -16,7 +16,7 @@ pkgver=${_pkgver}_${_build}
 # entirely (zero references left in app.asar / cli tree), so the check list
 # loses that line and gains the @lydell node-pty Linux prebuild that 5.9.x
 # actually ships; pkgrel 2 was the workbuddyStorage at-rest shim (Fix 7).
-pkgrel=4
+pkgrel=5
 pkgdesc="AI Agent for everyday office work (international edition, unofficial Linux port)"
 arch=('x86_64')
 url="https://www.workbuddy.ai"
@@ -110,6 +110,24 @@ check() {
         }
         msg2 "renderer clean-exit recovery fix present in app.asar"
     fi
+
+    # 4. The sidecar is spawned detached and the upstream kill-on-close job
+    #    is Windows-only, so quitting the GUI used to orphan the sidecar and
+    #    its children (codebuddy serve, MCP servers). Fix 9A injects a
+    #    tree-kill into performQuitCleanup(); Fix 9B adds a parent-death
+    #    watchdog to sidecar-entry.js for the crash path.
+    grep -qa '__WB_LINUX_QUITKILL_V1__' "${asar}" || {
+        error "app.asar has no quit-kill sidecar tree fix (Fix 9A);"
+        error "quitting the GUI would orphan the sidecar process tree"
+        return 1
+    }
+    msg2 "quit-kill sidecar tree fix present in app.asar"
+    grep -qa '__WB_LINUX_PARENTDEATH_V1__' "${asar}" || {
+        error "app.asar has no sidecar parent-death watchdog (Fix 9B);"
+        error "a main-process crash would orphan the sidecar process tree"
+        return 1
+    }
+    msg2 "sidecar parent-death watchdog present in app.asar"
     return 0
 }
 

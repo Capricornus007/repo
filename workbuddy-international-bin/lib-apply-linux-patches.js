@@ -41,6 +41,18 @@
  *      under memory pressure leaves a dead window that relaunching the app
  *      cannot revive (the single-instance handler only shows the window).
  *
+ *   9. Kill the detached sidecar process tree on quit (Fix 9 below).
+ *      The sidecar is spawned with detached:true (its own process group),
+ *      and the upstream app-lifetime-job that would kill it on parent exit
+ *      is Windows-only (if (platform !== 'win32') return). The quit path
+ *      (performQuitCleanup) never references the sidecar manager, so on
+ *      Linux quitting the GUI orphans the sidecar (ppid=1) together with
+ *      its children (codebuddy serve, MCP servers) and crashpad.
+ *      Fix 9A injects a tree-kill into performQuitCleanup(); Fix 9B adds a
+ *      parent-death watchdog at the top of sidecar-entry.js so the sidecar
+ *      also dies when the main process crashes without running the quit
+ *      path at all.
+ *
  * The script operates directly on an app.asar file. It extracts it to a
  * temp directory, edits main/index.js + main/sidecar-entry.js, and
  * repacks the asar while preserving the original unpacked=true set.
@@ -862,6 +874,69 @@ const cleanExitPatchedFiles = [];
 const cleanExitChanged = cleanExitPatchedFiles.length > 0;
 
 // ---------------------------------------------------------------------------
+// Fix 9A (Linux): kill the detached sidecar process tree on quit.
+//
+// Root cause of "quit the GUI, sidecar + codebuddy serve + MCP servers stay
+// behind as orphans (ppid=1)": the sidecar is spawned with detached:true
+// (its own process group), the upstream app-lifetime-job that would reap it
+// on parent exit is Windows-only (if (platform !== 'win32') return), and the
+// quit path (performQuitCleanup) never references the sidecar manager — it
+// stops the daemon, the database and the IPC bridges, but not the sidecar.
+//
+// We inject a self-contained block at the end of performQuitCleanup() that
+// scans $XDG_RUNTIME_DIR/workbuddy/*/sidecar.pid (the same location
+// protocol.js pidFilePath() computes) and calls killProcessTree() from
+// ./process-reap-utils.js on each live pid. killProcessTree walks the
+// process table by ppid, so it reaches codebuddy serve and the MCP servers
+// even though node-pty puts them in their own sessions/process groups.
+// SIGTERM first, then SIGKILL after a 2s grace period.
+// ---------------------------------------------------------------------------
+const QUITKILL_MARKER = '__WB_LINUX_QUITKILL_V1__';
+const QUITKILL_ANCHOR = 'try{await e}catch(e){this.deps.logger.warn(`[Lifecycle] drain background sampling failed:`,e)}';
+let quitKillChanged = false;
+{
+    let current = fs.readFileSync(indexPath, 'utf8');
+    if (current.includes(QUITKILL_MARKER)) {
+        appliedFixes.push('quit-kill-sidecar-tree');
+        log('quit-kill sidecar tree fix already present in main/index.js');
+    } else if (!current.includes(QUITKILL_ANCHOR)) {
+        // The quit path was reshaped upstream (minifier renamed things or the
+        // drain step moved). Shipping unpatched reproduces the orphaned
+        // sidecar bug this gate exists to catch.
+        console.error('[apply-linux-patches] ERROR: main/index.js no longer has the '
+            + 'performQuitCleanup drain anchor. Update Fix 9A in lib-apply-linux-patches.js '
+            + 'before shipping this build.');
+        process.exit(10);
+    } else {
+        const quitKillBlock = QUITKILL_ANCHOR + '\n'
+            + '/*' + QUITKILL_MARKER + '*/\n'
+            + 'try{\n'
+            + '\tvar wbXdg=process.env.XDG_RUNTIME_DIR||("/run/user/"+(typeof process.getuid==="function"?process.getuid():1000));\n'
+            + '\tvar wbWbDir=require("path").join(wbXdg,"workbuddy");\n'
+            + '\tif(require("fs").existsSync(wbWbDir)){\n'
+            + '\t\tvar wbEntries=require("fs").readdirSync(wbWbDir);\n'
+            + '\t\tfor(var wbI=0;wbI<wbEntries.length;wbI++){\n'
+            + '\t\t\ttry{\n'
+            + '\t\t\t\tvar wbPidFile=require("path").join(wbWbDir,wbEntries[wbI],"sidecar.pid");\n'
+            + '\t\t\t\tvar wbJ=JSON.parse(require("fs").readFileSync(wbPidFile,"utf8"));\n'
+            + '\t\t\t\tif(wbJ&&Number.isInteger(wbJ.pid)&&wbJ.pid>1){\n'
+            + '\t\t\t\t\tthis.deps.logger.info(`[Lifecycle] killing sidecar tree pid=${wbJ.pid}`);\n'
+            + '\t\t\t\t\tawait require("./process-reap-utils.js").r(wbJ.pid,{gracefulMs:2000,forceMs:2000});\n'
+            + '\t\t\t\t}\n'
+            + '\t\t\t}catch(_){}\n'
+            + '\t\t}\n'
+            + '\t}\n'
+            + '}catch(e){this.deps.logger.warn(`[Lifecycle] sidecar tree kill failed:`,e)}';
+        current = current.replace(QUITKILL_ANCHOR, quitKillBlock);
+        fs.writeFileSync(indexPath, current);
+        source = current;
+        quitKillChanged = true;
+        appliedFixes.push('quit-kill-sidecar-tree');
+        log('patched main/index.js (quit-kill sidecar tree)');
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Also patch sidecar-entry.js so the sidecar process, spawned with
 // ELECTRON_RUN_AS_NODE=1 and its own Node bootstrap, receives the same
 // env Proxy / _FILE receiver installed in main/index.js. Without this
@@ -871,19 +946,71 @@ const cleanExitChanged = cleanExitPatchedFiles.length > 0;
 // a stale bootstrap value.
 // ---------------------------------------------------------------------------
 const sidecarEntryPath = path.join(tmpDir, 'main', 'sidecar-entry.js');
+const PARENTDEATH_MARKER = '__WB_LINUX_PARENTDEATH_V1__';
 let sidecarChanged = false;
+let parentDeathChanged = false;
 if (fs.existsSync(sidecarEntryPath)) {
     let sidecarSource = fs.readFileSync(sidecarEntryPath, 'utf8');
+
+    // -------------------------------------------------------------------
+    // Fix 9B (Linux): parent-death watchdog.
+    //
+    // Fix 9A only runs when the main process quits through the normal
+    // performQuitCleanup() path. If the main process crashes, is SIGKILLed,
+    // or the user kills it from a terminal, the sidecar never learns that
+    // its parent is gone and stays behind as an orphan (ppid=1) together
+    // with codebuddy serve and the MCP servers.
+    //
+    // This watchdog polls the *original* parent pid every 2s. When that pid
+    // no longer exists (ESRCH; EPERM still counts as alive), the sidecar
+    // sends itself SIGTERM. The sidecar's own SIGTERM handler (registered
+    // in main()) then runs its graceful shutdown: it kills every session
+    // (SIGTERM to each pty process group, which reaches codebuddy serve and
+    // the MCP servers in that group), unlinks the control socket and the
+    // pid file, disposes the credential state and exits. A 5s backstop
+    // force-exits if the graceful path wedges.
+    //
+    // Note: killProcessTree(process.pid) is NOT usable here — upstream's
+    // isValidTargetPid() explicitly rejects e === process.pid, so it would
+    // be a silent no-op.
+    // -------------------------------------------------------------------
+    if (sidecarSource.includes(PARENTDEATH_MARKER)) {
+        appliedFixes.push('sidecar-parent-death-watchdog');
+        log('parent-death watchdog already present in main/sidecar-entry.js');
+    } else {
+        const watchdog = '/*' + PARENTDEATH_MARKER + ' - WorkBuddy Linux port: exit when the main process dies. See lib-apply-linux-patches.js Fix 9B. */\n'
+            + '(function wbParentDeathWatchdog(){\n'
+            + '  if(process.platform==="win32")return;\n'
+            + '  var wbParentPid=process.ppid;\n'
+            + '  if(!Number.isInteger(wbParentPid)||wbParentPid<=1)return;\n'
+            + '  var wbTimer=setInterval(function(){\n'
+            + '    var wbAlive=false;\n'
+            + '    try{process.kill(wbParentPid,0);wbAlive=true}catch(e){wbAlive=!!(e&&e.code==="EPERM")}\n'
+            + '    if(wbAlive)return;\n'
+            + '    clearInterval(wbTimer);\n'
+            + '    try{process.kill(process.pid,"SIGTERM")}catch(_){process.exit(0)}\n'
+            + '    setTimeout(function(){process.exit(0)},5000).unref();\n'
+            + '  },2000);\n'
+            + '  if(wbTimer.unref)wbTimer.unref();\n'
+            + '})();\n';
+        sidecarSource = watchdog + sidecarSource;
+        parentDeathChanged = true;
+        appliedFixes.push('sidecar-parent-death-watchdog');
+        log('patched main/sidecar-entry.js (parent-death watchdog)');
+    }
+
     const sidecarNeedsShim = sidecarSource.includes('ACC_PRODUCT_CONFIG_V3') || sidecarSource.includes('ACC_PRODUCT_CONFIG_V2');
     if (!sidecarNeedsShim) {
         log('no ACC_PRODUCT_CONFIG_V* in sidecar-entry.js; skipping env shim');
     } else if (!sidecarSource.includes(marker)) {
         sidecarSource = SHIM_BODY + sidecarSource;
-        fs.writeFileSync(sidecarEntryPath, sidecarSource);
         sidecarChanged = true;
         log('patched main/sidecar-entry.js (env shim)');
     } else {
         log('marker already present in main/sidecar-entry.js; skipping');
+    }
+    if (sidecarChanged || parentDeathChanged) {
+        fs.writeFileSync(sidecarEntryPath, sidecarSource);
     }
 }
 
@@ -892,7 +1019,7 @@ if (fs.existsSync(sidecarEntryPath)) {
 // carry the E2BIG / tray fixes), skip the repack: rebuilding the archive only
 // reshuffles the unpacked set, which is pure churn.
 // ---------------------------------------------------------------------------
-if (source === originalSource && !sidecarChanged && !atRestChanged && !cleanExitChanged) {
+if (source === originalSource && !sidecarChanged && !parentDeathChanged && !atRestChanged && !cleanExitChanged && !quitKillChanged) {
     writePatchStamp('noop', {
         asarSize: fs.statSync(asarPath).size,
         appliedFixes: appliedFixes,
@@ -1163,7 +1290,7 @@ const unpackPattern = '{*.node,*.so,*.dylib,*.dll,*.wasm}';
     // patch is really in what we ship. Must run BEFORE the rename: @electron/asar
     // caches the raw header per archive path, so extractFile() on asarPath after
     // it was replaced would resolve offsets from the old (upstream) header.
-    if (atRestChanged || cleanExitChanged) {
+    if (atRestChanged || cleanExitChanged || quitKillChanged || parentDeathChanged) {
         const packedIndex = asar.extractFile(outPath, 'main/index.js').toString('utf8');
         if (atRestChanged) {
             if (!packedIndex.includes(ATREST_MARKER)) {
@@ -1174,6 +1301,25 @@ const unpackPattern = '{*.node,*.so,*.dylib,*.dll,*.wasm}';
             }
             log('verified repack: at-rest shim is inside main/index.js (' +
                 packedIndex.length + ' bytes)');
+        }
+        if (quitKillChanged) {
+            if (!packedIndex.includes(QUITKILL_MARKER)) {
+                throw new Error('repacked app.asar does not contain the quit-kill sidecar tree fix');
+            }
+            if (!packedIndex.includes('process-reap-utils.js')) {
+                throw new Error('repacked app.asar quit-kill fix lost the process-reap-utils require');
+            }
+            log('verified repack: quit-kill sidecar tree fix is inside main/index.js');
+        }
+        if (parentDeathChanged) {
+            const packedSidecar = asar.extractFile(outPath, 'main/sidecar-entry.js').toString('utf8');
+            if (!packedSidecar.includes(PARENTDEATH_MARKER)) {
+                throw new Error('repacked app.asar does not contain the sidecar parent-death watchdog');
+            }
+            if (!packedSidecar.includes('wbParentDeathWatchdog')) {
+                throw new Error('repacked app.asar parent-death watchdog is malformed');
+            }
+            log('verified repack: parent-death watchdog is inside main/sidecar-entry.js');
         }
         if (cleanExitChanged) {
             for (const rel of cleanExitPatchedFiles) {
