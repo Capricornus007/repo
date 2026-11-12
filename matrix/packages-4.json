@@ -666,6 +666,7 @@
     "key": "openvpn-git",
     "repo_name": "openvpn-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "artix",
+    "image": "artixlinux/artixlinux:base-devel"
   }
 ]

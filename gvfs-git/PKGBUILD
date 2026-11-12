@@ -21,7 +21,7 @@ depends=('avahi' 'dconf' 'fuse3' 'libarchive' 'libcdio-paranoia' 'libsoup3' 'udi
          'libbluray' 'libgudev' 'gcr' 'psmisc' 'gsettings-desktop-schemas>=3.34.0')
 makedepends=('dbus' 'libgphoto2' 'libimobiledevice' 'smbclient' 'docbook-xsl' 'gtk3' 'libmtp'
              'gnome-online-accounts' 'libnfs' 'libgdata' 'git' 'gtk-doc' 'python' 'meson'
-             'openssh' 'glib2-devel')
+             'openssh' 'glib2-devel' 'msgraph')
 source=("git+https://gitlab.gnome.org/GNOME/gvfs.git"
         gvfsd.hook)
 sha512sums=('SKIP'
@@ -153,7 +153,7 @@ package_gvfs-mtp-git() {
 
 package_gvfs-goa-git() {
   pkgdesc+=" (Gnome Online Accounts backend; cloud storage)"
-  depends=("gvfs-git=$pkgver" 'gnome-online-accounts')
+  depends=("gvfs-git=$pkgver" 'gnome-online-accounts' 'msgraph')
   provides=('gvfs-goa')
   conflicts=('gvfs-goa')
 

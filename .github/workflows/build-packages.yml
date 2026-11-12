@@ -1389,6 +1389,11 @@ jobs:
         run: |
           set -euo pipefail
           F="pkg_dir/PKGBUILD"
+          # in-tree 包（本倉維護，已修好）跳過 AUR 手術——AUR 版的 sed 對不上 in-tree 內容
+          if grep -q '本倉 in-tree 維護版' "$F" 2>/dev/null; then
+            echo "in-tree 包，跳過 AUR 手術"
+            exit 0
+          fi
           case "$REPO_NAME" in
             iptables-git)
               sed -i 's|rm "include/linux/types.h"|rm -f "include/linux/types.h"|' "$F"
@@ -1411,9 +1416,6 @@ jobs:
             parted-git)
               sed -i "s/makedepends=('pkg-config'/makedepends=('bc' 'pkg-config'/" "$F"
               grep -q "makedepends=('bc'" "$F" || { echo "::error::parted bc 沒加到"; exit 1; } ;;
-            xfburn-git)
-              sed -i "s/makedepends=('meson' 'git')/makedepends=('meson' 'git' 'libxslt')/" "$F"
-              grep -q "'libxslt'" "$F" || { echo "::error::xfburn libxslt 沒加到"; exit 1; } ;;
             mangohud-git)
               sed -i "s/'libxrandr'/'libxrandr' 'libxi'/;s/'libx11'/'libx11' 'libxi'/" "$F"
               grep -q "'libxi'" "$F" || { echo "::error::mangohud libxi 沒加到"; exit 1; } ;;
@@ -1428,10 +1430,16 @@ jobs:
               grep -q '^  wireplumber$' "$F" || { echo "::error::xdg-desktop-portal wireplumber 沒加到"; exit 1; } ;;
             usbutils-git)
               sed -i "s/'hwids'/'hwdata'/" "$F"
-              grep -q "'hwdata'" "$F" || { echo "::error::usbutils hwdata 沒改到"; exit 1; } ;;
+              # autogen.sh 需要 meson（AUR makedepends 只有 libusb）
+              sed -i "s/makedepends=('libusb')/makedepends=('libusb' 'meson')/" "$F"
+              grep -q "'hwdata'" "$F" || { echo "::error::usbutils hwdata 沒改到"; exit 1; }
+              grep -q "'meson'" "$F" || { echo "::error::usbutils meson 沒加到"; exit 1; } ;;
             nemo-git)
               sed -i 's|data/nemo.desktop.in|data/nemo.desktop|g' "$F"
-              ! grep -q 'nemo.desktop.in' "$F" || { echo "::error::nemo desktop.in 沒改到"; exit 1; } ;;
+              # meson.build 需要 gstreamer-1.0.pc（AUR makedepends 沒有）
+              sed -i "s/makedepends=(git meson samurai gobject-introspection intltool libgsf glib2-devel)/makedepends=(git meson samurai gobject-introspection intltool libgsf glib2-devel gstreamer)/" "$F"
+              ! grep -q 'nemo.desktop.in' "$F" || { echo "::error::nemo desktop.in 沒改到"; exit 1; }
+              grep -q 'gstreamer' "$F" || { echo "::error::nemo gstreamer 沒加到"; exit 1; } ;;
             nvme-cli-git)
               sed -i "s/-D docs='man'/-D docs='false'/" "$F"
               grep -q "docs='false'" "$F" || { echo "::error::nvme-cli docs 沒改到"; exit 1; } ;;
@@ -1444,13 +1452,17 @@ jobs:
               # xfce4-session-git 的 meson 版本是 4.21.2-dev，夠不夠 >=4.21.2 由 meson 判，
               # 不夠就 auto 關（不報錯），不是我砍的。
               printf '\nmakedepends+=('"'"'xfce4-session-git'"'"')\n' >> "$F"
-              grep -q 'xfce4-session-git' "$F" || { echo "::error::thunar makedepends 沒補到 xfce4-session-git"; exit 1; } ;;
-            seahorse-git)
-              sed -i 's/depends=(gtk3 gcr libsecret libsoup gpgme gnome-keyring libpwquality libhandy)/depends=(gtk4 gcr libsecret libsoup3 gpgme gnome-keyring libpwquality libadwaita libqrencode)/' "$F"
-              grep -q 'libadwaita libqrencode)' "$F" || { echo "::error::seahorse gtk4 沒改到"; exit 1; } ;;
+              # meson.build 需要 vte-2.91.pc（AUR makedepends 沒有）
+              printf '\nmakedepends+=('"'"'vte3'"'"')\n' >> "$F"
+              grep -q 'xfce4-session-git' "$F" || { echo "::error::thunar makedepends 沒補到 xfce4-session-git"; exit 1; }
+              grep -q 'vte3' "$F" || { echo "::error::thunar vte3 沒加到"; exit 1; } ;;
             openvpn-git)
               sed -i 's#patch -Np1 < ../0001-unprivileged.patch#patch -Np1 < ../0001-unprivileged.patch || true#' "$F"
-              grep -q '0001-unprivileged.patch || true' "$F" || { echo "::error::openvpn patch || true 沒加到"; exit 1; } ;;
+              # Artix 用 elogind 取代 systemd（CI 白名單拒 systemd-libs）
+              sed -i "s/'systemd-libs' 'libsystemd.so'/'libelogind' 'libelogind.so'/" "$F"
+              sed -i "s/'systemd'/'elogind'/" "$F"
+              grep -q '0001-unprivileged.patch || true' "$F" || { echo "::error::openvpn patch || true 沒加到"; exit 1; }
+              grep -q "'libelogind'" "$F" || { echo "::error::openvpn libelogind 沒改到"; exit 1; } ;;
             tesseract-data-*-git)
               sed -i 's/ frk / /' "$F"
               ! grep -q ' frk ' "$F" || { echo "::error::tesseract frk 沒刪到"; exit 1; } ;;
@@ -1472,9 +1484,12 @@ jobs:
               # 讓 CI 在 Artix 容器建（Arch 沒有 libelogind）。
               sed -i 's/-Dwith-systemd-user-unit-dir=\/usr\/lib\/systemd\/user/-Dwith-sd-bus-provider=elogind/' "$F"
               sed -i "s/'systemd-libs' 'libsystemd.so'/'libelogind' 'libelogind.so'/" "$F"
+              # Artix 容器沒有 dbus-1.pc（meson.build 需要）
+              sed -i "s/  'libinih'/  'libinih'\n  'dbus'/" "$F"
               # 32 位元保留（client 函式庫，no-daemon 正確；kind=artix 開 [lib32]）
               grep -q 'with-sd-bus-provider=elogind' "$F" || { echo "::error::gamemode elogind 沒加到"; exit 1; }
               grep -q "'libelogind'" "$F" || { echo "::error::gamemode libelogind 依賴沒改到"; exit 1; }
+              grep -q "'dbus'" "$F" || { echo "::error::gamemode dbus 沒加到"; exit 1; }
               grep -q 'lib32-gamemode-git' "$F" || { echo "::error::gamemode 32 位元被誤刪"; exit 1; } ;;
             libfm-gtk2)
               # AUR 的 depends 寫 "libfm=$pkgver"（=1.4.0），但 Arch 只有 libfm 1.4.1
