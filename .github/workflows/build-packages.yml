@@ -1439,8 +1439,12 @@ jobs:
               sed -i '/^  \.\/configure/i\  ./autogen.sh' "$F"
               grep -q './autogen.sh' "$F" || { echo "::error::tcpdump autogen 沒加到"; exit 1; } ;;
             thunar-git)
-              sed -i 's/-D gtk-doc=true/-D gtk-doc=true -D session-management=disabled/' "$F"
-              grep -q 'session-management=disabled' "$F" || { echo "::error::thunar session-management 沒加到"; exit 1; } ;;
+              # session-management 需要 libxfce4session-client-1.pc（xfce4-session-git 提供，
+              # 已在本倉 feed）。補進 makedepends 讓 meson auto 偵測到就開；不砍功能。
+              # xfce4-session-git 的 meson 版本是 4.21.2-dev，夠不夠 >=4.21.2 由 meson 判，
+              # 不夠就 auto 關（不報錯），不是我砍的。
+              printf '\nmakedepends+=('"'"'xfce4-session-git'"'"')\n' >> "$F"
+              grep -q 'xfce4-session-git' "$F" || { echo "::error::thunar makedepends 沒補到 xfce4-session-git"; exit 1; } ;;
             seahorse-git)
               sed -i 's/depends=(gtk3 gcr libsecret libsoup gpgme gnome-keyring libpwquality libhandy)/depends=(gtk4 gcr libsecret libsoup3 gpgme gnome-keyring libpwquality libadwaita libqrencode)/' "$F"
               grep -q 'libadwaita libqrencode)' "$F" || { echo "::error::seahorse gtk4 沒改到"; exit 1; } ;;
@@ -1463,12 +1467,21 @@ jobs:
               ! grep -q 'google' "$F" || { echo "::error::gvfs google 殘留"; exit 1; }
               grep -q "'libsoup3'" "$F" || { echo "::error::gvfs libsoup3 沒改到"; exit 1; } ;;
             gamemode-git)
-              sed -i '/^package_lib32-gamemode-git()/,/^}/d' "$F"
-              sed -i "/^  'lib32-gamemode-git'$/d" "$F"
-              sed -i '/export CFLAGS+=" -m32"/,/meson compile -C build32/d' "$F"
-              sed -i 's/-Dwith-privileged-group=gamemode$/-Dwith-privileged-group=gamemode -Dwith-sd-bus-provider=no-daemon/' "$F"
-              ! grep -q 'lib32\|build32\|m32' "$F" || { echo "::error::gamemode 32 位元殘留"; exit 1; }
-              grep -q 'with-sd-bus-provider=no-daemon' "$F" || { echo "::error::gamemode sd-bus 沒加到"; exit 1; } ;;
+              # 64 位元：elogind 取代 systemd（Artix 用 elogind；daemon 照常建、
+              # D-Bus service 預設裝到 /usr/share/dbus-1/services）。kind 改 artix
+              # 讓 CI 在 Artix 容器建（Arch 沒有 libelogind）。
+              sed -i 's/-Dwith-systemd-user-unit-dir=\/usr\/lib\/systemd\/user/-Dwith-sd-bus-provider=elogind/' "$F"
+              sed -i "s/'systemd-libs' 'libsystemd.so'/'libelogind' 'libelogind.so'/" "$F"
+              # 32 位元保留（client 函式庫，no-daemon 正確；kind=artix 開 [lib32]）
+              grep -q 'with-sd-bus-provider=elogind' "$F" || { echo "::error::gamemode elogind 沒加到"; exit 1; }
+              grep -q "'libelogind'" "$F" || { echo "::error::gamemode libelogind 依賴沒改到"; exit 1; }
+              grep -q 'lib32-gamemode-git' "$F" || { echo "::error::gamemode 32 位元被誤刪"; exit 1; } ;;
+            libfm-gtk2)
+              # AUR 的 depends 寫 "libfm=$pkgver"（=1.4.0），但 Arch 只有 libfm 1.4.1
+              # → 精確版對不上、makepkg -s 直接 target not found。放寬成 >=，
+              # 1.4.x API 相容（pcmanfm-git 的前置）。
+              sed -i 's/"libfm=\$pkgver"/"libfm>=\$pkgver"/' "$F"
+              grep -q '"libfm>=\$pkgver"' "$F" || { echo "::error::libfm-gtk2 libfm 依賴沒放寬"; exit 1; } ;;
             vapoursynth-git)
               sed -i '/Makefile\.am/d' "$F"
               sed -i "s/^  'git'$/  'git'\n  'meson'/" "$F"

@@ -481,6 +481,12 @@
     "kind": "aur"
   },
   {
+    "key": "libfm-gtk2",
+    "repo_name": "libfm-gtk2",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
     "key": "playerctl-git",
     "repo_name": "playerctl-git",
     "variant": "none",
@@ -546,7 +552,8 @@
     "key": "gamemode-git",
     "repo_name": "gamemode-git",
     "variant": "none",
-    "kind": "aur"
+    "kind": "artix",
+    "image": "artixlinux/artixlinux:base-devel"
   },
   {
     "key": "vapoursynth-git",
