@@ -1573,7 +1573,33 @@ jobs:
               awk -v p="$_bg_patch" '$0 ~ /msg2 "Tree cleaned"/ {print; print p; next} {print}' \
                 "$F" > "$F.t" && mv "$F.t" "$F"
               grep -q 'libutil_rust_bindgen_c' "$F" \
-                || { echo "::error::bindgen -I 補丁沒注入進 prepare()（錨點 msg2 \"Tree cleaned\" 不見了）"; exit 1; } ;;  *) echo "（無手術）$REPO_NAME" ;;
+                || { echo "::error::bindgen -I 補丁沒注入進 prepare()（錨點 msg2 \"Tree cleaned\" 不見了）"; exit 1; } ;;
+            ffmpeg-full-git)
+              # AUR makedepends 寫 amf-headers，但 Arch/AUR 都沒有這個包（只有 amf-headers-git）。
+              # CI 容器無 AMD GPU，AMF 支援無意義 → 移除 --enable-amf 與 amf-headers。
+              sed -i '/--enable-amf/d' "$F"
+              sed -i "/'amf-headers'/d" "$F"
+              ! grep -q 'enable-amf' "$F" || { echo "::error::ffmpeg amf 沒刪到"; exit 1; }
+              ! grep -q 'amf-headers' "$F" || { echo "::error::ffmpeg amf-headers 沒刪到"; exit 1; } ;;
+            linutil-git)
+              # AUR build() 硬編碼 RUSTFLAGS="-C link-arg=/usr/lib/libtree-sitter.so"，
+              # 但系統 tree-sitter 是 0.26.9，linutil 的 tree-sitter-highlight 0.27.0
+              # 需要 ts_language_is_parseable（0.27.0 才有）→ undefined symbol。
+              # 移除 RUSTFLAGS，讓 Rust crate 用自己的 tree-sitter。
+              sed -i '/^  export RUSTFLAGS=/d' "$F"
+              ! grep -q 'RUSTFLAGS' "$F" || { echo "::error::linutil RUSTFLAGS 沒刪到"; exit 1; } ;;
+            capnproto-git)
+              # OpenSSL 3.x 的 X509_NAME_ENTRY_get_data() 回傳 const ASN1_STRING*，
+              # AUR 的 tls.c++:1196 把它賦給 ASN1_STRING* → invalid conversion。
+              # 加 const_cast 修正。
+              sed -i 's/ASN1_STRING\* data = X509_NAME_ENTRY_get_data(entry);/const ASN1_STRING* data = X509_NAME_ENTRY_get_data(entry);/' "$F"
+              grep -q 'const ASN1_STRING\* data = X509_NAME_ENTRY_get_data' "$F" || { echo "::error::capnproto const 修正沒改到"; exit 1; } ;;
+            bzip3-git)
+              # AUR build() 呼叫 ./bootstrap.sh，但上游源碼只有 ./bootstrap（無 .sh 後綴）。
+              sed -i 's|./bootstrap.sh|./bootstrap|' "$F"
+              grep -q './bootstrap' "$F" || { echo "::error::bzip3 bootstrap 沒改到"; exit 1; }
+              ! grep -q 'bootstrap.sh' "$F" || { echo "::error::bzip3 bootstrap.sh 殘留"; exit 1; } ;;
+            *) echo "（無手術）$REPO_NAME" ;;
           esac
 
       - name: 检测 ffmpeg-full-git 上游版本
@@ -2373,8 +2399,11 @@ jobs:
               [ -n "$_ue_vers" ] || skip "拿不到 unicode.org /Public/ 的版本目錄清單"
               TARGET_PKGVER=""
               for _v in $_ue_vers; do
-                if curl -fsIL --connect-timeout 15 -o /dev/null \
-                     "https://www.unicode.org/Public/$_v/emoji/emoji-sequences.txt" 2>/dev/null; then
+                # 不跟隨重定向：19.0.0 的 emoji-sequences.txt 回 302 → draft/ 目錄，
+                # -L 會拿到 200 但內容是目錄列表不是資料檔，導致 sha512 驗證失敗。
+                # 只接受 HTTP 200（穩定版），302/404 一律跳過。
+                if [ "$(curl -sI -o /dev/null -w '%{http_code}' --connect-timeout 15 \
+                     "https://www.unicode.org/Public/$_v/emoji/emoji-sequences.txt" 2>/dev/null)" = "200" ]; then
                   TARGET_PKGVER="$_v"; break
                 fi
               done

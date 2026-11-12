@@ -103,6 +103,10 @@ pkgver() {
 
 prepare() {
   cd librime
+  # 上游 CMakeLists.txt 要求 deps/spdlog submodule（static linking 必須），
+  # 但 git clone 不會自動初始化 submodule → CMake 報
+  #   "Bundled spdlog is required for static linking"
+  git submodule update --init deps/spdlog
   # capnp 2.0 的 kj 標頭要求 C++20（#error "This code requires C++20"），
   # 而上游釘 17 → 抬到 20。實測這一筆就把 420 個錯誤壓到 12 個。
   git apply -v "$srcdir/cxx20-for-capnp-2.patch"
