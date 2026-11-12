@@ -1,0 +1,42 @@
+name: Build Git Packages (shard 4)
+# 矩陣分片 4/4：GitHub Actions 單矩陣硬上限 256 job，故把大矩陣拆多個 workflow，
+# 各自讀自己的 matrix/packages-4.json（≤250）、獨立 run／concurrency／deploy。
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'matrix/packages-4.json'
+      - '.github/workflows/build-git-packages-4.yml'
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+concurrency:
+  group: build-git-packages-4-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.read.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: read
+        name: 讀取 matrix/packages-4.json 輸出為 job output
+        run: |
+          {
+            echo "packages<<__PKGS_EOF__"
+            # 2026-11-02：xorg-server 的 5 個 split 名（common/devel/xephyr/xnest/xvfb）
+            # 是同一份 xorg-server-git PKGBUILD 的產物，保留在矩陣檔作紀錄，
+            # 但不送進 build 矩陣（否則同一份源碼會被重複編 5 次）。
+            jq '[.[] | select(.kind != "alias")]' matrix/packages-4.json
+            echo "__PKGS_EOF__"
+          } >> "$GITHUB_OUTPUT"
+  build:
+    needs: setup
+    uses: ./.github/workflows/build-packages.yml
+    permissions:
+      contents: write
+    secrets: inherit
+    with:
+      timeout_minutes: 360
+      packages: ${{ needs.setup.outputs.packages }}
