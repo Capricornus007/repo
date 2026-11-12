@@ -8,11 +8,15 @@ _pkgver=5.9.4.42593613
 _build=fa0a0901
 _electronver=37.10.3
 pkgver=${_pkgver}_${_build}
+# pkgrel 4: Fix 8 — renderer clean-exit-0 crash recovery. Upstream's decider
+# treats a spontaneous renderer exit 0 as a normal shutdown and never reloads
+# it, leaving a black/frozen window that relaunching cannot revive; the patch
+# lets clean-exit enter the existing backoff/give-up recovery flow.
 # pkgrel 3: 5.9.4 payload verification sync — upstream dropped better-sqlite3
 # entirely (zero references left in app.asar / cli tree), so the check list
 # loses that line and gains the @lydell node-pty Linux prebuild that 5.9.x
 # actually ships; pkgrel 2 was the workbuddyStorage at-rest shim (Fix 7).
-pkgrel=3
+pkgrel=4
 pkgdesc="AI Agent for everyday office work (international edition, unofficial Linux port)"
 arch=('x86_64')
 url="https://www.workbuddy.ai"
@@ -48,7 +52,8 @@ build() {
     # runtime, rebuild native modules for Linux, apply runtime patches.
     # Fixes 1-6 are anchor-tolerant (5.8.x already carries the E2BIG/tray work
     # upstream, so they are no-ops here); Fix 7 (workbuddyStorage at-rest shim)
-    # is mandatory on 5.8+ and aborts the build if its anchor drifts.
+    # is mandatory on 5.8+ and Fix 8 (renderer clean-exit-0 recovery) on 5.9+;
+    # both abort the build if their anchor drifts.
     export WORKBUDDY_APP_ID="WorkBuddy AI"
     export WORKBUDDY_APP_DISPLAY_NAME="WorkBuddy AI (International)"
     export WORKBUDDY_INSTALL_DIR="${srcdir}/workbuddy-app"
@@ -91,6 +96,19 @@ check() {
             return 1
         }
         msg2 "workbuddyStorage at-rest shim present in app.asar"
+    fi
+
+    # 3. 5.9.x's crash-recovery decider ignores a renderer clean-exit with
+    #    exitCode 0, so a renderer that dies under memory pressure is never
+    #    reloaded: the window stays mapped but dead, and relaunching only
+    #    shows it again. Fix 8 must have removed the exitCode qualifier.
+    if grep -qa 'clean-exit-code-' "${asar}"; then
+        grep -qa '__WB_LINUX_CLEANEXIT_RECOVERY_V1__' "${asar}" || {
+            error "app.asar still ignores renderer clean-exit-0;"
+            error "the crash-recovery patch (Fix 8) was not applied"
+            return 1
+        }
+        msg2 "renderer clean-exit recovery fix present in app.asar"
     fi
     return 0
 }
@@ -233,6 +251,10 @@ _verify_package_payload() {
     if grep -qa 'workbuddyStorage' "${asar}" && \
        ! grep -qa '__WB_LINUX_ATREST_SHIM_V1__' "${asar}"; then
         _fail "app.asar uses the vendor-only electron.workbuddyStorage without the Linux at-rest shim"
+    fi
+    if grep -qa 'clean-exit-code-' "${asar}" && \
+       ! grep -qa '__WB_LINUX_CLEANEXIT_RECOVERY_V1__' "${asar}"; then
+        _fail "app.asar ignores renderer clean-exit-0 without the Fix 8 recovery patch"
     fi
     if compgen -G "${appdir}/resources/app.asar.new*" >/dev/null \
         || compgen -G "${appdir}/resources/app.asar.prepatch" >/dev/null; then

@@ -35,6 +35,12 @@
  *      real symmetric key on a stock Linux Electron runtime. Without it the
  *      main window opens but every agent session child dies immediately.
  *
+ *   8. Recover from a renderer "clean-exit" with exit code 0 (Fix 8 below).
+ *      Upstream's crash-recovery decider treats it as a normal shutdown and
+ *      never reloads the renderer, so a renderer that dies spontaneously
+ *      under memory pressure leaves a dead window that relaunching the app
+ *      cannot revive (the single-instance handler only shows the window).
+ *
  * The script operates directly on an app.asar file. It extracts it to a
  * temp directory, edits main/index.js + main/sidecar-entry.js, and
  * repacks the asar while preserving the original unpacked=true set.
@@ -784,6 +790,78 @@ let atRestChanged = false;
 }
 
 // ---------------------------------------------------------------------------
+// Fix 8 (Linux): recover from a renderer "clean-exit" with exit code 0.
+//
+// Root cause of the "window goes black/frozen and relaunching does not help"
+// bug on 5.9.4: under memory pressure (a ~340KB markdown conversation
+// re-parsed with zero cache hits stalls the renderer event loop for ~18s)
+// the renderer can exit spontaneously with reason=clean-exit, exitCode=0.
+// The CrashRecovery decider in main/main-bootstrap.js treats that
+// combination as a normal shutdown and returns {action:'none'}, so the
+// renderer is never reloaded. The main process and the X window stay alive,
+// but nothing repaints; the single-instance "show" handler does not reload
+// it either.
+//
+// Removing the exitCode qualifier lets clean-exit-0 enter the same recovery
+// flow as every other crash reason. That flow already carries the safety
+// valves (stability-window backoff, clear-cache-and-reload escalation,
+// consecutive-crash and total-OOM give-up thresholds), so a renderer that
+// keeps dying is not reloaded forever.
+// ---------------------------------------------------------------------------
+const CLEANEXIT_MARKER = '__WB_LINUX_CLEANEXIT_RECOVERY_V1__';
+const CLEANEXIT_ANCHOR = /([A-Za-z_$][\w$]*)\.reason===`clean-exit`&&\1\.exitCode!==0/;
+const cleanExitPatchedFiles = [];
+{
+    // The decider lives in main/main-bootstrap.js on 5.9.x but has moved
+    // between modules across upstream releases, so locate it by its unique
+    // reasonTag sentinel instead of hardcoding a path.
+    const candidates = [];
+    (function scan(dir, rel) {
+        for (const name of fs.readdirSync(dir)) {
+            const abs = path.join(dir, name);
+            const r = rel ? rel + '/' + name : name;
+            const st = fs.lstatSync(abs);
+            if (st.isDirectory()) {
+                scan(abs, r);
+            } else if (st.isFile() && name.endsWith('.js')) {
+                const text = fs.readFileSync(abs, 'utf8');
+                if (text.includes('clean-exit-code-')) candidates.push([r, abs, text]);
+            }
+        }
+    })(tmpDir, '');
+    if (candidates.length === 0) {
+        // Old upstream without the crash-recovery decider: nothing to fix.
+        appliedFixes.push('renderer-clean-exit-recovery:not-needed');
+        log('no clean-exit recovery guard anywhere in the asar; Fix 8 not needed');
+    } else {
+        for (const [rel, abs, text] of candidates) {
+            if (text.includes(CLEANEXIT_MARKER)) {
+                log('renderer clean-exit recovery fix already present in ' + rel);
+                continue;
+            }
+            if (!CLEANEXIT_ANCHOR.test(text)) {
+                // The decider is still there but our anchor no longer matches
+                // (minifier renamed things / guard reshaped). Shipping unpatched
+                // reproduces the dead-window bug this gate exists to catch.
+                console.error('[apply-linux-patches] ERROR: ' + rel + ' still has the '
+                    + 'clean-exit-code recovery guard but the Fix 8 anchor did not match. '
+                    + 'Update Fix 8 in lib-apply-linux-patches.js before shipping this build.');
+                process.exit(9);
+            }
+            const re = new RegExp(CLEANEXIT_ANCHOR.source, 'g');
+            const hits = text.match(re).length;
+            const patched = text.replace(re, (m, v) =>
+                v + '.reason===`clean-exit`/*' + CLEANEXIT_MARKER + '*/');
+            fs.writeFileSync(abs, patched);
+            cleanExitPatchedFiles.push(rel);
+            log('patched ' + rel + ' (renderer clean-exit recovery, ' + hits + ' site(s))');
+        }
+        appliedFixes.push('renderer-clean-exit-recovery');
+    }
+}
+const cleanExitChanged = cleanExitPatchedFiles.length > 0;
+
+// ---------------------------------------------------------------------------
 // Also patch sidecar-entry.js so the sidecar process, spawned with
 // ELECTRON_RUN_AS_NODE=1 and its own Node bootstrap, receives the same
 // env Proxy / _FILE receiver installed in main/index.js. Without this
@@ -814,7 +892,7 @@ if (fs.existsSync(sidecarEntryPath)) {
 // carry the E2BIG / tray fixes), skip the repack: rebuilding the archive only
 // reshuffles the unpacked set, which is pure churn.
 // ---------------------------------------------------------------------------
-if (source === originalSource && !sidecarChanged && !atRestChanged) {
+if (source === originalSource && !sidecarChanged && !atRestChanged && !cleanExitChanged) {
     writePatchStamp('noop', {
         asarSize: fs.statSync(asarPath).size,
         appliedFixes: appliedFixes,
@@ -1085,16 +1163,30 @@ const unpackPattern = '{*.node,*.so,*.dylib,*.dll,*.wasm}';
     // patch is really in what we ship. Must run BEFORE the rename: @electron/asar
     // caches the raw header per archive path, so extractFile() on asarPath after
     // it was replaced would resolve offsets from the old (upstream) header.
-    if (atRestChanged) {
+    if (atRestChanged || cleanExitChanged) {
         const packedIndex = asar.extractFile(outPath, 'main/index.js').toString('utf8');
-        if (!packedIndex.includes(ATREST_MARKER)) {
-            throw new Error('repacked app.asar does not contain the workbuddyStorage at-rest shim');
+        if (atRestChanged) {
+            if (!packedIndex.includes(ATREST_MARKER)) {
+                throw new Error('repacked app.asar does not contain the workbuddyStorage at-rest shim');
+            }
+            if (!/electron\.workbuddyStorage\s*\.\s*loggerGet\s*\(/.test(packedIndex)) {
+                throw new Error('repacked app.asar lost the workbuddyStorage call site it must intercept');
+            }
+            log('verified repack: at-rest shim is inside main/index.js (' +
+                packedIndex.length + ' bytes)');
         }
-        if (!/electron\.workbuddyStorage\s*\.\s*loggerGet\s*\(/.test(packedIndex)) {
-            throw new Error('repacked app.asar lost the workbuddyStorage call site it must intercept');
+        if (cleanExitChanged) {
+            for (const rel of cleanExitPatchedFiles) {
+                const packed = asar.extractFile(outPath, rel).toString('utf8');
+                if (!packed.includes(CLEANEXIT_MARKER)) {
+                    throw new Error('repacked app.asar does not contain the renderer clean-exit recovery fix in ' + rel);
+                }
+                if (CLEANEXIT_ANCHOR.test(packed)) {
+                    throw new Error('repacked app.asar still has the unpatched clean-exit-0 guard in ' + rel);
+                }
+            }
+            log('verified repack: clean-exit recovery fix is inside ' + cleanExitPatchedFiles.join(', '));
         }
-        log('verified repack: at-rest shim is inside main/index.js (' +
-            packedIndex.length + ' bytes)');
     }
 
     // Atomically replace app.asar only. Leave app.asar.unpacked alone.
