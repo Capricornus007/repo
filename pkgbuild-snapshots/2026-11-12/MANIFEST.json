@@ -12,6 +12,7 @@
   "ci/scripts/bump-pkgrel": "a7499e9b5b5accba271768c31d9c606dd62939b6044568a2ca9cd5d7d886f396",
   "ci/scripts/check-pkg-split-overlap.py": "f0927c32787dc6a1a9d8b14befe0c6b1f248604eb1bc78fa639db11ed2ba6b0e",
   "ci/scripts/install-git-hooks.sh": "8892f9348ed57943d1dc92c4f34749cb2be1022bcae7bd8f2672f0b5f8216768",
+  "ci/scripts/workbuddy-update.sh": "8e31ab780332d1c46a03aaf86481b53af29eca032aba3109e9c4bfc29b400a2f",
   "ci/scripts/workflow-step-budget.py": "10953b06cc1c58a3869e2a8bb90c15a7c6775d28358dec874fcd8571aed88daf",
   "ci/tools/aur_update.py": "f50efabfde4b72d21ec69b804962c052b4438f9fd72778d9a51f77ef1220d886",
   "ci/tools/pkgbuild_snapshot.py": "a4f03b4517ef0d42494c207f692d3096ea7dacedd273107f8db5e6159762279b",
@@ -23,9 +24,10 @@
   "ci/workflows/build-git-packages.yml": "439d04e52605cc6d4cf80fac9817c6e8564dc7c9198d0b6c14833f4cdc8dce62",
   "ci/workflows/build-kernels.yml": "a02c2dfce1d8f458eb323603fd2318e22f9891c404d0d49efb66b13742be533b",
   "ci/workflows/build-one-package.yml": "dac687388bcc1f63814c8bbb7b1f298e9d24d3438b558dec944dd08d58129115",
-  "ci/workflows/build-packages.yml": "9f20c0ef30e523a8e4c06147b50c6bf6b32118438e280c37d26dbf26ce317ac6",
+  "ci/workflows/build-packages.yml": "1f1e7b3c861c53218fd5861621a8e85484efba071cc7681275263302001694eb",
   "ci/workflows/build-restored.yml": "d9b8bf801357f1c466e99757510937af9c7fd181462451aef8ff5a333b8f71a4",
-  "ci/workflows/perch-cli-toolchain.yml": "e3a6c43225a4a36190251ce5a63b37bec0a03ad3696685ab33921b2be3d37cfb"
+  "ci/workflows/perch-cli-toolchain.yml": "e3a6c43225a4a36190251ce5a63b37bec0a03ad3696685ab33921b2be3d37cfb",
+  "ci/workflows/workbuddy-update.yml": "84c4b5c2b0b1b4dc7f9e18d446edff1120ab26de8f07048af89b5dfbd542747e"
  },
  "date": "2026-11-12",
  "missing_aur": [
@@ -52,9 +54,9 @@
   },
   "linux-zencjk": {
    "files": {
-    ".SRCINFO": "31152c08ecb756d04df4a5d5cac8c7303a74c471d5c46a45328d6108398984d4",
+    ".SRCINFO": "94d3cb8d4f384805f87d806440068fa3e161bec15cfadf1e686a895a921ae2a9",
     ".gitignore": "416362d171fbd84c0ec2f3c04a00b8786bf1edb2b5fae14412b174a02a9c7921",
-    "PKGBUILD": "f5efa930cde7d2b648206dd879b108d3474b7f0f9c70a7eb2e7bc69e865a0d06",
+    "PKGBUILD": "2246475587dcaab92c88032e94203062fc0e0689fa7214d30bd5b824146314d1",
     "config": "f9be7d01ba92cef1522660994d2e0ccd53c1e1013107d1be421a9df5d53ae750"
    },
    "kind": "",
