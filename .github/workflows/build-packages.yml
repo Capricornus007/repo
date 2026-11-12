@@ -1383,6 +1383,127 @@ jobs:
           grep -q 'i3lock-fancy' pkg_dir/PKGBUILD \
             || { echo "::error::provides 行沒改寫成功（AUR 版格式變了？）"; exit 1; }
 
+      - name: 逐包 AUR 上游小毛病修復（獨立 step——run 塊無表達式，不受 21000 上限）
+        env:
+          REPO_NAME: ${{ matrix.repo_name }}
+        run: |
+          set -euo pipefail
+          F="pkg_dir/PKGBUILD"
+          case "$REPO_NAME" in
+            iptables-git)
+              sed -i 's|rm "include/linux/types.h"|rm -f "include/linux/types.h"|' "$F"
+              grep -q 'rm -f "include/linux/types.h"' "$F" || { echo "::error::iptables rm -f 沒改到"; exit 1; } ;;
+            fwupd-git)
+              sed -i '/-D plugin_powerd=disabled/d' "$F"
+              ! grep -q 'plugin_powerd' "$F" || { echo "::error::fwupd powerd 沒刪到"; exit 1; } ;;
+            xfce4-settings-git)
+              sed -i '/-D upower=enabled/d' "$F"
+              ! grep -q 'upower=enabled' "$F" || { echo "::error::xfce4-settings upower 沒刪到"; exit 1; } ;;
+            gjs-git)
+              sed -i 's/-D installed_tests=false/-D installed_tests=false -D skip_gtk_tests=true/' "$F"
+              grep -q 'skip_gtk_tests=true' "$F" || { echo "::error::gjs skip_gtk_tests 沒加到"; exit 1; } ;;
+            lxsession-git)
+              sed -i '/autoreconf -fi/i\  mkdir -p m4' "$F"
+              grep -q 'mkdir -p m4' "$F" || { echo "::error::lxsession mkdir m4 沒加到"; exit 1; } ;;
+            vala-git)
+              sed -i 's|./configure --prefix=/usr|GI_GIRDIR=/usr/share/gir-1.0 ./configure --prefix=/usr|' "$F"
+              grep -q 'GI_GIRDIR=/usr/share/gir-1.0 ./configure' "$F" || { echo "::error::vala GI_GIRDIR 沒加到"; exit 1; } ;;
+            parted-git)
+              sed -i "s/makedepends=('pkg-config'/makedepends=('bc' 'pkg-config'/" "$F"
+              grep -q "makedepends=('bc'" "$F" || { echo "::error::parted bc 沒加到"; exit 1; } ;;
+            xfburn-git)
+              sed -i "s/makedepends=('meson' 'git')/makedepends=('meson' 'git' 'libxslt')/" "$F"
+              grep -q "'libxslt'" "$F" || { echo "::error::xfburn libxslt 沒加到"; exit 1; } ;;
+            mangohud-git)
+              sed -i "s/'libxrandr'/'libxrandr' 'libxi'/;s/'libx11'/'libx11' 'libxi'/" "$F"
+              grep -q "'libxi'" "$F" || { echo "::error::mangohud libxi 沒加到"; exit 1; } ;;
+            kdeconnect-git)
+              sed -i 's/^depends=(dbus/depends=(dbus libei/' "$F"
+              grep -q '^depends=(dbus libei' "$F" || { echo "::error::kdeconnect libei 沒加到"; exit 1; } ;;
+            upower-git)
+              sed -i 's/^depends=(libimobiledevice libgudev)/depends=(libimobiledevice libgudev polkit)/' "$F"
+              grep -q 'libgudev polkit)' "$F" || { echo "::error::upower polkit 沒加到"; exit 1; } ;;
+            xdg-desktop-portal-git)
+              sed -i '/^  pipewire$/a\  wireplumber' "$F"
+              grep -q '^  wireplumber$' "$F" || { echo "::error::xdg-desktop-portal wireplumber 沒加到"; exit 1; } ;;
+            usbutils-git)
+              sed -i "s/'hwids'/'hwdata'/" "$F"
+              grep -q "'hwdata'" "$F" || { echo "::error::usbutils hwdata 沒改到"; exit 1; } ;;
+            nemo-git)
+              sed -i 's|data/nemo.desktop.in|data/nemo.desktop|g' "$F"
+              ! grep -q 'nemo.desktop.in' "$F" || { echo "::error::nemo desktop.in 沒改到"; exit 1; } ;;
+            nvme-cli-git)
+              sed -i "s/-D docs='man'/-D docs='false'/" "$F"
+              grep -q "docs='false'" "$F" || { echo "::error::nvme-cli docs 沒改到"; exit 1; } ;;
+            tcpdump-git)
+              sed -i '/^  \.\/configure/i\  ./autogen.sh' "$F"
+              grep -q './autogen.sh' "$F" || { echo "::error::tcpdump autogen 沒加到"; exit 1; } ;;
+            thunar-git)
+              sed -i 's/-D gtk-doc=true/-D gtk-doc=true -D session-management=disabled/' "$F"
+              grep -q 'session-management=disabled' "$F" || { echo "::error::thunar session-management 沒加到"; exit 1; } ;;
+            seahorse-git)
+              sed -i 's/depends=(gtk3 gcr libsecret libsoup gpgme gnome-keyring libpwquality libhandy)/depends=(gtk4 gcr libsecret libsoup3 gpgme gnome-keyring libpwquality libadwaita libqrencode)/' "$F"
+              grep -q 'libadwaita libqrencode)' "$F" || { echo "::error::seahorse gtk4 沒改到"; exit 1; } ;;
+            openvpn-git)
+              sed -i 's#patch -Np1 < ../0001-unprivileged.patch#patch -Np1 < ../0001-unprivileged.patch || true#' "$F"
+              grep -q '0001-unprivileged.patch || true' "$F" || { echo "::error::openvpn patch || true 沒加到"; exit 1; } ;;
+            tesseract-data-*-git)
+              sed -i 's/ frk / /' "$F"
+              ! grep -q ' frk ' "$F" || { echo "::error::tesseract frk 沒刪到"; exit 1; } ;;
+            sccache-git)
+              sed -i 's/cargo build --release --all-features/cargo build --release/' "$F"
+              ! grep -q -- '--all-features' "$F" || { echo "::error::sccache all-features 沒刪到"; exit 1; } ;;
+            gvfs-git)
+              sed -i 's/,google}/}/' "$F"
+              sed -i "s/'libsoup'/'libsoup3'/" "$F"
+              sed -i "s/'libgdata' //" "$F"
+              sed -i "/gvfs-google: Google Drive support/d" "$F"
+              sed -i '/^  _split google \\/,+2d' "$F"
+              sed -i '/^package_gvfs-google-git()/,/^}/d' "$F"
+              ! grep -q 'google' "$F" || { echo "::error::gvfs google 殘留"; exit 1; }
+              grep -q "'libsoup3'" "$F" || { echo "::error::gvfs libsoup3 沒改到"; exit 1; } ;;
+            gamemode-git)
+              sed -i '/^package_lib32-gamemode-git()/,/^}/d' "$F"
+              sed -i "/^  'lib32-gamemode-git'$/d" "$F"
+              sed -i '/export CFLAGS+=" -m32"/,/meson compile -C build32/d' "$F"
+              sed -i 's/-Dwith-privileged-group=gamemode$/-Dwith-privileged-group=gamemode -Dwith-sd-bus-provider=no-daemon/' "$F"
+              ! grep -q 'lib32\|build32\|m32' "$F" || { echo "::error::gamemode 32 位元殘留"; exit 1; }
+              grep -q 'with-sd-bus-provider=no-daemon' "$F" || { echo "::error::gamemode sd-bus 沒加到"; exit 1; } ;;
+            vapoursynth-git)
+              sed -i '/Makefile\.am/d' "$F"
+              sed -i "s/^  'git'$/  'git'\n  'meson'/" "$F"
+              awk -v repl='build() {
+            arch-meson "${srcdir}/vapoursynth" "${srcdir}/build"
+            meson compile -C "${srcdir}/build"
+
+            (cd "${srcdir}/vapoursynth/doc"
+              sphinx-build -b html -d _build/doctrees . _build/html
+              sphinx-build -b man -d _build/doctrees . _build/man
+            )
+          }' '
+                /^build\(\) \{/ { print repl; skip=1; next }
+                skip && /^\}/ { skip=0; next }
+                !skip { print }
+              ' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
+              sed -i 's|make -C build DESTDIR="${srcdir}/fakeroot" install|DESTDIR="${srcdir}/fakeroot" meson install -C build|' "$F"
+              sed -i 's|make -C build DESTDIR="${pkgdir}" install|DESTDIR="${pkgdir}" meson install -C build|' "$F"
+              grep -q 'arch-meson "${srcdir}/vapoursynth"' "$F" || { echo "::error::vapoursynth build 沒改到"; exit 1; }
+              ! grep -q 'autogen\|configure\|Makefile.am' "$F" || { echo "::error::vapoursynth autotools 殘留"; exit 1; }
+              grep -q "'meson'" "$F" || { echo "::error::vapoursynth meson makedepends 沒加到"; exit 1; } ;;
+            mesa-tkg-git)
+              # mesa main 的 rust bindgen（src/util/rust/meson.build）在 LLVM 24 環境缺 -I：
+              # libutil_rust_bindgen_c 的 include_directories 只有 inc_util，bindgen 產出的
+              # bindgen.rs 找不到 build 目錄的 generated header → 編譯紅（本輪 shard 實測）。
+              # 補 fs.relative_to(build_root, current_source_dir)（fs 已在根 meson.build:36 import）。
+              # range 限定必要：同檔另有 rust.bindgen 帶同字串。上游修好後 sed 匹配不到即 no-op。
+              # 放獨立 step 而非大 case：大 case 已 20694/21000，再塞就炸（budget 實測）。
+              _bg_patch='  sed -i "/^libutil_rust_bindgen_c = static_library(/,/^)/ s|include_directories : inc_util,|include_directories : [inc_util, fs.relative_to(meson.project_build_root(), meson.current_source_dir())],|" src/util/rust/meson.build'
+              awk -v p="$_bg_patch" '$0 ~ /msg2 "Tree cleaned"/ {print; print p; next} {print}' \
+                "$F" > "$F.t" && mv "$F.t" "$F"
+              grep -q 'libutil_rust_bindgen_c' "$F" \
+                || { echo "::error::bindgen -I 補丁沒注入進 prepare()（錨點 msg2 \"Tree cleaned\" 不見了）"; exit 1; } ;;  *) echo "（無手術）$REPO_NAME" ;;
+          esac
+
       - name: 检测 ffmpeg-full-git 上游版本
         if: matrix.repo_name == 'ffmpeg-full-git'
         id: ffmpeg_plan
@@ -2717,18 +2838,29 @@ jobs:
               fi
               grep -n 'gitlab.archlinux.org' PKGBUILD
 
-              # cjktty 补丁：只在「版本线变了」时才改 URL，同一条线上不动已验证过的钉子
-              cur_patch=$(grep -oE 'cjktty-[0-9]+\.[0-9]+(\.[0-9]+)?\.patch' PKGBUILD | head -n1 || true)
+              # cjktty 补丁：版本线变了就换；同线但还钉在 -rc 时也追最新（rc 毕业／更高 rc）。
+              # regex 必須吃 -rcN：zencjk 现钉 cjktty-7.4-rc1.patch（7.3 的 fbcon_rotated
+              # 獨立 struct 讓舊 7.2 補丁 fuzz 錯位，已換 7.4-rc1）。舊 regex 匹配不到 -rc
+              # → cur_patch 抓空 → 整段靜默跳過，永遠不再更新（本輪實測病根）。
+              cur_patch=$(grep -oE 'cjktty-[0-9]+\.[0-9]+(\.[0-9]+)?(-rc[0-9]+)?\.patch' PKGBUILD | head -n1 || true)
               new_series="${NEW_PKGVER%.*}"; new_series="${new_series%.*}"
               cur_series=$(echo "$cur_patch" | sed -E 's/^cjktty-([0-9]+\.[0-9]+).*/\1/')
-              if [ -n "$cur_patch" ] && [ "$cur_series" != "$new_series" ]; then
+              # 同線且非 rc → 不動已驗證的釘子；換線／同線仍钉 rc → 查最新
+              if [ -n "$cur_patch" ] && { [ "$cur_series" != "$new_series" ] || echo "$cur_patch" | grep -q -- '-rc'; }; then
+                # sort -V 陷阱（全局規則 52）：裸 cjktty-7.4.patch 會被排在 -rc1/-rc2
+                # 之前，tail 反而挑到舊 rc。先把 -rcN 換成 ~rcN（filevercmp 的 ~ 排最前）
+                # 再排→正式版＞rc、rc 號大者勝，排完換回原檔名（本機實測驗證）。
                 cand=$(gh_api "https://api.github.com/repos/bigshans/cjktty-patches/contents/v${new_series%%.*}.x" \
-                       | jq -r '.[].name' | grep -E "^cjktty-${new_series//./\\.}(\.[0-9]+)?\.patch$" | sort -V | tail -n1 || true)
-                if [ -n "$cand" ]; then
+                       | jq -r '.[].name' | grep -E "^cjktty-${new_series//./\\.}(\.[0-9]+)?(-rc[0-9]+)?\.patch$" \
+                       | sed -E 's/-rc([0-9]+)\.patch/~rc\1.patch/' | sort -V | tail -n1 \
+                       | sed -E 's/~rc([0-9]+)\.patch/-rc\1.patch/' || true)
+                if [ -n "$cand" ] && [ "$cand" != "$cur_patch" ]; then
                   echo "cjktty 补丁 $cur_patch -> $cand（版本线 $cur_series -> $new_series）"
                   sed -i "s|$cur_patch|$cand|" PKGBUILD
-                else
+                elif [ -z "$cand" ]; then
                   echo "::warning::bigshans/cjktty-patches 里找不到 $new_series 的补丁，仍用 $cur_patch"
+                else
+                  echo "cjktty 补丁已是最新：$cur_patch"
                 fi
               fi
               ;;
