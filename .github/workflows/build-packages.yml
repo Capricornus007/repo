@@ -1635,6 +1635,9 @@ jobs:
                 '  _wb_ts="$(find "$CARGO_TARGET_DIR/release/build" -path "*/out/libtree-sitter.a" -print -quit)"' \
                 '  _wb_tsb="$(find "$CARGO_TARGET_DIR/release/build" -path "*/out/libtree-sitter-bash.a" -print -quit)"' \
                 '  [ -n "$_wb_ts" ] && [ -n "$_wb_tsb" ] || { echo "::error::linutil tree-sitter 靜態庫沒編出來"; exit 1; }' \
+                '  _wb_ts="$(realpath "$_wb_ts")"' \
+                '  _wb_tsb="$(realpath "$_wb_tsb")"' \
+                '  nm "$_wb_ts" 2>/dev/null | grep -q "T ts_parser_new" || { echo "::error::libtree-sitter.a 缺 ts_parser_new 符號"; nm "$_wb_ts" 2>&1 | head -20; exit 1; }' \
                 '  cargo rustc --frozen --release --all-features -p linutil_tui --bin linutil -- -C "link-arg=$_wb_ts" -C "link-arg=$_wb_tsb"' \
                 '}' >> "$F"
               sed -i 's|^  cargo build --frozen --release --all-features$|  _wb_linutil_build|' "$F"
