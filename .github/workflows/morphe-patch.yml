@@ -33,14 +33,14 @@ jobs:
           java-version: '21'
 
       - name: 下載 morphe-desktop
-        run: curl -sL -o morphe-desktop.jar https://github.com/MorpheApp/morphe-desktop/releases/download/v2.1.1/morphe-desktop-2.1.1-all.jar
+        run: curl -fsSL -o morphe-desktop.jar https://github.com/MorpheApp/morphe-desktop/releases/download/v2.1.1/morphe-desktop-2.1.1-all.jar
 
       - name: 下載來源 APK 與 selections
         run: |
           base=https://github.com/Capricornus007/repo/releases/download/morphe-apk-sources
-          curl -sL -o youtube-src.apk "$base/youtube-21.46.520-BETA.apk"
-          curl -sL -o twitter-src.apkm "$base/twitter-12.43.0-beta.01.apkm"
-          curl -sL -o export.json "$base/morphe_all_selections.json"
+          curl -fsSL -o youtube-src.apk "$base/youtube-21.46.520-BETA.apk"
+          curl -fsSL -o twitter-src.apkm "$base/twitter-12.43.0-beta.01.apkm"
+          curl -fsSL -o export.json "$base/morphe_all_selections.json"
           ls -la youtube-src.apk twitter-src.apkm export.json
 
       - name: YouTube versionName 改純數字（21.46.520-BETA → 21.46.520）
