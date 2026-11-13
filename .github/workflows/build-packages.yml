@@ -209,7 +209,8 @@ jobs:
 
           if [ "${{ matrix.kind }}" = 'multilib' ] \
              || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ] \
-             || [ "${{ matrix.repo_name }}" = 'lib32-nvidia-utils-beta' ]; then
+             || [ "${{ matrix.repo_name }}" = 'lib32-nvidia-utils-beta' ] \
+             || [ "${{ matrix.repo_name }}" = 'gamemode-git' ]; then
             # spirv-llvm-translator-git 現在多切一顆 lib32-spirv-llvm-translator-git，
             # 而容器預設不啟用 [multilib]（run #471 實測 target not found: lib32-spirv-tools）。
             # lib32-* 需要 [multilib] 倉：容器預設只有 core/extra 且 [multilib] 是註解掉的。
@@ -1400,13 +1401,20 @@ jobs:
               grep -q 'rm -f "include/linux/types.h"' "$F" || { echo "::error::iptables rm -f 沒改到"; exit 1; } ;;
             fwupd-git)
               sed -i '/-D plugin_powerd=disabled/d' "$F"
-              ! grep -q 'plugin_powerd' "$F" || { echo "::error::fwupd powerd 沒刪到"; exit 1; } ;;
+              ! grep -q 'plugin_powerd' "$F" || { echo "::error::fwupd powerd 沒刪到"; exit 1; }
+              # 上游 meson 已移除 launchd 選項（macOS 專用）；AUR 的 -D launchd=disabled
+              # 會直接 Unknown option（run 43267320293 實測）
+              sed -i '/-D launchd=disabled/d' "$F"
+              ! grep -q 'launchd' "$F" || { echo "::error::fwupd launchd 沒刪到"; exit 1; } ;;
             xfce4-settings-git)
               sed -i '/-D upower=enabled/d' "$F"
               ! grep -q 'upower=enabled' "$F" || { echo "::error::xfce4-settings upower 沒刪到"; exit 1; } ;;
             gjs-git)
               sed -i 's/-D installed_tests=false/-D installed_tests=false -D skip_gtk_tests=true/' "$F"
-              grep -q 'skip_gtk_tests=true' "$F" || { echo "::error::gjs skip_gtk_tests 沒加到"; exit 1; } ;;
+              grep -q 'skip_gtk_tests=true' "$F" || { echo "::error::gjs skip_gtk_tests 沒加到"; exit 1; }
+              # installed-tests 需要 wat2wasm（wabt 提供）；AUR makedepends 沒有
+              printf '\nmakedepends+=('"'"'wabt'"'"')\n' >> "$F"
+              grep -q 'wabt' "$F" || { echo "::error::gjs wabt 沒加到"; exit 1; } ;;
             lxsession-git)
               sed -i '/autoreconf -fi/i\  mkdir -p m4' "$F"
               grep -q 'mkdir -p m4' "$F" || { echo "::error::lxsession mkdir m4 沒加到"; exit 1; } ;;
@@ -1421,10 +1429,11 @@ jobs:
               grep -q 'wget' "$F" || { echo "::error::parted wget 沒加到"; exit 1; } ;;
             mangohud-git)
               sed -i "s/'libxrandr'/'libxrandr' 'libxi'/;s/'libx11'/'libx11' 'libxi'/" "$F"
-              # Artix 用 elogind 取代 systemd（CI 白名單拒 systemd-libs）
-              sed -i "s/'systemd-libs'/'libelogind'/" "$F"
+              # MangoHud 不鏈 libsystemd（meson.build 只用 dbus-1）；
+              # depends 的 systemd-libs 是多餘的，直接拿掉（libelogind 不存在）
+              sed -i "/'systemd-libs'/d" "$F"
               grep -q "'libxi'" "$F" || { echo "::error::mangohud libxi 沒加到"; exit 1; }
-              grep -q "'libelogind'" "$F" || { echo "::error::mangohud libelogind 沒改到"; exit 1; } ;;
+              ! grep -q 'systemd-libs' "$F" || { echo "::error::mangohud systemd-libs 殘留"; exit 1; } ;;
             kdeconnect-git)
               sed -i 's/^depends=(dbus/depends=(dbus libei/' "$F"
               grep -q '^depends=(dbus libei' "$F" || { echo "::error::kdeconnect libei 沒加到"; exit 1; } ;;
@@ -1434,10 +1443,10 @@ jobs:
             xdg-desktop-portal-git)
               sed -i '/^  pipewire$/a\  wireplumber' "$F"
               # meson 需要 gst-inspect 與 wavparse 插件（feature test 不可關）；
-              # Arch 由 gst-plugins-base 提供
-              printf '\nmakedepends+=('"'"'gst-plugins-base'"'"')\n' >> "$F"
+              # wavparse 由 gst-plugins-good 提供（gst-plugins-base 沒有）
+              printf '\nmakedepends+=('"'"'gst-plugins-good'"'"')\n' >> "$F"
               grep -q '^  wireplumber$' "$F" || { echo "::error::xdg-desktop-portal wireplumber 沒加到"; exit 1; }
-              grep -q 'gst-plugins-base' "$F" || { echo "::error::xdg-desktop-portal gst-plugins-base 沒加到"; exit 1; } ;;
+              grep -q 'gst-plugins-good' "$F" || { echo "::error::xdg-desktop-portal gst-plugins-good 沒加到"; exit 1; } ;;
             usbutils-git)
               sed -i "s/'hwids'/'hwdata'/" "$F"
               # 上游已換 meson（autogen.sh 直接跑 meson）；AUR 的 ./configure
@@ -1449,8 +1458,11 @@ jobs:
                 !skip { print }
               ' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
               sed -i 's|make DESTDIR="$pkgdir" install|DESTDIR="$pkgdir" meson install -C build|' "$F"
+              # arch-meson 由 meson 包提供；AUR makedepends 只有 libusb
+              printf '\nmakedepends+=('"'"'meson'"'"')\n' >> "$F"
               grep -q 'arch-meson . build' "$F" || { echo "::error::usbutils build 沒改到"; exit 1; }
-              ! grep -q './configure' "$F" || { echo "::error::usbutils ./configure 殘留"; exit 1; } ;;
+              ! grep -q './configure' "$F" || { echo "::error::usbutils ./configure 殘留"; exit 1; }
+              grep -q "'meson'" "$F" || { echo "::error::usbutils meson 沒加到"; exit 1; } ;;
             nemo-git)
               sed -i 's|data/nemo.desktop.in|data/nemo.desktop|g' "$F"
               # meson.build 需要 gstreamer-pbutils-1.0.pc（AUR makedepends 沒有）；
@@ -1459,8 +1471,14 @@ jobs:
               ! grep -q 'nemo.desktop.in' "$F" || { echo "::error::nemo desktop.in 沒改到"; exit 1; }
               grep -q 'gst-plugins-base-libs' "$F" || { echo "::error::nemo gst-plugins-base-libs 沒加到"; exit 1; } ;;
             nvme-cli-git)
-              sed -i "s/-D docs='man'/-D docs='false'/" "$F"
-              grep -q "docs='false'" "$F" || { echo "::error::nvme-cli docs 沒改到"; exit 1; } ;;
+              sed -i "s/-D docs='man'/-D docs='false' -D nvme-discoverd=disabled/" "$F"
+              # nvme-discoverd 是唯一需要 libsystemd >=253 的元件（meson.build:460-469）；
+              # 關掉它，產物就不會 NEEDED libsystemd.so.0（Artix 沒這顆 .so，裝上即死）。
+              # depends 的 libsystemd 一併拿掉（不再需要）。
+              sed -i "s/depends=('util-linux' 'libsystemd')/depends=('util-linux')/" "$F"
+              sed -i "s/makedepends=('systemd' 'meson' 'git' 'swig')/makedepends=('meson' 'git' 'swig')/" "$F"
+              grep -q "nvme-discoverd=disabled" "$F" || { echo "::error::nvme-cli discoverd 沒關掉"; exit 1; }
+              ! grep -q "'libsystemd'" "$F" || { echo "::error::nvme-cli libsystemd 依賴殘留"; exit 1; } ;;
             tcpdump-git)
               sed -i '/^  \.\/configure/i\  ./autogen.sh' "$F"
               grep -q './autogen.sh' "$F" || { echo "::error::tcpdump autogen 沒加到"; exit 1; } ;;
@@ -1479,13 +1497,18 @@ jobs:
               grep -q 'libcanberra' "$F" || { echo "::error::thunar libcanberra 沒加到"; exit 1; } ;;
             openvpn-git)
               sed -i 's#patch -Np1 < ../0001-unprivileged.patch#patch -Np1 < ../0001-unprivileged.patch || true#' "$F"
-              # Artix 用 elogind 取代 systemd（CI 白名單拒 systemd-libs）
-              sed -i "s/'systemd-libs' 'libsystemd.so'/'libelogind' 'libelogind.so'/" "$F"
-              sed -i "s/'systemd'/'elogind'/" "$F"
+              # Artix 沒有 libsystemd：--enable-systemd 會直接 configure 紅
+              # （run 實測 "systemd enabled but libsystemd is missing"）。
+              # openvpn 的 --enable-systemd 只是 sd_notify（Type=notify），
+              # elogind 不提供 → 直接關掉，depends 的 systemd-libs/libsystemd.so 一併拿掉。
+              sed -i 's/--enable-systemd/--disable-systemd/' "$F"
+              sed -i "s/ 'systemd-libs' 'libsystemd.so'//" "$F"
+              sed -i "s/'systemd' //" "$F"
               # configure 需要 libnl-genl-3.0.pc >= 3.4.0（DCO）；AUR makedepends 沒有
               printf '\nmakedepends+=('"'"'libnl'"'"')\n' >> "$F"
               grep -q '0001-unprivileged.patch || true' "$F" || { echo "::error::openvpn patch || true 沒加到"; exit 1; }
-              grep -q "'libelogind'" "$F" || { echo "::error::openvpn libelogind 沒改到"; exit 1; }
+              grep -q -- '--disable-systemd' "$F" || { echo "::error::openvpn systemd 沒關掉"; exit 1; }
+              ! grep -q 'systemd-libs' "$F" || { echo "::error::openvpn systemd-libs 殘留"; exit 1; }
               grep -q 'libnl' "$F" || { echo "::error::openvpn libnl 沒加到"; exit 1; } ;;
             tesseract-data-*-git)
               sed -i 's/ frk / /' "$F"
@@ -1495,8 +1518,13 @@ jobs:
               # aws-lc-sys 需要 cmake 建 aws-lc C 庫；AUR makedepends 只有 git/rust，
               # 缺 cmake 時 build script 靜默產出空庫 → 連結時 aws_lc_0_47_0_* 全 undefined
               sed -i "s/makedepends=('git' 'rust')/makedepends=('git' 'rust' 'cmake')/" "$F"
+              # 強制走 CmakeBuilder：CcBuilder 路徑在 CI 實測產出的
+              # libaws_lc_0_47_0_crypto.a 沒被 cargo 帶進最終連結
+              # （link line 有 -L .../aws-lc-sys-*/out 卻沒有 -laws_lc_0_47_0_crypto）。
+              sed -i 's/cargo build --release/export AWS_LC_SYS_CMAKE_BUILDER=1 \&\& cargo build --release/' "$F"
               ! grep -q -- '--all-features' "$F" || { echo "::error::sccache all-features 沒刪到"; exit 1; }
-              grep -q "'cmake'" "$F" || { echo "::error::sccache cmake 沒加到"; exit 1; } ;;
+              grep -q "'cmake'" "$F" || { echo "::error::sccache cmake 沒加到"; exit 1; }
+              grep -q 'AWS_LC_SYS_CMAKE_BUILDER=1' "$F" || { echo "::error::sccache CMAKE_BUILDER 沒加到"; exit 1; } ;;
             gvfs-git)
               sed -i 's/,google}/}/' "$F"
               sed -i "s/'libsoup'/'libsoup3'/" "$F"
@@ -1532,7 +1560,12 @@ jobs:
             vapoursynth-git)
               sed -i '/Makefile\.am/d' "$F"
               sed -i "s/^  'git'$/  'git'\n  'meson'/" "$F"
+              # meson.build:199 無條件 subproject('glslang')，且 arch-meson 帶
+              # --wrap-mode nodownload → 不先下載 subproject 就直接紅
+              # （run 實測 "Subproject glslang is buildable: NO"）。
+              # 系統 glslang 包沒用（上游刻意用 wrap 釘版本），先 meson subprojects download。
               awk -v repl='build() {
+            (cd "${srcdir}/vapoursynth" && meson subprojects download)
             arch-meson "${srcdir}/vapoursynth" "${srcdir}/build"
             meson compile -C "${srcdir}/build"
 
@@ -1547,21 +1580,10 @@ jobs:
               ' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
               sed -i 's|make -C build DESTDIR="${srcdir}/fakeroot" install|DESTDIR="${srcdir}/fakeroot" meson install -C build|' "$F"
               sed -i 's|make -C build DESTDIR="${pkgdir}" install|DESTDIR="${pkgdir}" meson install -C build|' "$F"
+              grep -q 'meson subprojects download' "$F" || { echo "::error::vapoursynth subprojects download 沒加到"; exit 1; }
               grep -q 'arch-meson "${srcdir}/vapoursynth"' "$F" || { echo "::error::vapoursynth build 沒改到"; exit 1; }
               ! grep -q 'autogen\|configure\|Makefile.am' "$F" || { echo "::error::vapoursynth autotools 殘留"; exit 1; }
-              grep -q "'meson'" "$F" || { echo "::error::vapoursynth meson makedepends 沒加到"; exit 1; }
-              # meson 需要 glslang（subproject 不可下載）；AUR makedepends 沒有
-              printf '\nmakedepends+=('"'"'glslang'"'"')\n' >> "$F"
-              grep -q 'glslang' "$F" || { echo "::error::vapoursynth glslang 沒加到"; exit 1; } ;;
-            gjs-git)
-              # installed-tests 需要 wat2wasm（wabt 提供）；AUR makedepends 沒有
-              printf '\nmakedepends+=('"'"'wabt'"'"')\n' >> "$F"
-              grep -q 'wabt' "$F" || { echo "::error::gjs wabt 沒加到"; exit 1; } ;;
-            fwupd-git)
-              # 上游 meson 已移除 launchd 選項（macOS 專用）；AUR 的 -D launchd=disabled
-              # 會直接 Unknown option（run 43267320293 實測）
-              sed -i '/-D launchd=disabled/d' "$F"
-              ! grep -q 'launchd' "$F" || { echo "::error::fwupd launchd 沒刪到"; exit 1; } ;;
+              grep -q "'meson'" "$F" || { echo "::error::vapoursynth meson makedepends 沒加到"; exit 1; } ;;
             mesa-tkg-git)
               # mesa main 的 rust bindgen（src/util/rust/meson.build）在 LLVM 24 環境缺 -I：
               # libutil_rust_bindgen_c 的 include_directories 只有 inc_util，bindgen 產出的
