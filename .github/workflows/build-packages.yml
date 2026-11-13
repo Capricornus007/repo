@@ -1589,6 +1589,9 @@ jobs:
               # cc 在 build script 編出的靜態庫沒被自動帶進最終連結。
               # 所以改成兩階段：第一遍讓 build script 把 C 原始碼編成 .a
               # （此遍連結會失敗，忽略），第二遍明確把這兩顆 .a 接進 linker。
+              # 第二遍**不能用全域 RUSTFLAGS**（run #826 實測：會連 proc-macro2 /
+              # quote / libc 的 build script 一起吃到 -C link-arg，全部 linking
+              # failed）→ 改用 cargo rustc --bin，額外 rustflags 只套到最終 bin。
               # 兩顆 .a 都來自 Cargo.lock 鎖的 0.27.0 / 0.25.1 原始碼，版本一致。
               sed -i '/^  export RUSTFLAGS=/d' "$F"
               sed -i "s/ 'tree-sitter' 'tree-sitter-bash'//" "$F"
@@ -1599,7 +1602,7 @@ jobs:
                 '  _wb_ts="$(find "$CARGO_TARGET_DIR/release/build" -path "*/out/libtree-sitter.a" -print -quit)"' \
                 '  _wb_tsb="$(find "$CARGO_TARGET_DIR/release/build" -path "*/out/libtree-sitter-bash.a" -print -quit)"' \
                 '  [ -n "$_wb_ts" ] && [ -n "$_wb_tsb" ] || { echo "::error::linutil tree-sitter 靜態庫沒編出來"; exit 1; }' \
-                '  RUSTFLAGS="-C link-arg=$_wb_ts -C link-arg=$_wb_tsb" cargo build --frozen --release --all-features' \
+                '  cargo rustc --frozen --release --all-features --bin linutil -- -C "link-arg=$_wb_ts" -C "link-arg=$_wb_tsb"' \
                 '}' >> "$F"
               sed -i 's|^  cargo build --frozen --release --all-features$|  _wb_linutil_build|' "$F"
               grep -q '_wb_linutil_build' "$F" || { echo "::error::linutil 兩階段 build 沒注入"; exit 1; }
