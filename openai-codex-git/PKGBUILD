@@ -232,7 +232,10 @@ build() {
   [ -f "${srcdir}/rusty_v8/env.sh" ] && source "${srcdir}/rusty_v8/env.sh"
   # codex-code-mode-host 是「完整套件」的必須檔（validate_package 會查），
   # 少了它裝上去一樣報 no complete local package。
-  RUSTUP_TOOLCHAIN="$_toolchain" cargo build --release --frozen \
+  # --jobs 2：整個 workspace 全速並行會在後段大 crate（codex-cloud-tasks 等）
+  # 同時 codegen 時把 runner 記憶體吃爆——2026-11-13 run 43347102699 實測
+  # exit 137（OOM killer），降並行壓峰值，寧可慢不可死。
+  RUSTUP_TOOLCHAIN="$_toolchain" cargo build --release --frozen --jobs 2 \
     --bin codex \
     --bin codex-code-mode-host \
     --bin codex-exec \

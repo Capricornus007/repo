@@ -1470,6 +1470,13 @@ jobs:
               sed -i "s/makedepends=(git meson samurai gobject-introspection intltool libgsf glib2-devel)/makedepends=(git meson samurai gobject-introspection intltool libgsf glib2-devel gst-plugins-base-libs)/" "$F"
               ! grep -q 'nemo.desktop.in' "$F" || { echo "::error::nemo desktop.in 沒改到"; exit 1; }
               grep -q 'gst-plugins-base-libs' "$F" || { echo "::error::nemo gst-plugins-base-libs 沒加到"; exit 1; } ;;
+            okular-git)
+              # ar 的 man docbook 把程式名也翻成阿拉伯文，meinproc 產出「أوكلار.1」，
+              # cmake install 卻寫死找 okular.1（run 43399305874 實測：
+              # "Note: Writing أوكلار.1" → package() 報 po/ar/docs/okular/okular.1
+              # No such file）。build 後把各語言目錄實際產出的 .1 補成 okular.1。
+              sed -i '/^  cmake --build build$/a\  # KDE 翻譯把 man 程式名也翻了（ar：أوكلار.1），install 寫死找 okular.1，缺就補\n  for _d in build/po/*/docs/okular; do\n    [ -d "$_d" ] || continue\n    [ -f "$_d/okular.1" ] && continue\n    _m=$(find "$_d" -maxdepth 1 -name "*.1" -type f | head -n1)\n    [ -n "$_m" ] && cp "$_m" "$_d/okular.1"\n  done' "$F"
+              grep -q 'docs/okular; do' "$F" || { echo "::error::okular man 檔名修復沒加到"; exit 1; } ;;
             nvme-cli-git)
               sed -i "s/-D docs='man'/-D docs='false' -D nvme-discoverd=disabled/" "$F"
               # nvme-discoverd 是唯一需要 libsystemd >=253 的元件（meson.build:460-469）；
