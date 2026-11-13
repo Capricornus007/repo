@@ -1622,6 +1622,10 @@ jobs:
               # quote / libc 的 build script 一起吃到 -C link-arg，全部 linking
               # failed）→ 改用 cargo rustc --bin，額外 rustflags 只套到最終 bin。
               # 兩顆 .a 都來自 Cargo.lock 鎖的 0.27.0 / 0.25.1 原始碼，版本一致。
+              # 注意：workspace 根 Cargo.toml 是 virtual manifest（members =
+              # core/tui/xtask），cargo rustc 從根跑必須 -p 指定包，否則報
+              # 「manifest path is a virtual manifest」（run 43404842179 實測）。
+              # linutil bin 屬於 tui 子包（linutil_tui）。
               sed -i '/^  export RUSTFLAGS=/d' "$F"
               sed -i "s/ 'tree-sitter' 'tree-sitter-bash'//" "$F"
               printf '%s\n' \
@@ -1631,7 +1635,7 @@ jobs:
                 '  _wb_ts="$(find "$CARGO_TARGET_DIR/release/build" -path "*/out/libtree-sitter.a" -print -quit)"' \
                 '  _wb_tsb="$(find "$CARGO_TARGET_DIR/release/build" -path "*/out/libtree-sitter-bash.a" -print -quit)"' \
                 '  [ -n "$_wb_ts" ] && [ -n "$_wb_tsb" ] || { echo "::error::linutil tree-sitter 靜態庫沒編出來"; exit 1; }' \
-                '  cargo rustc --frozen --release --all-features --bin linutil -- -C "link-arg=$_wb_ts" -C "link-arg=$_wb_tsb"' \
+                '  cargo rustc --frozen --release --all-features -p linutil_tui --bin linutil -- -C "link-arg=$_wb_ts" -C "link-arg=$_wb_tsb"' \
                 '}' >> "$F"
               sed -i 's|^  cargo build --frozen --release --all-features$|  _wb_linutil_build|' "$F"
               grep -q '_wb_linutil_build' "$F" || { echo "::error::linutil 兩階段 build 沒注入"; exit 1; }
