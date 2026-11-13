@@ -1405,7 +1405,12 @@ jobs:
               # 上游 meson 已移除 launchd 選項（macOS 專用）；AUR 的 -D launchd=disabled
               # 會直接 Unknown option（run 43267320293 實測）
               sed -i '/-D launchd=disabled/d' "$F"
-              ! grep -q 'launchd' "$F" || { echo "::error::fwupd launchd 沒刪到"; exit 1; } ;;
+              ! grep -q 'launchd' "$F" || { echo "::error::fwupd launchd 沒刪到"; exit 1; }
+              # fwupd 2.2.1 起 meson 頂層就 add_languages('rust')（硬性要求）；
+              # AUR makedepends 沒列 rust → 容器沒 rustc，meson setup 直接
+              # Unknown compiler(s): [['rustc']]（run 43433195787 實測）
+              printf '\nmakedepends+=('"'"'rust'"'"')\n' >> "$F"
+              grep -q "'rust'" "$F" || { echo "::error::fwupd rust 沒加到"; exit 1; } ;;
             xfce4-settings-git)
               sed -i '/-D upower=enabled/d' "$F"
               ! grep -q 'upower=enabled' "$F" || { echo "::error::xfce4-settings upower 沒刪到"; exit 1; } ;;
@@ -1529,6 +1534,16 @@ jobs:
               # libaws_lc_0_47_0_crypto.a 沒被 cargo 帶進最終連結
               # （link line 有 -L .../aws-lc-sys-*/out 卻沒有 -laws_lc_0_47_0_crypto）。
               sed -i 's/cargo build --release/export AWS_LC_SYS_CMAKE_BUILDER=1 \&\& cargo build --release/' "$F"
+              # makepkg CFLAGS 的 -flto 會被 CMake 吃進 CMAKE_C_FLAGS：GCC slim-LTO
+              # 物件 nm 看得到符號、ld.lld 抽不出機器碼 → aws_lc_0_47_0_* 全 undefined
+              # （run 43433195787 實測；本地 CFLAGS=-O2 -flto=auto 完整復現，linutil 同病同修）。
+              printf '%s\n' \
+                '_wb_flto_filter() {' \
+                '  export CFLAGS="$(printf '"'"'%s '"'"' ${CFLAGS:-} | sed -E '"'"'s/-flto[^ ]*//g'"'"')"' \
+                '  export CXXFLAGS="$(printf '"'"'%s '"'"' ${CXXFLAGS:-} | sed -E '"'"'s/-flto[^ ]*//g'"'"')"' \
+                '}' >> "$F"
+              sed -i 's/export AWS_LC_SYS_CMAKE_BUILDER=1/_wb_flto_filter \&\& export AWS_LC_SYS_CMAKE_BUILDER=1/' "$F"
+              grep -q '_wb_flto_filter' "$F" || { echo "::error::sccache flto filter 沒注入"; exit 1; }
               ! grep -q -- '--all-features' "$F" || { echo "::error::sccache all-features 沒刪到"; exit 1; }
               grep -q "'cmake'" "$F" || { echo "::error::sccache cmake 沒加到"; exit 1; }
               grep -q 'AWS_LC_SYS_CMAKE_BUILDER=1' "$F" || { echo "::error::sccache CMAKE_BUILDER 沒加到"; exit 1; } ;;
@@ -1631,6 +1646,11 @@ jobs:
               printf '%s\n' \
                 '' \
                 '_wb_linutil_build() {' \
+                '  # makepkg CFLAGS 的 -flto 會被 cc crate 吃進去：GCC slim-LTO' \
+                '  # 物件 nm 看得到符號、ld.lld 卻抽不出機器碼 → 全部 ts_* undefined' \
+                '  # （本地 CFLAGS="-O2 -flto=auto" 完整復現 CI 符號集）。編 C 前濾掉。' \
+                '  export CFLAGS="$(printf '"'"'%s '"'"' ${CFLAGS:-} | sed -E '"'"'s/-flto[^ ]*//g'"'"')"' \
+                '  export CXXFLAGS="$(printf '"'"'%s '"'"' ${CXXFLAGS:-} | sed -E '"'"'s/-flto[^ ]*//g'"'"')"' \
                 '  cargo build --frozen --release --all-features || true' \
                 '  _wb_ts="$(find "$CARGO_TARGET_DIR/release/build" -path "*/out/libtree-sitter.a" -print -quit)"' \
                 '  _wb_tsb="$(find "$CARGO_TARGET_DIR/release/build" -path "*/out/libtree-sitter-bash.a" -print -quit)"' \
@@ -4145,7 +4165,10 @@ jobs:
           [ "$_sysd_link" = 0 ] || exit 1
           if [ -n "$_sysd_dep" ]; then
             case " ${{ matrix.repo_name }} " in
-              *" qoder-gui-bin "*|*" qoder-gui-cn "*|*" codex-desktop-git "*|*" kcoreaddons-git "*)
+              *" qoder-gui-bin "*|*" qoder-gui-cn "*|*" codex-desktop-git "*|*" kcoreaddons-git "*|*" xdg-desktop-portal-git "*)
+                # xdg-desktop-portal-git：上游 meson 偵測到 systemd 就寫進 depends，
+                # 但產物沒有實際 NEEDED libsystemd.so.0（僅聲明；目標機 Artix 靠
+                # artix-archlinux-support 的虛擬 Provides 過關）。
                 echo "::warning::聲明 systemd 但未鏈接（已在白名單，目標機靠虛擬 Provides 過關）:$_sysd_dep" ;;
               *)
                 echo "::error::產物聲明了 systemd／systemd-libs 卻不在白名單:$_sysd_dep"; exit 1 ;;
