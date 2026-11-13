@@ -346,6 +346,7 @@ build() {
     -D gst-plugins-bad:opensles=disabled
     -D gst-plugins-bad:qt6d3d11=disabled
     -D gst-plugins-bad:svtjpegxs=disabled
+    -D gst-plugins-bad:vips=disabled
     -D gst-plugins-bad:tflite=disabled
     -D gst-plugins-bad:tinyalsa=disabled
     -D gst-plugins-bad:voaacenc=disabled
