@@ -1,0 +1,49 @@
+name: WorkBuddy Update
+
+# 每天檢查 WorkBuddy 國際版官方更新 API，有新版本就更新 in-tree PKGBUILD，
+# 推送父倉與獨立倉（Capricornus007/workbuddy-international-bin，CI 通用分支
+# clone 的構建來源），再觸發 build-one-package 立即構建——build-packages
+# 排程實測可能延遲數小時，不靠它準時。
+#
+# 安全邊界（同 aur-update.yml 的思路）：腳本只讀 API、下載官方產物、算雜湊、
+# 改 PKGBUILD 文字，不執行任何上游代碼。產物必須通過官方 API 公布的 sha256
+# 才寫入。Electron 版本從產物 plist 抽出，變了就一併換 Linux runtime zip。
+#
+# permissions: contents: write 只用於把更新提交推回本倉；跨倉推送用
+# PERSONAL_BUILD_TOKEN。腳本見 scripts/workbuddy-update.sh（可本地 DRY_RUN 驗證）。
+
+on:
+  schedule:
+    - cron: '40 6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只檢查、產 diff，不推送（預設會推）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: workbuddy-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install tools
+        run: pacman -Syu --noconfirm git p7zip python curl
+
+      - uses: actions/checkout@v7
+
+      - name: Check upstream and update
+        env:
+          BUILD_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+        run: |
+          useradd -m builder
+          chown -R builder:builder "$GITHUB_WORKSPACE"
+          su -w BUILD_TOKEN,DRY_RUN - builder -c "cd '$GITHUB_WORKSPACE' && bash scripts/workbuddy-update.sh"
