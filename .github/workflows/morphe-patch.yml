@@ -1,0 +1,70 @@
+name: Morphe Patch APKs
+
+# 用 Morphe（最新 dev 版）+ Piko NewX + X Shim 修補 YouTube 與 Twitter/X APK。
+# 來源 APK 與 Manager 匯出的 selections 放在 release morphe-apk-sources：
+#   https://github.com/Capricornus007/repo/releases/tag/morphe-apk-sources
+# 修補完的 APK 以 artifact 上傳（morphe-patched-apks）。
+#
+# 注意：
+# - Morphe 用 --prerelease（最新 dev 版 v2.3.0-dev.x）。用戶的 selections 含
+#   dev 版才有的 patch（Autoplay control / Fullscreen playlist panel /
+#   Loop count / Playlist button），穩定版 v2.2.0 沒有。
+# - YouTube 21.46.520-BETA 只有 dev 版 patch 支援（119/119 全過）。
+# - Twitter 12.43.0-beta.01 比 Piko 目標的 12.41.0-prod.01 新，13 個 Piko
+#   patch 指紋對不上會失敗（--continue-on-error 讓其餘 47 個照常套用）。
+# - YouTube versionName 先由 morphe/fix_youtube_version.py 改成純數字 21.46.520。
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'morphe/**'
+      - '.github/workflows/morphe-patch.yml'
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: 下載 morphe-desktop
+        run: curl -sL -o morphe-desktop.jar https://github.com/MorpheApp/morphe-desktop/releases/download/v2.1.1/morphe-desktop-2.1.1-all.jar
+
+      - name: 下載來源 APK 與 selections
+        run: |
+          base=https://github.com/Capricornus007/repo/releases/download/morphe-apk-sources
+          curl -sL -o youtube-src.apk "$base/youtube-21.46.520-BETA.apk"
+          curl -sL -o twitter-src.apkm "$base/twitter-12.43.0-beta.01.apkm"
+          curl -sL -o export.json "$base/morphe_all_selections.json"
+          ls -la youtube-src.apk twitter-src.apkm export.json
+
+      - name: YouTube versionName 改純數字（21.46.520-BETA → 21.46.520）
+        run: python3 morphe/fix_youtube_version.py youtube-src.apk youtube-21.46.520.apk
+
+      - name: 產生 options 檔（--prerelease = 最新 dev 版）
+        run: |
+          java -jar morphe-desktop.jar options-create --patches https://github.com/MorpheApp/morphe-patches --prerelease -f com.google.android.youtube -o youtube-options.json
+          java -jar morphe-desktop.jar options-create --patches https://github.com/MorpheApp/morphe-patches --patches https://github.com/crimera/piko-newx --patches https://gitlab.com/inotia00/x-shim --prerelease -f com.twitter.android -o twitter-options.json
+
+      - name: 套用 selections
+        run: python3 morphe/apply_selections.py export.json youtube-options.json com.google.android.youtube twitter-options.json com.twitter.android
+
+      - name: 修補 YouTube
+        run: java -jar morphe-desktop.jar patch --patches https://github.com/MorpheApp/morphe-patches --prerelease --options-file youtube-options.json --force --continue-on-error -o youtube-patched.apk youtube-21.46.520.apk
+
+      - name: 修補 Twitter/X
+        run: java -jar morphe-desktop.jar patch --patches https://github.com/MorpheApp/morphe-patches --prerelease --patches https://github.com/crimera/piko-newx --patches https://gitlab.com/inotia00/x-shim --options-file twitter-options.json --force --continue-on-error -o twitter-patched.apk twitter-src.apkm
+
+      - name: 上傳修補完的 APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: morphe-patched-apks
+          path: |
+            youtube-patched.apk
+            twitter-patched.apk
+          retention-days: 30
