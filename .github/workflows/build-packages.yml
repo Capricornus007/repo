@@ -1582,18 +1582,24 @@ jobs:
               ! grep -q 'enable-amf' "$F" || { echo "::error::ffmpeg amf 沒刪到"; exit 1; }
               ! grep -q 'amf-headers' "$F" || { echo "::error::ffmpeg amf-headers 沒刪到"; exit 1; } ;;
             linutil-git)
-              # AUR build() 硬編碼 RUSTFLAGS="-C link-arg=/usr/lib/libtree-sitter.so"，
-              # 但系統 tree-sitter 是 0.26.9，linutil 的 tree-sitter-highlight 0.27.0
-              # 需要 ts_language_is_parseable（0.27.0 才有）→ undefined symbol。
-              # 移除 RUSTFLAGS，讓 Rust crate 用自己的 tree-sitter。
+              # 全部依賴走原始碼直出：不要系統預編譯的 tree-sitter / tree-sitter-bash，
+              # 也不要 RUSTFLAGS 去 -C link-arg 系統 .so。
+              # 原因：系統 tree-sitter 是 0.26.9，而 linutil 的 Cargo.lock 鎖
+              # tree-sitter 0.27.0 / tree-sitter-highlight 0.27.0（需要
+              # ts_language_is_parseable，0.27.0 才有）→ ABI 對不上。
+              # crate 本身就自帶完整 C 原始碼（binding_rust/build.rs 用 cc 編
+              # lib.c），cargo 自己編自己鏈就沒有版本不匹配；AUR 那份 depends
+              # + RUSTFLAGS 是多餘且有害的。
               sed -i '/^  export RUSTFLAGS=/d' "$F"
-              ! grep -q 'RUSTFLAGS' "$F" || { echo "::error::linutil RUSTFLAGS 沒刪到"; exit 1; } ;;
+              sed -i "s/ 'tree-sitter' 'tree-sitter-bash'//" "$F"
+              ! grep -q 'RUSTFLAGS' "$F" || { echo "::error::linutil RUSTFLAGS 沒刪到"; exit 1; }
+              ! grep -q "'tree-sitter'" "$F" || { echo "::error::linutil 系統 tree-sitter 依賴沒刪到"; exit 1; }
+              ! grep -q 'libtree-sitter.so' "$F" || { echo "::error::linutil 還在 link 系統 tree-sitter"; exit 1; } ;;
             capnproto-git)
-              # OpenSSL 3.x 的 X509_NAME_ENTRY_get_data() 回傳 const ASN1_STRING*，
-              # AUR 的 tls.c++:1196 把它賦給 ASN1_STRING* → invalid conversion。
-              # 加 const_cast 修正。
-              sed -i 's/ASN1_STRING\* data = X509_NAME_ENTRY_get_data(entry);/const ASN1_STRING* data = X509_NAME_ENTRY_get_data(entry);/' "$F"
-              grep -q 'const ASN1_STRING\* data = X509_NAME_ENTRY_get_data' "$F" || { echo "::error::capnproto const 修正沒改到"; exit 1; } ;;
+              # 上游 master 已修（tls.c++:1135 已是 const ASN1_STRING* data =
+              # X509_NAME_ENTRY_get_data(entry);），AUR 直接追 master，不需手術。
+              # 舊手術對 PKGBUILD sed 一個不存在的字串再 grep 驗證 → 必定 exit 1。
+              : ;;
             bzip3-git)
               # AUR build() 呼叫 ./bootstrap.sh，但上游源碼只有 ./bootstrap（無 .sh 後綴）。
               sed -i 's|./bootstrap.sh|./bootstrap|' "$F"
