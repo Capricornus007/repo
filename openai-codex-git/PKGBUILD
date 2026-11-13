@@ -235,6 +235,11 @@ build() {
   # --jobs 2：整個 workspace 全速並行會在後段大 crate（codex-cloud-tasks 等）
   # 同時 codegen 時把 runner 記憶體吃爆——2026-11-13 run 43347102699 實測
   # exit 137（OOM killer），降並行壓峰值，寧可慢不可死。
+  # LTO=off：--jobs 2 之後仍紅在最後一步——codex-cli 單一 rustc 的 thin-LTO
+  # 跨 crate 連結本身就要吃掉數 GB（2026-11-13 run 43484807005 實測：警告後
+  # 靜默 5.5 分鐘無任何診斷直接死，OOM 殺進程）。env 覆寫上游 profile 的
+  # lto="thin"，代價是二進位稍大、執行稍慢；連結記憶體從峰值降到可完成。
+  export CARGO_PROFILE_RELEASE_LTO=off
   RUSTUP_TOOLCHAIN="$_toolchain" cargo build --release --frozen --jobs 2 \
     --bin codex \
     --bin codex-code-mode-host \
