@@ -41,6 +41,15 @@ b2sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 prepare() {
   cd ${basen}
+  # flex >= 2.6.4 把 YY_BUF_SIZE 的定義移到 scanner 生成碼後段，但
+  # util/configlexer.lex 的 definitions 區塊（%{…%}）會被原樣複製到生成碼最前面，
+  # 第 111 行 yy_create_buffer(input, YY_BUF_SIZE) 因此 undeclared
+  # （run #42 / #43 實證：./util/configlexer.lex:111:53: error）。
+  # 補上 flex 官方預設值 16384；flex 稍後以相同替換清單再定義一次是合法 C，
+  # 不產生警告也不改行為。與 lfs-pacman 的 iproute2 flex 修補同一套路。
+  sed -i '/^%{$/a #ifndef YY_BUF_SIZE\n#define YY_BUF_SIZE 16384\n#endif' util/configlexer.lex
+  grep -q '^#define YY_BUF_SIZE 16384' util/configlexer.lex || {
+    echo "::error::YY_BUF_SIZE 沒補進 configlexer.lex"; return 1; }
   # enable trusted-anchor-file and set it to an unbound specific location
   patch -Np1 -i ../"${basen}-1.14.0-trust_anchor_file.patch"
   autoreconf -fiv
