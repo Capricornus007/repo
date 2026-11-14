@@ -37,7 +37,7 @@ sha256sums=('SKIP'
 
 pkgver() {
   cd glib
-  git describe --tags | sed 's/-/+/g'
+  git describe --tags | sed 's/([^-]*-g)/r\1/;s/-/./g'
 }
 
 # 2026-11-01：glib 2.90 把 subprojects/gvdb 拆成 git submodule，makepkg 不會自動
