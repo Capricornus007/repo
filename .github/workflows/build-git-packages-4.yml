@@ -23,6 +23,15 @@ jobs:
       - id: read
         name: 讀取 matrix/packages-4.json 輸出為 job output
         run: |
+          # GitHub Actions 單一 matrix 上限 256 job。超過時矩陣會「整個展開失敗」：
+          # 0 個 build job、setup/deploy-repo 仍 success，run 卻判 failure（2026-11-14
+          # run #840/#841 實測：第 257 筆 electron45-bin 加進來就踩到，查了半天看不到紅 job）。
+          # 在源頭硬擋，讓錯誤訊息直接指到要分流，不要留一個靜默的空矩陣。
+          _n=$(jq '[.[] | select(.kind != "alias")] | length' matrix/packages-4.json)
+          if [ "$_n" -gt 256 ]; then
+            echo "::error::matrix/packages-4.json 送進 build 矩陣 $_n 筆，超過 GitHub Actions 上限 256；請把多出來的包分流到 matrix/packages-{2,3,4}.json"
+            exit 1
+          fi
           {
             echo "packages<<__PKGS_EOF__"
             # 2026-11-02：xorg-server 的 5 個 split 名（common/devel/xephyr/xnest/xvfb）

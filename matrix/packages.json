@@ -1423,36 +1423,8 @@
     "in_tree": true
   },
   {
-    "key": "adwaita-icon-theme-git",
-    "repo_name": "adwaita-icon-theme-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "adwaita-cursors-git",
-    "repo_name": "adwaita-cursors-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
     "key": "blas-git",
     "repo_name": "blas-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "bun-git",
-    "repo_name": "bun-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "wget-git",
-    "repo_name": "wget-git",
     "variant": "none",
     "kind": "aur",
     "in_tree": true
@@ -1465,37 +1437,11 @@
     "in_tree": true
   },
   {
-    "key": "vim-git",
-    "repo_name": "vim-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "calibre-git",
-    "repo_name": "calibre-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "podofo-git",
-    "repo_name": "podofo-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
     "key": "links-git",
     "repo_name": "links-git",
     "variant": "none",
     "kind": "artix",
     "image": "artixlinux/artixlinux:base-devel",
     "in_tree": true
-  },
-  {
-    "key": "electron45-bin",
-    "repo_name": "electron45-bin",
-    "variant": "none"
   }
 ]
