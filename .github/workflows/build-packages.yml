@@ -614,6 +614,26 @@ jobs:
               ;;
           esac
 
+          # ── lib32-dbus 斷鏈預裝（2026-11-15，run 43633126160 gamemode-git 實測）────
+          # 上游把 lib32 工具鏈搬進 [core]/[system]（lib32-glibc／lib32-gcc-libs／
+          # lib32-libltdl，Artix [system] 已同步），同時把 lib32-libcap／lib32-pam
+          # 從 Arch multilib 與 Artix [lib32] **整個裁掉**（Artix [lib32] 234→172 顆，
+          # lib32-goblins/gremlins 是 45 位元組空殼；連 [lib32] 自家的 multilib-devel
+          # 元包都依賴已消失的 lib32-gcc-libs）。結果 lib32-dbus→lib32-elogind→
+          # lib32-libcap 這條鏈在所有倉都解不開，makepkg -s 整筆交易紅。
+          # 實測（解包 lib32-dbus-1.16.4-1）：libdbus-1.so.3 只 NEEDED libc.so.6，
+          # elogind 只有 dbus-daemon 用、lib32-dbus 包裡根本沒有 daemon →
+          # --assume-installed lib32-elogind 跳過斷鏈預裝 lib32-dbus，makepkg 之後
+          # 看到已裝就不會再碰這條鏈。目標機上這條鏈是歷史安裝、完整存在，
+          # 發出去的包不受影響。gstreamer-git 同為 Artix 容器 lib32 job，一併覆蓋。
+          case '${{ matrix.repo_name }}' in
+            gamemode-git|gstreamer-git)
+              pacman -S --noconfirm --needed --assume-installed lib32-elogind lib32-dbus \
+                || { echo "::error::lib32-dbus 斷鏈預裝失敗"; exit 1; }
+              pacman -Q lib32-dbus
+              ;;
+          esac
+
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
           # 结果最重的 CachyOS 内核是单线程编译的，必然撞 6 小时上限。
           # 直接追加到文件末尾，比 sed 匹配注释行可靠（上游默认值改过好几次）。
