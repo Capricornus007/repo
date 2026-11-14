@@ -1430,7 +1430,14 @@ jobs:
               # 缺 gi 就 "missing dependency python gobject introspection"
               # （run 43600513319 實測）。pango／python-cairo 已由既有 makedepends 裝到。
               printf '\nmakedepends+=('"'"'python-gobject'"'"')\n' >> "$F"
-              grep -q 'python-gobject' "$F" || { echo "::error::fwupd python-gobject 沒加到"; exit 1; } ;;
+              grep -q 'python-gobject' "$F" || { echo "::error::fwupd python-gobject 沒加到"; exit 1; }
+              # 上游新 i2c 外掛也往 modules-load.d 裝 fwupd-i2c.conf
+              # （data/meson.build:188 install_dir=systemd_modules_load_dir）；
+              # AUR 的「rm fwupd-msr.conf + rmdir」就 Directory not empty
+              # （run 43617345723 實測）。AUR 意圖只是「msr 模組已內建才刪」，
+              # i2c.conf 屬正常內容應保留 → 只刪 rmdir 行。
+              sed -i '/rmdir "${pkgdir}"\/usr\/lib\/modules-load.d/d' "$F"
+              ! grep -q 'rmdir "${pkgdir}"/usr/lib/modules-load.d' "$F" || { echo "::error::fwupd rmdir 沒刪到"; exit 1; } ;;
             xfce4-settings-git)
               sed -i '/-D upower=enabled/d' "$F"
               ! grep -q 'upower=enabled' "$F" || { echo "::error::xfce4-settings upower 沒刪到"; exit 1; } ;;
