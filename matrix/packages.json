@@ -1492,5 +1492,10 @@
     "kind": "artix",
     "image": "artixlinux/artixlinux:base-devel",
     "in_tree": true
+  },
+  {
+    "key": "electron45-bin",
+    "repo_name": "electron45-bin",
+    "variant": "none"
   }
 ]

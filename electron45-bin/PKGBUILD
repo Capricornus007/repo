@@ -1,0 +1,45 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# Adapted from AUR electron-bin packaging conventions.
+#
+# 官方預編譯 Electron 45 runtime（linux-x64 zip 直裝 /usr/lib/electron45）。
+# 用途：ZCode-CE 桌面端（electron-builder electronVersion 44→45 迁移后）等
+# 需要 electron45 runtime 的應用；本包只提供 runtime 本體，不綁任何應用。
+#
+# 為什麼 -bin 而不是源碼編譯：Electron 源碼編譯是數小時級的 Chromium 構建，
+# 官方發行的預編譯二進制就是上游的正式產物（SHASUMS256.txt 可校驗），無重編價值。
+
+pkgname=electron45-bin
+pkgver=45.3.2
+pkgrel=1
+pkgdesc="Build cross-platform desktop apps with web technologies (prebuilt runtime)"
+arch=('x86_64')
+url="https://electronjs.org/"
+license=('MIT' 'custom')
+# 依賴對齊官方預編譯二進制的動態連結閉包（ldd 實測 + AUR electronXX-bin 慣例）；
+# 系統 libffmpeg/libc++ 不攔（zip 自帶 libffmpeg 與 libc++，見 package() 的排除說明）。
+depends=('c-ares' 'gtk3' 'libevent' 'libxslt' 'minizip' 'nss' 'snappy' 'libwebp'
+         'libcups' 'alsa-lib' 'libjpeg-turbo' 'libpng' 'harfbuzz' 'libxcomposite'
+         'libxdamage' 'libxrandr' 'mesa' 'libdrm' 'libffi' 'wayland' 'libxkbcommon')
+optdepends=('libappindicator: systray indicator support')
+provides=("electron45=$pkgver")
+conflicts=('electron45')
+options=('!strip')
+source=("electron-$pkgver.zip::https://github.com/electron/electron/releases/download/v$pkgver/electron-v$pkgver-linux-x64.zip"
+        "LICENSE-$pkgver::https://raw.githubusercontent.com/electron/electron/v$pkgver/LICENSE")
+sha256sums=('0ae270dcca192d2f0a0e2be585307a2460f59303d76b7d19171fc6442d72a829'
+            '5154e165bd6c2cc0cfbcd8916498c7abab0497923bafcd5cb07673fe8480087d')
+
+package() {
+    cd "$srcdir"
+
+    install -d "$pkgdir/usr/lib/electron45"
+    # zip 內即 runtime 根（electron 主程式 + resources/ + 自帶 libffmpeg.so、
+    # libc++.so 等）；全部原位安裝，electron 主程式靠 RPATH $ORIGIN 解析自帶庫。
+    cp -a "$srcdir/electron-v$pkgver-linux-x64/." "$pkgdir/usr/lib/electron45/"
+
+    install -d "$pkgdir/usr/bin"
+    ln -sf /usr/lib/electron45/electron "$pkgdir/usr/bin/electron45"
+
+    install -Dm644 "$srcdir/LICENSE-$pkgver" \
+        "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
