@@ -33,9 +33,19 @@ package() {
     cd "$srcdir"
 
     install -d "$pkgdir/usr/lib/electron45"
-    # zip 內即 runtime 根（electron 主程式 + resources/ + 自帶 libffmpeg.so、
-    # libc++.so 等）；全部原位安裝，electron 主程式靠 RPATH $ORIGIN 解析自帶庫。
-    cp -a "$srcdir/electron-v$pkgver-linux-x64/." "$pkgdir/usr/lib/electron45/"
+    # Electron 官方 zip **沒有** electron-vXX-linux-x64/ 包一層目錄：頂層直接是
+    # runtime 根（electron 主程式、resources/、locales/、chrome-sandbox、
+    # libffmpeg.so、libvk_swiftshader.so …，用 release asset 的 zip central
+    # directory 逐項核對過，18 個頂層項目）。makepkg 已把 zip 解到 $srcdir，
+    # 逐項搬過去，只排除兩個原始 source 檔本身（run 43592567544 實測：
+    # 舊寫法 cp -a "$srcdir/electron-v$pkgver-linux-x64/." → No such file）。
+    # 全部原位安裝，electron 主程式靠 RPATH $ORIGIN 解析自帶庫。
+    for _entry in "$srcdir"/*; do
+        case "${_entry##*/}" in
+            "electron-$pkgver.zip"|"LICENSE-$pkgver") continue ;;
+        esac
+        cp -a "$_entry" "$pkgdir/usr/lib/electron45/"
+    done
 
     install -d "$pkgdir/usr/bin"
     ln -sf /usr/lib/electron45/electron "$pkgdir/usr/bin/electron45"

@@ -1420,7 +1420,17 @@ jobs:
               # requires the Python Textual module >= 0.50"（run 43585469020 實測）。
               # Arch extra 已有 python-textual 8.2.8，補進 makedepends 讓 makepkg -s 裝到。
               printf '\nmakedepends+=('"'"'python-textual'"'"')\n' >> "$F"
-              grep -q 'python-textual' "$F" || { echo "::error::fwupd python-textual 沒加到"; exit 1; } ;;
+              grep -q 'python-textual' "$F" || { echo "::error::fwupd python-textual 沒加到"; exit 1; }
+              # arch-meson 會帶 --auto-features enabled，把 feature 型別 option 從
+              # auto 升級成 enabled；上游 meson.build:951 是
+              #   dependency('umockdev-1.0', required:
+              #     get_option('umockdev_tests').require(dbusmock.returncode()==0)...)
+              # 容器沒有 python-dbusmock（AUR 只放在 checkdepends，makepkg -s 不裝），
+              # 於是 .require(false) 撞上 enabled → "Feature umockdev_tests cannot
+              # be disabled"（run 43592567544 實測）。明確指定 disabled 就不會被
+              # auto-features 升級，也不需要為了不跑的測試去裝 dbusmock／umockdev。
+              sed -i '/-D supported_build=enabled/a\        -D umockdev_tests=disabled \\' "$F"
+              grep -q 'umockdev_tests=disabled' "$F" || { echo "::error::fwupd umockdev_tests 沒關掉"; exit 1; } ;;
             xfce4-settings-git)
               sed -i '/-D upower=enabled/d' "$F"
               ! grep -q 'upower=enabled' "$F" || { echo "::error::xfce4-settings upower 沒刪到"; exit 1; } ;;
@@ -1587,8 +1597,19 @@ jobs:
               grep -q 'lib32-gamemode-git' "$F" || { echo "::error::gamemode 32 位元被誤刪"; exit 1; }
               # 32 位元 build 需要 lib32-gcc-libs（libgcc_s.so.1 32 位元版）；
               # Artix 容器 [lib32] 已開但未預裝（run 43267320293 實測 ld skipping incompatible）
-              printf '\nmakedepends+=('"'"'lib32-gcc-libs'"'"')\n' >> "$F"
-              grep -q 'lib32-gcc-libs' "$F" || { echo "::error::gamemode lib32-gcc-libs 沒加到"; exit 1; } ;;
+              # lib32-dbus 同理：build32 設 PKG_CONFIG_PATH=/usr/lib32/pkgconfig，
+              # 但缺 lib32-dbus 時那裡沒有 dbus-1.pc，pkg-config 會退回
+              # /usr/lib/pkgconfig/dbus-1.pc → 把 64 位元 /usr/lib/libdbus-1.so
+              # 餵給 -m32 的 linker → "file in wrong format"（run 43592567544 實測）。
+              # Artix [lib32] 有 lib32-dbus 1.16.4-1，提供
+              # usr/lib32/pkgconfig/dbus-1.pc 與 usr/lib32/libdbus-1.so（已解 lib32.db 核對）。
+              printf '\nmakedepends+=('"'"'lib32-gcc-libs'"'"' '"'"'lib32-dbus'"'"')\n' >> "$F"
+              grep -q 'lib32-gcc-libs' "$F" || { echo "::error::gamemode lib32-gcc-libs 沒加到"; exit 1; }
+              grep -q 'lib32-dbus' "$F" || { echo "::error::gamemode lib32-dbus 沒加到"; exit 1; }
+              # 硬閘：build32 起跑前直接驗 32 位元 dbus-1.pc 真的在，別讓它靜默
+              # 退回 64 位元又產出一顆壞包。分隔符用 # ，因為替換內容含 ||
+              sed -i "s#  export PKG_CONFIG_PATH='/usr/lib32/pkgconfig'#  export PKG_CONFIG_PATH='/usr/lib32/pkgconfig'\n  test -f /usr/lib32/pkgconfig/dbus-1.pc || return 1#" "$F"
+              grep -Fq 'test -f /usr/lib32/pkgconfig/dbus-1.pc' "$F" || { echo "::error::gamemode 32 位元 dbus 硬閘沒加進去"; exit 1; } ;;
             libfm-gtk2)
               # AUR 的 depends 寫 "libfm=$pkgver"（=1.4.0），但 Arch 只有 libfm 1.4.1
               # → 精確版對不上、makepkg -s 直接 target not found。放寬成 >=，
