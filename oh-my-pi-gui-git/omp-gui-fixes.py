@@ -49,11 +49,13 @@ def main() -> int:
 \t{ id: "en", name: "English", short: "EN", locale: "en-US" },
 \t{ id: "ru", name: "Русский", short: "RU", locale: "ru-RU" },
 \t{ id: "zh", name: "中文", short: "中文", locale: "zh-CN" },
+\t{ id: "th", name: "ไทย", short: "TH", locale: "th-TH" },
 ] as const;''',
         '''export const LANGUAGES = [
 \t{ id: "en", name: "English", short: "EN", locale: "en-US" },
 \t{ id: "ru", name: "Русский", short: "RU", locale: "ru-RU" },
 \t{ id: "zh", name: "简体中文", short: "简中", locale: "zh-CN" },
+\t{ id: "th", name: "ไทย", short: "TH", locale: "th-TH" },
 \t{ id: "zh-TW", name: "繁體中文", short: "繁中", locale: "zh-TW" },
 ] as const;''',
         "languages: add zh-TW",
@@ -85,8 +87,8 @@ def main() -> int:
     )
     replace_once(
         i18n,
-        "const LOCALES: Record<Lang, Locale> = { en, ru, zh };",
-        'const LOCALES: Record<Lang, Locale> = { en, ru, zh, "zh-TW": zhTW };',
+        "const LOCALES: Record<Lang, Locale> = { en, ru, th, zh };",
+        'const LOCALES: Record<Lang, Locale> = { en, ru, th, zh, "zh-TW": zhTW };',
         "i18n: register locale",
     )
 
@@ -164,14 +166,22 @@ export function schemaOptionText(language: Language, text: string): string {
     )
     replace_once(
         main_i18n,
-        'const TEXT: Record<MainTextKey, Record<Exclude<MainLanguage, "ru">, string>> = {',
-        'const TEXT: Record<MainTextKey, Record<Exclude<MainLanguage, "ru" | "zh-TW">, string>> = {',
+        'const TEXT: Record<MainTextKey, Record<Exclude<MainLanguage, "ru" | "th">, string>> = {',
+        'const TEXT: Record<MainTextKey, Record<Exclude<MainLanguage, "ru" | "th" | "zh-TW">, string>> = {',
         "native menus: type",
     )
     replace_once(
         main_i18n,
-        '\tconst text = language === "ru" ? RU_MAIN_TEXT[key] : TEXT[key][language];',
-        '\tconst text =\n\t\tlanguage === "ru"\n\t\t\t? RU_MAIN_TEXT[key]\n\t\t\t: language === "zh-TW"\n\t\t\t\t? ZH_TW_MAIN_TEXT[key]\n\t\t\t\t: TEXT[key][language];',
+        '''\t\tcase "th":
+\t\t\treturn TH_MAIN_TEXT[key];
+\t\tdefault:
+\t\t\treturn TEXT[key][language];''',
+        '''\t\tcase "th":
+\t\t\treturn TH_MAIN_TEXT[key];
+\t\tcase "zh-TW":
+\t\t\treturn ZH_TW_MAIN_TEXT[key];
+\t\tdefault:
+\t\t\treturn TEXT[key][language];''',
         "native menus: lookup",
     )
     tray = root / "src/main/tray-labels.ts"
@@ -183,10 +193,16 @@ export function schemaOptionText(language: Language, text: string): string {
     )
     replace_once(
         tray,
-        '\treturn lang === "ru" ? RU_TRAY_TEXT[key] : TRAY_LABELS[key][lang];',
-        '''\tif (lang === "ru") return RU_TRAY_TEXT[key];
-\tif (lang === "zh-TW") return ZH_TW_TRAY_TEXT[key];
-\treturn TRAY_LABELS[key][lang as "en" | "zh"];''',
+        '''\t\tcase "th":
+\t\t\treturn TH_TRAY_TEXT[key];
+\t\tdefault:
+\t\t\treturn TRAY_LABELS[key][lang];''',
+        '''\t\tcase "th":
+\t\t\treturn TH_TRAY_TEXT[key];
+\t\tcase "zh-TW":
+\t\t\treturn ZH_TW_TRAY_TEXT[key];
+\t\tdefault:
+\t\t\treturn TRAY_LABELS[key][lang];''',
         "tray: lookup",
     )
 
@@ -278,6 +294,12 @@ export function schemaOptionText(language: Language, text: string): string {
     # ---- 7. self-check ---------------------------------------------------
     checks = {
         "zh-TW registered": ('"zh-TW", name: "繁體中文"' in lang.read_text(encoding="utf-8")),
+        # 上游 595eeb7f 新增了 th；補丁必須保留它，不能在重寫 LANGUAGES 時吃掉。
+        "upstream th preserved": ('{ id: "th", name: "ไทย"' in lang.read_text(encoding="utf-8")),
+        # TEXT 只有 en/zh 兩欄，zh-TW 必須被排除在這個 Record 的鍵型別之外。
+        "native TEXT excludes zh-TW": (
+            '"ru" | "th" | "zh-TW"' in main_i18n.read_text(encoding="utf-8")
+        ),
         "no forced refresh in dialog": ("refreshProviders(true)" not in dialog.read_text(encoding="utf-8")),
         "renderer locale wired": ('"zh-TW": zhTW' in i18n.read_text(encoding="utf-8")),
         "native menu wired": ("ZH_TW_MAIN_TEXT[key]" in main_i18n.read_text(encoding="utf-8")),

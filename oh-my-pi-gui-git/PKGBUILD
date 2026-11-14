@@ -75,7 +75,7 @@ source=(
   'native-tray-zh-TW.ts'
 )
 sha256sums=('SKIP'
-            '47737c58b3a4d870de5a8a2a3464394597ba56d588bed85c7fbadc466e5ea9ae'
+            '073c631c80c573066987a5b65f105854ccdb8e1c3bded5df4f770c8b5d770e2b'
             'b7375853720111d1c08b1313a374c46f5f70e0d5f393c37df265b69380c667c5'
             'a11fff5087ed1479d52582683dee3dc90363bb2eeff1d4ea49a26ffcc0295f28'
             'c272aadaf7343da05ec26b6a3e44e2ee94c5911deecfe4ab4c0de651952f36ad'

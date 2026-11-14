@@ -207,10 +207,14 @@ jobs:
               shiboken6 shiboken6-generator pyside6 python-build python-setuptools
           fi
 
+          # gamemode-git 是 kind:artix（跑在 Artix 容器）。這裡塞進去的是 **Arch** 的
+          # [multilib]，Artix 鏡像沒有 multilib.db → pacman -Syu 十次全敗
+          # （run 43585469020 實測：multilib downloading... → 連續 10 次失敗）。
+          # Artix 自己的 [lib32] 由下面 kind=artix 那段重寫 pacman.conf 時就開好了，
+          # 所以刻意不把 gamemode-git 列進這個 Arch 專用分支。
           if [ "${{ matrix.kind }}" = 'multilib' ] \
              || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ] \
-             || [ "${{ matrix.repo_name }}" = 'lib32-nvidia-utils-beta' ] \
-             || [ "${{ matrix.repo_name }}" = 'gamemode-git' ]; then
+             || [ "${{ matrix.repo_name }}" = 'lib32-nvidia-utils-beta' ]; then
             # spirv-llvm-translator-git 現在多切一顆 lib32-spirv-llvm-translator-git，
             # 而容器預設不啟用 [multilib]（run #471 實測 target not found: lib32-spirv-tools）。
             # lib32-* 需要 [multilib] 倉：容器預設只有 core/extra 且 [multilib] 是註解掉的。
@@ -1410,7 +1414,13 @@ jobs:
               # AUR makedepends 沒列 rust → 容器沒 rustc，meson setup 直接
               # Unknown compiler(s): [['rustc']]（run 43433195787 實測）
               printf '\nmakedepends+=('"'"'rust'"'"')\n' >> "$F"
-              grep -q "'rust'" "$F" || { echo "::error::fwupd rust 沒加到"; exit 1; } ;;
+              grep -q "'rust'" "$F" || { echo "::error::fwupd rust 沒加到"; exit 1; }
+              # meson.build:877 起 TUI 是硬性需求，關不掉：容器沒有 python-textual
+              # 的 metadata 就直接 "Feature tui cannot be disabled: TUI support
+              # requires the Python Textual module >= 0.50"（run 43585469020 實測）。
+              # Arch extra 已有 python-textual 8.2.8，補進 makedepends 讓 makepkg -s 裝到。
+              printf '\nmakedepends+=('"'"'python-textual'"'"')\n' >> "$F"
+              grep -q 'python-textual' "$F" || { echo "::error::fwupd python-textual 沒加到"; exit 1; } ;;
             xfce4-settings-git)
               sed -i '/-D upower=enabled/d' "$F"
               ! grep -q 'upower=enabled' "$F" || { echo "::error::xfce4-settings upower 沒刪到"; exit 1; } ;;
@@ -1546,7 +1556,13 @@ jobs:
               grep -q '_wb_flto_filter' "$F" || { echo "::error::sccache flto filter 沒注入"; exit 1; }
               ! grep -q -- '--all-features' "$F" || { echo "::error::sccache all-features 沒刪到"; exit 1; }
               grep -q "'cmake'" "$F" || { echo "::error::sccache cmake 沒加到"; exit 1; }
-              grep -q 'AWS_LC_SYS_CMAKE_BUILDER=1' "$F" || { echo "::error::sccache CMAKE_BUILDER 沒加到"; exit 1; } ;;
+              grep -q 'AWS_LC_SYS_CMAKE_BUILDER=1' "$F" || { echo "::error::sccache CMAKE_BUILDER 沒加到"; exit 1; }
+              # 上面把 --all-features 拿掉後 sccache-dist 不再被編出來，但 AUR 的
+              # package() 仍無條件 install 它 → "install: cannot stat
+              # 'target/release/sccache-dist'"（run 43585469020 實測）。改成存在才裝：
+              # 日後若恢復 all-features，這顆仍會自動進包，不砍功能。
+              sed -i 's|install -D target/release/sccache-dist -t "\$pkgdir"/usr/bin|[ -f target/release/sccache-dist ] \&\& install -D target/release/sccache-dist -t "\$pkgdir"/usr/bin|' "$F"
+              grep -Fq '[ -f target/release/sccache-dist ]' "$F" || { echo "::error::sccache-dist 條件化沒改到"; exit 1; } ;;
             gvfs-git)
               sed -i 's/,google}/}/' "$F"
               sed -i "s/'libsoup'/'libsoup3'/" "$F"
@@ -4497,6 +4513,73 @@ jobs:
           else
             echo "::warning::取不到 Release 资产清单，本轮跳过幽灵条目检查"
           fi
+          # ── %CSIZE% 對齊（2026-11-14 稽核；run 43585469020 實測）─────────────
+          # pacman 把 DB 的 %CSIZE% 直接餵給 CURLOPT_MAXFILESIZE_LARGE
+          # （上游 lib/libalpm/sync.c: payload->max_size = pkg->size；
+          #  lib/libalpm/dload.c: 超限轉 CURLE_FILESIZE_EXCEEDED）。資產只要比
+          # 登記值大 1 byte，整包就抓不下來，報 "Maximum file size exceeded"；
+          # xfce4-power-manager-git 連錯 20 次就是這樣（DB 1251026 / 資產 1251112）。
+          # 同名資產被別輪重新上傳、DB 沒跟著重算時會發生（稽核 853 筆有 118 筆不符）。
+          # 上傳前一律校正：本輪產物用本地檔案大小，其餘用 Release 資產清單的 size。
+          release_id=$(gh api "repos/${{ github.repository }}/releases/tags/$REPO_RELEASE_TAG" \
+                       --jq .id 2>/dev/null | tail -1 || true)
+          gh api --paginate "repos/${{ github.repository }}/releases/$release_id/assets?per_page=100" \
+            --jq '.[] | [.name, .size] | @tsv' > /tmp/_wb_asset_sizes.tsv 2>/dev/null || :
+          if [ ! -s /tmp/_wb_asset_sizes.tsv ]; then
+            echo "::warning::取不到 Release 資產大小清單，本輪略過 %CSIZE% 校正"
+          fi
+          _wb_fix_csize() {
+            _wb_db="$1"
+            rm -rf _dbfix
+            mkdir -p _dbfix
+            tar -xzf "$_wb_db" -C _dbfix
+            _wb_changed=0
+            for _wb_d in _dbfix/*/desc; do
+              [ -f "$_wb_d" ] || continue
+              _wb_fn=$(awk '/^%FILENAME%$/{getline; print; exit}' "$_wb_d")
+              _wb_cs=$(awk '/^%CSIZE%$/{getline; print; exit}' "$_wb_d")
+              [ -n "$_wb_fn" ] && [ -n "$_wb_cs" ] || continue
+              _wb_key=${_wb_fn//:/.}
+              if [ -f "./$_wb_key" ]; then
+                _wb_real=$(stat -c %s "./$_wb_key")
+              else
+                _wb_real=$(awk -F'\t' -v n="$_wb_key" '$1==n{print $2; exit}' /tmp/_wb_asset_sizes.tsv)
+              fi
+              [ -n "$_wb_real" ] || continue
+              if [ "$_wb_real" != "$_wb_cs" ]; then
+                awk -v new="$_wb_real" '/^%CSIZE%$/{print; getline; print new; next} {print}' \
+                  "$_wb_d" > "$_wb_d.wb" && mv "$_wb_d.wb" "$_wb_d"
+                _wb_changed=$((_wb_changed + 1))
+              fi
+            done
+            ( cd _dbfix && find . -mindepth 1 -maxdepth 1 -printf '%P\n' \
+                | sort | tar -czf "../$_wb_db.wb" -T - )
+            mv "$_wb_db.wb" "$_wb_db"
+            echo "  %CSIZE% 校正 $_wb_db：$_wb_changed 筆"
+            rm -rf _dbfix
+          }
+          _wb_fix_csize junlin03-aur.db.tar.gz
+          _wb_fix_csize junlin03-aur.files.tar.gz
+          # pacman 實際請求的是無副檔名的 junlin03-aur.db / .files；repo-add 只更新
+          # .tar.gz，這兩份必須明確同步，否則客戶端永遠吃到落後一輪的 CSIZE。
+          cp -f junlin03-aur.db.tar.gz junlin03-aur.db
+          cp -f junlin03-aur.files.tar.gz junlin03-aur.files
+          # 上傳前硬閘：DB 裡任何一筆 CSIZE 小於對應資產大小就不准出庫。
+          rm -rf _dbcheck && mkdir _dbcheck
+          tar -xzf junlin03-aur.db.tar.gz -C _dbcheck
+          : > /tmp/_wb_db_csize.tsv
+          for _wb_d in _dbcheck/*/desc; do
+            [ -f "$_wb_d" ] || continue
+            awk '/^%FILENAME%$/{getline; f=$0; gsub(/:/, ".", f)} /^%CSIZE%$/{getline; print f "\t" $0}' \
+              "$_wb_d" >> /tmp/_wb_db_csize.tsv
+          done
+          if ! awk -F'\t' 'NR==FNR{a[$1]=$2; next} ($1 in a) && a[$1]+0 > $2+0 {print $1, a[$1], $2; n++} END{if(n>0) exit 1}' \
+                 /tmp/_wb_asset_sizes.tsv /tmp/_wb_db_csize.tsv > /tmp/_wb_over.tsv; then
+            echo "::error::DB 仍有 %CSIZE% 小於實際資產大小，中止部署"
+            cat /tmp/_wb_over.tsv
+            exit 1
+          fi
+          rm -rf _dbcheck
           rm -f junlin03-aur.db.tar.gz.old junlin03-aur.files.tar.gz.old
           ls -lh
 
