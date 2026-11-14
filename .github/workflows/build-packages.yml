@@ -4569,7 +4569,18 @@ jobs:
               [ -n "$_wb_fn" ] && [ -n "$_wb_cs" ] || continue
               _wb_key=${_wb_fn//:/.}
               if [ -f "./$_wb_key" ]; then
-                _wb_real=$(stat -c %s "./$_wb_key")
+                _wb_local=$(stat -c %s "./$_wb_key")
+                _wb_rel=$(awk -F'\t' -v n="$_wb_key" '$1==n{print $2; exit}' /tmp/_wb_asset_sizes.tsv)
+                # 同名 Release 資產若已存在且比本輪本地产物大（同版本號重建的
+                # 必然結果：編譯非確定，大小每輪不同；run 43617328057 shard3
+                # #46 實測閘被這個打爆），上傳後留哪份不由這裡控——db 一律取
+                # max，保證 CSIZE ≥ 實際資產大小（CURLOPT_MAXFILESIZE 只怕
+                # db 登記值偏小；偏大只影響進度條，客戶端無感）。
+                if [ -n "$_wb_rel" ] && [ "$_wb_rel" -gt "$_wb_local" ]; then
+                  _wb_real=$_wb_rel
+                else
+                  _wb_real=$_wb_local
+                fi
               else
                 _wb_real=$(awk -F'\t' -v n="$_wb_key" '$1==n{print $2; exit}' /tmp/_wb_asset_sizes.tsv)
               fi
