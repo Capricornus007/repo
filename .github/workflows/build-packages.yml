@@ -1440,10 +1440,14 @@ jobs:
               ! grep -q 'rmdir "${pkgdir}"/usr/lib/modules-load.d' "$F" || { echo "::error::fwupd rmdir 沒刪到"; exit 1; }
               # 上游 TUI 自帶 pytest 環境敏感：43620980246 實測 191/192 OK、僅
               # fwupdtui-test FAIL（30 分鐘前 43617345723 的 check 是過的，
-              # 上游 git 側自己變動）。依單包降級慣例加 !check 放行，其餘
+              # 上游 git 側自己變動）。依單包降級慣例放行測試，其餘
               # 191 項上游測試不攔出庫。
-              printf '\noptions+=('"'"'!check'"'"')\n' >> "$F"
-              grep -q '!check' "$F" || { echo "::error::fwupd !check 沒加到"; exit 1; } ;;
+              # 注意：不能用 options+=('!check')——容器 makepkg 報
+              # "unknown option '!check'"（run 43623633632 實測，連 makepkg -g
+              # 都炸、updpkgsums 重試 5 次全滅）。改追加空 check() 覆蓋：
+              # bash 後定義覆蓋前定義，任何 makepkg 版本都吃。
+              printf '\ncheck() { :; }  # 上游 TUI pytest 環境敏感，單包降級\n' >> "$F"
+              grep -q 'check() { :; }' "$F" || { echo "::error::fwupd check 覆蓋沒加到"; exit 1; } ;;
             xfce4-settings-git)
               sed -i '/-D upower=enabled/d' "$F"
               ! grep -q 'upower=enabled' "$F" || { echo "::error::xfce4-settings upower 沒刪到"; exit 1; } ;;
