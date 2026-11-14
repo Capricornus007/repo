@@ -4562,8 +4562,21 @@ jobs:
           _wb_fix_csize junlin03-aur.files.tar.gz
           # pacman 實際請求的是無副檔名的 junlin03-aur.db / .files；repo-add 只更新
           # .tar.gz，這兩份必須明確同步，否則客戶端永遠吃到落後一輪的 CSIZE。
-          cp -f junlin03-aur.db.tar.gz junlin03-aur.db
-          cp -f junlin03-aur.files.tar.gz junlin03-aur.files
+          # ⚠️ gh release download 抓下來的 `.db`／`.db.tar.gz` 在 CI 容器裡可能是
+          # **同一個 inode**（硬連結或 symlink）：直接 `cp -f a b` 會報
+          # "'a' and 'b' are the same file" 並讓整個 deploy 紅（run 43593991828
+          # 實測，離線用 curl 各別下載成兩個獨立檔時不會重現）。改成先寫獨立暫存檔
+          # 再 mv -f 換掉目錄項：兩者是否同源都能正確切開，也不會寫回原 inode。
+          _wb_sync_copy() {
+            cp -f "$1" "$2.wb-tmp"
+            mv -f "$2.wb-tmp" "$2"
+          }
+          _wb_sync_copy junlin03-aur.db.tar.gz junlin03-aur.db
+          _wb_sync_copy junlin03-aur.files.tar.gz junlin03-aur.files
+          cmp -s junlin03-aur.db.tar.gz junlin03-aur.db || {
+            echo "::error::junlin03-aur.db 與 .db.tar.gz 不同步，中止部署"; exit 1; }
+          cmp -s junlin03-aur.files.tar.gz junlin03-aur.files || {
+            echo "::error::junlin03-aur.files 與 .files.tar.gz 不同步，中止部署"; exit 1; }
           # 上傳前硬閘：DB 裡任何一筆 CSIZE 小於對應資產大小就不准出庫。
           rm -rf _dbcheck && mkdir _dbcheck
           tar -xzf junlin03-aur.db.tar.gz -C _dbcheck
