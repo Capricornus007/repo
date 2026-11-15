@@ -648,6 +648,15 @@ jobs:
             # OPTIONS+= 而不是直接赋值，保留上游其余默认项（strip/lto/purge 等）。
             echo 'OPTIONS+=(!debug)'
           } >> /etc/makepkg.conf
+          # rhash 上游 Makefile 的 install 目標同時掛 build-install-binary
+          # （內含 `+$(MAKE) install-binary`）與 install-symlinks（依賴
+          # install-binary）——-j 下同一條 `install rhash` 並發跑兩次，
+          # 輸家報 "cannot create regular file …: File exists" 整個
+          # package() 判紅（run 43683547967 shard3 實測；上游注解自認
+          # "otherwise 'make -j<n>' can fail"）。rhash 體量小，一律 -j1。
+          if [ "${{ matrix.repo_name }}" = 'rhash-git' ]; then
+            echo 'MAKEFLAGS="-j1"' >> /etc/makepkg.conf
+          fi
           # makepkg 用 curl 下载源码，kernel.org 大文件常断连；
           # 设 120s 超时 + 3 次自动重试，再结合下游重试循环足够稳定
           echo 'CURL_OPTIONS="--connect-timeout 30 --max-time 300 --retry 5 --retry-delay 15"' >> /etc/makepkg.conf
