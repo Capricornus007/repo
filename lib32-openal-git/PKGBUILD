@@ -30,6 +30,16 @@ pkgver() {
   git describe --long --tags --exclude=makemhr | sed 's/^openal-soft-//;s/-/.r/;s/-/./g'
 }
 
+prepare() {
+  cd openal-soft
+  # GCC 16 的 libstdc++ 在 <bits/std.cc>（C++ 模組單元）裡用
+  # `#if __cpp_lib_xxx` 判斷特性，宏未定義時會觸發 -Werror=undef 直接中斷，
+  # 這是工具鏈與函式庫的相容問題，不是本包原始碼缺陷（run 43728961096 實測）。
+  # 上游在 ALSOFT_WERROR=OFF 時仍無條件附加 -Werror=undef，這裡降級為一般警告。
+  sed -i 's/list(APPEND C_FLAGS -Werror=undef -Werror=format-security/list(APPEND C_FLAGS -Werror=format-security/' CMakeLists.txt
+  grep -q 'C_FLAGS -Werror=undef' CMakeLists.txt && { echo "sed 未命中 -Werror=undef" >&2; return 1; }
+}
+
 build() {
   local cmake_options=(
     -DCMAKE_INSTALL_PREFIX=/usr
