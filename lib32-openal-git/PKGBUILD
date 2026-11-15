@@ -16,8 +16,10 @@ arch=(x86_64)
 url='https://github.com/kcat/openal-soft'
 license=(LGPL-2.0-or-later)
 depends=(lib32-gcc-libs lib32-glibc openal)
+# lib32-portaudio 是 AUR-only，CI multilib 容器沒有也不該為了一個選配
+# backend 去裝它（run 43726513086 實測 target not found）。明確關掉 backend。
 makedepends=(cmake git ninja lib32-alsa-lib lib32-jack lib32-libpulse
-             lib32-pipewire lib32-portaudio)
+             lib32-pipewire)
 provides=('lib32-openal' libopenal.so)
 conflicts=('lib32-openal')
 source=("git+https://github.com/kcat/openal-soft.git")
@@ -35,6 +37,7 @@ build() {
     -DCMAKE_INSTALL_LIBDIR=lib32
     -DALSOFT_EXAMPLES=OFF
     -DALSOFT_UTILS=OFF
+    -DALSOFT_BACKEND_PORTAUDIO=OFF
   )
   export CC="gcc -m32 -mstackrealign"
   export CXX="g++ -m32 -mstackrealign"

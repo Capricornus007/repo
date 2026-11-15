@@ -1,0 +1,51 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# License: The Better WTFPL (TBWTFPL) v114514 - https://github.com/Capricornus007/tbwtfpl/blob/main/LICENSE
+#
+# 本倉 in-tree 維護版（2026-11-15）。基底：AUR lib32-libnsl-git 2.0.1.r6.gc2702fc-1。
+#
+# 為什麼不直接 clone AUR：那份 depends 寫 `lib32-libtirpc`，是 AUR-only 包，
+# CI 的 [multilib] 容器沒有 → run 43726513086 實測 `target not found: lib32-libtirpc`
+# 直接判紅。本倉自有 lib32-libtirpc-git（同一輪已成功發布）provides
+# lib32-libtirpc，改吃自家兄弟包即可；裸名會被同步庫實包搶走，故用 -git 全名。
+#
+# epoch=1 保證 1:2.0.1.rN.gHASH 嚴格大於目標機的 lib32-libnsl 2.0.1-2。
+# ⚠️ 版號由 pkgver() 現算 ⇒ kind: multilib 天然排除「校驗和回推」。
+
+pkgname=lib32-libnsl-git
+pkgver=2.0.1.r6.gc2702fc
+pkgrel=1
+epoch=1
+pkgdesc='Public client interface library for NIS(YP) (32-bit, git)'
+arch=(x86_64)
+url='https://github.com/thkukuk/libnsl'
+license=(LGPL-2.1-only)
+depends=(lib32-glibc lib32-libtirpc-git libnsl-git)
+makedepends=(git autoconf automake libtool)
+provides=('lib32-libnsl' libnsl.so)
+conflicts=('lib32-libnsl')
+source=("git+https://github.com/thkukuk/libnsl.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd libnsl
+  git describe --long --tags --abbrev=7 | sed -E 's/^v//;s/([^-]*-g)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd libnsl
+  autoreconf -fiv
+}
+
+build() {
+  cd libnsl
+  export CC='gcc -m32'
+  export CXX='g++ -m32'
+  export PKG_CONFIG_PATH='/usr/lib32/pkg-config'
+  ./configure --prefix=/usr --libdir=/usr/lib32 --disable-static
+  make
+}
+
+package() {
+  make DESTDIR="$pkgdir" install -C libnsl
+  rm -rf "$pkgdir"/usr/include
+}

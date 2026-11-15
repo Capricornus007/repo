@@ -797,7 +797,8 @@
     "key": "lib32-libnsl-git",
     "repo_name": "lib32-libnsl-git",
     "variant": "none",
-    "kind": "multilib"
+    "kind": "multilib",
+    "in_tree": true
   },
   {
     "key": "lib32-libtirpc-git",

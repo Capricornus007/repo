@@ -2722,6 +2722,10 @@ jobs:
                 # 見 flex-git/PKGBUILD 頭註）。flex-git 未發佈前 makepkg -s 會
                 # `target not found: flex-git` 直接判紅，所以在這裡等它就緒、本輪跳過。
                 doxygen-git)               _extra_gate_deps="flex-git" ;;
+                # lib32-libnsl-git 改吃本倉的兩顆 -git 兄弟包（AUR 版的裸名
+                # lib32-libtirpc 在 CI multilib 容器不存在，run 43726513086
+                # 實測 target not found 判紅）。冷啟動時等它們進 feed 再建。
+                lib32-libnsl-git)          _extra_gate_deps="lib32-libtirpc-git libnsl-git" ;;
                 # ⚠️ mpv-git 不屬於這張表（2026-10-28 自己踩過的死碼）：plan 步裡
                 # mpv-git 走的是上面那條 `mpv-git|oh-my-pi-git|pysolfc-git)` 專屬探測
                 # 分支，根本到不了這個通用分支。它的「libplacebo-git 就緒」閘門寫在
