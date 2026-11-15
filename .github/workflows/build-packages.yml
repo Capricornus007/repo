@@ -130,10 +130,17 @@ jobs:
              || [ "${{ matrix.repo_name }}" = 'spirv-headers-git' ] \
              || [ "${{ matrix.repo_name }}" = 'fcitx5-qt-git' ] \
              || [ "${{ matrix.repo_name }}" = 'mpv-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'wireplumber-git' ] \
              || [ "${{ matrix.repo_name }}" = 'ffmpeg-full-git' ]; then
             # mpv-git 點名掛源（2026-10-28）：它的 depends 有裸名 libplacebo，同步庫那顆
             # 只有 7.360.1 而 mpv 的 meson 閘門要 >= 7.387.0；要先查得到/裝得上本倉的
             # libplacebo-git，plan 的依賴閘門與「換 libplacebo」那步才走得通。
+            # wireplumber-git 點名掛源（2026-11-16）：它的 kind 是 artix，
+            # 不在上面的 kde/wayland/aur 名單裡，所以 run 43741115356 的
+            # 「用本倉 spandsp-git 補依賴」那步一開頭就 grep 不到
+            # [junlin03-aur] 而紅（日誌實物：##[error]junlin03-aur 沒掛上）。
+            # 它需要 spandsp-git 提供 libspandsp.so=2-64 才能滿足
+            # checkdepends=(pipewire-audio)，故必須掛源。
             # ffmpeg-full-git 點名掛源（2026-10-28）：plan 步的兄弟依賴閘門
             # （mpeghdec-git/quirc-git/svt-jpeg-xs-git/astc-encoder-git 四顆）靠
             # `pacman -Si` 查 feed；不掛源就恆查無 → 恆跳過 → ffmpeg-full-git
