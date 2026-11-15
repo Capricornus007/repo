@@ -161,6 +161,11 @@
     "variant": "none"
   },
   {
+    "key": "flex-git",
+    "repo_name": "flex-git",
+    "variant": "none"
+  },
+  {
     "key": "lib32-llvm-git",
     "repo_name": "lib32-llvm-git",
     "variant": "none",

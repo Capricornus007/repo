@@ -2327,3 +2327,48 @@ nashira-git 的掛源點名也一併拿掉（它不再吃本倉的 jbr21）。**
 做成 `current-repo` 上可下載的 `.pkg.tar.zst` 會構成再散布，所以不上矩陣、
 不進 `junlin03-aur`、不上傳任何二進位資產，也不在使用者電腦安裝。
 若上游日後換成允許再散布的授權，再照 `omnirush-cli/` 的 npm 包範本評估。
+
+## flex-git（2026-11-15；run 43688123660 實測 doxygen-git 紅）
+
+### 為什麼必須有這顆（不是「也想 -git」，是 distro flex 已經壞了）
+`doxygen-git` 的構建紅在 flex 2.6.5–2.6.12 的兩個上游缺陷（run 43688123660 實測）：
+
+1. flex 2.6.5 把 `yy_fatal_error()` 改名 `yypanic()`，doxygen 的 `doxygen_lex.h`
+   仍呼叫 `yy_fatal_error` → `error: 'yy_fatal_error' was not declared in this scope`；
+2. flex 2.6.5 起 `yy_base` 表窄化成 `flex_int16_t`（flex bug #816），doxygen 的
+   `code.l` 產生的偏移超過 32767 → `error: narrowing conversion of '35988' from
+   'int' to 'flex_int16_t'`（C++ narrowing，直接紅）。
+
+上游 doxygen PR #12451（open）明確拒絕 flex 2.6.5–2.6.12，要求 2.6.4 或 ≥ 2.6.13。
+用戶政策（2026-11-15）：**依賴版本問題一律走源碼直出的 -git 版本**，不從 release
+tarball 或系統 flex 將就。所以這顆 flex-git 就是 doxygen-git 的 makedepends。
+
+### 收錄範圍
+- `pkgver()` 從上游 HEAD 現算（`git describe --tags --match 'v*'`，tag 形如 `v2.6.14`；
+  master HEAD = 6e285f26b，2026-11-15）。describe 錨點漂移時靠 `epoch=1` 避免被
+  repo-add 判降級而永遠拒收（同 make-git 的理由）。
+- git 版沒有預生成的 `configure`，`build()` 先跑 `./autogen.sh`（libtoolize +
+  autoreconf）再 `./configure --prefix=/usr && make`；`check()` 跑上游自帶測試套件
+  `make check`，不准 `-E` 排掉。
+- `makedepends` 補上整組 autotools 鏈（autoconf/automake/bison/gettext/help2man/
+  indent/libtool/m4/sed/texinfo）＋ `flex` 本身（AC_PROG_LEX 要一支 flex 來
+  bootstrap，系統那顆 2.6.10 夠用）。
+- `provides=('flex')`＋`conflicts=('flex')`：頂替的是安裝用的名字 `flex`。
+
+### 四接點
+1. `matrix/packages.json`：`{"key": "flex-git", "repo_name": "flex-git", "variant": "none"}`
+   （插在 doxygen-git 之後，總數 249 → 250）。
+2. `build-packages.yml` in-tree case 清單加 `flex-git`；回推校驗和 giant if 加
+   `!= 'flex-git'`（純 git 源，跑 updpkgsums 會撕檔）。
+3. `build-packages.yml` 的 plan 步依賴閘門：`doxygen-git) _extra_gate_deps="flex-git" ;;`
+   ——flex-git 未發佈前 `makepkg -s` 會 `target not found: flex-git` 直接判紅，
+   所以本輪跳過等下輪，符合本倉 DAG 收斂設計（spirv-tools-git 同款做法）。
+4. 本檔。
+
+### doxygen-git 側的改動
+`makedepends` 的 `flex` → `flex-git`，並在 PKGBUILD 註明理由（flex 2.6.5–2.6.12
+破壞 doxygen，上游 PR #12451 要求 ≥ 2.6.13）。
+
+### 裝機影響
+`pactree -r flex` 需自行評估：flex 是建置期工具（lex/yacc 鏈），執行期幾乎沒有
+反向依賴；`provides=('flex')` 讓所有 `makedepends=(flex)` 的包都能解到這顆。

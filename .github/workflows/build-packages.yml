@@ -496,10 +496,14 @@ jobs:
                       galaxy-goblins galaxy-gremlins lib32-goblins lib32-gremlins; do
               printf '\n[%s]\nServer = https://mirror.nju.edu.cn/artixlinux/%s/os/$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/%s/os/$arch\nServer = https://artix.wheaton.edu/repos/%s/os/$arch\n' "$_r" "$_r" "$_r" "$_r" >> /etc/pacman.conf
             done
-            # system / world / galaxy / lib32 用 Include 走鏡像清單，與目標機一致
-            for _r in system world galaxy lib32; do
+            # system / world / galaxy 用 Include 走鏡像清單，與目標機一致
+            for _r in system world galaxy; do
               printf '\n[%s]\nInclude = /etc/pacman.d/mirrorlist\n' "$_r" >> /etc/pacman.conf
             done
+            # [lib32]：Artix 官方 mirrorlist 無 wheaton；wheaton 是唯一還留著 lib32-dbus
+            # 的鏡像（1.16.4-1，實測 HTTP 200），Artix [lib32] 已裁掉（run 43688123660）。
+            # wheaton 排第一，沒有的包落回 mirrorlist。
+            printf '\n[lib32]\nServer = https://artix.wheaton.edu/repos/lib32/os/$arch\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
             # libevent 全鏈與宿主同用 Artix，重寫設定後仍須保留自有依賴來源。
             case '${{ matrix.repo_name }}' in
               libevent-git|links-git|unbound-git|fstrm-git|libverto-git)
@@ -889,7 +893,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr25|serein-git|qt6ct-git|brotli-git|nodejs-git|nodejs-better-sqlite3-git|npm-git|pnpm-git|fcitx5-chinese-addons-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git|htop-git|chafa-git|xtitle-git|downgrade-git|pacman-git|meson-git|python2-git|qt4-git|expac-git|shiboken6-git|zcode-ce-git|openvpn|tcpdump|libplacebo-git|omnirush-cli|libjpeg-turbo-git|lib32-libjpeg-turbo-git|svt-jpeg-xs-git)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr25|serein-git|qt6ct-git|brotli-git|nodejs-git|nodejs-better-sqlite3-git|npm-git|pnpm-git|fcitx5-chinese-addons-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|flex-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git|htop-git|chafa-git|xtitle-git|downgrade-git|pacman-git|meson-git|python2-git|qt4-git|expac-git|shiboken6-git|zcode-ce-git|openvpn|tcpdump|libplacebo-git|omnirush-cli|libjpeg-turbo-git|lib32-libjpeg-turbo-git|svt-jpeg-xs-git)
               # 這批包為什麼走本倉目錄版（逐包理由）：見 docs/in-tree-packages.md。
               # 那個 step 的表達式有 21000 字元上限、註解也計入，加包只加清單、
               # 說明寫進該檔，別寫回這裡。
@@ -2714,6 +2718,10 @@ jobs:
                 # 沒進的話容器會去裝官方 clang 23.1，產出一顆又鏈 .23.1 的死包
                 # ——那是本包存在的全部意義的反面，寧可本輪跳過等下輪。
                 shiboken6-git)             _extra_gate_deps="clang-git llvm-libs-git" ;;
+                # doxygen-git 的 makedepends 點名 flex-git（flex 2.6.5–2.6.12 破壞 doxygen，
+                # 見 flex-git/PKGBUILD 頭註）。flex-git 未發佈前 makepkg -s 會
+                # `target not found: flex-git` 直接判紅，所以在這裡等它就緒、本輪跳過。
+                doxygen-git)               _extra_gate_deps="flex-git" ;;
                 # ⚠️ mpv-git 不屬於這張表（2026-10-28 自己踩過的死碼）：plan 步裡
                 # mpv-git 走的是上面那條 `mpv-git|oh-my-pi-git|pysolfc-git)` 專屬探測
                 # 分支，根本到不了這個通用分支。它的「libplacebo-git 就緒」閘門寫在
@@ -3376,7 +3384,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-zen1th' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'android-ndk-30' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'libjpeg-turbo-git' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'svt-jpeg-xs-git' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'nodejs-git' && matrix.repo_name != 'brotli-git' && matrix.repo_name != 'nodejs-better-sqlite3-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.repo_name != 'htop-git' && matrix.repo_name != 'chafa-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix' && matrix.repo_name != 'oh-my-pi-gui-git'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-zen1th' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'android-ndk-30' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'libjpeg-turbo-git' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'svt-jpeg-xs-git' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'nodejs-git' && matrix.repo_name != 'brotli-git' && matrix.repo_name != 'nodejs-better-sqlite3-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'flex-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.repo_name != 'htop-git' && matrix.repo_name != 'chafa-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix' && matrix.repo_name != 'oh-my-pi-gui-git'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -3911,6 +3919,19 @@ jobs:
             echo "已放好 mesa 的 LLVM 24 userpatch：$(ls mesa-userpatches/)"
           fi
           pacman -Qo /usr/lib/llvm-config 2>/dev/null || true
+
+      # 32 位 mesa_clc 靜默退出 267（run 43688123660 實測）：64 位那半邊同一支
+      # mesa_clc 正常產出 .spv，32 位那半邊一執行就無輸出退出 267——疑似 32 位
+      # clang 堆疊溢位（clang 訊號處理器 exit(267)）。build() 開頭放寬堆疊上限，
+      # 兩半邊都吃（64 位本來就過，無害）。獨立成一步：上面那步已貼近 21000 位元組上限。
+      - name: mesa-tkg-git：放寬 build() 堆疊上限（32 位 mesa_clc 靜默退出 267）
+        if: matrix.repo_name == 'mesa-tkg-git' && steps.plan.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          cd pkg_dir
+          sed -i '/^build() {/a\    ulimit -s unlimited' PKGBUILD
+          grep -q 'ulimit -s unlimited' PKGBUILD || {
+            echo "::error::ulimit 注入沒落地（build() 開頭格式變了？）"; exit 1; }
 
       - name: 把容器的 libplacebo 換成自有 libplacebo-git（mpv-git 的 meson 閘門）
         if: matrix.repo_name == 'mpv-git' && steps.plan.outputs.build == 'true'

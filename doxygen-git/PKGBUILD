@@ -33,7 +33,10 @@ license=('GPL-2.0-or-later')
 #   `pacman -Q doxygen-docs` 未裝、`pactree -r doxygen` 也只有它自己 →
 #   文件那半邊不是「該進產物」，所以 build() 用 `-Dbuild_doc=OFF` 明確關掉，
 #   而不是假裝建了、其實產物裡沒有。
-makedepends=(clang cmake flex fmt git libxslt python qt6-base qt6-svg sqlite spdlog)
+# flex-git（本倉源碼直出）：flex 2.6.5–2.6.12 破壞 doxygen（yy_fatal_error 改名 +
+# yy_base 窄化，見 flex-git/PKGBUILD 頭註），上游 doxygen PR #12451 要求 ≥ 2.6.13。
+# 用戶政策：依賴版本問題一律走源碼直出的 -git 版本。
+makedepends=(clang cmake flex-git fmt git libxslt python qt6-base qt6-svg sqlite spdlog)
 # ⚠️ `012_cite` 那條測試會真的跑 **latex → bibtex → latex** 整條引用鏈。本機逐層查證：
 #   ① 完全沒有 TeX 時 → `error: Problems running bibtex … Exit code: 2`；
 #   ② 只補 texlive-bin（有 bibtex、沒 latex）時 → 測試仍紅，而且換一種紅法：

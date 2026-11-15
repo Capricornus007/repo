@@ -1,0 +1,79 @@
+# flex 的開發版（上游 master，AC_INIT 已是 2.6.14，master 在 v2.6.14 之後繼續走）。
+# 為什麼存在（2026-11-15，run 43688123660 實測）：
+#   doxygen-git 的構建紅在 flex 2.6.5–2.6.12 的兩個上游缺陷——
+#     ① flex 2.6.5 把 `yy_fatal_error()` 改名 `yypanic()`，doxygen 的 doxygen_lex.h
+#        仍呼叫 `yy_fatal_error` → `error: 'yy_fatal_error' was not declared in this scope`；
+#     ② flex 2.6.5 起 `yy_base` 表窄化成 flex_int16_t（flex bug #816），doxygen 的
+#        code.l 產生的偏移超過 32767 → `error: narrowing conversion of '35988' from
+#        'int' to 'flex_int16_t'`（C++ narrowing，直接紅）。
+#   上游 doxygen PR #12451（open）明確拒絕 flex 2.6.5–2.6.12，要求 2.6.4 或 ≥ 2.6.13。
+#   用戶政策（2026-11-15）：依賴版本問題一律走源碼直出的 -git 版本，不從 release
+#   tarball 或系統 flex 將就。所以這顆 flex-git 就是 doxygen-git 的 makedepends。
+#
+# 版本由 pkgver() 從上游 HEAD 現算 ⇒ 本檔要列進「回推校驗和」的排除清單。
+
+_name=flex
+pkgname=$_name-git
+# 佔位值，僅供人讀：實際由 pkgver() 從 origin/master 現算。
+pkgver=2.6.14.r0.g6e285f26b
+pkgrel=1
+# epoch=1：describe 錨點漂移時避免被 repo-add 判降級而永遠拒收（同 make-git 的理由）。
+epoch=1
+pkgdesc='A fast lexical analyser generator (git, 追上游 master)'
+arch=('x86_64')
+url='https://github.com/westes/flex'
+license=('BSD-2-Clause')
+depends=('glibc' 'm4')
+# git 版必須 autogen.sh（倉裡沒有預生成的 configure），故補上整組 autotools 鏈；
+# flex 本身也要列進來（AC_PROG_LEX 要一支 flex 來 bootstrap，系統那顆 2.6.10 夠用）；
+# help2man／texinfo／indent 是上游 INSTALL.md 點名的 git 版構建需求。
+makedepends=('autoconf' 'automake' 'bison' 'flex' 'gettext' 'git' 'help2man' 'indent' 'libtool' 'm4' 'sed' 'texinfo')
+provides=("$_name")
+conflicts=("$_name")
+source=("git+https://github.com/westes/flex#branch=master")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd $_name
+  # 上游 tag 形如 `v2.6.14`，describe 直接吃；HEAD 正好落在 tag 上時 describe 只回
+  # tag 名（沒有 -N-gsha 尾巴），由右往左剝段會把 tag 名本身當成 count → 算出垃圾，
+  # 而 repo-add 因不單調直接拒收。查無可達 tag 時退回 `0.r<總數>.g<sha>`。
+  local raw base count
+  raw=$(git describe --tags --match 'v*' HEAD 2>/dev/null)
+  if [ -n "$raw" ]; then
+    count=${raw##*-}
+    if [ "$count" = "$raw" ]; then
+      count=0; base=$raw
+    else
+      raw=${raw%-*}
+      count=${raw##*-}
+      base=${raw%-*}
+    fi
+    base=${base#v}
+  else
+    base=0; count=$(git rev-list --count HEAD)
+  fi
+  printf '%s.r%s.g%s\n' "$base" "$count" "$(git rev-parse --short=9 HEAD)"
+}
+
+build() {
+  cd $_name
+  # git 版沒有預生成的 configure，先 autogen.sh（libtoolize + autoreconf）。
+  ./autogen.sh
+  ./configure --prefix=/usr
+  make
+}
+
+check() {
+  cd $_name
+  # 上游自帶測試套件（tests/），照跑不准 -E 排掉。
+  make check
+}
+
+package() {
+  cd $_name
+  make DESTDIR="$pkgdir" install
+  install -Dm644 COPYING -t "$pkgdir/usr/share/licenses/$pkgname"
+}
+
+# vim:set ts=2 sw=2 et:
