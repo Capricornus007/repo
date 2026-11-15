@@ -1896,6 +1896,40 @@ jobs:
           su builder -c 'makepkg -s --noconfirm -f --skippgpcheck'
           ls -lh ./*.pkg.tar.zst
 
+      # ── wireplumber-git：用本倉 spandsp-git 满足 pipewire-audio 的旧 soname ──
+      # run 43726520906 / 43728961096 的 wireplumber job 紅在：
+      #   warning: cannot resolve "libspandsp.so=2-64", a dependency of "pipewire-audio"
+      # 因為 wireplumber 的 checkdepends=(pipewire-audio)，而容器裡 pipewire-audio
+      # 需要 libspandsp.so=2-64；world-goblins 已推 spandsp 3.1.1（上游
+      # SPANDSP_LT_CURRENT=4 → soname .so.4），舊 soname 沒人提供 ⇒ 整筆交易失敗。
+      # 本倉 spandsp-git 正是「取上游 HEAD + 把 libtool current patch 回 2」
+      # 的修復版（provides libspandsp.so=2-64、epoch=1 壓過 world-goblins），
+      # 所以先把它裝進容器，pipewire-audio 的依賴就解析得開。
+      - name: 用本倉 spandsp-git 補齊 wireplumber-git 的 checkdepends
+        if: matrix.repo_name == 'wireplumber-git'
+        run: |
+          set -uo pipefail
+          grep -q '^\[junlin03-aur\]' /etc/pacman.conf \
+            || { echo "::error::junlin03-aur 沒掛上"; exit 1; }
+          for _t in 1 2 3 4 5; do pacman -Sy >/dev/null 2>&1 && break; sleep $((_t * 5)); done
+          for _t in 1 2 3; do
+            pacman -S --noconfirm --needed spandsp-git && break
+            echo "::warning::裝 spandsp-git 失敗（第 ${_t}/3 次）"
+            sleep $((_t * 8))
+          done
+          pacman -Q spandsp-git >/dev/null 2>&1 \
+            || { echo "::error::spandsp-git 裝不進容器（feed 下載失敗？）"; exit 1; }
+          # 產物端自證：.so.2 必須真的存在，否則 pipewire-audio 依賴照樣斷
+          _so="$(pacman -Ql spandsp-git 2>/dev/null | awk '/\/usr\/lib\/libspandsp\.so\.[0-9]+$/ {print $2}' | head -n1)"
+          [ -n "$_so" ] && [ -e "$_so" ] \
+            || { echo "::error::spandsp-git 沒裝出 /usr/lib/libspandsp.so.N"; exit 1; }
+          case "$(basename "$_so")" in
+            libspandsp.so.2) echo "::notice::spandsp-git 提供了 $(basename "$_so")，對得上 pipewire-audio" ;;
+            *) echo "::error::spandsp-git 的 soname 是 $(basename "$_so")，pipewire-audio 要 .so.2 —— ABI 補丁失效"; exit 1 ;;
+          esac
+          _miss="$(pacman -T pipewire-audio || true)"
+          [ -z "$_miss" ] || { echo "::error::deptest 仍認缺：$_miss"; exit 1; }
+
       - name: 导入源码签名公钥
         if: matrix.repo_name != 'ffmpeg-full-git'
         run: |
@@ -2726,6 +2760,11 @@ jobs:
                 # lib32-libtirpc 在 CI multilib 容器不存在，run 43726513086
                 # 實測 target not found 判紅）。冷啟動時等它們進 feed 再建。
                 lib32-libnsl-git)          _extra_gate_deps="lib32-libtirpc-git libnsl-git" ;;
+                # wireplumber-git 的 checkdepends=(pipewire-audio)，而 pipewire-audio
+                # 需要 libspandsp.so=2-64；world-goblins 的 spandsp 3.1.1 是 .so.4，
+                # 這條依賴只有本倉 spandsp-git（ABI 補回 .so.2）解得開。
+                # run 43726520906 實測整筆交易失敗，故等它進 feed 再建。
+                wireplumber-git)           _extra_gate_deps="spandsp-git" ;;
                 # ⚠️ mpv-git 不屬於這張表（2026-10-28 自己踩過的死碼）：plan 步裡
                 # mpv-git 走的是上面那條 `mpv-git|oh-my-pi-git|pysolfc-git)` 專屬探測
                 # 分支，根本到不了這個通用分支。它的「libplacebo-git 就緒」閘門寫在
