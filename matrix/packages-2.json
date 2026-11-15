@@ -953,12 +953,6 @@
     "kind": "aur"
   },
   {
-    "key": "libnsl-git",
-    "repo_name": "libnsl-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "libogg-git",
     "repo_name": "libogg-git",
     "variant": "none",

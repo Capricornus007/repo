@@ -1,0 +1,39 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# License: The Better WTFPL (TBWTFPL) v114514 - https://github.com/Capricornus007/tbwtfpl/blob/main/LICENSE
+# 本倉 in-tree 維護版（2026-11-15）。基底：AUR lib32-orc 0.4.44-1
+# （git+tag，帶 PGP tag 驗證），改成 GitLab gstreamer/orc 的 git HEAD。
+# AUR 上沒有 lib32-orc-git。git 直出沒有 tag 可驗，故去掉 ?signed／validpgpkeys。
+# epoch=1 保證 1:0.4.44.rN.gHASH 嚴格大於 0.4.44-1，杜絕版本回退。
+# ⚠️ 版號由 pkgver() 現算 ⇒ kind: multilib 天然排除「校驗和回推」。
+
+pkgname=lib32-orc-git
+pkgver=0.4.44.r1.gf4ac35cf
+pkgrel=1
+epoch=1
+pkgdesc='Optimized Inner Loop Runtime Compiler (32-bit, git)'
+arch=(x86_64)
+url='https://gstreamer.freedesktop.org/modules/orc.html'
+license=(BSD-3-Clause)
+depends=(lib32-gcc-libs lib32-glibc orc)
+makedepends=(git meson valgrind)
+provides=('lib32-orc' "liborc-0.4.so" "liborc-test-0.4.so")
+conflicts=('lib32-orc')
+source=("git+https://gitlab.freedesktop.org/gstreamer/orc.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd orc
+  git describe --long --tags | sed 's/^orc-//;s/-/.r/;s/-/./g'
+}
+
+build() {
+  arch-meson orc build --cross-file lib32 \
+    -D hotdoc=disabled -D orc-target=avx,sse,mmx,altivec,neon,mips,c64x,riscv,lsx,lasx
+  meson compile -C build
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+  rm -r "$pkgdir"/usr/{bin,include}
+  install -Dt "$pkgdir/usr/share/licenses/$pkgname" -m644 orc/COPYING
+}

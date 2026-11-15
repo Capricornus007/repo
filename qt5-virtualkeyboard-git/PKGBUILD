@@ -1,0 +1,48 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# License: The Better WTFPL (TBWTFPL) v114514 - https://github.com/Capricornus007/tbwtfpl/blob/main/LICENSE
+# 本倉 in-tree 維護版（2026-11-15）。基底：AUR qt5-virtualkeyboard 5.15.19-1
+# （invent.kde.org 的 kde/5.15 分支 + 固定 commit），改成吃該分支的 git HEAD。
+#
+# 為什麼不取 AUR 的 qt5-virtualkeyboard-git：那份跟的是 code.qt.io 的 5.15
+# 分支，靜態版號 5.15.9.r0.g4191fd90，比目標機上現有的 5.15.19-1 **舊**；
+# 直接入庫會造成版本回退。使用者 2026-11-15 點名要把這顆收進自動構建倉庫，
+# 故走同源的 KDE 分支（與 5.15.19 穩定版同一條線），且加 epoch=1。
+#
+# ⚠️ 版號由 pkgver() 現算 ⇒ kind: aur 借道排除「校驗和回推」。
+
+pkgname=qt5-virtualkeyboard-git
+_basever=5.15.19
+pkgver=5.15.19.kde.r1.g4fc9919e
+pkgrel=1
+epoch=1
+pkgdesc='Virtual keyboard framework (KDE Qt 5.15 git)'
+arch=(x86_64)
+url='https://www.qt.io'
+license=(GPL3)
+depends=(qt5-declarative qt5-svg hunspell)
+makedepends=(git)
+provides=("qt5-virtualkeyboard=$pkgver")
+conflicts=('qt5-virtualkeyboard')
+source=("qtvirtualkeyboard::git+https://invent.kde.org/qt/qt/qtvirtualkeyboard.git#branch=kde/5.15")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd qtvirtualkeyboard
+  printf "%s.kde.r%s.g%s" "$_basever" \
+    "$(git rev-list --count v$_basever-lts-lgpl..HEAD 2>/dev/null || git rev-list --count HEAD)" \
+    "$(git rev-parse --short=8 HEAD)"
+}
+
+build() {
+  mkdir -p build
+  cd build
+  qmake ../qtvirtualkeyboard CONFIG+="lang-all handwriting"
+  make
+}
+
+package() {
+  cd build
+  make INSTALL_ROOT="$pkgdir" install
+  find "$pkgdir/usr/lib" -type f -name '*.prl' \
+    -exec sed -i -e '/^QMAKE_PRL_BUILD_DIR/d' {} \;
+}

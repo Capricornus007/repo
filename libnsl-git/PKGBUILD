@@ -1,0 +1,45 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# License: The Better WTFPL (TBWTFPL) v114514 - https://github.com/Capricornus007/tbwtfpl/blob/main/LICENSE
+# 本倉 in-tree 維護版（2026-11-15）。基底：Arch 官方 core/libnsl 2.0.1-2
+# （release tarball），改成 thkukuk/libnsl 的 git HEAD。
+# AUR 上雖有 libnsl-git，但那份的 pkgver() 直接把 commit hash 當版號
+# （printf '%s.r%s.%s' "$(_commit)" 只傳一個參數），版號既不可排序又可能
+# 小於 2.0.1 → 會造成版本回退，故不取 AUR 版，本倉自行現算。
+# epoch=1 雙保險：1:2.0.1.rN.gHASH 嚴格大於 2.0.1-2。
+# ⚠️ 版號由 pkgver() 現算 ⇒ kind: aur 借道排除「校驗和回推」。
+
+pkgname=libnsl-git
+pkgver=2.0.1.r1.gd4b22e54
+pkgrel=1
+epoch=1
+pkgdesc='Public client interface library for NIS(YP) (git)'
+arch=(x86_64)
+url='https://github.com/thkukuk/libnsl'
+license=(LGPL-2.1-only)
+depends=(glibc libtirpc)
+makedepends=(git autoconf automake libtool gettext)
+provides=('libnsl' libnsl.so)
+conflicts=('libnsl')
+source=("git+https://github.com/thkukuk/libnsl.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd libnsl
+  git describe --long --tags --abbrev=7 | sed -E 's/^v//;s/([^-]*-g)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd libnsl
+  autoreconf -fiv
+}
+
+build() {
+  cd libnsl
+  ./configure --prefix=/usr --disable-static
+  make
+}
+
+package() {
+  make DESTDIR="$pkgdir" install -C libnsl
+  install -vDm644 libnsl/{AUTHORS,NEWS,README} -t "$pkgdir/usr/share/doc/$pkgname/"
+}

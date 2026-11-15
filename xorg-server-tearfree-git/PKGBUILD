@@ -1,0 +1,100 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# License: The Better WTFPL (TBWTFPL) v114514 - https://github.com/Capricornus007/tbwtfpl/blob/main/LICENSE
+# 本倉 in-tree 維護版（2026-11-15）。基底：AUR xorg-server-tearfree 21.1.24-1
+# （xorg/xserver tag + 1006.patch TearFree），改成 server-21.1-branch 的 git HEAD。
+#
+# AUR 上沒有 xorg-server-tearfree-git；AUR 的 xorg-server-git 雖然尖端，但
+# 不含 TearFree 補丁，直接換掉會丟掉使用者特意選的 modesetting TearFree。
+# 故保留 1006.patch，改吃 21.1 維護分支（上游 tag 已到 21.1.26），
+# epoch=1 保證 1:21.1.26.rN.gHASH 嚴格大於目標機的 21.1.24-1.1。
+#
+# ⚠️ 0001/1006.patch 是針對 21.1.24 寫的；分支往後走若有衝突，patch 會 fail
+#    loud（不加 --forward 容錯），不會靜默產出「沒有 TearFree 的 tearfree 包」。
+# ⚠️ 版號由 pkgver() 現算 ⇒ kind: aur 借道排除「校驗和回推」。
+
+pkgbase=xorg-server-tearfree-git
+# plan 通用分支會為 ${_gitname} 建 src/ 軟鏈，pkgver()/prepare() 才 cd 得到。
+_gitname=xorg-server
+pkgname=xorg-server-tearfree-git
+pkgver=21.1.26.r1.g7dbd8d0d
+pkgrel=1
+epoch=1
+pkgdesc='Xorg X server with the TearFree patch for the modesetting driver (21.1 git)'
+arch=(x86_64)
+groups=(xorg)
+url='https://xorg.freedesktop.org'
+license=('LicenseRef-Adobe-Display-PostScript' BSD-3-Clause HPND ICU ISC MIT
+         MIT-open-group NTP SGI-B-2.0 SMLNJ X11 X11-distribute-modifications-variant)
+makedepends=(xorgproto pixman libx11 mesa mesa-libgl xtrans libxkbfile libxfont2
+             libpciaccess libxv libxcvt libxmu libxrender libxi libxaw libxtst
+             libxres xorg-xkbcomp xorg-util-macros xorg-font-util libepoxy
+             xcb-util xcb-util-image xcb-util-renderutil xcb-util-wm
+             xcb-util-keysyms libxshmfence libunwind systemd meson git)
+source=(xorg-server::git+https://gitlab.freedesktop.org/xorg/xserver.git#branch=server-21.1-branch
+        xvfb-run
+        xvfb-run.1
+        1006.patch)
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP')
+pkgver() {
+  cd xorg-server
+  git describe --long --tags | sed 's/^xorg.server.//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd xorg-server
+  patch -Np1 --fuzz=3 -i "${srcdir}/1006.patch"
+  # 1006.patch 是針對 21.1.24 寫的，分支往後走可能漂移；補丁若沒落地就
+  # fail loud，避免靜默產出「沒有 TearFree 的 tearfree 包」。
+  grep -q "TearFree" hw/xfree86/drivers/modesetting/modesetting.man 2>/dev/null \
+    || grep -rq "TearFree" hw/xfree86/drivers/modesetting/ \
+    || { echo "::error::1006.patch 沒落地，TearFree 功能缺失"; return 1; }
+}
+
+build() {
+  export CFLAGS=${CFLAGS/-fno-plt}
+  export CXXFLAGS=${CXXFLAGS/-fno-plt}
+  export LDFLAGS=${LDFLAGS/-Wl,-z,now}
+  arch-meson xorg-server build \
+    -D ipv6=true -D xvfb=true -D xnest=true -D xcsecurity=true \
+    -D xorg=true -D xephyr=true -D glamor=true -D udev=true \
+    -D dtrace=false -D systemd_logind=true -D suid_wrapper=true \
+    -D linux_acpi=false -D xkb_dir=/usr/share/X11/xkb \
+    -D xkb_output_dir=/var/lib/xkb -D libunwind=true
+  ninja -C build
+  DESTDIR="${srcdir}/fakeinstall" ninja -C build install
+}
+
+_install() {
+  local src f dir
+  for src; do
+    f="${src#fakeinstall/}"
+    dir="${pkgdir}/${f%/*}"
+    install -m755 -d "${dir}"
+    cp -av "${src}" "${dir}/"
+    rm -rf "${src}"
+  done
+}
+
+package() {
+  pkgdesc='Xorg X server with the tearfree patch for the modesetting driver (enabled by default)'
+  depends=(libepoxy libxfont2 pixman xorg-server-common libunwind dbus libgl
+           xf86-input-libinput nettle libxdmcp sh glibc libxau systemd-libs
+           libtirpc libpciaccess libdrm libxshmfence libxcvt)
+  provides=('X-ABI-VIDEODRV_VERSION=25.4' 'X-ABI-XINPUT_VERSION=24.4'
+            'X-ABI-EXTENSION_VERSION=10.0' 'x-server' "xorg-server=$pkgver")
+  conflicts=('nvidia-utils<=331.20' 'glamor-egl' 'xf86-video-modesetting'
+             'xorg-server' 'xorg-server-tearfree')
+  replaces=('glamor-egl' 'xf86-video-modesetting')
+  install=xorg-server.install
+
+  _install fakeinstall/usr/bin/{X,Xorg,gtf}
+  _install fakeinstall/usr/lib/Xorg{,.wrap}
+  _install fakeinstall/usr/lib/xorg/modules/*
+  _install fakeinstall/usr/share/X11/xorg.conf.d/10-quirks.conf
+  _install fakeinstall/usr/share/man/man1/{Xorg,Xorg.wrap,gtf}.1
+  _install fakeinstall/usr/share/man/man4/{exa,fbdevhw,inputtestdrv,modesetting}.4
+  _install fakeinstall/usr/share/man/man5/{Xwrapper.config,xorg.conf,xorg.conf.d}.5
+
+  install -m755 -d "${pkgdir}/etc/X11/xorg.conf.d"
+  install -m644 -Dt "${pkgdir}/usr/share/licenses/${pkgname}" "xorg-server/COPYING"
+}

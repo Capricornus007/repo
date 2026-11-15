@@ -22,6 +22,14 @@
 # ⚠️ 版號由 plan 步驅動 ⇒ 本檔在「回推校驗和」排除清單（kind: aur 借道跳過，crave 同型）。
 
 pkgname=moregram-git
+# epoch=1：擋掉目標機上早期手建包 `71212f86-4`（epoch=0，直接拿 commit hash 當
+# pkgver、pkgrel 被 bump 到 4）。libalpm 比較時該包純數字段 `71212f86` 會壓過本倉
+# 的語意 VCS 版號 `7.3.3.r4194.g7c90812a`，pacman -Syu 因此誤判「本機比較新」而
+# 拒絕升級，等於把上游更新的 commit（7c90812a 11-03 > 71212f86 11-02）卡住。
+# 加 epoch 後 `1:7.3.3.r...` 嚴格大於任何 epoch=0 本機包，且內容確為升級——與
+# make-git / gh-git / flex-git 等同一手法，不是版本回退。plan/rewrite 只改
+# _pkgver 與 pkgrel，不會動到 epoch。
+epoch=1
 _pkgver=7.3.3.r4194.g7c90812a
 _commit="${_pkgver##*.g}"
 pkgver="$_pkgver"

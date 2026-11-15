@@ -1,0 +1,49 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# License: The Better WTFPL (TBWTFPL) v114514 - https://github.com/Capricornus007/tbwtfpl/blob/main/LICENSE
+# 本倉 in-tree 維護版（2026-11-15）。基底：Arch 官方 core/libtirpc 1.3.8-1
+# （sourceforge release tarball），改成上游 git.linux-nfs.org 的 git HEAD。
+# AUR 上沒有 libtirpc-git（只有 lib32-libtirpc-git）。git:// 走 9418 常被
+# 防火牆擋，這裡用 https 端點；上游沒有官方 GitHub mirror，實查
+# github.com/steved/libtirpc 不存在，其餘同名倉都是第三方 fork，不用。
+# epoch=1 保證 1:1.3.8.rN.gHASH 嚴格大於 1.3.8-1，杜絕版本回退。
+# ⚠️ 版號由 pkgver() 現算 ⇒ kind: aur 借道排除「校驗和回推」。
+
+pkgname=libtirpc-git
+pkgver=1.3.8.r1.g5bd87617
+pkgrel=1
+epoch=1
+pkgdesc='Transport Independent RPC library (SunRPC replacement, git)'
+arch=(x86_64)
+url='http://git.linux-nfs.org/?p=steved/libtirpc.git;a=summary'
+license=(SISSL BSD-3-Clause)
+depends=(krb5 glibc)
+makedepends=(git autoconf automake libtool)
+backup=(etc/netconfig)
+provides=('libtirpc')
+conflicts=('libtirpc')
+source=("git+git://git.linux-nfs.org/projects/steved/libtirpc.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd libtirpc
+  git describe --long --tags | sed 's/^libtirpc-//;s/-/.r/;s/-/./g'
+}
+
+prepare() {
+  cd libtirpc
+  chmod +x autogen.sh
+  ./autogen.sh
+}
+
+build() {
+  cd libtirpc
+  ./configure --prefix=/usr --sysconfdir=/etc
+  sed -i -e 's/ -shared / -Wl,-O1,--as-needed\0/g' libtool
+  make
+}
+
+package() {
+  cd libtirpc
+  make DESTDIR="$pkgdir" install
+  install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

@@ -691,12 +691,6 @@
     "kind": "aur"
   },
   {
-    "key": "spandsp-git",
-    "repo_name": "spandsp-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "speex-git",
     "repo_name": "speex-git",
     "variant": "none",

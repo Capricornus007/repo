@@ -1,0 +1,58 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# License: The Better WTFPL (TBWTFPL) v114514 - https://github.com/Capricornus007/tbwtfpl/blob/main/LICENSE
+# 本倉 in-tree 維護版（2026-11-15）。基底：AUR lib32-sdl2 2.32.10-1
+# （release tarball），改成 libsdl-org/SDL 的 SDL2 維護分支 git HEAD。
+# AUR 上沒有 lib32-sdl2-git。⚠️ 必須釘 #branch=SDL2：SDL 倉的 main 是 SDL3，
+# 直接吃 HEAD 會把 ABI 換成 SDL3，lib32-sdl2 的依賴方全部壞掉。
+# epoch=1 保證 1:2.32.10.rN.gHASH 嚴格大於 2.32.10-1，杜絕版本回退。
+# ⚠️ 版號由 pkgver() 現算 ⇒ kind: multilib 天然排除「校驗和回推」。
+
+pkgname=lib32-sdl2-git
+pkgver=2.32.10.r1.gcee83f2d
+pkgrel=1
+epoch=1
+pkgdesc='A library for portable low-level access to a video framebuffer, audio output, mouse and keyboard (32-bit, SDL2 git)'
+arch=(x86_64)
+url='https://www.libsdl.org'
+license=(Zlib)
+depends=(lib32-glibc lib32-libxext lib32-libxrender lib32-libx11 lib32-libgl
+         lib32-libxcursor sdl2)
+makedepends=(cmake git ninja jack lib32-alsa-lib lib32-libpulse lib32-libxinerama
+             lib32-libxkbcommon lib32-libxrandr lib32-libxss lib32-mesa
+             lib32-vulkan-driver vulkan-headers lib32-pipewire lib32-wayland
+             lib32-libsamplerate wayland-protocols)
+provides=('lib32-sdl2' 'lib32-sdl2-compat')
+conflicts=('lib32-sdl2' 'lib32-sdl2-compat')
+optdepends=('lib32-alsa-lib: ALSA audio driver'
+            'lib32-jack: JACK audio driver'
+            'lib32-libpulse: PulseAudio audio driver'
+            'lib32-pipewire: PipeWire audio driver')
+source=("git+https://github.com/libsdl-org/SDL.git#branch=SDL2")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd SDL
+  git describe --long --tags | sed 's/^release-//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  export CC='gcc -m32'
+  export CXX='g++ -m32'
+  export CFLAGS+=" -ffat-lto-objects"
+  export PKG_CONFIG=i686-pc-linux-gnu-pkg-config
+  cmake -S SDL -B build -G Ninja \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DCMAKE_INSTALL_LIBDIR=lib32 \
+    -DSDL_DLOPEN=ON \
+    -DSDL_RPATH=OFF \
+    -DSDL_STATIC=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+  rm -rf "$pkgdir"/usr/{bin,include,share}
+  if [ -f "$pkgdir/usr/lib32/cmake/SDL2/SDL2Targets-noconfig.cmake" ]; then
+    sed -i 's/libSDL2\.a/libSDL2main.a/g' "$pkgdir/usr/lib32/cmake/SDL2/SDL2Targets-noconfig.cmake"
+  fi
+}

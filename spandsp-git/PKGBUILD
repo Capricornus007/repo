@@ -1,0 +1,84 @@
+# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# License: The Better WTFPL (TBWTFPL) v114514 - https://github.com/Capricornus007/tbwtfpl/blob/main/LICENSE
+# 本倉 in-tree 維護版（2026-11-15）。
+#
+# 動機：world-goblins 把 spandsp 從 0.0.6-7 跳到 3.1.1-1。上游 configure.ac
+#   SPANDSP_LT_CURRENT=4 / SPANDSP_LT_AGE=0 → libtool soname 為
+#   libspandsp.so.4（實查 upstream master），直接斷掉 pipewire-audio 需要的
+#   「libspandsp.so=2-64」→ pacman -Syu 整輪 error installing repo packages。
+#
+# 解法（用戶規則「依賴版本問題一律走源碼直出 -git 版本」）：取上游 git HEAD
+#   現編，不回退到 0.0.6，而是把 libtool current patch 回 2，讓產物 soname
+#   就是 libspandsp.so.2；provides 明確宣告 libspandsp.so=2-64；epoch=1 壓過
+#   任何 epoch=0 的他庫同名包。pipewire 的 bluez5 PLC 用到的
+#   plc_init / plc_rx / plc_fillin / plc_release / plc_free 在 3.1.1 的
+#   src/spandsp/plc.h 簽名不變（已核），.so.2 直接可用。
+#
+# ⚠️ 版號由 pkgver() 現算 ⇒ kind: aur 借道排除「校驗和回推」。
+
+pkgname=spandsp-git
+pkgver=3.1.1.r563.g7977601
+pkgrel=1
+epoch=1
+pkgdesc='A DSP library for telephony (FreeSWITCH version, git HEAD; keeps libspandsp.so.2 ABI)'
+arch=(x86_64)
+url='https://github.com/freeswitch/spandsp'
+license=(LGPL-2.1-or-later GPL-2.0-or-later)
+depends=(libtiff)
+makedepends=(git autoconf automake libtool)
+# epoch=1 + provides 讓 pacman 拿本包替掉 world-goblins 的 spandsp 3.1.1-1，
+# 同時滿足 pipewire-audio 的 soname 虛擬依賴；兩者缺一都會讓 -Syu 卡死。
+provides=('spandsp' 'libspandsp.so=2-64')
+conflicts=('spandsp')
+source=("git+https://github.com/freeswitch/spandsp.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd spandsp
+  printf "%s.r%s.g%s" \
+    "$(awk '/^Version:/ { print $2 }' spandsp.spec)" \
+    "$(git rev-list --count HEAD)" \
+    "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+  cd spandsp
+  # 0.0.6-7 的 soname 是 libspandsp.so.2；上游 3.1.1 把 current 抬到 4。
+  # 這裡只把 libtool 的版本號改回去，**不改任何 API/結構**，讓現有
+  # pipewire-audio（編的時候連結 libspandsp.so.2）不必重編就能載入。
+  sed -i 's/^SPANDSP_LT_CURRENT=.*/SPANDSP_LT_CURRENT=2/' configure.ac
+  sed -i 's/^SPANDSP_LT_REVISION=.*/SPANDSP_LT_REVISION=0/' configure.ac
+  sed -i 's/^SPANDSP_LT_AGE=.*/SPANDSP_LT_AGE=0/' configure.ac
+  grep -q '^SPANDSP_LT_CURRENT=2$' configure.ac || {
+    echo '::error::configure.ac 沒有 SPANDSP_LT_CURRENT，soname 相容補丁失效'; return 1
+  }
+  sed -i "s|libdir='\${exec_prefix}/lib/x86_64-linux-gnu'|libdir='\${exec_prefix}/lib'|g" configure.ac
+  sed -i "s|libdir='\${exec_prefix}/lib64'|libdir='\${exec_prefix}/lib'|g" configure.ac
+  ./autogen.sh
+}
+
+build() {
+  cd spandsp
+  ./configure --prefix=/usr --libdir=/usr/lib --disable-static
+  make -C src
+}
+
+check() {
+  # 產物 soname 與 pipewire 需要的 PLC 符號，建完立刻自檢，別讓 CI 出啞巴包。
+  local so
+  so=$(find -L "$PWD/spandsp/src/.libs" -maxdepth 1 -name 'libspandsp.so.*' | head -1)
+  [ -n "$so" ] || { echo '::error::沒產出 libspandsp.so.*'; return 1; }
+  for sym in plc_init plc_rx plc_fillin plc_release plc_free; do
+    nm -D "$so" | grep -qw "$sym" || { echo "::error::$so 缺 $sym"; return 1; }
+  done
+}
+
+package() {
+  cd spandsp
+  make DESTDIR="$pkgdir" -C src install
+  make DESTDIR="$pkgdir" install-pkgconfigDATA
+  # 雙保險：就算上游哪天又改 libtool 變數名，也要真的有 .so.2 這個檔案。
+  [ -e "$pkgdir/usr/lib/libspandsp.so.2" ] || {
+    echo '::error::產物沒有 libspandsp.so.2，pipewire-audio 會 dlopen 失敗'; return 1
+  }
+}

@@ -723,5 +723,87 @@
     "repo_name": "electron45-bin",
     "variant": "none",
     "in_tree": true
+  },
+  {
+    "key": "spandsp-git",
+    "repo_name": "spandsp-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "orc-git",
+    "repo_name": "orc-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "libnsl-git",
+    "repo_name": "libnsl-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "libtirpc-git",
+    "repo_name": "libtirpc-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "qt5-virtualkeyboard-git",
+    "repo_name": "qt5-virtualkeyboard-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xorg-server-tearfree-git",
+    "repo_name": "xorg-server-tearfree-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "lib32-openal-git",
+    "repo_name": "lib32-openal-git",
+    "variant": "none",
+    "kind": "multilib",
+    "in_tree": true
+  },
+  {
+    "key": "lib32-orc-git",
+    "repo_name": "lib32-orc-git",
+    "variant": "none",
+    "kind": "multilib",
+    "in_tree": true
+  },
+  {
+    "key": "lib32-sdl2-git",
+    "repo_name": "lib32-sdl2-git",
+    "variant": "none",
+    "kind": "multilib",
+    "in_tree": true
+  },
+  {
+    "key": "sdl2-git",
+    "repo_name": "sdl2-git",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "lib32-libnsl-git",
+    "repo_name": "lib32-libnsl-git",
+    "variant": "none",
+    "kind": "multilib"
+  },
+  {
+    "key": "lib32-libtirpc-git",
+    "repo_name": "lib32-libtirpc-git",
+    "variant": "none",
+    "kind": "multilib",
+    "in_tree": true
   }
 ]
