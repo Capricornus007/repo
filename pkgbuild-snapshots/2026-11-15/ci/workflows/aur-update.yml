@@ -1,0 +1,122 @@
+name: AUR Update
+
+# 把本倉維護者自己的 AUR 包版號回推上去。跟 build-packages.yml / build-kernels.yml
+# **完全分開**，這是刻意的安全邊界，不是整理癖：
+#
+#   * 那兩條會 clone 上游 PKGBUILD 並實際執行 prepare()/build()，那是任意代碼。
+#   * 這條只讀 PKGBUILD、抓 tarball 算雜湊（updpkgsums 下載但**不執行** build()），
+#     並把結果 push 到 AUR。
+#
+# 所以 AUR 的寫入金鑰不會跟「跑來路不明代碼」出現在同一個 job 裡。
+# 代價是 AUR 不支持 per-package／唯讀金鑰，这把鍵等於全部包的寫入權；
+# 建議為 CI 另生一把鍵（跟本機 ~/.ssh/aur 分開），要撤銷時不用動本機那把。
+#
+# permissions 只給 contents: read —— 這條不需要寫本倉，被攻破也改不了倉庫。
+
+on:
+  schedule:
+    # 每天一次。-git 包上游 HEAD 動得頻，但 AUR 沒必要跟着每次 HEAD 更新，
+    # 一天一次剛好；實測本機那輪 5/8 有更新、3 顆主動跳過，開銷在分鐘級。
+    - cron: '20 6 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只看結果、不推 AUR（預設會推）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aur-update
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:base-devel
+    steps:
+      - name: 裝依賴
+        run: |
+          # archlinux:base-devel 鏡像**不含 git**（base 與 base-devel 的群組裡都沒有），
+          # 實測 run 39449408158 就在 `git --version` 上 127 掉。
+          # updpkgsums 也不在 pacman 裡，它屬於 pacman-contrib——
+          # run 39449787337 就是死在 `command -v updpkgsums` 回空。
+          pacman -Syu --noconfirm --needed git openssh python pacman-contrib >/dev/null
+          for t in git python updpkgsums vercmp makepkg; do
+            command -v "$t" >/dev/null 2>&1 || { echo "::error::容器裡缺 $t"; exit 1; }
+            printf '  %-10s %s\n' "$t" "$(command -v $t)"
+          done
+          # container job 預設以 root 跑，而 makepkg / updpkgsums **拒絕 root**：
+          # 實測 `makepkg --printsrcinfo` 以 root 跑回 rc=10
+          # "Running makepkg as root is not allowed…"，updpkgsums 回 rc=1。
+          # 所以後面全部改在这个非特權使用者底下來做。
+          id aurbot >/dev/null 2>&1 || useradd -m aurbot
+          install -d -o aurbot -g aurbot /home/aurbot/aurwork
+
+      - uses: actions/checkout@v7
+
+      # 金鑰與 known_hosts 一起設好：known_hosts 寫死，不用 ssh-keyscan 現掃，
+      # 否則中間人可以塞一把自己的鍵進去把 AUR 金鑰吃掉。
+      - name: 設 AUR SSH
+        shell: bash
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AUR_SSH_KEY:-}" ]; then
+            # 還沒設 secret 時讓這條整輪跳過而不是天天變紅燈。
+            echo "::warning::尚未設定 secret AUR_SSH_KEY，本輪跳過。"
+            echo "AUR_SKIP=1" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          SSHD=/home/aurbot/.ssh
+          install -d -m 700 -o aurbot -g aurbot "$SSHD"
+          printf '%s\n' "$AUR_SSH_KEY" > "$SSHD/id_ed25519"
+          chown aurbot:aurbot "$SSHD/id_ed25519"; chmod 600 "$SSHD/id_ed25519"
+          cat > "$SSHD/config" <<'EOF'
+          Host aur.archlinux.org
+            IdentityFile ~/.ssh/id_ed25519
+            User aur
+            IdentitiesOnly yes
+          EOF
+          chown aurbot:aurbot "$SSHD/config"; chmod 600 "$SSHD/config"
+          cat > "$SSHD/known_hosts" <<'EOF'
+          aur.archlinux.org ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEuBKrPzbawxA/k2g6NcyV5jmqwJ2s+zpgZGZ7tpLIcN
+          aur.archlinux.org ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDKF9vAFWdgm9Bi8uc+tYRBmXASBb5cB5iZsB7LOWWFeBrLp3r14w0/9S2vozjgqY5sJLDPONWoTTaVTbhe3vwO8CBKZTEt1AcWxuXNlRnk9FliR1/eNB9uz/7y1R0+c1Md+P98AJJSJWKN12nqIDIhjl2S1vOUvm7FNY43fU2knIhEbHybhwWeg+0wxpKwcAd/JeL5i92Uv03MYftOToUijd1pqyVFdJvQFhqD4v3M157jxS5FTOBrccAEjT+zYmFyD8WvKUa9vUclRddNllmBJdy4NyLB8SvVZULUPrP3QOlmzemeKracTlVOUG1wsDbxknF1BwSCU7CmU6UFP90kpWIyz66bP0bl67QAvlIc52Yix7pKJPbw85+zykvnfl2mdROsaT8p8R9nwCdFsBc9IiD0NhPEHcyHRwB8fokXTajk2QnGhL+zP5KnkmXnyQYOCUYo3EKMXIlVOVbPDgRYYT/XqvBuzq5S9rrU70KoI/S5lDnFfx/+lPLdtcnnEPk=
+          aur.archlinux.org ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBLMiLrP8pVi5BFX2i3vepSUnpedeiewE5XptnUnau+ZoeUOPkpoCgZZuYfpaIQfhhJJI5qgnjJmr4hyJbe/zxow=
+          EOF
+          chown aurbot:aurbot "$SSHD/known_hosts"; chmod 644 "$SSHD/known_hosts"
+          su aurbot -c "git config --global --add safe.directory '*'"
+          su aurbot -c "git config --global user.name 'Capricornus007'"
+          su aurbot -c "git config --global user.email 'Capricornus007@users.noreply.github.com'"
+          # 金鑰能不能真的被 AUR 認，先在這裡問一次；不行就早點紅，不用等 clone 完 26 包。
+          su aurbot -c 'timeout 25 ssh -T aur@aur.archlinux.org 2>&1 | head -2' || true
+
+      - name: 跑回推
+        if: env.AUR_SKIP != '1'
+        env:
+          DO_DRY: ${{ inputs.dry_run }}
+          # resolve_zen / resolve_cachy_kernel 打 api.github.com，匿名從容器出去會 403
+          # （實測這臺機器匿名回 "API rate limit exceeded for 203.10.99.35"）。
+          # GITHUB_TOKEN 是短效、限本倉的，不是 AUR 金鑰。
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ARGS='--file aur/bases.txt'
+          # 預設**就是真推**：排程那條之前寫成「只有 workflow_dispatch 且勾了 push 才推」，
+          # 等於每天的 cron 永遠只 dry-run，使用者要的「自動回推」根本不會發生。
+          if [ "$DO_DRY" = 'true' ]; then
+            echo "::notice::模式＝dry-run（只 commit 不 push）"
+          else
+            ARGS="$ARGS --push"
+            echo "::notice::模式＝真推 AUR"
+          fi
+          echo "+ (aurbot) python tools/aur_update.py $ARGS"
+          # makepkg / updpkgsums 拒絕 root，所以整段在 aurbot 身分下跑；
+          # -m 保留環境，否則 su 會把上面那個 GH_TOKEN 剝掉。
+          # HOME 必須明著指回 aurbot：-m 會連呼叫端的 HOME 一起保留，aurbot 的
+          # ~/.gitconfig（user.name/email）與 ~/.ssh/{config,id_ed25519} 就都讀不到。
+          # 舊版因此 commit 失敗、push 舊 HEAD 得到 up-to-date，全部假報「已 push」。
+          su -m aurbot -c "cd '$GITHUB_WORKSPACE' && HOME=/home/aurbot AUR_WORK=/home/aurbot/aurwork python tools/aur_update.py $ARGS"
