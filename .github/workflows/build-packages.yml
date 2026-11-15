@@ -4413,7 +4413,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ matrix.key }}
-          path: pkg_dir/*.pkg.tar.zst
+          # tesseract-data-git 是 split pkgbase：每個語言一格 matrix，但 makepkg
+          # 每次都建出全部 125 個語言子包。若整包上傳，5 個 artifact 各含同樣
+          # 125 個同名檔案，deploy 端 merge-multiple 併發解壓互相截斷（run
+          # 43658667801 實測：86 個 zst 截斷、3 個 0 位元組被 repo-add 拒收，
+          # attempt 1 還把截斷包傳上了 release）。只上傳本格語言的包。
+          path: ${{ matrix.pkgbase == 'tesseract-data-git' && format('pkg_dir/{0}-*.pkg.tar.zst', matrix.key) || 'pkg_dir/*.pkg.tar.zst' }}
           if-no-files-found: error
           overwrite: true
       - name: 上传产物到 artifact（重试：Actions 中转层偶发 403）
@@ -4425,7 +4430,12 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ matrix.key }}
-          path: pkg_dir/*.pkg.tar.zst
+          # tesseract-data-git 是 split pkgbase：每個語言一格 matrix，但 makepkg
+          # 每次都建出全部 125 個語言子包。若整包上傳，5 個 artifact 各含同樣
+          # 125 個同名檔案，deploy 端 merge-multiple 併發解壓互相截斷（run
+          # 43658667801 實測：86 個 zst 截斷、3 個 0 位元組被 repo-add 拒收，
+          # attempt 1 還把截斷包傳上了 release）。只上傳本格語言的包。
+          path: ${{ matrix.pkgbase == 'tesseract-data-git' && format('pkg_dir/{0}-*.pkg.tar.zst', matrix.key) || 'pkg_dir/*.pkg.tar.zst' }}
           if-no-files-found: error
           overwrite: true
 
@@ -4457,7 +4467,9 @@ jobs:
         with:
           path: artifact-downloads
           pattern: pkg-*
-          merge-multiple: true
+          # 刻意不用 merge-multiple：多個 artifact 含同名檔案時（split pkgbase
+          # 多格 matrix，見上方上傳步驟註釋），action 併發解壓到同一目錄會互相
+          # 截斷。改為各 artifact 落自己的子目錄，下一步「先到先得」整合。
 
       - name: 检查是否有构建产物
         id: check_artifacts
@@ -4479,7 +4491,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p deploy
-          find artifact-downloads -name "*.pkg.tar.zst" -exec cp {} deploy/ \;
+          # 先到先得：同名包檔案只收第一份（split pkgbase 多格 matrix 時各
+          # artifact 內容相同，任取一份即可；cp -n 保證不會互相覆蓋）。
+          find artifact-downloads -name "*.pkg.tar.zst" -exec cp -n {} deploy/ \;
           cd deploy
           # 抓舊 DB 是整條流水線的生命線。抓不到卻繼續往下 repo-add，會產出「只含本輪
           # 產物」的半截庫；上傳後別輪的包全成孤兒，下一輪清理照半截庫把它們連環刪掉
