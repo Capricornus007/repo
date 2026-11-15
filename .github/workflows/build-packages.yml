@@ -4696,6 +4696,11 @@ jobs:
           if ! gh release view "$REPO_RELEASE_TAG" --json id --jq .id >/dev/null 2>&1; then
             gh release create "$REPO_RELEASE_TAG" --title "Custom Personal Repository"
           fi
+          # 注意：mapfile 裡的 cd deploy 只在 process substitution 子殼生效，
+          # gh release upload 仍在 repo 根目錄執行；gh 對每個檔案參數做
+          # filepath.Glob（cmdutil.GlobPaths），匹配不到就報
+          # "no matches found for `./xxx`"（run 43676859814 實測，5 次重試
+          # 全是同一個錯，根本不是限流）。上傳一律在 deploy/ 裡執行。
           mapfile -t assets < <(
             cd deploy && ls -1 ./*.pkg.tar.zst ./junlin03-aur.db* ./junlin03-aur.files* 2>/dev/null)
           if [ "${#assets[@]}" -eq 0 ]; then
@@ -4703,11 +4708,11 @@ jobs:
             exit 1
           fi
           for _try in 1 2 3 4 5; do
-            if gh release upload "$REPO_RELEASE_TAG" --clobber "${assets[@]}"; then
+            if (cd deploy && gh release upload "$REPO_RELEASE_TAG" --clobber "${assets[@]}"); then
               echo "✅ 部署完成（第 $_try 次嘗試，共 ${#assets[@]} 個資產）"
               exit 0
             fi
-            echo ">> 第 $_try 次上傳失敗（疑似二級限流），$((_try * 60)) 秒後重試"
+            echo ">> 第 $_try 次上傳失敗，$((_try * 60)) 秒後重試"
             sleep $((_try * 60))
           done
           echo "::error::連續 5 次上傳失敗，中止部署（已上傳部分保持原樣，不清理）"
