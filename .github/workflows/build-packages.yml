@@ -625,41 +625,6 @@ jobs:
               ;;
           esac
 
-          # ── lib32-dbus 斷鏈預裝（2026-11-15，run 43633126160 gamemode-git 實測）────
-          # 上游把 lib32 工具鏈搬進 [core]/[system]（lib32-glibc／lib32-gcc-libs／
-          # lib32-libltdl，Artix [system] 已同步），同時把 lib32-libcap／lib32-pam
-          # 從 Arch multilib 與 Artix [lib32] **整個裁掉**（Artix [lib32] 234→172 顆，
-          # lib32-goblins/gremlins 是 45 位元組空殼；連 [lib32] 自家的 multilib-devel
-          # 元包都依賴已消失的 lib32-gcc-libs）。結果 lib32-dbus→lib32-elogind→
-          # lib32-libcap 這條鏈在所有倉都解不開，makepkg -s 整筆交易紅。
-          # 實測（解包 lib32-dbus-1.16.4-1）：libdbus-1.so.3 只 NEEDED libc.so.6，
-          # elogind 只有 dbus-daemon 用、lib32-dbus 包裡根本沒有 daemon →
-          # --assume-installed lib32-elogind 跳過斷鏈預裝 lib32-dbus，makepkg 之後
-          # 看到已裝就不會再碰這條鏈。目標機上這條鏈是歷史安裝、完整存在，
-          # 發出去的包不受影響。gstreamer-git 同為 Artix 容器 lib32 job，一併覆蓋。
-          # ⚠️ run 43781041746（gstreamer-git）實測：wheaton 瞬斷時 [lib32] 的同步
-          # DB 會落到 Include 的 Artix 官方鏡像上，而那些鏡像已裁掉 lib32-dbus
-          # → `target not found: lib32-dbus`。wheaton 的 DB 實測（2026-11-16 直拉
-          # lib32.db）仍含 lib32-dbus-1.16.4-1，所以是鏡像可用性問題而非裁包。
-          # 兜底：倉庫裝不上就從 Arch multilib（nju 鏡像，國內穩）直拉同版本包檔
-          # pacman -U，lib32-elogind 照舊 assume-installed（libdbus-1.so.3 只
-          # NEEDED libc.so.6，elogind 只有 daemon 用、包裡根本沒有 daemon）。
-          case '${{ matrix.repo_name }}' in
-            gamemode-git|gstreamer-git)
-              if ! pacman -S --noconfirm --needed --assume-installed lib32-elogind lib32-dbus; then
-                echo "::warning::lib32-dbus 走倉庫裝不上（wheaton 瞬斷時 DB 落到已裁包的 Artix 鏡像），改從 Arch multilib 直拉包檔"
-                _f=$(curl -sfL --max-time 60 "https://mirror.nju.edu.cn/archlinux/multilib/os/x86_64/" \
-                  | grep -oE 'lib32-dbus-[^"]*\.pkg\.tar\.zst' | head -1)
-                [ -n "$_f" ] || { echo "::error::Arch multilib 目錄裡也找不到 lib32-dbus 包檔"; exit 1; }
-                curl -sfL --max-time 120 -o /tmp/lib32-dbus.pkg.tar.zst \
-                  "https://mirror.nju.edu.cn/archlinux/multilib/os/x86_64/$_f" \
-                  || { echo "::error::下載 $_f 失敗"; exit 1; }
-                pacman -U --noconfirm --assume-installed lib32-elogind /tmp/lib32-dbus.pkg.tar.zst \
-                  || { echo "::error::lib32-dbus 直裝包檔失敗"; exit 1; }
-              fi
-              pacman -Q lib32-dbus
-              ;;
-          esac
 
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
           # 结果最重的 CachyOS 内核是单线程编译的，必然撞 6 小时上限。
@@ -702,6 +667,44 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: lib32-dbus 斷鏈預裝（gamemode-git／gstreamer-git）
+        if: matrix.repo_name == 'gamemode-git' || matrix.repo_name == 'gstreamer-git'
+        run: |
+          set -euo pipefail
+          # ── lib32-dbus 斷鏈預裝（2026-11-15，run 43633126160 gamemode-git 實測）────
+          # 上游把 lib32 工具鏈搬進 [core]/[system]（lib32-glibc／lib32-gcc-libs／
+          # lib32-libltdl，Artix [system] 已同步），同時把 lib32-libcap／lib32-pam
+          # 從 Arch multilib 與 Artix [lib32] **整個裁掉**（Artix [lib32] 234→172 顆，
+          # lib32-goblins/gremlins 是 45 位元組空殼；連 [lib32] 自家的 multilib-devel
+          # 元包都依賴已消失的 lib32-gcc-libs）。結果 lib32-dbus→lib32-elogind→
+          # lib32-libcap 這條鏈在所有倉都解不開，makepkg -s 整筆交易紅。
+          # 實測（解包 lib32-dbus-1.16.4-1）：libdbus-1.so.3 只 NEEDED libc.so.6，
+          # elogind 只有 dbus-daemon 用、lib32-dbus 包裡根本沒有 daemon →
+          # --assume-installed lib32-elogind 跳過斷鏈預裝 lib32-dbus，makepkg 之後
+          # 看到已裝就不會再碰這條鏈。目標機上這條鏈是歷史安裝、完整存在，
+          # 發出去的包不受影響。gstreamer-git 同為 Artix 容器 lib32 job，一併覆蓋。
+          #
+          # ⚠️ run 43781041746（gstreamer-git）實測：wheaton 瞬斷時 [lib32] 的同步
+          # DB 會落到 Include 的 Artix 官方鏡像上，而那些鏡像已裁掉 lib32-dbus
+          # → `target not found: lib32-dbus`。wheaton 的 DB 實測（2026-11-16 直拉
+          # lib32.db）仍含 lib32-dbus-1.16.4-1，所以是鏡像可用性問題而非裁包。
+          # 兜底：倉庫裝不上就從 Arch multilib（nju 鏡像，國內穩）直拉同版本包檔
+          # pacman -U，lib32-elogind 照舊 assume-installed。
+          # （2026-11-16 從 init step 拆出：該 step 的表達式總量頂到 GitHub 的
+          #  21000 上限，加註解後 dispatch 直接 422「Exceeded max expression
+          #  length 21000」，整個 build-packages.yml 都發不起。）
+          if ! pacman -S --noconfirm --needed --assume-installed lib32-elogind lib32-dbus; then
+            echo "::warning::lib32-dbus 走倉庫裝不上（wheaton 瞬斷時 DB 落到已裁包的 Artix 鏡像），改從 Arch multilib 直拉包檔"
+            _f=$(curl -sfL --max-time 60 "https://mirror.nju.edu.cn/archlinux/multilib/os/x86_64/" \
+              | grep -oE 'lib32-dbus-[^"]*\.pkg\.tar\.zst' | head -1)
+            [ -n "$_f" ] || { echo "::error::Arch multilib 目錄裡也找不到 lib32-dbus 包檔"; exit 1; }
+            curl -sfL --max-time 120 -o /tmp/lib32-dbus.pkg.tar.zst \
+              "https://mirror.nju.edu.cn/archlinux/multilib/os/x86_64/$_f" \
+              || { echo "::error::下載 $_f 失敗"; exit 1; }
+            pacman -U --noconfirm --assume-installed lib32-elogind /tmp/lib32-dbus.pkg.tar.zst \
+              || { echo "::error::lib32-dbus 直裝包檔失敗"; exit 1; }
+          fi
+          pacman -Q lib32-dbus
       - name: 還原 bwrap 權限設定並留證據（gstreamer-git 专用）
         if: matrix.repo_name == 'gstreamer-git'
         run: |
