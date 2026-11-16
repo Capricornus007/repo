@@ -1470,6 +1470,15 @@ jobs:
             exit 0
           fi
           case "$REPO_NAME" in
+            kvazaar-git)
+              # 上游 2026-11 的功能推送裡，加密路徑新增的 kvz_intra_get_dir_luma_predictor_encry
+              # 沒進 multilib_rename.h 的改名清單（該檔由 tools/gen_multilib_rename.py 生成，
+              # 維護者生成時沒開 cryptopp，加密閘門的符號全部缺席）→ intra.c 按 8/10/12-bit
+              # 編譯三份，10/12-bit 物件與 8-bit 撞 multiple definition
+              # （run 43847562517 實測：libkvazaar_10bit_la-intra.o vs libkvazaar_la-intra.o）。
+              # 修法：prepare() 末尾把該符號補進改名清單（grep 防重入，冪等）。
+              sed -i '/autoreconf -fi kvazaar/a\    grep -q "kvz_intra_get_dir_luma_predictor_encry" kvazaar/src/multilib_rename.h || sed -i "/^#define kvz_intra_get_dir_luma_predictor /a #define kvz_intra_get_dir_luma_predictor_encry KVZ_MULTILIB_NAME(kvz_intra_get_dir_luma_predictor_encry)" kvazaar/src/multilib_rename.h' "$F"
+              grep -q 'kvz_intra_get_dir_luma_predictor_encry' "$F" || { echo "::error::kvazaar multilib 改名補丁沒注入"; exit 1; } ;;
             iptables-git)
               sed -i 's|rm "include/linux/types.h"|rm -f "include/linux/types.h"|' "$F"
               grep -q 'rm -f "include/linux/types.h"' "$F" || { echo "::error::iptables rm -f 沒改到"; exit 1; } ;;
