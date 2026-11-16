@@ -1964,6 +1964,14 @@ jobs:
             libspandsp.so.2) echo "::notice::spandsp-git 提供了 $(basename "$_so")，對得上 pipewire-audio" ;;
             *) echo "::error::spandsp-git 的 soname 是 $(basename "$_so")，pipewire-audio 要 .so.2 —— ABI 補丁失效"; exit 1 ;;
           esac
+          # pacman -T 是對「已安裝套件」做滿足性檢查：pipewire-audio 沒裝就必報缺。
+          # 所以這裡直接把它裝進容器（checkdepends 本來就要裝）——此時
+          # libspandsp.so=2-64 已由 spandsp-git 提供，依賴鏈應當解得開。
+          for _t in 1 2 3; do
+            pacman -S --noconfirm --needed pipewire-audio && break
+            echo "::warning::裝 pipewire-audio 失敗（第 ${_t}/3 次）"
+            sleep $((_t * 8))
+          done
           _miss="$(pacman -T pipewire-audio || true)"
           [ -z "$_miss" ] || { echo "::error::deptest 仍認缺：$_miss"; exit 1; }
 
