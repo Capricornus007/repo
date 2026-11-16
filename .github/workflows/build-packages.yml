@@ -503,9 +503,14 @@ jobs:
                       galaxy-goblins galaxy-gremlins lib32-goblins lib32-gremlins; do
               printf '\n[%s]\nServer = https://mirror.nju.edu.cn/artixlinux/%s/os/$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/%s/os/$arch\nServer = https://artix.wheaton.edu/repos/%s/os/$arch\n' "$_r" "$_r" "$_r" "$_r" >> /etc/pacman.conf
             done
-            # system / world / galaxy 用 Include 走鏡像清單，與目標機一致
+            # system / world / galaxy 用 Include 走鏡像清單，與目標機一致。
+            # ⚠️ 但要在 Include 前顯式放 nju／tuna（run 43820993097 實測）：容器
+            # mirrorlist 裡混著 pkgbuild.com（Arch 的 CDN，對 Artix 倉**從來就是
+            # 404**，實測 fastly/geo 兩顆全 404、nju 200），pacman 對同一鏡像
+            # 連錯 3 次就整輪放棄 → 5 次重試全滅。顯式 Server 按序嘗試、排最前，
+            # mirrorlist 裡的壞條目就輪不到。
             for _r in system world galaxy; do
-              printf '\n[%s]\nInclude = /etc/pacman.d/mirrorlist\n' "$_r" >> /etc/pacman.conf
+              printf '\n[%s]\nServer = https://mirror.nju.edu.cn/artixlinux/%s/os/$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/%s/os/$arch\nInclude = /etc/pacman.d/mirrorlist\n' "$_r" "$_r" "$_r" >> /etc/pacman.conf
             done
             # [lib32]：Artix 官方 mirrorlist 無 wheaton；wheaton 是唯一還留著 lib32-dbus
             # 的鏡像（1.16.4-1，實測 HTTP 200），Artix [lib32] 已裁掉（run 43688123660）。
