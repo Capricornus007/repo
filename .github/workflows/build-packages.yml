@@ -710,7 +710,11 @@ jobs:
           }
           case '${{ matrix.repo_name }}' in
             gamemode-git|gstreamer-git) _arch_ml lib32-dbus ;;
-            lib32-openal-git)           _arch_ml lib32-alsa-lib lib32-libpulse lib32-fluidsynth lib32-portaudio lib32-jack ;;
+            # 只留還存在於倉庫的兩顆（fluidsynth/portaudio/jack 已從 Arch
+            # multilib 與 Artix [lib32] 整個消失，run 43822343141 實測連
+            # Arch multilib 目錄都沒有，_arch_ml 直拉必紅）；makedepends
+            # 也已同步摘掉，cmake 探測不到自動關 backend。
+            lib32-openal-git)           _arch_ml lib32-alsa-lib lib32-libpulse ;;
           esac
       - name: 還原 bwrap 權限設定並留證據（gstreamer-git 专用）
         if: matrix.repo_name == 'gstreamer-git'
