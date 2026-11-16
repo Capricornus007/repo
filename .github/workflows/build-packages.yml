@@ -512,8 +512,12 @@ jobs:
             # wheaton 排第一，沒有的包落回 mirrorlist。
             printf '\n[lib32]\nServer = https://artix.wheaton.edu/repos/lib32/os/$arch\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
             # libevent 全鏈與宿主同用 Artix，重寫設定後仍須保留自有依賴來源。
+            # ⚠️ wireplumber-git 也要（run 43813823163 實測）：artix kind 的 job
+            # 會在這裡**整個重寫** /etc/pacman.conf，把「初始化容器環境」步掛上的
+            # [junlin03-aur] 抹掉；這個 case 是重寫後唯一補回掛載的地方，
+            # ab884f6 只改了前面的掛源清單、沒改這裡，等於白掛。
             case '${{ matrix.repo_name }}' in
-              libevent-git|links-git|unbound-git|fstrm-git|libverto-git)
+              libevent-git|links-git|unbound-git|fstrm-git|libverto-git|wireplumber-git)
                 printf '\n[junlin03-aur]\nSigLevel = Never\nServer = https://github.com/${{ github.repository }}/releases/download/current-repo\n' >> /etc/pacman.conf
                 ;;
             esac
