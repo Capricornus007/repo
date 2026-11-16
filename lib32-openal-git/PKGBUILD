@@ -36,8 +36,19 @@ prepare() {
   # `#if __cpp_lib_xxx` 判斷特性，宏未定義時會觸發 -Werror=undef 直接中斷，
   # 這是工具鏈與函式庫的相容問題，不是本包原始碼缺陷（run 43728961096 實測）。
   # 上游在 ALSOFT_WERROR=OFF 時仍無條件附加 -Werror=undef，這裡降級為一般警告。
-  sed -i 's/list(APPEND C_FLAGS -Werror=undef -Werror=format-security/list(APPEND C_FLAGS -Werror=format-security/' CMakeLists.txt
-  grep -q 'C_FLAGS -Werror=undef' CMakeLists.txt && { echo "sed 未命中 -Werror=undef" >&2; return 1; }
+  #
+  # ⚠️ 上一版寫 `grep -q ... && { echo; return 1; }`——makepkg 的 prepare() 用
+  # `set -e` 語義跑，這個複合指令在 grep **成功**（＝sed 沒命中）時執行 return 1，
+  # 使整個 prepare 靜默失敗（run 43701041746 實測只有 "ERROR: A failure occurred
+  # in prepare()"，連訊息都沒印出來）。改成 if 塊並把失敗訊息寫清楚。
+  sed -i 's/list(APPEND C_FLAGS -Werror=undef -Werror=format-security/list(APPEND C_FLAGS -Werror=format-security/' \
+    CMakeLists.txt
+  if grep -q 'C_FLAGS -Werror=undef' CMakeLists.txt; then
+    echo "::error::lib32-openal-git: sed 未命中 -Werror=undef，上游 CMakeLists 改寫法了" >&2
+    grep -n 'Werror=undef' CMakeLists.txt >&2 || true
+    exit 1
+  fi
+  echo "prepare: 已把 -Werror=undef 降級（保留 format-security 等其餘告警）"
 }
 
 build() {

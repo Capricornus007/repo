@@ -29,7 +29,7 @@ makedepends=(xorgproto pixman libx11 mesa mesa-libgl xtrans libxkbfile libxfont2
              libpciaccess libxv libxcvt libxmu libxrender libxi libxaw libxtst
              libxres xorg-xkbcomp xorg-util-macros xorg-font-util libepoxy
              xcb-util xcb-util-image xcb-util-renderutil xcb-util-wm
-             xcb-util-keysyms libxshmfence libunwind systemd meson git)
+             xcb-util-keysyms libxshmfence libunwind elogind meson git)
 source=(xorg-server::git+https://gitlab.freedesktop.org/xorg/xserver.git#branch=server-21.1-branch
         xvfb-run
         xvfb-run.1
@@ -78,7 +78,7 @@ _install() {
 package() {
   pkgdesc='Xorg X server with the tearfree patch for the modesetting driver (enabled by default)'
   depends=(libepoxy libxfont2 pixman xorg-server-common libunwind dbus libgl
-           xf86-input-libinput nettle libxdmcp sh glibc libxau systemd-libs
+           xf86-input-libinput nettle libxdmcp sh glibc libxau libelogind
            libtirpc libpciaccess libdrm libxshmfence libxcvt)
   provides=('X-ABI-VIDEODRV_VERSION=25.4' 'X-ABI-XINPUT_VERSION=24.4'
             'X-ABI-EXTENSION_VERSION=10.0' 'x-server' "xorg-server=$pkgver")

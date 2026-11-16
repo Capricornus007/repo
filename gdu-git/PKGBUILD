@@ -4,6 +4,11 @@
 # （與 lmdb-git、qt6ct-git 同一手法），用戶 `pacman -Syu` 即平順換檔。
 # ⚠️ 這是 in-tree 包：必須同時列進 build-packages.yml 的 in-tree 攔截分支，
 #    否則通用規則見 '-git$' 會去 clone AUR（這幾個 AUR 全查無對應 -git 包）。
+# ⚠️ 2026-11-16 上游 master 把 module 路徑從 v5 升到 v6（go.mod: module
+#    github.com/dundee/gdu/v6），build() 的目標包與 ldflags -X 路徑必須同步跟進，
+#    否則 `cannot find module providing package …/v5/cmd/gdu: import lookup
+#    disabled by -mod=readonly`（run 43783044587 實測）。build 包裡的
+#    Version/Time/User 變數名不變（build/build.go 實測）。
 
 _name=gdu
 pkgname=$_name-git
@@ -38,11 +43,11 @@ build() {
     -modcacherw \
     -pgo=default.pgo \
     -ldflags "-compressdwarf=false -linkmode external -extldflags \"${LDFLAGS}\" \
-              -X 'github.com/dundee/gdu/v5/build.Version=${_ver}' \
-              -X 'github.com/dundee/gdu/v5/build.User=${PACKAGER}' \
-              -X 'github.com/dundee/gdu/v5/build.Time=${_DATE}'" \
+              -X 'github.com/dundee/gdu/v6/build.Version=${_ver}' \
+              -X 'github.com/dundee/gdu/v6/build.User=${PACKAGER}' \
+              -X 'github.com/dundee/gdu/v6/build.Time=${_DATE}'" \
     -o dist/gdu \
-    github.com/dundee/gdu/v5/cmd/gdu
+    github.com/dundee/gdu/v6/cmd/gdu
 }
 
 check() {
