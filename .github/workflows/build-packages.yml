@@ -689,8 +689,11 @@ jobs:
                 echo "$_p: 倉庫安裝 OK"; continue
               fi
               echo "::warning::$_p 倉庫裝不上（Artix 已裁或鏡像瞬斷），從 Arch multilib 直拉包檔 -Udd"
+              # ⚠️ 管線賦值必須 || true：set -euo pipefail 下 grep 不命中會讓
+              # 整條管線退出碼 1，賦值語句直接觸發 set -e 殺死腳本，下面的
+              # [ -n ] 防呆根本執行不到（run 43820282668 openal 實測）。
               _f=$(curl -sfL --max-time 60 "https://mirror.nju.edu.cn/archlinux/multilib/os/x86_64/" \
-                | grep -oE "${_p}-[^\"]*\.pkg\.tar\.zst" | sort -V | tail -1)
+                | grep -oE "${_p}-[^\"]*\.pkg\.tar\.zst" | sort -V | tail -1) || true
               [ -n "$_f" ] || { echo "::error::Arch multilib 目錄裡找不到 $_p 包檔"; exit 1; }
               curl -sfL --max-time 180 -o "/tmp/${_f}" \
                 "https://mirror.nju.edu.cn/archlinux/multilib/os/x86_64/${_f}" \

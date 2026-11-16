@@ -18,8 +18,12 @@ license=(LGPL-2.0-or-later)
 depends=(lib32-gcc-libs lib32-glibc openal)
 # lib32-portaudio 是 AUR-only，CI multilib 容器沒有也不該為了一個選配
 # backend 去裝它（run 43726513086 實測 target not found）。明確關掉 backend。
-makedepends=(cmake git ninja lib32-alsa-lib lib32-jack lib32-libpulse
-             lib32-pipewire)
+# ⚠️ lib32-jack 也裁了（run 43816326927/43820282668 實測）：Arch 已從 multilib
+# 刪掉 lib32-jack／lib32-fluidsynth／lib32-portaudio（jack 由 pipewire-jack
+# 頂替），Artix [lib32] 同步裁掉——這三顆在任何倉都取不到，openal 的 cmake
+# 探測不到標頭會自動關掉對應 backend（ALSA／PulseAudio／PipeWire 三個主力
+# backend 的庫都還在，不受影響）。
+makedepends=(cmake git ninja lib32-alsa-lib lib32-libpulse lib32-pipewire)
 provides=('lib32-openal' libopenal.so)
 conflicts=('lib32-openal')
 source=("git+https://github.com/kcat/openal-soft.git")
@@ -68,7 +72,8 @@ build() {
 }
 
 package_lib32-openal-git() {
-  optdepends=('lib32-fluidsynth: MIDI rendering')
+  # lib32-fluidsynth 已從 Arch multilib／Artix [lib32] 消失，optdepends 一併摘
+  # （否則 pacman -Si 會提示一顆永遠裝不上的選配）。
   DESTDIR="$pkgdir" cmake --install build
   rm -rvf "$pkgdir"/usr/{include,share,bin}
 }
