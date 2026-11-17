@@ -1,0 +1,51 @@
+name: Perch CLI toolchain
+
+# 使用者 2026-11-08 指示：「你既然在等 ci 的話那就順帶把
+# npm install -g perchai-cli 這個加進自動構建倉庫去吧？就不用加到我電腦裡了」。
+#
+# ⚠️ 刻意不做成 pacman 包、不進 junlin03-aur、不進 current-repo release。
+# perchai-cli 2.4.129 的 LICENSE 是「Perch AI CLI Proprietary License」，
+# 明文禁止 copy / modify / distribute / sublicense / sell；把 tarball 或
+# 安裝後的 node_modules 做成可下載的套件資產會構成再散布。
+# 這裡只在 GitHub-hosted runner 內安裝並驗證，不產生、不上傳任何二進位資產，
+# 也不會裝到使用者電腦。若日後上游改成允許再散布的授權，再評估做成包。
+#
+# 保持最新：每次執行都用 npm registry 的 dist-tags.latest（官方端點），
+# 不寫死版本；排程每天跑一次，失敗即代表該版本在 runner 上裝不起來。
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 5 * * *'
+concurrency:
+  group: perch-cli-toolchain
+  cancel-in-progress: true
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install latest perchai-cli globally (CI runner only)
+        run: |
+          set -euo pipefail
+          sudo npm install -g perchai-cli@latest --no-audit --no-fund
+      - name: Verify the CLI is on PATH and report the installed version
+        run: |
+          set -euo pipefail
+          command -v perch
+          # `sudo npm install -g` 用的是 runner 系統 npm（prefix /usr/local），
+          # 而 setup-node 之後的 `npm root -g` 指向 /opt/hostedtoolcache/...，
+          # 兩者不同；拿 npm root -g 去 require 會 MODULE_NOT_FOUND
+          # （run 43087224128 實測）。改從 perch 這支執行檔本身反推套件根目錄。
+          perch_bin=$(readlink -f "$(command -v perch)")
+          pkgdir=$(dirname "$(dirname "$perch_bin")")
+          if [ ! -f "$pkgdir/package.json" ]; then
+            pkgdir=/usr/local/lib/node_modules/perchai-cli
+          fi
+          [ -f "$pkgdir/package.json" ] || { echo '::error::找不到 perchai-cli 的 package.json'; exit 1; }
+          ver=$(node -p "require('${pkgdir}/package.json').version")
+          echo "installed perchai-cli=${ver:-unknown}"
+          [ -n "${ver:-}" ] || { echo '::error::讀不到 perchai-cli 版本'; exit 1; }
+          # 上游 CLI 的旗標可能隨版本改，這裡只確認可執行，不拿 --version 當硬閘。
+          perch --help >/dev/null 2>&1 || echo '::warning::perch --help 無輸出或非 0，僅記錄不判紅'

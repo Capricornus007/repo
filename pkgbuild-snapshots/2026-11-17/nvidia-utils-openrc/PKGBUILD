@@ -1,0 +1,52 @@
+# Maintainer: Capricornus007
+# Fork 自 Artix openrc-world 的 nvidia-utils-openrc 20210505-2
+# （原檔 https://gitea.artixlinux.org/artixlinux/packages-openrc ，內容一概保留），
+# 只補一件事：nvidia-utils 的 elogind 睡眠鉤子只有 post、沒有 pre，
+# 而 pre 在上游是 systemd unit 的活 → OpenRC 環境下 suspend 必然被 GPU 否決
+# （nv_pmops_suspend returns -5）。見 90-nvidia-sleep。
+#
+# 2026-10-27 追加修復：上面那句只講了 pre，漏了另一半。原 post 分支「只寫記錄、
+# 不做 resume」，因為註解假設 nvidia-utils 自己的 elogind 鉤子會做——但它只裝在
+# /usr/lib/systemd/system-sleep/nvidia，OpenRC + elogind 不會讀那個目錄。
+# 結果：睡醒後驅動永遠停在 suspend 狀態，nvidia-smi／fastfetch GPU 模組／
+# Electron（WorkBuddy、VS Code）全部卡死，只能重開機。現在 post 自己 echo resume。
+#
+# ✅ 2026-10-07 起正式進 CI（build-kernels.yml 的套件清單，kind=artix +
+#    artixlinux/artixlinux:base-devel 容器）。舊註解寫「刻意不進矩陣，因為 Arch
+#    容器沒有 openrc 鏡像必紅」——那個前提已經被 qt6ct-git 那輪換代打掉：
+#    kind=artix 的 job 跑在同發行版容器裡，[system] 原生就有 openrc／elogind，
+#    nvidia-utils 在 [world]，所以不需要再靠「本地 makepkg + pacman -U」手工發佈。
+#    會留這條註解是因為實測到 feed 停在 20261005-1、本機已是 -2：沒有矩陣就沒人
+#    重建 -2，重灌機器會拿到「沒有 pre 分支 → 睡眠被 GPU 否決」的舊版。
+pkgname=nvidia-utils-openrc
+pkgver=20261027
+pkgrel=1
+pkgdesc="OpenRC glue for NVIDIA: persistenced init script + the missing pre branch of the elogind sleep hook"
+arch=('any')
+url="https://gitea.artixlinux.org/artixlinux/packages-openrc"
+license=('GPL2')
+depends=('openrc' 'nvidia-utils' 'elogind')
+provides=('init-nvidia-utils')
+conflicts=('init-nvidia-utils')
+backup=('etc/conf.d/nvidia-persistenced')
+source=(
+	'nvidia-persistenced.confd'
+	'nvidia-persistenced.initd'
+	'90-nvidia-sleep'
+)
+sha256sums=('347437868119e8ae12852a574597936e855f534a9ad290fef3f62b4083a38516'
+            'b672a70260d1370f462d3f0f9e027708118bb46e087c2be63890e97260dd2686'
+            '23a2815811045589ab0bee0db8da04071c145e388d25899895e65e4c4e10dba3')
+
+package() {
+	install -d "${pkgdir}/etc/conf.d"
+	install -d "${pkgdir}/etc/init.d"
+	install -d "${pkgdir}/usr/lib/elogind/system-sleep"
+
+	install -m 644 "${srcdir}/nvidia-persistenced.confd" \
+		"${pkgdir}/etc/conf.d/nvidia-persistenced"
+	install -m 755 "${srcdir}/nvidia-persistenced.initd" \
+		"${pkgdir}/etc/init.d/nvidia-persistenced"
+	install -m 755 "${srcdir}/90-nvidia-sleep" \
+		"${pkgdir}/usr/lib/elogind/system-sleep/90-nvidia-sleep"
+}
