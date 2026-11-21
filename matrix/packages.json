@@ -1539,5 +1539,26 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "kpat-git",
+    "repo_name": "kpat-git",
+    "variant": "none",
+    "kind": "kde",
+    "in_tree": true
+  },
+  {
+    "key": "kmahjongg-git",
+    "repo_name": "kmahjongg-git",
+    "variant": "none",
+    "kind": "kde",
+    "in_tree": true
+  },
+  {
+    "key": "kdeconnect-git",
+    "repo_name": "kdeconnect-git",
+    "variant": "none",
+    "kind": "kde",
+    "in_tree": true
   }
 ]
