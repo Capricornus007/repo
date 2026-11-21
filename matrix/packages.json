@@ -1518,5 +1518,12 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "librewolf-git",
+    "repo_name": "librewolf-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]

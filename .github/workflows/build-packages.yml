@@ -1610,6 +1610,34 @@ jobs:
           NEW_TTF_SHA=""
 
           case "$PKG" in
+            librewolf-git)
+              # LibreWolf 版本權威 = librewolf.dev Forgejo source tags API（Arch nvchecker 同源）。
+              # tag 格式 160.0.1-1 -> pkgver 160.0.1_1；round release 160.0-1 -> 160.0.0_1
+              # （補 .0 避免 vercmp 比較問題，見 Arch README）。
+              _lw_tags=$(curl -sfL --connect-timeout 20 --retry 3 \
+                "https://librewolf.dev/api/v1/repos/librewolf/source/tags" || true)
+              [ -n "$_lw_tags" ] || skip "拿不到 LibreWolf tags"
+              TARGET_PKGVER=$(printf '%s' "$_lw_tags" | python3 -c '
+import json,sys,re
+d=json.load(sys.stdin)
+best=None
+for t in d:
+    m=re.match(r"^(\d+)(?:\.(\d+))?(?:\.(\d+))?-(\d+)$", t["name"])
+    if not m: continue
+    maj,minor,patch,rel=[int(x) if x else 0 for x in m.groups()]
+    key=(maj,minor,patch,rel)
+    if best is None or key>best[0]: best=(key,(maj,minor,patch,rel))
+if not best: sys.exit(1)
+maj,minor,patch,rel=best[1]
+# round release (patch==0) 補 .0 -> 160.0 -> 160.0.0
+if patch==0: patch=0
+print(f"{maj}.{minor}.{patch}_{rel}")
+')
+              [ -n "$TARGET_PKGVER" ] || skip "解析 LibreWolf 版本失敗"
+              sed -i "s/^pkgver=.*/pkgver=${TARGET_PKGVER}/" PKGBUILD
+              echo "LibreWolf 最新版本: $TARGET_PKGVER"
+              ;;
+
             wechat-bin|linuxqq-bin)
               # 2026-11-22 用戶裁定：版本權威＝上游 .deb 的 control Version（拆包讀），
               # 不信 AUR RPC 顯示（實測 wechat AUR=4.1.13.26 但 deb 已 4.1.13.29）。
