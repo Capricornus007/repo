@@ -43,7 +43,7 @@ validpgpkeys=(CA262C6C83DE4D2FB28A332A3A6A4DB839EAA6D7  # Albert Astals Cid <aac
 
 pkgver() {
   cd "$srcdir/kpat"
-  git tag --sort=-v:refname --list | grep '^v[0-9.]*$' | head -n1 | cut -c2-
+  git describe --long --tags | sed -E 's/^v//;s/([^-]*-g)/r\1/;s/-/./g'
 }
 
 build() {

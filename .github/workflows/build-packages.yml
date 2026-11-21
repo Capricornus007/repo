@@ -1623,22 +1623,22 @@ jobs:
 
           case "$PKG" in
             kpat-git|kmahjongg-git|kdeconnect-git|kbreakout-git)
-              # KDE -git 包：版本權威 = invent.kde.org tags API（去 v 前綴取最高）。
-              # /PKGBUILD 的 pkgver() 同源（git describe），CI 只讀 API 判斷是否重建。
+              # KDE -git：目標 pkgver 由上游 HEAD 決定，直接 source PKGBUILD 跑它自己的
+              # pkgver()（git describe --long → 26.11.80.rN.gHASH），與 makepkg 逐字一致。
+              # 不能用 API 純 tag 代替——那樣永遠 != CUR_PKGVER，每小時白編一次。
               case "$PKG" in
-                kdeconnect-git) _kde_path='network%2Fkdeconnect-kde' ;;
-                kpat-git)       _kde_path='games%2Fkpat' ;;
-                kmahjongg-git)  _kde_path='games%2Fkmahjongg' ;;
-                kbreakout-git)  _kde_path='games%2Fkbreakout' ;;
+                kdeconnect-git) _kde_url='https://invent.kde.org/network/kdeconnect-kde.git'; _kde_dir='kdeconnect-kde' ;;
+                kpat-git)       _kde_url='https://invent.kde.org/games/kpat.git';       _kde_dir='kpat' ;;
+                kmahjongg-git)  _kde_url='https://invent.kde.org/games/kmahjongg.git';  _kde_dir='kmahjongg' ;;
+                kbreakout-git)  _kde_url='https://invent.kde.org/games/kbreakout.git';  _kde_dir='kbreakout' ;;
               esac
-              curl -sfL --retry 3 "https://raw.githubusercontent.com/$GH_REPO/master/ci/kde-git-version.py" \
-                -o /tmp/kde-version.py || skip "抓不到 ci/kde-git-version.py"
-              _kde_tags=$(curl -sfL --connect-timeout 20 --retry 3 \
-                "https://invent.kde.org/api/v4/projects/$_kde_path/repository/tags?per_page=30" || true)
-              [ -n "$_kde_tags" ] || skip "拿不到 $PKG 的 KDE tags"
-              TARGET_PKGVER=$(printf '%s' "$_kde_tags" | python3 /tmp/kde-version.py) \
-                || skip "解析 $PKG 版本失敗"
-              sed -i "s/^pkgver=.*/pkgver=${TARGET_PKGVER}/" PKGBUILD
+              rm -rf /tmp/kde-version-src
+              mkdir -p /tmp/kde-version-src
+              # pkgver() 裡 cd "$srcdir/<dir>"，clone 目標目錄名必須與之逐字一致
+              git clone --quiet "$_kde_url" "/tmp/kde-version-src/$_kde_dir" || skip "clone $PKG 上游失敗"
+              TARGET_PKGVER=$(srcdir=/tmp/kde-version-src bash -c \
+                'source ./PKGBUILD >/dev/null 2>&1; pkgver') || skip "跑 $PKG 的 pkgver() 失敗"
+              [ -n "$TARGET_PKGVER" ] || skip "$PKG 版本為空"
               echo "$PKG 最新版本: $TARGET_PKGVER"
               ;;
 
