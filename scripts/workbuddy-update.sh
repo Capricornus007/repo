@@ -189,7 +189,7 @@ push_retry() {
 # 1) 父倉（鏡像；checkout 的 origin 已帶 GITHUB_TOKEN）。
 git add "$PKGDIR/PKGBUILD" "$PKGDIR/.SRCINFO"
 git commit -m "$msg"
-push_retry "$GITHUB_WORKSPACE" master || die "父倉 push 三次失敗"
+push_retry "${GITHUB_WORKSPACE:-$PWD}" master || die "父倉 push 三次失敗"
 log "父倉已推送"
 
 # 2) 獨立倉（CI 通用分支 clone 的構建來源）。
