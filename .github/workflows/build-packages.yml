@@ -2937,6 +2937,11 @@ jobs:
               echo "选用 cjktty 补丁: $pick（$how，目标线 $series）"
               curl -sfL -o 0001-cjktty.patch \
                 "https://raw.githubusercontent.com/Capricornus007/cjktty-patches/master/v${series%%.*}.x/$pick"
+              # CachyOS 的 fbcon.h 用命名 struct fbcon_rotated（vanilla 是匿名），
+              # 補丁 Hunk#1 對不上 → 用本機驗證過的腳本改寫 Hunk#1 context。
+              curl -sfL --retry 3 "https://raw.githubusercontent.com/$GH_REPO/master/ci/cjktty-fix-patch.py" \
+                -o /tmp/cjktty-fix-patch.py || { echo "::error::抓不到 ci/cjktty-fix-patch.py"; exit 1; }
+              python3 /tmp/cjktty-fix-patch.py 0001-cjktty.patch || exit 1
               sed -i -E 's|^[[:space:]]*"\$\{_cjktty_source\}/v[0-9]+\.x/cjktty-[^"]+\.patch"[[:space:]]*$|    "0001-cjktty.patch"|' PKGBUILD
               curl -sfL -o cjktty-add-cjk32x32-font-data.patch \
                 "https://raw.githubusercontent.com/Capricornus007/cjktty-patches/master/cjktty-add-cjk32x32-font-data.patch"
@@ -2960,21 +2965,6 @@ jobs:
                 echo '  sed -i "s/memchr(mode, /__builtin_memchr(mode, /" "$f"'
                 echo '  grep -q "__builtin_memchr(mode, " "$f" || { echo "错误：gud fortify 规避失败" >&2; return 1; }'
                 echo '  echo "gud: memchr -> __builtin_memchr（规避 clang ThinLTO fortify 假阳性）"'
-                echo '}'
-              } >> PKGBUILD
-              # cjktty 跨線補丁（7.2-rc7 補 7.3）的 fbcon.h hunk 因 CachyOS
-              # 原始碼行號偏移而 FAILED（只有這一個 hunk，其他全過）。補丁要加的三個
-              # rotated CJK 欄位沒套上 → 其他 .c 檔引用它們會編不過。
-              # 用確定性修正：補丁套完後檢查欄位在不在，不在就補上（不依賴行號）。
-              {
-                echo '_ci_fix_fbcon_h() {'
-                echo '  local f="drivers/video/fbdev/core/fbcon.h"'
-                echo '  [ -f "$f" ] || return 0'
-                echo '  grep -q "fontdata_utf" "$f" && return 0'
-                echo '  grep -q "int buf_rotate;" "$f" || { echo "错误：fbcon.h rotated 结构异常" >&2; return 1; }'
-                echo '  sed -i "/int buf_rotate;/a\\t\\tfont_data_t *fontdata_utf; /* CJK font source */\\n\\t\\tu8 *buf_utf; /* rotated CJK glyphs */\\n\\t\\tsize_t bufsize_utf;" "$f"'
-                echo '  grep -q "fontdata_utf" "$f" || { echo "错误：fbcon.h CJK 栏位补齐失败" >&2; return 1; }'
-                echo '  echo "fbcon.h: 补上 CJK rotated 栏位（跨线补丁 hunk 偏移修正）"'
                 echo '}'
               } >> PKGBUILD
               # 插在 _ci_force_config 之前：此时 prepare() 里补丁已套用完、源码树就位
