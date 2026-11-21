@@ -1,6 +1,6 @@
 {
  "ci": {
-  "ci/docs/in-tree-packages.md": "6bab6bbe30936e85ada4138cfac1691ba8b7fe968e65ec1b19e4721820f89d5d",
+  "ci/docs/in-tree-packages.md": "f2aa0a76e652a9c37d957960761da47a8f73ebef5db093ef01afc4a0c868ea4b",
   "ci/docs/upstream-pkgbuilds/clang.PKGBUILD": "3b569b3f056c6a857c285f7a6c2415ab8bdf9bdd40f4a46e4de2c76b273c7875",
   "ci/docs/upstream-pkgbuilds/compiler-rt.PKGBUILD": "825464ccac403e26ef5a35b06029c59809605beb751abfa832c6cff3ee9515b5",
   "ci/docs/upstream-pkgbuilds/doxygen.PKGBUILD": "cd7c1369450dd9b7de316d2b48644e1b90fea22542fd376bf048fab3826740e0",
@@ -12,21 +12,21 @@
   "ci/scripts/bump-pkgrel": "a7499e9b5b5accba271768c31d9c606dd62939b6044568a2ca9cd5d7d886f396",
   "ci/scripts/check-pkg-split-overlap.py": "f0927c32787dc6a1a9d8b14befe0c6b1f248604eb1bc78fa639db11ed2ba6b0e",
   "ci/scripts/install-git-hooks.sh": "8892f9348ed57943d1dc92c4f34749cb2be1022bcae7bd8f2672f0b5f8216768",
-  "ci/scripts/workbuddy-update.sh": "8e31ab780332d1c46a03aaf86481b53af29eca032aba3109e9c4bfc29b400a2f",
+  "ci/scripts/workbuddy-update.sh": "5862f43c0dd0e1ccbc279f9035cdf3dd10e611fa1613f09629c81ccdabad6d9d",
   "ci/scripts/workflow-step-budget.py": "10953b06cc1c58a3869e2a8bb90c15a7c6775d28358dec874fcd8571aed88daf",
-  "ci/tools/aur_update.py": "f50efabfde4b72d21ec69b804962c052b4438f9fd72778d9a51f77ef1220d886",
+  "ci/tools/aur_update.py": "5f00b6fdf97669e0b96183c8d6a3bb795412bc184990f3e46611eda44d604538",
   "ci/tools/pkgbuild_snapshot.py": "a4f03b4517ef0d42494c207f692d3096ea7dacedd273107f8db5e6159762279b",
   "ci/workflows/aur-update.yml": "6ccbb4b070b86a9ee7baf5eccebe55a2370761f1861feacb8f194874414386f7",
   "ci/workflows/backup-pkgbuilds.yml": "63dfabedcafd4d3c01a15f5874a0788a360329957a01d4025993b8b291072158",
-  "ci/workflows/build-git-packages-2.yml": "33e70358b3a2b6a03068bbe2412382ccdb744658d93022c04a80baa380f0b9d5",
-  "ci/workflows/build-git-packages-3.yml": "81e55147e06c896bdfc051b0913806f1875b9e8447f81416dd2403a8d75574a1",
-  "ci/workflows/build-git-packages-4.yml": "c9be3d2a9affa3d1c1cdd6b4160aa6f1aec4ae4262f38359fc87e62edcb3103f",
-  "ci/workflows/build-git-packages.yml": "3491fe7eb9ebf3f7c3ede7563634d0b687fcb6bdb531eee014955ff8ea5491fd",
-  "ci/workflows/build-kernels.yml": "a02c2dfce1d8f458eb323603fd2318e22f9891c404d0d49efb66b13742be533b",
+  "ci/workflows/build-git-packages-2.yml": "82a99b3d9b7bf083f9a581b5ec2a790d8e7ceeab32bc34b303cb71bcb6914cf5",
+  "ci/workflows/build-git-packages-3.yml": "0b31f2106755d0ae05b4c4563d9d0e39392dfba479908f7278856e33a8af7919",
+  "ci/workflows/build-git-packages-4.yml": "e09391410f6daa4f61c0549dd8b568237357e405c17ecc19637f80cc9b3fdea6",
+  "ci/workflows/build-git-packages.yml": "11df3fbd95738688b4756d44c061f332aab729af3898f8a0ba006eb2b7ceec37",
+  "ci/workflows/build-kernels.yml": "27c87e8dba28a2e12522d5a83dd592c15045c3be0434c9e501a6dbe9d7081a4b",
   "ci/workflows/build-one-package.yml": "dac687388bcc1f63814c8bbb7b1f298e9d24d3438b558dec944dd08d58129115",
-  "ci/workflows/build-packages.yml": "de5b4fba51b44919da021a6a88fa3faa7eb315ddd4ebef2b3ec60ad6fba9e1d5",
+  "ci/workflows/build-packages.yml": "ff21d1bdea82b3ed00701a906aace490c8de20f0ee5dfe9d0286731474f6a5f2",
   "ci/workflows/build-restored.yml": "d9b8bf801357f1c466e99757510937af9c7fd181462451aef8ff5a333b8f71a4",
-  "ci/workflows/perch-cli-toolchain.yml": "e3a6c43225a4a36190251ce5a63b37bec0a03ad3696685ab33921b2be3d37cfb",
+  "ci/workflows/perch-cli-toolchain.yml": "f418834d90aefe195f32354b0c04623fb98d3eea0995f2de2ca54061731cb52b",
   "ci/workflows/workbuddy-update.yml": "84c4b5c2b0b1b4dc7f9e18d446edff1120ab26de8f07048af89b5dfbd542747e"
  },
  "date": "2026-11-21",
@@ -35,21 +35,21 @@
    "error": "AUR 倉是空的（已下架或成 orphan）",
    "package": "linux-ltscjk",
    "pkgbase": "linux-ltscjk"
-  },
-  {
-   "error": "AUR 倉是空的（已下架或成 orphan）",
-   "package": "linux-zen1th",
-   "pkgbase": "linux-zen1th"
   }
  ],
  "note": "每日自動快照：in-tree 包取 master 現檔，AUR 包取 AUR 現檔，外加 CI 定義檔。缺的 AUR 包列在 missing_aur（幽靈／改名包）。",
  "packages": {
-  "lib32-nvidia-utils-beta": {
+  "linux-cachyos-cjktty": {
    "files": {
-    ".SRCINFO": "59bc68c4001d777705a1615bc775cb14d4a9707de776d3f769d2dc750efed10a",
-    "PKGBUILD": "069b7545b1be9d224510282756e3afb6b9d303271fbde65674104857a401b37c"
+    ".SRCINFO": "282158866aa7f6ec04138fad48a04ca98d7322bda1d9ce501c3f6999e341747c",
+    ".gitignore": "c91ab7ebcc18553fe93892e31ec41688c4477c29994cd343b6db59741d5ec6c7",
+    "LICENSE": "d1ed44b8400a12b8500ac509f4ea05cf14aceaf56e073a8a3f0a2d98005d068e",
+    "LICENSES/0BSD.txt": "d1ed44b8400a12b8500ac509f4ea05cf14aceaf56e073a8a3f0a2d98005d068e",
+    "PKGBUILD": "edbf6cd72fabc7e2517fc80df5b335b8abca751a7ef553baf1176583e9725e1a",
+    "REUSE.toml": "1fa34b031d2f54f45499903272207f2a202053910172eef9734534165519c5a9",
+    "config": "70a755e054368c4fe804b79c6afbf00ee78e345883444bd2c6f1465ab40f48fd"
    },
-   "kind": "aur",
+   "kind": "",
    "source": "aur"
   },
   "linux-zencjk": {

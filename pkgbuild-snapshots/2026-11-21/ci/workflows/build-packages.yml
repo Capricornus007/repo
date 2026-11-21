@@ -23,6 +23,10 @@ on:
 
 env:
   REPO_RELEASE_TAG: current-repo
+  # 全域 GH_REPO：以下多個 step 的 run 塊都用 ${GH_REPO} 抓本倉 raw 檔／API，
+  # 之前只在部分 step 的 env 宣告，導致「改寫 PKGBUILD」等 step 觸發
+  # unbound variable（cjktty-pick.sh/librewolf-version.py/deb-version.sh 全中）。
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   build-packages:
@@ -120,7 +124,6 @@ jobs:
           # 重複的 [arch4edu] 區段（pacman 會直接報 duplicate repository）。
 
           if [ "${{ matrix.kind }}" = 'kde' ] || [ "${{ matrix.kind }}" = 'wayland' ] || [ "${{ matrix.kind }}" = 'aur' ] \
-             || [ "${{ matrix.repo_name }}" = 'lib32-nvidia-utils-beta' ] \
              || [ "${{ matrix.repo_name }}" = 'tk-git' ] \
              || [ "${{ matrix.repo_name }}" = 'mesa-tkg-git' ] \
              || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ] \
@@ -130,17 +133,10 @@ jobs:
              || [ "${{ matrix.repo_name }}" = 'spirv-headers-git' ] \
              || [ "${{ matrix.repo_name }}" = 'fcitx5-qt-git' ] \
              || [ "${{ matrix.repo_name }}" = 'mpv-git' ] \
-             || [ "${{ matrix.repo_name }}" = 'wireplumber-git' ] \
              || [ "${{ matrix.repo_name }}" = 'ffmpeg-full-git' ]; then
             # mpv-git 點名掛源（2026-10-28）：它的 depends 有裸名 libplacebo，同步庫那顆
             # 只有 7.360.1 而 mpv 的 meson 閘門要 >= 7.387.0；要先查得到/裝得上本倉的
             # libplacebo-git，plan 的依賴閘門與「換 libplacebo」那步才走得通。
-            # wireplumber-git 點名掛源（2026-11-16）：它的 kind 是 artix，
-            # 不在上面的 kde/wayland/aur 名單裡，所以 run 43741115356 的
-            # 「用本倉 spandsp-git 補依賴」那步一開頭就 grep 不到
-            # [junlin03-aur] 而紅（日誌實物：##[error]junlin03-aur 沒掛上）。
-            # 它需要 spandsp-git 提供 libspandsp.so=2-64 才能滿足
-            # checkdepends=(pipewire-audio)，故必須掛源。
             # ffmpeg-full-git 點名掛源（2026-10-28）：plan 步的兄弟依賴閘門
             # （mpeghdec-git/quirc-git/svt-jpeg-xs-git/astc-encoder-git 四顆）靠
             # `pacman -Si` 查 feed；不掛源就恆查無 → 恆跳過 → ffmpeg-full-git
@@ -214,14 +210,8 @@ jobs:
               shiboken6 shiboken6-generator pyside6 python-build python-setuptools
           fi
 
-          # gamemode-git 是 kind:artix（跑在 Artix 容器）。這裡塞進去的是 **Arch** 的
-          # [multilib]，Artix 鏡像沒有 multilib.db → pacman -Syu 十次全敗
-          # （run 43585469020 實測：multilib downloading... → 連續 10 次失敗）。
-          # Artix 自己的 [lib32] 由下面 kind=artix 那段重寫 pacman.conf 時就開好了，
-          # 所以刻意不把 gamemode-git 列進這個 Arch 專用分支。
           if [ "${{ matrix.kind }}" = 'multilib' ] \
-             || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ] \
-             || [ "${{ matrix.repo_name }}" = 'lib32-nvidia-utils-beta' ]; then
+             || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ]; then
             # spirv-llvm-translator-git 現在多切一顆 lib32-spirv-llvm-translator-git，
             # 而容器預設不啟用 [multilib]（run #471 實測 target not found: lib32-spirv-tools）。
             # lib32-* 需要 [multilib] 倉：容器預設只有 core/extra 且 [multilib] 是註解掉的。
@@ -378,6 +368,8 @@ jobs:
           fi
 
       - name: 初始化容器源與建置環境（tkg／artix／makepkg，接上一歩）
+        env:
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
@@ -503,26 +495,13 @@ jobs:
                       galaxy-goblins galaxy-gremlins lib32-goblins lib32-gremlins; do
               printf '\n[%s]\nServer = https://mirror.nju.edu.cn/artixlinux/%s/os/$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/%s/os/$arch\nServer = https://artix.wheaton.edu/repos/%s/os/$arch\n' "$_r" "$_r" "$_r" "$_r" >> /etc/pacman.conf
             done
-            # system / world / galaxy 用 Include 走鏡像清單，與目標機一致。
-            # ⚠️ 但要在 Include 前顯式放 nju／tuna（run 43820993097 實測）：容器
-            # mirrorlist 裡混著 pkgbuild.com（Arch 的 CDN，對 Artix 倉**從來就是
-            # 404**，實測 fastly/geo 兩顆全 404、nju 200），pacman 對同一鏡像
-            # 連錯 3 次就整輪放棄 → 5 次重試全滅。顯式 Server 按序嘗試、排最前，
-            # mirrorlist 裡的壞條目就輪不到。
-            for _r in system world galaxy; do
-              printf '\n[%s]\nServer = https://mirror.nju.edu.cn/artixlinux/%s/os/$arch\nServer = https://mirrors.tuna.tsinghua.edu.cn/artixlinux/%s/os/$arch\nInclude = /etc/pacman.d/mirrorlist\n' "$_r" "$_r" "$_r" >> /etc/pacman.conf
+            # system / world / galaxy / lib32 用 Include 走鏡像清單，與目標機一致
+            for _r in system world galaxy lib32; do
+              printf '\n[%s]\nInclude = /etc/pacman.d/mirrorlist\n' "$_r" >> /etc/pacman.conf
             done
-            # [lib32]：Artix 官方 mirrorlist 無 wheaton；wheaton 是唯一還留著 lib32-dbus
-            # 的鏡像（1.16.4-1，實測 HTTP 200），Artix [lib32] 已裁掉（run 43688123660）。
-            # wheaton 排第一，沒有的包落回 mirrorlist。
-            printf '\n[lib32]\nServer = https://artix.wheaton.edu/repos/lib32/os/$arch\nInclude = /etc/pacman.d/mirrorlist\n' >> /etc/pacman.conf
             # libevent 全鏈與宿主同用 Artix，重寫設定後仍須保留自有依賴來源。
-            # ⚠️ wireplumber-git 也要（run 43813823163 實測）：artix kind 的 job
-            # 會在這裡**整個重寫** /etc/pacman.conf，把「初始化容器環境」步掛上的
-            # [junlin03-aur] 抹掉；這個 case 是重寫後唯一補回掛載的地方，
-            # ab884f6 只改了前面的掛源清單、沒改這裡，等於白掛。
             case '${{ matrix.repo_name }}' in
-              libevent-git|links-git|unbound-git|fstrm-git|libverto-git|wireplumber-git)
+              libevent-git|links-git|unbound-git|fstrm-git|libverto-git)
                 printf '\n[junlin03-aur]\nSigLevel = Never\nServer = https://github.com/${{ github.repository }}/releases/download/current-repo\n' >> /etc/pacman.conf
                 ;;
             esac
@@ -634,7 +613,6 @@ jobs:
               ;;
           esac
 
-
           # 并行编译 + 多线程压缩。原来只在「非 CachyOS」分支里改 makepkg.conf，
           # 结果最重的 CachyOS 内核是单线程编译的，必然撞 6 小时上限。
           # 直接追加到文件末尾，比 sed 匹配注释行可靠（上游默认值改过好几次）。
@@ -649,15 +627,29 @@ jobs:
             # OPTIONS+= 而不是直接赋值，保留上游其余默认项（strip/lto/purge 等）。
             echo 'OPTIONS+=(!debug)'
           } >> /etc/makepkg.conf
-          # rhash 上游 Makefile 的 install 目標同時掛 build-install-binary
-          # （內含 `+$(MAKE) install-binary`）與 install-symlinks（依賴
-          # install-binary）——-j 下同一條 `install rhash` 並發跑兩次，
-          # 輸家報 "cannot create regular file …: File exists" 整個
-          # package() 判紅（run 43683547967 shard3 實測；上游注解自認
-          # "otherwise 'make -j<n>' can fail"）。rhash 體量小，一律 -j1。
-          if [ "${{ matrix.repo_name }}" = 'rhash-git' ]; then
-            echo 'MAKEFLAGS="-j1"' >> /etc/makepkg.conf
-          fi
+
+          # ---- 六最（v2.27 用戶鐵律：znver3/O3/LTO/PGO，遇衝突修源頭不降旗標）----
+          # 移植自 lfs-pacman/feed-bot：全包 LTO 硬幹 + 完整 znver3 旗標 + 編譯器外掛。
+          sed -i 's/!lto/lto/g' /etc/makepkg.conf
+          grep -qE '^OPTIONS=\(.*lto' /etc/makepkg.conf || echo 'OPTIONS+=(lto)' >> /etc/makepkg.conf
+          # 本 workflow 無 checkout step（見 mpv-git 註解）， ci/ 不在容器裡。
+          # 從本倉庫 master 的 raw URL 抓六最配置（與 mpv-git 同手法），重試 3 次。
+          _ci_base="https://raw.githubusercontent.com/$GH_REPO/master/ci"
+          for _try in 1 2 3; do
+            curl -sfL --retry 2 "$_ci_base/makepkg-flags.conf" -o /tmp/makepkg-flags.conf \
+              && curl -sfL --retry 2 "$_ci_base/gcc-znver3.sh" -o /tmp/gcc-znver3.sh \
+              && [ -s /tmp/makepkg-flags.conf ] && [ -s /tmp/gcc-znver3.sh ] && break
+            [ "$_try" = 3 ] && { echo "::error::抓不到 ci/ 六最配置（raw URL 3 次失敗）"; exit 1; }
+            sleep $((_try * 10))
+          done
+          cat /tmp/makepkg-flags.conf >> /etc/makepkg.conf
+          sed -i 's/,--as-needed//g; s/ --as-needed//g' /etc/makepkg.conf
+          sed -i 's|^LDFLAGS="|LDFLAGS="-lm |' /etc/makepkg.conf
+          install -d /usr/local/bin
+          install -m755 /tmp/gcc-znver3.sh /usr/local/bin/gcc-znver3
+          for c in gcc g++ cc c++; do ln -sf /usr/local/bin/gcc-znver3 "/usr/local/bin/$c"; done
+          echo "### 六最: $(grep -m1 CFLAGS= /etc/makepkg.conf)" >> "$GITHUB_STEP_SUMMARY"
+          gcc -march=znver3 -dM -E - </dev/null | grep -m1 __znver3__ >> "$GITHUB_STEP_SUMMARY" 
           # makepkg 用 curl 下载源码，kernel.org 大文件常断连；
           # 设 120s 超时 + 3 次自动重试，再结合下游重试循环足够稳定
           echo 'CURL_OPTIONS="--connect-timeout 30 --max-time 300 --retry 5 --retry-delay 15"' >> /etc/makepkg.conf
@@ -676,46 +668,6 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: lib32 斷鏈預裝（gamemode-git／gstreamer-git／lib32-openal-git）
-        if: matrix.repo_name == 'gamemode-git' || matrix.repo_name == 'gstreamer-git' || matrix.repo_name == 'lib32-openal-git'
-        run: |
-          set -euo pipefail
-          # ── lib32 斷鏈預裝（2026-11-15，run 43633126160 gamemode-git 實測）────
-          # Artix 把一批 lib32 包從 [lib32] 整個裁掉（234→172 顆，goblins/gremlins
-          # 是空殼）。這些 .so 是建置要鏈的、目標機上是歷史安裝，倉庫裝不上就
-          # 從 Arch multilib 直拉包檔 `pacman -Udd`（跳過依賴檢查——Arch 新構建的
-          # 依賴鏈如 lib32-dbus→lib32-systemd 在 Artix 容器解不開，但建置只需要
-          # .so 落地；run 43816326927 gstreamer job 實測 -U 帶依賴檢查必紅）。
-          _arch_ml() {
-            local _p _f
-            for _p in "$@"; do
-              pacman -Q "$_p" >/dev/null 2>&1 && { echo "$_p: 已裝"; continue; }
-              if pacman -S --noconfirm --needed --assume-installed lib32-elogind "$_p"; then
-                echo "$_p: 倉庫安裝 OK"; continue
-              fi
-              echo "::warning::$_p 倉庫裝不上（Artix 已裁或鏡像瞬斷），從 Arch multilib 直拉包檔 -Udd"
-              # ⚠️ 管線賦值必須 || true：set -euo pipefail 下 grep 不命中會讓
-              # 整條管線退出碼 1，賦值語句直接觸發 set -e 殺死腳本，下面的
-              # [ -n ] 防呆根本執行不到（run 43820282668 openal 實測）。
-              _f=$(curl -sfL --max-time 60 "https://mirror.nju.edu.cn/archlinux/multilib/os/x86_64/" \
-                | grep -oE "${_p}-[^\"]*\.pkg\.tar\.zst" | sort -V | tail -1) || true
-              [ -n "$_f" ] || { echo "::error::Arch multilib 目錄裡找不到 $_p 包檔"; exit 1; }
-              curl -sfL --max-time 180 -o "/tmp/${_f}" \
-                "https://mirror.nju.edu.cn/archlinux/multilib/os/x86_64/${_f}" \
-                || { echo "::error::下載 $_f 失敗"; exit 1; }
-              pacman -Udd --noconfirm "/tmp/${_f}" \
-                || { echo "::error::$_p 直裝包檔失敗"; exit 1; }
-              echo "$_p: 直裝 OK（$_f）"
-            done
-          }
-          case '${{ matrix.repo_name }}' in
-            gamemode-git|gstreamer-git) _arch_ml lib32-dbus ;;
-            # 只留還存在於倉庫的兩顆（fluidsynth/portaudio/jack 已從 Arch
-            # multilib 與 Artix [lib32] 整個消失，run 43822343141 實測連
-            # Arch multilib 目錄都沒有，_arch_ml 直拉必紅）；makedepends
-            # 也已同步摘掉，cmake 探測不到自動關 backend。
-            lib32-openal-git)           _arch_ml lib32-alsa-lib lib32-libpulse ;;
-          esac
       - name: 還原 bwrap 權限設定並留證據（gstreamer-git 专用）
         if: matrix.repo_name == 'gstreamer-git'
         run: |
@@ -930,7 +882,7 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/nashira-git"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr25|serein-git|qt6ct-git|brotli-git|nodejs-git|nodejs-better-sqlite3-git|npm-git|pnpm-git|fcitx5-chinese-addons-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|flex-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git|htop-git|chafa-git|xtitle-git|downgrade-git|pacman-git|meson-git|python2-git|qt4-git|expac-git|shiboken6-git|zcode-ce-git|openvpn|tcpdump|libplacebo-git|omnirush-cli|libjpeg-turbo-git|lib32-libjpeg-turbo-git|svt-jpeg-xs-git)
+            free-claude-code-git|openai-codex-git|alacritty-sixel-git|bash-git|nodejs-better-sqlite3|qalculate-gtk-git|ttf-jetbrains-maple-mono-nf-xx-xx-xx|adguardhome-git|tar-git|make-git|cmake-git|jq-git|multitail-git|amd-debug-tools-git|nano-git|pi-coding-agent-git|fsearch-git|lmdb-git|jbr25|serein-git|qt6ct-git|brotli-git|nodejs-git|nodejs-better-sqlite3-git|npm-git|pnpm-git|fcitx5-chinese-addons-git|go-git|fzf-git|git-lfs-git|gdu-git|gh-git|glab-git|actionlint-git|warp-plus-git|nwg-look-git|nvidia-utils-openrc|pysolfc-git|gstreamer-git|lib32-glib2-git|lib32-glib2|lib32-gstreamer-git|linux-firmware-nfp-git|librime-git|tcl-git|tk-git|ccache-git|spirv-llvm-translator-git|lib32-llvm-git|spirv-headers-git|spirv-tools-git|doxygen-git|tty-solitaire-git|opencc-git|crave|topgrade-git|xorg-server-git|afdko-git|htop-git|chafa-git|xtitle-git|downgrade-git|pacman-git|meson-git|python2-git|qt4-git|expac-git|shiboken6-git|zcode-ce-git|openvpn|tcpdump|libplacebo-git|omnirush-cli|libjpeg-turbo-git|lib32-libjpeg-turbo-git|svt-jpeg-xs-git)
               # 這批包為什麼走本倉目錄版（逐包理由）：見 docs/in-tree-packages.md。
               # 那個 step 的表達式有 21000 字元上限、註解也計入，加包只加清單、
               # 說明寫進該檔，別寫回這裡。
@@ -1056,24 +1008,14 @@ jobs:
               mkdir pkg_dir
               base="https://raw.githubusercontent.com/${{ github.repository }}/master/${{ matrix.repo_name }}"
               curl -sfL "$base/PKGBUILD" -o "pkg_dir/PKGBUILD" ;;
-            nvidia-utils-beta|nvidia-beta-dkms|lib32-nvidia-utils-beta)
+            nvidia-utils-beta|nvidia-beta-dkms)
               # NVIDIA -beta：來源就是 AUR（Artix／Arch 全部啟用的倉都沒有 -beta 這條，
-              # 實測 archlinux.org API 404）。三條各是一個 pkgbase；nvidia-utils-beta 一顆
+              # 實測 archlinux.org API 404）。兩條各是一個 pkgbase；nvidia-utils-beta 一顆
               # pkgbase 產三顆 split（nvidia-utils-beta／opencl-nvidia-beta／
-              # nvidia-settings-beta），lib32-nvidia-utils-beta 一顆 pkgbase 產兩顆 split
-              # （lib32-nvidia-utils-beta／lib32-opencl-nvidia-beta），所以這裡**只准按
-              # pkgbase clone**——拿 split 的包名來 clone 會 404。逐包理由與依賴／換代
-              # 分析見 docs/in-tree-packages.md 的 NVIDIA -beta 段（這個 step 的說明不寫
-              # 在 workflow 裡）。
+              # nvidia-settings-beta），所以這裡**只准按 pkgbase clone**——拿 split 的包名
+              # 來 clone 會 404。逐包理由與依賴／換代分析見 docs/in-tree-packages.md 的
+              # NVIDIA -beta 段（這個 step 的說明不寫在 workflow 裡）。
               _aur_clone pkg_dir "https://aur.archlinux.org/${{ matrix.repo_name }}.git" ;;
-            linux-zen1th)
-              # zen1th 整合分支版 PKGBUILD 維護在本倉 master 的 pkgbuild/ 目錄
-              # （不是 zen1th 分支——那是內核源碼本身）。source 是
-              # git+…#branch=zen1th，pkgver() 現算，config 用倉內
-              # config/zen1th-x86_64.baseconfig，cjktty 補丁已合入整合分支。
-              mkdir pkg_dir
-              curl -sfL "https://raw.githubusercontent.com/${{ github.repository_owner }}/linux-zen1th/master/pkgbuild/PKGBUILD" \
-                -o pkg_dir/PKGBUILD ;;
             *)
               # AUR 包或本仓库维护的 -git 包：
               # sway/wlroots/waybar/i3status 家族：-git 取 AUR、穩定版取 Arch
@@ -1403,18 +1345,6 @@ jobs:
 
             *) : ;;
           esac
-      - name: linux-zen1th 補 pahole 進 makedepends（獨立 step——大 step 已貼著 21000 表達式上限）
-        if: matrix.repo_name == 'linux-zen1th'
-        run: |
-          set -euo pipefail
-          # DEBUG_INFO_BTF 在 Kconfig 裡 depends on PAHOLE_VERSION >= 122
-          # （lib/Kconfig.debug 實查），而 pahole-version.sh 對不存在的
-          # pahole 回 0 → olddefconfig 靜默把 BTF 丟掉 → PKGBUILD 的
-          # 開機自檢「config 自檢失敗：CONFIG_DEBUG_INFO_BTF=y」直接紅
-          # （run 42815488315 實測）。PKGBUILD 的 makedepends 沒列 pahole
-          # （本機裝了所以本地編譯沒事），補進去讓 makepkg -s 裝上。
-          printf "\n%s\n" "makedepends+=('pahole')" >> pkg_dir/PKGBUILD
-          tail -2 pkg_dir/PKGBUILD
       - name: i3lock-color-git 的 fancy×color 合一（獨立 step——大 step 已貼著 21000 表達式上限）
         if: matrix.repo_name == 'i3lock-color-git'
         run: |
@@ -1457,366 +1387,6 @@ jobs:
             || { echo "::error::i3lock-fancy 包裝腳本沒注入進 PKGBUILD"; exit 1; }
           grep -q 'i3lock-fancy' pkg_dir/PKGBUILD \
             || { echo "::error::provides 行沒改寫成功（AUR 版格式變了？）"; exit 1; }
-
-      - name: 逐包 AUR 上游小毛病修復（獨立 step——run 塊無表達式，不受 21000 上限）
-        env:
-          REPO_NAME: ${{ matrix.repo_name }}
-        run: |
-          set -euo pipefail
-          F="pkg_dir/PKGBUILD"
-          # in-tree 包（本倉維護，已修好）跳過 AUR 手術——AUR 版的 sed 對不上 in-tree 內容
-          if grep -q '本倉 in-tree 維護版' "$F" 2>/dev/null; then
-            echo "in-tree 包，跳過 AUR 手術"
-            exit 0
-          fi
-          case "$REPO_NAME" in
-            kvazaar-git)
-              # 上游 2026-11 的功能推送裡，加密路徑新增的 kvz_intra_get_dir_luma_predictor_encry
-              # 沒進 multilib_rename.h 的改名清單（該檔由 tools/gen_multilib_rename.py 生成，
-              # 維護者生成時沒開 cryptopp，加密閘門的符號全部缺席）→ intra.c 按 8/10/12-bit
-              # 編譯三份，10/12-bit 物件與 8-bit 撞 multiple definition
-              # （run 43847562517 實測：libkvazaar_10bit_la-intra.o vs libkvazaar_la-intra.o）。
-              # 修法：prepare() 末尾把該符號補進改名清單（grep 防重入，冪等）。
-              sed -i '/autoreconf -fi kvazaar/a\    grep -q "kvz_intra_get_dir_luma_predictor_encry" kvazaar/src/multilib_rename.h || sed -i "/^#define kvz_intra_get_dir_luma_predictor /a #define kvz_intra_get_dir_luma_predictor_encry KVZ_MULTILIB_NAME(kvz_intra_get_dir_luma_predictor_encry)" kvazaar/src/multilib_rename.h' "$F"
-              grep -q 'kvz_intra_get_dir_luma_predictor_encry' "$F" || { echo "::error::kvazaar multilib 改名補丁沒注入"; exit 1; } ;;
-            iptables-git)
-              sed -i 's|rm "include/linux/types.h"|rm -f "include/linux/types.h"|' "$F"
-              grep -q 'rm -f "include/linux/types.h"' "$F" || { echo "::error::iptables rm -f 沒改到"; exit 1; } ;;
-            fwupd-git)
-              sed -i '/-D plugin_powerd=disabled/d' "$F"
-              ! grep -q 'plugin_powerd' "$F" || { echo "::error::fwupd powerd 沒刪到"; exit 1; }
-              # 上游 meson 已移除 launchd 選項（macOS 專用）；AUR 的 -D launchd=disabled
-              # 會直接 Unknown option（run 43267320293 實測）
-              sed -i '/-D launchd=disabled/d' "$F"
-              ! grep -q 'launchd' "$F" || { echo "::error::fwupd launchd 沒刪到"; exit 1; }
-              # fwupd 2.2.1 起 meson 頂層就 add_languages('rust')（硬性要求）；
-              # AUR makedepends 沒列 rust → 容器沒 rustc，meson setup 直接
-              # Unknown compiler(s): [['rustc']]（run 43433195787 實測）
-              printf '\nmakedepends+=('"'"'rust'"'"')\n' >> "$F"
-              grep -q "'rust'" "$F" || { echo "::error::fwupd rust 沒加到"; exit 1; }
-              # meson.build:877 起 TUI 是硬性需求，關不掉：容器沒有 python-textual
-              # 的 metadata 就直接 "Feature tui cannot be disabled: TUI support
-              # requires the Python Textual module >= 0.50"（run 43585469020 實測）。
-              # Arch extra 已有 python-textual 8.2.8，補進 makedepends 讓 makepkg -s 裝到。
-              printf '\nmakedepends+=('"'"'python-textual'"'"')\n' >> "$F"
-              grep -q 'python-textual' "$F" || { echo "::error::fwupd python-textual 沒加到"; exit 1; }
-              # --auto-features enabled 會把 umockdev_tests 升成 enabled，但
-              # meson.build:951 的 .require(dbusmock.returncode()==0) 在缺
-              # python-dbusmock 時報 "Feature ... cannot be disabled"（#55 實測）。
-              sed -i '/-D supported_build=enabled/a\        -D umockdev_tests=disabled \\' "$F"
-              grep -q 'umockdev_tests=disabled' "$F" || { echo "::error::fwupd umockdev_tests 沒關掉"; exit 1; }
-              # plugins/uefi-capsule/meson.build:93 的 po/test-deps 要 import gi；
-              # 缺 gi 就 "missing dependency python gobject introspection"
-              # （run 43600513319 實測）。pango／python-cairo 已由既有 makedepends 裝到。
-              printf '\nmakedepends+=('"'"'python-gobject'"'"')\n' >> "$F"
-              grep -q 'python-gobject' "$F" || { echo "::error::fwupd python-gobject 沒加到"; exit 1; }
-              # 上游新 i2c 外掛也往 modules-load.d 裝 fwupd-i2c.conf
-              # （data/meson.build:188 install_dir=systemd_modules_load_dir）；
-              # AUR 的「rm fwupd-msr.conf + rmdir」就 Directory not empty
-              # （run 43617345723 實測）。AUR 意圖只是「msr 模組已內建才刪」，
-              # i2c.conf 屬正常內容應保留 → 只刪 rmdir 行。
-              sed -i '/rmdir "${pkgdir}"\/usr\/lib\/modules-load.d/d' "$F"
-              ! grep -q 'rmdir "${pkgdir}"/usr/lib/modules-load.d' "$F" || { echo "::error::fwupd rmdir 沒刪到"; exit 1; }
-              # 上游 TUI 自帶 pytest 環境敏感：43620980246 實測 191/192 OK、僅
-              # fwupdtui-test FAIL（30 分鐘前 43617345723 的 check 是過的，
-              # 上游 git 側自己變動）。依單包降級慣例放行測試，其餘
-              # 191 項上游測試不攔出庫。
-              # 注意：不能用 options+=('!check')——容器 makepkg 報
-              # "unknown option '!check'"（run 43623633632 實測，連 makepkg -g
-              # 都炸、updpkgsums 重試 5 次全滅）。改追加空 check() 覆蓋：
-              # bash 後定義覆蓋前定義，任何 makepkg 版本都吃。
-              printf '\ncheck() { :; }  # 上游 TUI pytest 環境敏感，單包降級\n' >> "$F"
-              grep -q 'check() { :; }' "$F" || { echo "::error::fwupd check 覆蓋沒加到"; exit 1; } ;;
-            xfce4-settings-git)
-              sed -i '/-D upower=enabled/d' "$F"
-              ! grep -q 'upower=enabled' "$F" || { echo "::error::xfce4-settings upower 沒刪到"; exit 1; } ;;
-            gjs-git)
-              sed -i 's/-D installed_tests=false/-D installed_tests=false -D skip_gtk_tests=true/' "$F"
-              grep -q 'skip_gtk_tests=true' "$F" || { echo "::error::gjs skip_gtk_tests 沒加到"; exit 1; }
-              # installed-tests 需要 wat2wasm（wabt 提供）；AUR makedepends 沒有
-              printf '\nmakedepends+=('"'"'wabt'"'"')\n' >> "$F"
-              grep -q 'wabt' "$F" || { echo "::error::gjs wabt 沒加到"; exit 1; } ;;
-            lxsession-git)
-              sed -i '/autoreconf -fi/i\  mkdir -p m4' "$F"
-              grep -q 'mkdir -p m4' "$F" || { echo "::error::lxsession mkdir m4 沒加到"; exit 1; } ;;
-            vala-git)
-              sed -i 's|./configure --prefix=/usr|GI_GIRDIR=/usr/share/gir-1.0 ./configure --prefix=/usr|' "$F"
-              grep -q 'GI_GIRDIR=/usr/share/gir-1.0 ./configure' "$F" || { echo "::error::vala GI_GIRDIR 沒加到"; exit 1; } ;;
-            parted-git)
-              sed -i "s/makedepends=('pkg-config'/makedepends=('bc' 'pkg-config'/" "$F"
-              # bootstrap 需要 wget（AUR makedepends 沒有）
-              printf '\nmakedepends+=('"'"'wget'"'"')\n' >> "$F"
-              grep -q "makedepends=('bc'" "$F" || { echo "::error::parted bc 沒加到"; exit 1; }
-              grep -q 'wget' "$F" || { echo "::error::parted wget 沒加到"; exit 1; } ;;
-            mangohud-git)
-              sed -i "s/'libxrandr'/'libxrandr' 'libxi'/;s/'libx11'/'libx11' 'libxi'/" "$F"
-              # MangoHud 不鏈 libsystemd（meson.build 只用 dbus-1）；
-              # depends 的 systemd-libs 是多餘的，直接拿掉（libelogind 不存在）
-              sed -i "/'systemd-libs'/d" "$F"
-              grep -q "'libxi'" "$F" || { echo "::error::mangohud libxi 沒加到"; exit 1; }
-              ! grep -q 'systemd-libs' "$F" || { echo "::error::mangohud systemd-libs 殘留"; exit 1; } ;;
-            kdeconnect-git)
-              sed -i 's/^depends=(dbus/depends=(dbus libei/' "$F"
-              grep -q '^depends=(dbus libei' "$F" || { echo "::error::kdeconnect libei 沒加到"; exit 1; } ;;
-            upower-git)
-              sed -i 's/^depends=(libimobiledevice libgudev)/depends=(libimobiledevice libgudev polkit)/' "$F"
-              grep -q 'libgudev polkit)' "$F" || { echo "::error::upower polkit 沒加到"; exit 1; } ;;
-            xdg-desktop-portal-git)
-              sed -i '/^  pipewire$/a\  wireplumber' "$F"
-              # meson 需要 gst-inspect 與 wavparse 插件（feature test 不可關）；
-              # wavparse 由 gst-plugins-good 提供（gst-plugins-base 沒有）
-              printf '\nmakedepends+=('"'"'gst-plugins-good'"'"')\n' >> "$F"
-              grep -q '^  wireplumber$' "$F" || { echo "::error::xdg-desktop-portal wireplumber 沒加到"; exit 1; }
-              grep -q 'gst-plugins-good' "$F" || { echo "::error::xdg-desktop-portal gst-plugins-good 沒加到"; exit 1; } ;;
-            usbutils-git)
-              sed -i "s/'hwids'/'hwdata'/" "$F"
-              # 上游已換 meson（autogen.sh 直接跑 meson）；AUR 的 ./configure
-              # 與 make 行會直接紅（run 43267320293 實測 line 34 ./configure
-              # No such file）。整段 build() 換成 meson，package() 改 meson install。
-              awk '
-                /^build\(\) \{/ { print "build() {"; print "  cd usbutils"; print "  arch-meson . build"; print "  meson compile -C build"; print "}"; skip=1; next }
-                skip && /^\}/ { skip=0; next }
-                !skip { print }
-              ' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
-              sed -i 's|make DESTDIR="$pkgdir" install|DESTDIR="$pkgdir" meson install -C build|' "$F"
-              # arch-meson 由 meson 包提供；AUR makedepends 只有 libusb
-              printf '\nmakedepends+=('"'"'meson'"'"')\n' >> "$F"
-              grep -q 'arch-meson . build' "$F" || { echo "::error::usbutils build 沒改到"; exit 1; }
-              ! grep -q './configure' "$F" || { echo "::error::usbutils ./configure 殘留"; exit 1; }
-              grep -q "'meson'" "$F" || { echo "::error::usbutils meson 沒加到"; exit 1; } ;;
-            nemo-git)
-              sed -i 's|data/nemo.desktop.in|data/nemo.desktop|g' "$F"
-              # meson.build 需要 gstreamer-pbutils-1.0.pc（AUR makedepends 沒有）；
-              # Arch 由 gst-plugins-base-libs 提供（gstreamer 本體不含 pbutils）
-              sed -i "s/makedepends=(git meson samurai gobject-introspection intltool libgsf glib2-devel)/makedepends=(git meson samurai gobject-introspection intltool libgsf glib2-devel gst-plugins-base-libs)/" "$F"
-              ! grep -q 'nemo.desktop.in' "$F" || { echo "::error::nemo desktop.in 沒改到"; exit 1; }
-              grep -q 'gst-plugins-base-libs' "$F" || { echo "::error::nemo gst-plugins-base-libs 沒加到"; exit 1; } ;;
-            okular-git)
-              # ar 的 man docbook 把程式名也翻成阿拉伯文，meinproc 產出「أوكلار.1」，
-              # cmake install 卻寫死找 okular.1（run 43399305874 實測：
-              # "Note: Writing أوكلار.1" → package() 報 po/ar/docs/okular/okular.1
-              # No such file）。build 後把各語言目錄實際產出的 .1 補成 okular.1。
-              sed -i '/^  cmake --build build$/a\  # KDE 翻譯把 man 程式名也翻了（ar：أوكلار.1），install 寫死找 okular.1，缺就補\n  for _d in build/po/*/docs/okular; do\n    [ -d "$_d" ] || continue\n    [ -f "$_d/okular.1" ] && continue\n    _m=$(find "$_d" -maxdepth 1 -name "*.1" -type f | head -n1)\n    [ -n "$_m" ] && cp "$_m" "$_d/okular.1"\n  done' "$F"
-              grep -q 'docs/okular; do' "$F" || { echo "::error::okular man 檔名修復沒加到"; exit 1; } ;;
-            nvme-cli-git)
-              sed -i "s/-D docs='man'/-D docs='false' -D nvme-discoverd=disabled/" "$F"
-              # nvme-discoverd 是唯一需要 libsystemd >=253 的元件（meson.build:460-469）；
-              # 關掉它，產物就不會 NEEDED libsystemd.so.0（Artix 沒這顆 .so，裝上即死）。
-              # depends 的 libsystemd 一併拿掉（不再需要）。
-              sed -i "s/depends=('util-linux' 'libsystemd')/depends=('util-linux')/" "$F"
-              sed -i "s/makedepends=('systemd' 'meson' 'git' 'swig')/makedepends=('meson' 'git' 'swig')/" "$F"
-              grep -q "nvme-discoverd=disabled" "$F" || { echo "::error::nvme-cli discoverd 沒關掉"; exit 1; }
-              ! grep -q "'libsystemd'" "$F" || { echo "::error::nvme-cli libsystemd 依賴殘留"; exit 1; } ;;
-            tcpdump-git)
-              sed -i '/^  \.\/configure/i\  ./autogen.sh' "$F"
-              grep -q './autogen.sh' "$F" || { echo "::error::tcpdump autogen 沒加到"; exit 1; } ;;
-            thunar-git)
-              # session-management 需要 libxfce4session-client-1.pc（xfce4-session-git 提供，
-              # 已在本倉 feed）。補進 makedepends 讓 meson auto 偵測到就開；不砍功能。
-              # xfce4-session-git 的 meson 版本是 4.21.2-dev，夠不夠 >=4.21.2 由 meson 判，
-              # 不夠就 auto 關（不報錯），不是我砍的。
-              printf '\nmakedepends+=('"'"'xfce4-session-git'"'"')\n' >> "$F"
-              # meson.build 需要 vte-2.91.pc（AUR makedepends 沒有）
-              printf '\nmakedepends+=('"'"'vte3'"'"')\n' >> "$F"
-              # meson.build 需要 libcanberra.pc（AUR makedepends 沒有）
-              printf '\nmakedepends+=('"'"'libcanberra'"'"')\n' >> "$F"
-              grep -q 'xfce4-session-git' "$F" || { echo "::error::thunar makedepends 沒補到 xfce4-session-git"; exit 1; }
-              grep -q 'vte3' "$F" || { echo "::error::thunar vte3 沒加到"; exit 1; }
-              grep -q 'libcanberra' "$F" || { echo "::error::thunar libcanberra 沒加到"; exit 1; } ;;
-            openvpn-git)
-              sed -i 's#patch -Np1 < ../0001-unprivileged.patch#patch -Np1 < ../0001-unprivileged.patch || true#' "$F"
-              # Artix 沒有 libsystemd：--enable-systemd 會直接 configure 紅
-              # （run 實測 "systemd enabled but libsystemd is missing"）。
-              # openvpn 的 --enable-systemd 只是 sd_notify（Type=notify），
-              # elogind 不提供 → 直接關掉，depends 的 systemd-libs/libsystemd.so 一併拿掉。
-              sed -i 's/--enable-systemd/--disable-systemd/' "$F"
-              sed -i "s/ 'systemd-libs' 'libsystemd.so'//" "$F"
-              sed -i "s/'systemd' //" "$F"
-              # configure 需要 libnl-genl-3.0.pc >= 3.4.0（DCO）；AUR makedepends 沒有
-              printf '\nmakedepends+=('"'"'libnl'"'"')\n' >> "$F"
-              grep -q '0001-unprivileged.patch || true' "$F" || { echo "::error::openvpn patch || true 沒加到"; exit 1; }
-              grep -q -- '--disable-systemd' "$F" || { echo "::error::openvpn systemd 沒關掉"; exit 1; }
-              ! grep -q 'systemd-libs' "$F" || { echo "::error::openvpn systemd-libs 殘留"; exit 1; }
-              grep -q 'libnl' "$F" || { echo "::error::openvpn libnl 沒加到"; exit 1; } ;;
-            tesseract-data-*-git)
-              sed -i 's/ frk / /' "$F"
-              ! grep -q ' frk ' "$F" || { echo "::error::tesseract frk 沒刪到"; exit 1; } ;;
-            sccache-git)
-              sed -i 's/cargo build --release --all-features/cargo build --release/' "$F"
-              # aws-lc-sys 需要 cmake 建 aws-lc C 庫；AUR makedepends 只有 git/rust，
-              # 缺 cmake 時 build script 靜默產出空庫 → 連結時 aws_lc_0_47_0_* 全 undefined
-              sed -i "s/makedepends=('git' 'rust')/makedepends=('git' 'rust' 'cmake')/" "$F"
-              # 強制走 CmakeBuilder：CcBuilder 路徑在 CI 實測產出的
-              # libaws_lc_0_47_0_crypto.a 沒被 cargo 帶進最終連結
-              # （link line 有 -L .../aws-lc-sys-*/out 卻沒有 -laws_lc_0_47_0_crypto）。
-              sed -i 's/cargo build --release/export AWS_LC_SYS_CMAKE_BUILDER=1 \&\& cargo build --release/' "$F"
-              # makepkg CFLAGS 的 -flto 會被 CMake 吃進 CMAKE_C_FLAGS：GCC slim-LTO
-              # 物件 nm 看得到符號、ld.lld 抽不出機器碼 → aws_lc_0_47_0_* 全 undefined
-              # （run 43433195787 實測；本地 CFLAGS=-O2 -flto=auto 完整復現，linutil 同病同修）。
-              printf '%s\n' \
-                '_wb_flto_filter() {' \
-                '  export CFLAGS="$(printf '"'"'%s '"'"' ${CFLAGS:-} | sed -E '"'"'s/-flto[^ ]*//g'"'"')"' \
-                '  export CXXFLAGS="$(printf '"'"'%s '"'"' ${CXXFLAGS:-} | sed -E '"'"'s/-flto[^ ]*//g'"'"')"' \
-                '}' >> "$F"
-              sed -i 's/export AWS_LC_SYS_CMAKE_BUILDER=1/_wb_flto_filter \&\& export AWS_LC_SYS_CMAKE_BUILDER=1/' "$F"
-              grep -q '_wb_flto_filter' "$F" || { echo "::error::sccache flto filter 沒注入"; exit 1; }
-              ! grep -q -- '--all-features' "$F" || { echo "::error::sccache all-features 沒刪到"; exit 1; }
-              grep -q "'cmake'" "$F" || { echo "::error::sccache cmake 沒加到"; exit 1; }
-              grep -q 'AWS_LC_SYS_CMAKE_BUILDER=1' "$F" || { echo "::error::sccache CMAKE_BUILDER 沒加到"; exit 1; }
-              # 上面把 --all-features 拿掉後 sccache-dist 不再被編出來，但 AUR 的
-              # package() 仍無條件 install 它 → "install: cannot stat
-              # 'target/release/sccache-dist'"（run 43585469020 實測）。改成存在才裝：
-              # 日後若恢復 all-features，這顆仍會自動進包，不砍功能。
-              sed -i 's|install -D target/release/sccache-dist -t "\$pkgdir"/usr/bin|[ -f target/release/sccache-dist ] \&\& install -D target/release/sccache-dist -t "\$pkgdir"/usr/bin|' "$F"
-              grep -Fq '[ -f target/release/sccache-dist ]' "$F" || { echo "::error::sccache-dist 條件化沒改到"; exit 1; } ;;
-            gvfs-git)
-              sed -i 's/,google}/}/' "$F"
-              sed -i "s/'libsoup'/'libsoup3'/" "$F"
-              sed -i "s/'libgdata' //" "$F"
-              sed -i "/gvfs-google: Google Drive support/d" "$F"
-              sed -i '/^  _split google \\/,+2d' "$F"
-              sed -i '/^package_gvfs-google-git()/,/^}/d' "$F"
-              ! grep -q 'google' "$F" || { echo "::error::gvfs google 殘留"; exit 1; }
-              grep -q "'libsoup3'" "$F" || { echo "::error::gvfs libsoup3 沒改到"; exit 1; } ;;
-            gamemode-git)
-              # 64 位元：elogind 取代 systemd（Artix 用 elogind；daemon 照常建、
-              # D-Bus service 預設裝到 /usr/share/dbus-1/services）。kind 改 artix
-              # 讓 CI 在 Artix 容器建（Arch 沒有 libelogind）。
-              sed -i 's/-Dwith-systemd-user-unit-dir=\/usr\/lib\/systemd\/user/-Dwith-sd-bus-provider=elogind/' "$F"
-              sed -i "s/'systemd-libs' 'libsystemd.so'/'libelogind' 'libelogind.so'/" "$F"
-              # Artix 容器沒有 dbus-1.pc（meson.build 需要）
-              sed -i "s/  'libinih'/  'libinih'\n  'dbus'/" "$F"
-              # 32 位元保留（client 函式庫，no-daemon 正確；kind=artix 開 [lib32]）
-              grep -q 'with-sd-bus-provider=elogind' "$F" || { echo "::error::gamemode elogind 沒加到"; exit 1; }
-              grep -q "'libelogind'" "$F" || { echo "::error::gamemode libelogind 依賴沒改到"; exit 1; }
-              grep -q "'dbus'" "$F" || { echo "::error::gamemode dbus 沒加到"; exit 1; }
-              grep -q 'lib32-gamemode-git' "$F" || { echo "::error::gamemode 32 位元被誤刪"; exit 1; }
-              # 32 位元 build 需要 lib32-gcc-libs（libgcc_s.so.1 32 位元版）；
-              # Artix 容器 [lib32] 已開但未預裝（run 43267320293 實測 ld skipping incompatible）
-              # lib32-dbus 同理：build32 設 PKG_CONFIG_PATH=/usr/lib32/pkgconfig，
-              # 但缺 lib32-dbus 時那裡沒有 dbus-1.pc，pkg-config 會退回
-              # /usr/lib/pkgconfig/dbus-1.pc → 把 64 位元 /usr/lib/libdbus-1.so
-              # 餵給 -m32 的 linker → "file in wrong format"（run 43592567544 實測）。
-              # Artix [lib32] 有 lib32-dbus 1.16.4-1，提供
-              # usr/lib32/pkgconfig/dbus-1.pc 與 usr/lib32/libdbus-1.so（已解 lib32.db 核對）。
-              printf '\nmakedepends+=('"'"'lib32-gcc-libs'"'"' '"'"'lib32-dbus'"'"')\n' >> "$F"
-              grep -q 'lib32-gcc-libs' "$F" || { echo "::error::gamemode lib32-gcc-libs 沒加到"; exit 1; }
-              grep -q 'lib32-dbus' "$F" || { echo "::error::gamemode lib32-dbus 沒加到"; exit 1; }
-              # 硬閘：build32 起跑前直接驗 32 位元 dbus-1.pc 真的在，別讓它靜默
-              # 退回 64 位元又產出一顆壞包。分隔符用 # ，因為替換內容含 ||
-              sed -i "s#  export PKG_CONFIG_PATH='/usr/lib32/pkgconfig'#  export PKG_CONFIG_PATH='/usr/lib32/pkgconfig'\n  test -f /usr/lib32/pkgconfig/dbus-1.pc || return 1#" "$F"
-              grep -Fq 'test -f /usr/lib32/pkgconfig/dbus-1.pc' "$F" || { echo "::error::gamemode 32 位元 dbus 硬閘沒加進去"; exit 1; } ;;
-            libfm-gtk2)
-              # AUR 的 depends 寫 "libfm=$pkgver"（=1.4.0），但 Arch 只有 libfm 1.4.1
-              # → 精確版對不上、makepkg -s 直接 target not found。放寬成 >=，
-              # 1.4.x API 相容（pcmanfm-git 的前置）。
-              sed -i 's/"libfm=\$pkgver"/"libfm>=\$pkgver"/' "$F"
-              grep -q '"libfm>=\$pkgver"' "$F" || { echo "::error::libfm-gtk2 libfm 依賴沒放寬"; exit 1; } ;;
-            vapoursynth-git)
-              sed -i '/Makefile\.am/d' "$F"
-              sed -i "s/^  'git'$/  'git'\n  'meson'/" "$F"
-              # meson.build:199 無條件 subproject('glslang')，且 arch-meson 帶
-              # --wrap-mode nodownload → 不先下載 subproject 就直接紅
-              # （run 實測 "Subproject glslang is buildable: NO"）。
-              # 系統 glslang 包沒用（上游刻意用 wrap 釘版本），先 meson subprojects download。
-              awk -v repl='build() {
-            (cd "${srcdir}/vapoursynth" && meson subprojects download)
-            arch-meson "${srcdir}/vapoursynth" "${srcdir}/build"
-            meson compile -C "${srcdir}/build"
-
-            (cd "${srcdir}/vapoursynth/doc"
-              sphinx-build -b html -d _build/doctrees . _build/html
-              sphinx-build -b man -d _build/doctrees . _build/man
-            )
-          }' '
-                /^build\(\) \{/ { print repl; skip=1; next }
-                skip && /^\}/ { skip=0; next }
-                !skip { print }
-              ' "$F" > "$F.tmp" && mv "$F.tmp" "$F"
-              sed -i 's|make -C build DESTDIR="${srcdir}/fakeroot" install|DESTDIR="${srcdir}/fakeroot" meson install -C build|' "$F"
-              sed -i 's|make -C build DESTDIR="${pkgdir}" install|DESTDIR="${pkgdir}" meson install -C build|' "$F"
-              grep -q 'meson subprojects download' "$F" || { echo "::error::vapoursynth subprojects download 沒加到"; exit 1; }
-              grep -q 'arch-meson "${srcdir}/vapoursynth"' "$F" || { echo "::error::vapoursynth build 沒改到"; exit 1; }
-              ! grep -q 'autogen\|configure\|Makefile.am' "$F" || { echo "::error::vapoursynth autotools 殘留"; exit 1; }
-              grep -q "'meson'" "$F" || { echo "::error::vapoursynth meson makedepends 沒加到"; exit 1; } ;;
-            mesa-tkg-git)
-              # mesa main 的 rust bindgen（src/util/rust/meson.build）在 LLVM 24 環境缺 -I：
-              # libutil_rust_bindgen_c 的 include_directories 只有 inc_util，bindgen 產出的
-              # bindgen.rs 找不到 build 目錄的 generated header → 編譯紅（本輪 shard 實測）。
-              # 補 fs.relative_to(build_root, current_source_dir)（fs 已在根 meson.build:36 import）。
-              # range 限定必要：同檔另有 rust.bindgen 帶同字串。上游修好後 sed 匹配不到即 no-op。
-              # 放獨立 step 而非大 case：大 case 已 20694/21000，再塞就炸（budget 實測）。
-              _bg_patch='  sed -i "/^libutil_rust_bindgen_c = static_library(/,/^)/ s|include_directories : inc_util,|include_directories : [inc_util, fs.relative_to(meson.project_build_root(), meson.current_source_dir())],|" src/util/rust/meson.build'
-              awk -v p="$_bg_patch" '$0 ~ /msg2 "Tree cleaned"/ {print; print p; next} {print}' \
-                "$F" > "$F.t" && mv "$F.t" "$F"
-              grep -q 'libutil_rust_bindgen_c' "$F" \
-                || { echo "::error::bindgen -I 補丁沒注入進 prepare()（錨點 msg2 \"Tree cleaned\" 不見了）"; exit 1; } ;;
-            ffmpeg-full-git)
-              # AUR makedepends 寫 amf-headers，但 Arch/AUR 都沒有這個包（只有 amf-headers-git）。
-              # CI 容器無 AMD GPU，AMF 支援無意義 → 移除 --enable-amf 與 amf-headers。
-              sed -i '/--enable-amf/d' "$F"
-              sed -i "/'amf-headers'/d" "$F"
-              ! grep -q 'enable-amf' "$F" || { echo "::error::ffmpeg amf 沒刪到"; exit 1; }
-              ! grep -q 'amf-headers' "$F" || { echo "::error::ffmpeg amf-headers 沒刪到"; exit 1; } ;;
-            linutil-git)
-              # 全部依賴走原始碼直出：不裝系統 tree-sitter 0.26.9（缺
-              # ts_language_is_parseable），也不 link 系統 .so。
-              # 但「移除 RUSTFLAGS」還不夠（run #825 一字不差地又紅）：
-              # rustc 的 link line 裡根本沒有 -ltree-sitter / -ltree-sitter-bash，
-              # cc 在 build script 編出的靜態庫沒被自動帶進最終連結。
-              # 所以改成兩階段：第一遍讓 build script 把 C 原始碼編成 .a
-              # （此遍連結會失敗，忽略），第二遍明確把這兩顆 .a 接進 linker。
-              # 第二遍**不能用全域 RUSTFLAGS**（run #826 實測：會連 proc-macro2 /
-              # quote / libc 的 build script 一起吃到 -C link-arg，全部 linking
-              # failed）→ 改用 cargo rustc --bin，額外 rustflags 只套到最終 bin。
-              # 兩顆 .a 都來自 Cargo.lock 鎖的 0.27.0 / 0.25.1 原始碼，版本一致。
-              # 注意：workspace 根 Cargo.toml 是 virtual manifest（members =
-              # core/tui/xtask），cargo rustc 從根跑必須 -p 指定包，否則報
-              # 「manifest path is a virtual manifest」（run 43404842179 實測）。
-              # linutil bin 屬於 tui 子包（linutil_tui）。
-              sed -i '/^  export RUSTFLAGS=/d' "$F"
-              sed -i "s/ 'tree-sitter' 'tree-sitter-bash'//" "$F"
-              printf '%s\n' \
-                '' \
-                '_wb_linutil_build() {' \
-                '  # makepkg CFLAGS 的 -flto 會被 cc crate 吃進去：GCC slim-LTO' \
-                '  # 物件 nm 看得到符號、ld.lld 卻抽不出機器碼 → 全部 ts_* undefined' \
-                '  # （本地 CFLAGS="-O2 -flto=auto" 完整復現 CI 符號集）。編 C 前濾掉。' \
-                '  export CFLAGS="$(printf '"'"'%s '"'"' ${CFLAGS:-} | sed -E '"'"'s/-flto[^ ]*//g'"'"')"' \
-                '  export CXXFLAGS="$(printf '"'"'%s '"'"' ${CXXFLAGS:-} | sed -E '"'"'s/-flto[^ ]*//g'"'"')"' \
-                '  cargo build --frozen --release --all-features || true' \
-                '  _wb_ts="$(find "$CARGO_TARGET_DIR/release/build" -path "*/out/libtree-sitter.a" -print -quit)"' \
-                '  _wb_tsb="$(find "$CARGO_TARGET_DIR/release/build" -path "*/out/libtree-sitter-bash.a" -print -quit)"' \
-                '  [ -n "$_wb_ts" ] && [ -n "$_wb_tsb" ] || { echo "::error::linutil tree-sitter 靜態庫沒編出來"; exit 1; }' \
-                '  _wb_ts="$(realpath "$_wb_ts")"' \
-                '  _wb_tsb="$(realpath "$_wb_tsb")"' \
-                '  nm "$_wb_ts" 2>/dev/null | grep -q "T ts_parser_new" || { echo "::error::libtree-sitter.a 缺 ts_parser_new 符號"; nm "$_wb_ts" 2>&1 | head -20; exit 1; }' \
-                '  cargo rustc --frozen --release --all-features -p linutil_tui --bin linutil -- -C "link-arg=$_wb_ts" -C "link-arg=$_wb_tsb"' \
-                '}' >> "$F"
-              sed -i 's|^  cargo build --frozen --release --all-features$|  _wb_linutil_build|' "$F"
-              grep -q '_wb_linutil_build' "$F" || { echo "::error::linutil 兩階段 build 沒注入"; exit 1; }
-              ! grep -q 'libtree-sitter.so' "$F" || { echo "::error::linutil 還在 link 系統 tree-sitter"; exit 1; } ;;
-            capnproto-git)
-              # 舊手術對 PKGBUILD sed 一個根本不存在的字串（ASN1_STRING* 宣告
-              # 在上游 c++/src/kj/compat/tls.c++，不在 PKGBUILD），守衛 grep
-              # 必然 abort。移除手術後（run #825）編譯真的跑下去，撞上舊 commit
-              # 與 OpenSSL 3 的 const 不相容：
-              #   tls.c++:1190/1194/1196 invalid conversion from
-              #   'const X509_NAME*' / 'const X509_NAME_ENTRY*' /
-              #   'const ASN1_STRING*' ... [-fpermissive]
-              # 上游 master 已修正宣告，但 AUR 追的是 CI clone 當下的 commit，
-              # 版本會飄 → 用 -fpermissive 讓舊版宣告降為 warning，不改上游碼，
-              # 新版宣告也不受影響。
-              awk '{print} /^build\(\) \{/ && !d {d=1; print "  export CXXFLAGS=\"${CXXFLAGS} -fpermissive\""}' \
-                "$F" > "$F.t" && mv "$F.t" "$F"
-              grep -q -- '-fpermissive' "$F" || { echo "::error::capnproto -fpermissive 沒注入"; exit 1; } ;;
-            bzip3-git)
-              # AUR build() 呼叫 ./bootstrap.sh，但上游源碼只有 ./bootstrap（無 .sh 後綴）。
-              sed -i 's|./bootstrap.sh|./bootstrap|' "$F"
-              grep -q './bootstrap' "$F" || { echo "::error::bzip3 bootstrap 沒改到"; exit 1; }
-              ! grep -q 'bootstrap.sh' "$F" || { echo "::error::bzip3 bootstrap.sh 殘留"; exit 1; } ;;
-            *) echo "（無手術）$REPO_NAME" ;;
-          esac
 
       - name: 检测 ffmpeg-full-git 上游版本
         if: matrix.repo_name == 'ffmpeg-full-git'
@@ -1876,7 +1446,7 @@ jobs:
             (cd "/build/aur-deps/${aur_pkg}" && su builder -c 'makepkg -si --noconfirm --needed --asdeps')
           done
 
-      - name: 把容器的 libplacebo 換成自有 libplacebo-git（ffmpeg-full-git 重鏈）
+      - name: 把容器的 libplacebo 換成自有 libplacebo-git（ffmpeg-full-git 重鏈 387）
         if: matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true'
         run: |
           set -uo pipefail
@@ -1925,10 +1495,9 @@ jobs:
             echo "::error::makepkg 的 deptest 仍認為缺：$_miss —— 裸名又被同步庫搶走了"
             exit 1
           fi
-          _lpso="$(pacman -Ql libplacebo-git 2>/dev/null | awk '/\/usr\/lib\/libplacebo\.so\.[0-9]+$/ {print $2}' | head -n1)"
-          [ -n "$_lpso" ] && [ -e "$_lpso" ] \
-            || { echo "::error::libplacebo-git 沒有裝出 /usr/lib/libplacebo.so.N（上游 API version 換代了？）"; exit 1; }
-          echo "::notice::ffmpeg-full-git 的 libplacebo 已換成本倉（$(pkg-config --modversion libplacebo 2>/dev/null || echo 查不到)），重鏈後吃 $(basename "$_lpso")"
+          [ -e /usr/lib/libplacebo.so.387 ] \
+            || { echo "::error::/usr/lib/libplacebo.so.387 不在，裝的不是本倉那顆"; exit 1; }
+          echo "::notice::ffmpeg-full-git 的 libplacebo 已換成本倉（$(pkg-config --modversion libplacebo 2>/dev/null || echo 查不到)），重鏈後才是 .so.387"
 
       - name: 云端编译 ffmpeg-full-git
         if: matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true'
@@ -1941,48 +1510,6 @@ jobs:
           chown -R builder:builder .
           su builder -c 'makepkg -s --noconfirm -f --skippgpcheck'
           ls -lh ./*.pkg.tar.zst
-
-      # ── wireplumber-git：用本倉 spandsp-git 满足 pipewire-audio 的旧 soname ──
-      # run 43726520906 / 43728961096 的 wireplumber job 紅在：
-      #   warning: cannot resolve "libspandsp.so=2-64", a dependency of "pipewire-audio"
-      # 因為 wireplumber 的 checkdepends=(pipewire-audio)，而容器裡 pipewire-audio
-      # 需要 libspandsp.so=2-64；world-goblins 已推 spandsp 3.1.1（上游
-      # SPANDSP_LT_CURRENT=4 → soname .so.4），舊 soname 沒人提供 ⇒ 整筆交易失敗。
-      # 本倉 spandsp-git 正是「取上游 HEAD + 把 libtool current patch 回 2」
-      # 的修復版（provides libspandsp.so=2-64、epoch=1 壓過 world-goblins），
-      # 所以先把它裝進容器，pipewire-audio 的依賴就解析得開。
-      - name: 用本倉 spandsp-git 補齊 wireplumber-git 的 checkdepends
-        if: matrix.repo_name == 'wireplumber-git'
-        run: |
-          set -uo pipefail
-          grep -q '^\[junlin03-aur\]' /etc/pacman.conf \
-            || { echo "::error::junlin03-aur 沒掛上"; exit 1; }
-          for _t in 1 2 3 4 5; do pacman -Sy >/dev/null 2>&1 && break; sleep $((_t * 5)); done
-          for _t in 1 2 3; do
-            pacman -S --noconfirm --needed spandsp-git && break
-            echo "::warning::裝 spandsp-git 失敗（第 ${_t}/3 次）"
-            sleep $((_t * 8))
-          done
-          pacman -Q spandsp-git >/dev/null 2>&1 \
-            || { echo "::error::spandsp-git 裝不進容器（feed 下載失敗？）"; exit 1; }
-          # 產物端自證：.so.2 必須真的存在，否則 pipewire-audio 依賴照樣斷
-          _so="$(pacman -Ql spandsp-git 2>/dev/null | awk '/\/usr\/lib\/libspandsp\.so\.[0-9]+$/ {print $2}' | head -n1)"
-          [ -n "$_so" ] && [ -e "$_so" ] \
-            || { echo "::error::spandsp-git 沒裝出 /usr/lib/libspandsp.so.N"; exit 1; }
-          case "$(basename "$_so")" in
-            libspandsp.so.2) echo "::notice::spandsp-git 提供了 $(basename "$_so")，對得上 pipewire-audio" ;;
-            *) echo "::error::spandsp-git 的 soname 是 $(basename "$_so")，pipewire-audio 要 .so.2 —— ABI 補丁失效"; exit 1 ;;
-          esac
-          # pacman -T 是對「已安裝套件」做滿足性檢查：pipewire-audio 沒裝就必報缺。
-          # 所以這裡直接把它裝進容器（checkdepends 本來就要裝）——此時
-          # libspandsp.so=2-64 已由 spandsp-git 提供，依賴鏈應當解得開。
-          for _t in 1 2 3; do
-            pacman -S --noconfirm --needed pipewire-audio && break
-            echo "::warning::裝 pipewire-audio 失敗（第 ${_t}/3 次）"
-            sleep $((_t * 8))
-          done
-          _miss="$(pacman -T pipewire-audio || true)"
-          [ -z "$_miss" ] || { echo "::error::deptest 仍認缺：$_miss"; exit 1; }
 
       - name: 导入源码签名公钥
         if: matrix.repo_name != 'ffmpeg-full-git'
@@ -2099,6 +1626,81 @@ jobs:
           NEW_TTF_SHA=""
 
           case "$PKG" in
+            kpat-git|kmahjongg-git|kdeconnect-git|kbreakout-git)
+              # KDE -git：目標 pkgver 由上游 HEAD 決定，直接 source PKGBUILD 跑它自己的
+              # pkgver()（git describe --long → 26.11.80.rN.gHASH），與 makepkg 逐字一致。
+              # 不能用 API 純 tag 代替——那樣永遠 != CUR_PKGVER，每小時白編一次。
+              case "$PKG" in
+                kdeconnect-git) _kde_url='https://invent.kde.org/network/kdeconnect-kde.git'; _kde_dir='kdeconnect-kde' ;;
+                kpat-git)       _kde_url='https://invent.kde.org/games/kpat.git';       _kde_dir='kpat' ;;
+                kmahjongg-git)  _kde_url='https://invent.kde.org/games/kmahjongg.git';  _kde_dir='kmahjongg' ;;
+                kbreakout-git)  _kde_url='https://invent.kde.org/games/kbreakout.git';  _kde_dir='kbreakout' ;;
+              esac
+              rm -rf /tmp/kde-version-src
+              mkdir -p /tmp/kde-version-src
+              # pkgver() 裡 cd "$srcdir/<dir>"，clone 目標目錄名必須與之逐字一致
+              git clone --quiet "$_kde_url" "/tmp/kde-version-src/$_kde_dir" || skip "clone $PKG 上游失敗"
+              TARGET_PKGVER=$(srcdir=/tmp/kde-version-src bash -c \
+                'source ./PKGBUILD >/dev/null 2>&1; pkgver') || skip "跑 $PKG 的 pkgver() 失敗"
+              [ -n "$TARGET_PKGVER" ] || skip "$PKG 版本為空"
+              echo "$PKG 最新版本: $TARGET_PKGVER"
+              ;;
+
+            librewolf-git)
+              # LibreWolf 版本權威 = librewolf.dev Forgejo source tags API（Arch nvchecker 同源）。
+              # tag 格式 160.0.1-1 -> pkgver 160.0.1_1；round release 160.0-1 -> 160.0.0_1
+              # （補 .0 避免 vercmp 比較問題，見 Arch README）。
+              curl -sfL --retry 3 "https://raw.githubusercontent.com/$GH_REPO/master/ci/librewolf-version.py" \
+                -o /tmp/lw-version.py || skip "抓不到 ci/librewolf-version.py"
+              _lw_tags=$(curl -sfL --connect-timeout 20 --retry 3 \
+                "https://librewolf.dev/api/v1/repos/librewolf/source/tags" || true)
+              [ -n "$_lw_tags" ] || skip "拿不到 LibreWolf tags"
+              TARGET_PKGVER=$(printf '%s' "$_lw_tags" | python3 /tmp/lw-version.py) \
+                || skip "解析 LibreWolf 版本失敗"
+              [ -n "$TARGET_PKGVER" ] || skip "解析 LibreWolf 版本失敗"
+              sed -i "s/^pkgver=.*/pkgver=${TARGET_PKGVER}/" PKGBUILD
+              echo "LibreWolf 最新版本: $TARGET_PKGVER"
+              ;;
+
+            wechat-bin|linuxqq-bin)
+              # 2026-11-22 用戶裁定：版本權威＝上游 .deb 的 control Version（拆包讀），
+              # 不信 AUR RPC 顯示（實測 wechat AUR=4.1.13.26 但 deb 已 4.1.13.29）。
+              # wechat 下游 URL 固定；linuxqq URL 嵌 QQNT 目錄/md5 prefix，
+              # 先從 AUR 最新 PKGBUILD 的 source 取得下游址（AUR 更新下載址較快），
+              # 再拆該 deb 讀真實 Version 當 pkgver。
+              # workflow 無 checkout，從 raw URL 抓 deb-version.sh（與六最配置同手法）
+              curl -sfL --retry 3 "https://raw.githubusercontent.com/$GH_REPO/master/ci/deb-version.sh" \
+                -o /tmp/deb-version.sh || skip "抓不到 ci/deb-version.sh"
+              chmod +x /tmp/deb-version.sh
+              case "$PKG" in
+                wechat-bin)
+                  _deburl="https://dldir1v6.qq.com/weixin/Universal/Linux/WeChatLinux_x86_64.deb"
+                  ;;
+                linuxqq-bin)
+                  # AUR linuxqq PKGBUILD 的 source_x86_64 提下游 URL
+                  _aurpkg=$(curl -sfL --connect-timeout 20 --retry 3 \
+                    "https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=linuxqq" || true)
+                  _deburl=$(printf '%s' "$_aurpkg" \
+                    | grep -oE 'https://qqdl\.gtimg\.cn/[^" ]*amd64\.deb' | head -1)
+                  [ -n "$_deburl" ] || skip "拿不到 linuxqq 上游 deb URL"
+                  ;;
+              esac
+              TARGET_PKGVER=$(sh /tmp/deb-version.sh "$_deburl") \
+                || skip "拆包讀 $PKG 版本失敗（$_deburl）"
+              case "$TARGET_PKGVER" in
+                ""|*[!0-9A-Za-z._+-]*) skip "$PKG 拆包版本不合法（=$TARGET_PKGVER）" ;;
+              esac
+              # 把拆包得到的版本寫回 PKGBUILD（pkgver= 行）；URL 中的版本片段
+              # （linuxqq 的 _src_prefix / _qqnt / md5）隨 AUR 下游址一起更新。
+              sed -i "s/^pkgver=.*/pkgver=${TARGET_PKGVER}/" PKGBUILD
+              if [ "$PKG" = "linuxqq-bin" ]; then
+                _qqnt=$(printf '%s' "$_deburl" | sed -nE 's|.*/QQNT/([0-9.]+)/.*|\1|p')
+                _md5p=$(printf '%s' "$_deburl" | sed -nE 's|.*/beta/([0-9a-f]+)/.*|\1|p')
+                sed -i "s/^_qqnt=.*/_qqnt=${_qqnt}/; s/^_md5_prefix=.*/_md5_prefix=${_md5p}/" PKGBUILD
+              fi
+              echo "拆包版本 $PKG = $TARGET_PKGVER (url=$_deburl)"
+              ;;
+
             linux-zencjk)
               # 只认 *-zen* 且非 rc 的 tag，再用 sort -V 取最高。
               # 原来取 API 的 .[0]，2026-08-20 那次直接抓到 v7.1.9-lqx1，
@@ -2122,14 +1724,14 @@ jobs:
               [ -n "$TARGET_PKGVER" ] || skip "拿不到 latest_stable 版本号"
               ;;
 
-            nvidia-utils-beta|nvidia-beta-dkms|lib32-nvidia-utils-beta)
+            nvidia-utils-beta|nvidia-beta-dkms)
               # NVIDIA -beta 四顆（用戶 2026-10-11 點名，#170）。版號權威來源只有 AUR：
               # Artix world／lib32 與 Arch extra／testing 都只有 stable 那條，查
               # nvidia-beta* 全查無 → 不能拿 Arch 打包倉當地雷版來源（實測 API 404）。
               #
               # ⚠️ AUR RPC 的 .Version 是**含 pkgrel 的整串**（實測 615.78.08-1），必須
               # 拆成兩段再賦值：pkgver 進 TARGET_PKGVER、pkgrel 進 TARGET_PKGREL
-              # （與上面 linux-zen1th「tag 尾號即 pkgrel」同一手法）。把 `-1`
+              # （與上面 linux-cachyos-cjktty「tag 尾號即 pkgrel」同一手法）。把 `-1`
               # 整串塞進 TARGET_PKGVER 會拼出
               # `nvidia-utils-beta-615.78.08-1-1-x86_64.pkg.tar.zst` 這種資產名，
               # 下方「已在 release 裡」永不命中 → 每天白下 530MB＋409MB 重編一次。
@@ -2155,40 +1757,48 @@ jobs:
               # 資產名比對，AUR 只抬 pkgrel 時我們也照樣重建。
               #
               # 依賴就緒門檻：nvidia-beta-dkms 的 depends 有 `nvidia-utils-beta=${pkgver}`
-              # （**等號硬釘**）；lib32-nvidia-utils-beta 的 depends 有
-              # `nvidia-utils-beta>=${pkgver}`（**大於等於**）。那顆是同矩陣另一個 job 的
-              # 產物、不在任何官方倉，冷啟動或 utils 那輪失敗時 makepkg -s 會
-              # `target not found` 直接判紅。本倉既有的「-git 依賴門檻」只 grep `-git$`
-              # （plan 步通用分支），抓不到這條名字沒有 -git 後綴的兄弟包 → 在這裡點名
-              # 補上，讓它跟 KDE／Wayland 家族一樣「本輪跳過等下輪」，靠排程按依賴 DAG
-              # 逐層收斂。
-              case "$PKG" in
-                nvidia-beta-dkms|lib32-nvidia-utils-beta)
-                  pacman -Si -- nvidia-utils-beta >/dev/null 2>&1 \
-                    || skip "nvidia-utils-beta 尚未發布到 junlin03-aur（本包 depends 硬釘它），本轮跳过等下轮"
-                  ;;
-              esac
+              # （**等號硬釘**）。那顆是同矩陣另一個 job 的產物、不在任何官方倉，冷啟動
+              # 或 utils 那輪失敗時 makepkg -s 會 `target not found` 直接判紅。本倉既有的
+              # 「-git 依賴門檻」只 grep `-git$`（plan 步通用分支），抓不到這條名字沒有
+              # -git 後綴的兄弟包 → 在這裡點名補上，讓它跟 KDE／Wayland 家族一樣
+              # 「本輪跳過等下輪」，靠排程按依賴 DAG 逐層收斂。
+              if [ "$PKG" = nvidia-beta-dkms ]; then
+                pacman -Si -- nvidia-utils-beta >/dev/null 2>&1 \
+                  || skip "nvidia-utils-beta 尚未發布到 junlin03-aur（本包 depends 硬釘它），本轮跳过等下轮"
+              fi
               ;;
 
-            linux-zen1th)
-              # zen1th 整合分支版 PKGBUILD 的 pkgver() 算法：
-              #   kv=$(make -s kernelversion | tr -d '-')
-              #   printf '%s.r%s.g%s' "$kv" "$(date -u +%Y%m%d)" "$(git rev-parse --short HEAD)"
-              # 這裡用 API 取 Makefile 和 HEAD sha，不 clone 整個內核樹。
-              _mk=$(curl -sfL "https://raw.githubusercontent.com/Capricornus007/linux-zen1th/zen1th/Makefile" || true)
-              [ -n "$_mk" ] || skip "拿不到 zen1th 分支的 Makefile"
-              _ver=$(printf '%s\n' "$_mk" | sed -n 's/^VERSION = //p' | head -1)
-              _patch=$(printf '%s\n' "$_mk" | sed -n 's/^PATCHLEVEL = //p' | head -1)
-              _sub=$(printf '%s\n' "$_mk" | sed -n 's/^SUBLEVEL = //p' | head -1)
-              _extra=$(printf '%s\n' "$_mk" | sed -n 's/^EXTRAVERSION = //p' | head -1)
-              [ -n "$_ver" ] && [ -n "$_patch" ] && [ -n "$_sub" ] || skip "Makefile 版本欄位解析失敗"
-              _kv="${_ver}.${_patch}.${_sub}${_extra}"
-              _kv="${_kv//-/}"  # tr -d '-'
-              _head=$(gh_api "https://api.github.com/repos/Capricornus007/linux-zen1th/commits/zen1th" | jq -r '.sha' || true)
-              [ -n "$_head" ] || skip "拿不到 zen1th 分支 HEAD"
-              _short="${_head:0:7}"
-              TARGET_PKGVER="${_kv}.r$(date -u +%Y%m%d).g${_short}"
-              TARGET_PKGREL=1
+            linux-cachyos-cjktty)
+              all_tags=$(gh_api "https://api.github.com/repos/CachyOS/linux/releases?per_page=100" \
+                         | jq -r '.[].tag_name | select(test("^cachyos-[0-9]+\\."))' || true)
+              [ -n "$all_tags" ] || skip "拿不到 CachyOS/linux release 列表"
+              rel_tag=$(printf '%s\n' "$all_tags" | grep -v -- '-rc' | sort -V | tail -n1)
+              rc_tag=$(printf '%s\n' "$all_tags" | grep -- '-rc'   | sort -V | tail -n1)
+              echo "正式版 tag=$rel_tag / RC tag=$rc_tag"
+
+              rel_base="${rel_tag#cachyos-}"; rel_base="${rel_base%-*}"   # 7.2.0
+              rel_series="${rel_base%.*}"                                 # 7.2
+
+              if [ "$VARIANT" = "rc" ]; then
+                [ -n "$rc_tag" ] || skip "没有可用的 RC tag"
+                rc_base="${rc_tag#cachyos-}"; rc_base="${rc_base%-*}"      # 7.2-rc7
+                rc_series="${rc_base%-rc*}"                                # 7.2
+                # RC 只有在版本线高于正式版时才有意义。7.2 正式版已发布后，
+                # 7.2-rc7 就是废版本，再编三个小时纯属浪费。
+                newest=$(printf '%s\n%s\n' "$rc_series" "$rel_series" | sort -V | tail -n1)
+                if [ "$rc_series" = "$rel_series" ] || [ "$newest" != "$rc_series" ]; then
+                  skip "RC $rc_tag 的版本线 $rc_series 不高于正式版 $rel_series，已被取代"
+                fi
+                CACHY_TAG="$rc_tag"
+                rcver="rc${rc_base##*-rc}"
+                TARGET_PKGVER="${rc_series}.${rcver}"
+              else
+                [ -n "$rel_tag" ] || skip "没有可用的正式版 tag"
+                CACHY_TAG="$rel_tag"
+                TARGET_PKGVER="$rel_base"
+              fi
+              # CachyOS 的 tag 尾号即 pkgrel（本地历史产物 7.2.rc6-1 / 7.2.rc6-2 就是这么来的）
+              TARGET_PKGREL="${CACHY_TAG##*-}"
               ;;
 
             kew-git)
@@ -2657,11 +2267,8 @@ jobs:
               [ -n "$_ue_vers" ] || skip "拿不到 unicode.org /Public/ 的版本目錄清單"
               TARGET_PKGVER=""
               for _v in $_ue_vers; do
-                # 不跟隨重定向：19.0.0 的 emoji-sequences.txt 回 302 → draft/ 目錄，
-                # -L 會拿到 200 但內容是目錄列表不是資料檔，導致 sha512 驗證失敗。
-                # 只接受 HTTP 200（穩定版），302/404 一律跳過。
-                if [ "$(curl -sI -o /dev/null -w '%{http_code}' --connect-timeout 15 \
-                     "https://www.unicode.org/Public/$_v/emoji/emoji-sequences.txt" 2>/dev/null)" = "200" ]; then
+                if curl -fsIL --connect-timeout 15 -o /dev/null \
+                     "https://www.unicode.org/Public/$_v/emoji/emoji-sequences.txt" 2>/dev/null; then
                   TARGET_PKGVER="$_v"; break
                 fi
               done
@@ -2806,19 +2413,6 @@ jobs:
                 # 沒進的話容器會去裝官方 clang 23.1，產出一顆又鏈 .23.1 的死包
                 # ——那是本包存在的全部意義的反面，寧可本輪跳過等下輪。
                 shiboken6-git)             _extra_gate_deps="clang-git llvm-libs-git" ;;
-                # doxygen-git 的 makedepends 點名 flex-git（flex 2.6.5–2.6.12 破壞 doxygen，
-                # 見 flex-git/PKGBUILD 頭註）。flex-git 未發佈前 makepkg -s 會
-                # `target not found: flex-git` 直接判紅，所以在這裡等它就緒、本輪跳過。
-                doxygen-git)               _extra_gate_deps="flex-git" ;;
-                # lib32-libnsl-git 改吃本倉的兩顆 -git 兄弟包（AUR 版的裸名
-                # lib32-libtirpc 在 CI multilib 容器不存在，run 43726513086
-                # 實測 target not found 判紅）。冷啟動時等它們進 feed 再建。
-                lib32-libnsl-git)          _extra_gate_deps="lib32-libtirpc-git libnsl-git" ;;
-                # wireplumber-git 的 checkdepends=(pipewire-audio)，而 pipewire-audio
-                # 需要 libspandsp.so=2-64；world-goblins 的 spandsp 3.1.1 是 .so.4，
-                # 這條依賴只有本倉 spandsp-git（ABI 補回 .so.2）解得開。
-                # run 43726520906 實測整筆交易失敗，故等它進 feed 再建。
-                wireplumber-git)           _extra_gate_deps="spandsp-git" ;;
                 # ⚠️ mpv-git 不屬於這張表（2026-10-28 自己踩過的死碼）：plan 步裡
                 # mpv-git 走的是上面那條 `mpv-git|oh-my-pi-git|pysolfc-git)` 專屬探測
                 # 分支，根本到不了這個通用分支。它的「libplacebo-git 就緒」閘門寫在
@@ -3157,10 +2751,8 @@ jobs:
           cd pkg_dir
           cp PKGBUILD /tmp/PKGBUILD.orig
           gh_api() { curl -sfL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$@"; }
-          # 只有使用者点名的 linux-zencjk 要强制改 config；ltscjk / dkms / zen1th 保持原样
-          # （zen1th 的 config 由倉內 config/zen1th-x86_64.baseconfig + keep.fragment 決定，
-          #  cjktty 補丁已合入整合分支，不需要 CI 再注入）
-          case "$PKG" in linux-zencjk) INJECT=1 ;; *) INJECT=0 ;; esac
+          # 只有使用者点名的这两个内核要强制改 config；ltscjk / dkms 套件保持原样
+          case "$PKG" in linux-zencjk|linux-cachyos-cjktty) INJECT=1 ;; *) INJECT=0 ;; esac
 
           # ---------- 共用：把 CJK + dae 需要的内核选项强制写进 config ----------
           # 用「先删同名行再追加」而不是单纯 >> ，避免 config 里出现
@@ -3210,29 +2802,18 @@ jobs:
               fi
               grep -n 'gitlab.archlinux.org' PKGBUILD
 
-              # cjktty 补丁：版本线变了就换；同线但还钉在 -rc 时也追最新（rc 毕业／更高 rc）。
-              # regex 必須吃 -rcN：zencjk 现钉 cjktty-7.4-rc1.patch（7.3 的 fbcon_rotated
-              # 獨立 struct 讓舊 7.2 補丁 fuzz 錯位，已換 7.4-rc1）。舊 regex 匹配不到 -rc
-              # → cur_patch 抓空 → 整段靜默跳過，永遠不再更新（本輪實測病根）。
-              cur_patch=$(grep -oE 'cjktty-[0-9]+\.[0-9]+(\.[0-9]+)?(-rc[0-9]+)?\.patch' PKGBUILD | head -n1 || true)
+              # cjktty 补丁：只在「版本线变了」时才改 URL，同一条线上不动已验证过的钉子
+              cur_patch=$(grep -oE 'cjktty-[0-9]+\.[0-9]+(\.[0-9]+)?\.patch' PKGBUILD | head -n1 || true)
               new_series="${NEW_PKGVER%.*}"; new_series="${new_series%.*}"
               cur_series=$(echo "$cur_patch" | sed -E 's/^cjktty-([0-9]+\.[0-9]+).*/\1/')
-              # 同線且非 rc → 不動已驗證的釘子；換線／同線仍钉 rc → 查最新
-              if [ -n "$cur_patch" ] && { [ "$cur_series" != "$new_series" ] || echo "$cur_patch" | grep -q -- '-rc'; }; then
-                # sort -V 陷阱（全局規則 52）：裸 cjktty-7.4.patch 會被排在 -rc1/-rc2
-                # 之前，tail 反而挑到舊 rc。先把 -rcN 換成 ~rcN（filevercmp 的 ~ 排最前）
-                # 再排→正式版＞rc、rc 號大者勝，排完換回原檔名（本機實測驗證）。
+              if [ -n "$cur_patch" ] && [ "$cur_series" != "$new_series" ]; then
                 cand=$(gh_api "https://api.github.com/repos/bigshans/cjktty-patches/contents/v${new_series%%.*}.x" \
-                       | jq -r '.[].name' | grep -E "^cjktty-${new_series//./\\.}(\.[0-9]+)?(-rc[0-9]+)?\.patch$" \
-                       | sed -E 's/-rc([0-9]+)\.patch/~rc\1.patch/' | sort -V | tail -n1 \
-                       | sed -E 's/~rc([0-9]+)\.patch/-rc\1.patch/' || true)
-                if [ -n "$cand" ] && [ "$cand" != "$cur_patch" ]; then
+                       | jq -r '.[].name' | grep -E "^cjktty-${new_series//./\\.}(\.[0-9]+)?\.patch$" | sort -V | tail -n1 || true)
+                if [ -n "$cand" ]; then
                   echo "cjktty 补丁 $cur_patch -> $cand（版本线 $cur_series -> $new_series）"
                   sed -i "s|$cur_patch|$cand|" PKGBUILD
-                elif [ -z "$cand" ]; then
-                  echo "::warning::bigshans/cjktty-patches 里找不到 $new_series 的补丁，仍用 $cur_patch"
                 else
-                  echo "cjktty 补丁已是最新：$cur_patch"
+                  echo "::warning::bigshans/cjktty-patches 里找不到 $new_series 的补丁，仍用 $cur_patch"
                 fi
               fi
               ;;
@@ -3264,13 +2845,131 @@ jobs:
               sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/" PKGBUILD
               ;;
 
-            linux-zen1th)
-              # zen1th 整合分支版 PKGBUILD：pkgver() 現算、source 是 git+…#branch=zen1th、
-              # config 用倉內 config/zen1th-x86_64.baseconfig + keep.fragment、
-              # cjktty 補丁已合入整合分支。不需要改寫任何欄位。
-              # （舊版 CachyOS tarball PKGBUILD 的 _major/_minor/_rcver/_tagrel/_srcname
-              #  改寫、CachyOS config 下載、cjktty 補丁選取、gud fortify 規避全部過時，
-              #  已隨 2026-11-09 的 zen1th 整合分支重構一併移除。）
+            linux-cachyos-cjktty)
+              tag_part="${CACHY_TAG#cachyos-}"
+              base="${tag_part%-*}"
+              if [ "$VARIANT" = "rc" ]; then
+                series="${base%-rc*}"
+                rcver="rc${base##*-rc}"
+                sed -i "s/^_major=.*/_major=$series/"    PKGBUILD
+                sed -i "s/^_minor=.*/#_minor=/"          PKGBUILD
+                sed -i "s/^#_rcver=.*/_rcver=$rcver/; s/^_rcver=.*/_rcver=$rcver/" PKGBUILD
+                config_url="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos-rc/config"
+              else
+                case "$base" in
+                  *.*.*) series="${base%.*}"; minor="${base##*.}" ;;
+                  *)     series="$base";      minor="0" ;;
+                esac
+                sed -i "s/^_major=.*/_major=$series/"  PKGBUILD
+                sed -i "s/^_minor=.*/_minor=$minor/"   PKGBUILD
+                sed -i "s/^_rcver=.*/#_rcver=/"        PKGBUILD
+                config_url="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos/config"
+              fi
+              sed -i "s/^pkgver=.*/pkgver=$NEW_PKGVER/"          PKGBUILD
+              sed -i "s/^pkgrel=.*/pkgrel=$NEW_PKGREL/"          PKGBUILD
+              sed -i "s/^_tagrel=.*/_tagrel=${CACHY_TAG##*-}/"   PKGBUILD
+              # _srcname 直接用 tag：tarball 就叫 <tag>.tar.gz，不必再拼一遍
+              sed -i "s/^_srcname=.*/_srcname=$CACHY_TAG/"       PKGBUILD
+
+              # 「根据情况」挑 config：CachyOS 两个打包目录的版本线不一定跟得上我们要构建的 tag
+              # （现状：linux-cachyos 还停在 7.1.8，而 CachyOS/linux 的 release tag 已经是 7.2.0）。
+              # 拿错版本线的 config 只会让 make olddefconfig 用默认值填一大堆新符号，
+              # 编得出来但不是本意，所以优先挑版本线对得上的那一份。
+              _cfg_major() {
+                curl -sfL "https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/$1/PKGBUILD" \
+                  | sed -nE 's/^_major=([0-9.]+).*/\1/p' | head -n1
+              }
+              rel_maj=$(_cfg_major linux-cachyos || true)
+              rc_maj=$(_cfg_major linux-cachyos-rc || true)
+              echo "CachyOS 打包目录版本线：linux-cachyos=${rel_maj:-?}  linux-cachyos-rc=${rc_maj:-?}  本次要=$series"
+              if [ -n "$rel_maj" ] && [ "$series" = "$rel_maj" ]; then
+                config_url="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos/config"
+              elif [ -n "$rc_maj" ] && [ "$series" = "$rc_maj" ]; then
+                config_url="https://raw.githubusercontent.com/CachyOS/linux-cachyos/master/linux-cachyos-rc/config"
+              else
+                echo "::warning::CachyOS 两个打包目录都不是 $series 线，沿用默认 $config_url"
+              fi
+
+              echo "下载 config: $config_url"
+              curl -sfL -o config "$config_url"
+              grep -m1 'Kernel Configuration' config || true
+
+              # cjktty 补丁选取（版本无关，别再写成某一版的口吻）：
+              #   1) 本线精确匹配 cjktty-<series>.patch 或 cjktty-<series>.<N>.patch
+              #   2) 本线的 rc 版 cjktty-<series>-rc<N>.patch
+              #   3) 跨线回退：取同一 v<major>.x 桶里 sort -V 最新的一份
+              # 第 3 步是**故意的**，不是将就：cjktty 补丁对小版本漂移耐受
+              #（实测过 7.3-rc1 可干净套 7.2-rc7，也验证过 bigshans 那份正式 7.2 同样可套）。
+              # 仓库只查本仓 Capricornus007/cjktty-patches —— 那是**刻意从 bigshans
+              # 复刻出来的**，因为上游过去不及时候补补丁，不要改成查 parent。
+              # 回退必须回报「套的是哪条线的补丁」，并且只容忍相邻次版本：
+              # 7.2 补 7.3 成立，7.0 补 7.4 不成立——差超过 1 个次版本就让它红，
+              # 别出一颗看起来成功、其实没 CJK 的内核。
+              avail=$(gh_api "https://api.github.com/repos/Capricornus007/cjktty-patches/contents/v${series%%.*}.x" \
+                      | jq -r '.[].name' || true)
+              # 用獨立腳本挑補丁：本線精確 > 本線 rc > 不高於目標的最大版本
+              # （舊邏輯 sort -V|tail 會對 7.3 選到 7.4-rc1，字體數據補丁套不上而 prepare() 死）
+              curl -sfL --retry 3 "https://raw.githubusercontent.com/$GH_REPO/master/ci/cjktty-pick.sh" \
+                -o /tmp/cjktty-pick.sh || { echo "::error::抓不到 ci/cjktty-pick.sh"; exit 1; }
+              chmod +x /tmp/cjktty-pick.sh
+              pick=$(printf '%s\n' "$avail" | /tmp/cjktty-pick.sh "$series" || true)
+              how="本線"
+              if [ -n "$pick" ]; then
+                pb_series=$(printf '%s' "$pick" | sed -nE 's/^cjktty-([0-9]+\.[0-9]+).*/\1/p')
+                if [ "$pb_series" != "$series" ]; then
+                  how="跨線回退"
+                  p_maj=${pb_series%%.*}; p_min=${pb_series##*.}
+                  t_maj=${series%%.*};   t_min=${series##*.}
+                  if [ "$p_maj" != "$t_maj" ]; then
+                    echo "::error::補丁 $pick 屬 v${p_maj}.x，目標 $series 在 v${t_maj}.x —— 跨大版不回退"
+                    exit 1
+                  fi
+                  gap=$(( t_min - p_min ))
+                  if [ "$gap" -gt 1 ]; then
+                    echo "::error::補丁線 $pb_series 與目標 $series 差 $gap 個次版本，超出容忍範圍"
+                    exit 1
+                  fi
+                  echo "::warning::$series 沒有專屬補丁，跨線回退到 $pick（來自 $pb_series，差 $gap；舊邏輯曾錯選 7.4-rc1 導致字體補丁失敗）"
+                fi
+              fi
+              echo "選用 cjktty 補丁: ${pick:-（無）}（$how，目標線 $series）"
+              [ -n "$pick" ] || { echo "错误：cjktty-patches 的 v${series%%.*}.x 里找不到任何可用补丁"; exit 1; }
+              echo "选用 cjktty 补丁: $pick（$how，目标线 $series）"
+              curl -sfL -o 0001-cjktty.patch \
+                "https://raw.githubusercontent.com/Capricornus007/cjktty-patches/master/v${series%%.*}.x/$pick"
+              # CachyOS 的 fbcon.h 用命名 struct fbcon_rotated（vanilla 是匿名），
+              # 補丁 Hunk#1 對不上 → 用本機驗證過的腳本改寫 Hunk#1 context。
+              curl -sfL --retry 3 "https://raw.githubusercontent.com/$GH_REPO/master/ci/cjktty-fix-patch.py" \
+                -o /tmp/cjktty-fix-patch.py || { echo "::error::抓不到 ci/cjktty-fix-patch.py"; exit 1; }
+              python3 /tmp/cjktty-fix-patch.py 0001-cjktty.patch || exit 1
+              sed -i -E 's|^[[:space:]]*"\$\{_cjktty_source\}/v[0-9]+\.x/cjktty-[^"]+\.patch"[[:space:]]*$|    "0001-cjktty.patch"|' PKGBUILD
+              curl -sfL -o cjktty-add-cjk32x32-font-data.patch \
+                "https://raw.githubusercontent.com/Capricornus007/cjktty-patches/master/cjktty-add-cjk32x32-font-data.patch"
+              sed -i -E 's|^[[:space:]]*"\$\{_cjktty_source\}/cjktty-add-cjk32x32-font-data\.patch"[[:space:]]*$|    "cjktty-add-cjk32x32-font-data.patch"|' PKGBUILD
+
+              # ---------- gud fortify 假阳性规避（CI-only，随 _ci_force_config 一起注入） ----------
+              # 7.3-rc2 起 gud_connector.c 新增 memchr(mode, '\0', 16) 校验 TV mode 名
+              # （上游 da1ea35fea67）。clang 22 + ThinLTO 在连结期把
+              # __struct_size(&buf[i*16]) 折叠成小于 16 的常量，ld.lld 对 gud.o 报
+              # __read_overflow "dontcall-error"。运行期恒安全：buf 是 kmalloc(256)，
+              # gud_usb_get -> usb_control_msg 的返回上限就是传入的 len，故
+              # num_modes ≤ 16、i*16+16 ≤ 256——纯编译期假阳性。
+              # 换成 __builtin_memchr 绕过 fortify 内联检查，语义不变；
+              # 上游哪天改掉这行，下面的 grep 不中、注入自动变 no-op。
+              {
+                echo '_ci_fix_gud_fortify() {'
+                echo '  local f="drivers/gpu/drm/gud/gud_connector.c"'
+                echo '  [ -f "$f" ] || return 0'
+                echo '  grep -q "__builtin_memchr(mode, " "$f" && return 0'
+                echo '  grep -q "memchr(mode, " "$f" || return 0'
+                echo '  sed -i "s/memchr(mode, /__builtin_memchr(mode, /" "$f"'
+                echo '  grep -q "__builtin_memchr(mode, " "$f" || { echo "错误：gud fortify 规避失败" >&2; return 1; }'
+                echo '  echo "gud: memchr -> __builtin_memchr（规避 clang ThinLTO fortify 假阳性）"'
+                echo '}'
+              } >> PKGBUILD
+              # 插在 _ci_force_config 之前：此时 prepare() 里补丁已套用完、源码树就位
+              sed -i -E 's|^([[:space:]]*)_ci_force_config \.\./config$|\1_ci_fix_gud_fortify\n&|' PKGBUILD
+              grep -n '^[[:space:]]*_ci_fix_gud_fortify$' PKGBUILD
               ;;
             u1s1-bin)
               # 新版本時把 pkgver 換成 LATEST 讀到的值；pkgrel 保持 1。
@@ -3481,7 +3180,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-zen1th' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'android-ndk-30' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'libjpeg-turbo-git' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'svt-jpeg-xs-git' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'nodejs-git' && matrix.repo_name != 'brotli-git' && matrix.repo_name != 'nodejs-better-sqlite3-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'flex-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.repo_name != 'htop-git' && matrix.repo_name != 'chafa-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix' && matrix.repo_name != 'oh-my-pi-gui-git'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'android-ndk-30' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'libjpeg-turbo-git' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'svt-jpeg-xs-git' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'nodejs-git' && matrix.repo_name != 'brotli-git' && matrix.repo_name != 'nodejs-better-sqlite3-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.repo_name != 'htop-git' && matrix.repo_name != 'chafa-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
@@ -4017,19 +3716,6 @@ jobs:
           fi
           pacman -Qo /usr/lib/llvm-config 2>/dev/null || true
 
-      # 32 位 mesa_clc 靜默退出 267（run 43688123660 實測）：64 位那半邊同一支
-      # mesa_clc 正常產出 .spv，32 位那半邊一執行就無輸出退出 267——疑似 32 位
-      # clang 堆疊溢位（clang 訊號處理器 exit(267)）。build() 開頭放寬堆疊上限，
-      # 兩半邊都吃（64 位本來就過，無害）。獨立成一步：上面那步已貼近 21000 位元組上限。
-      - name: mesa-tkg-git：放寬 build() 堆疊上限（32 位 mesa_clc 靜默退出 267）
-        if: matrix.repo_name == 'mesa-tkg-git' && steps.plan.outputs.build == 'true'
-        run: |
-          set -euo pipefail
-          cd pkg_dir
-          sed -i '/^build() {/a\    ulimit -s unlimited' PKGBUILD
-          grep -q 'ulimit -s unlimited' PKGBUILD || {
-            echo "::error::ulimit 注入沒落地（build() 開頭格式變了？）"; exit 1; }
-
       - name: 把容器的 libplacebo 換成自有 libplacebo-git（mpv-git 的 meson 閘門）
         if: matrix.repo_name == 'mpv-git' && steps.plan.outputs.build == 'true'
         run: |
@@ -4119,10 +3805,9 @@ jobs:
             echo "::error::pkg-config 回報 ${_ver:-空}，低於 mpv 要的 7.387.0——換包沒生效"
             exit 1
           fi
-          _lpso="$(pacman -Ql libplacebo-git 2>/dev/null | awk '/\/usr\/lib\/libplacebo\.so\.[0-9]+$/ {print $2}' | head -n1)"
-          [ -n "$_lpso" ] && [ -e "$_lpso" ] \
-            || { echo "::error::libplacebo-git 沒有裝出 /usr/lib/libplacebo.so.N（上游 API version 換代了？）"; exit 1; }
-          echo "::notice::libplacebo 已換成本倉 ${_ver}（$(basename "$_lpso")），mpv 的 >=7.387.0 閘門這輪才可能過"
+          [ -e /usr/lib/libplacebo.so.387 ] \
+            || { echo "::error::/usr/lib/libplacebo.so.387 不在，裝的不是本倉那顆"; exit 1; }
+          echo "::notice::libplacebo 已換成本倉 ${_ver}，mpv 的 >=7.387.0 閘門這輪才可能過"
 
       - name: 安裝 libevent 2.2 建置鏈
         if: contains(fromJSON('["links-git","unbound-git","fstrm-git","libverto-git"]'), matrix.repo_name) && steps.plan.outputs.build == 'true'
@@ -4136,21 +3821,6 @@ jobs:
           pacman -S --ask=20 --noconfirm --needed $_event_deps
           pkg-config --modversion libevent
           test -e /usr/lib/libevent-2.2.so.1
-
-      - name: 拔掉同步庫 flex（doxygen-git）
-        if: matrix.repo_name == 'doxygen-git'
-        run: |
-          set -euo pipefail
-          # doxygen-git 的 makedepends 點名 flex-git，與容器預裝的同步庫 flex 衝突：
-          # run 43783044587 實測 makepkg -s 解依賴時
-          #   :: flex-git-1:2.6.15.r2.gacb5188eb-1 and flex-2.6.10-1 are in conflict
-          #   error: unresolvable package conflicts detected
-          # pacman 拒絕整筆交易。flex-git 裝上後頂替 flex 的角色（doxygen 要的是
-          # ≥2.6.13 的 flex 行為，見 flex-git/PKGBUILD 頭註），先拔掉同步庫 flex。
-          # （2026-11-16 從「云端编译」step 拆出：與 lib32-dbus 同一教訓——大 step
-          #  貼著 GitHub 單 step 21000 表達式上限，新增邏輯一律拆獨立 step。）
-          pacman -Rdd --noconfirm flex >/dev/null 2>&1 || true
-          echo "flex 已拔：$(pacman -Q flex 2>&1 || echo '不在了')"
 
       - name: 云端编译 `.pkg.tar.zst`
         if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'
@@ -4173,7 +3843,7 @@ jobs:
           echo "工作目錄: $(pwd)  PKGBUILD mtime=$(stat -c %y PKGBUILD 2>/dev/null)"
           echo "::endgroup::"
           flags="-s --noconfirm -f"
-          if [ "${{ matrix.repo_name }}" = "linux-zen1th" ]; then
+          if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ]; then
             # CachyOS 的 config / 补丁是 CI 现抓的，校验和对不上，跳过完整性检查
             flags="$flags --skipinteg"
           elif [ "${{ matrix.repo_name }}" = "element-desktop-nightly-bin" ]; then
@@ -4181,11 +3851,6 @@ jobs:
             # Element 官方 HTTPS 仓库，跳过校验和不损失信任（用户指示：
             # sums 能跳过就跳过）
             flags="$flags --skipchecksums"
-          elif [ "${{ matrix.repo_name }}" = 'lib32-nvidia-utils-beta' ]; then
-            # AUR 的輔助檔 sha256 是維護者手寫、會過時；來源本身就是 AUR 的 HTTPS git 倉，
-            # 跳過校驗和不另增信任面（與 kind:aur 同一理由）。這顆不是 kind:aur 是因為
-            # 它需要 [multilib]，所以在這裡點名給同一組旗標。
-            flags="$flags --skipchecksums --nocheck"
           elif [ "${{ matrix.kind }}" = 'aur' ]; then
             # AUR 的輔助檔 sha256 是維護者手寫、會過時：pi-coding-agent-git 的
             # pi-wrapper 聲明 3667009d…，AUR 倉裡實際檔案是 13a511a7…（實測
@@ -4270,19 +3935,19 @@ jobs:
             _backoff=$((_mp * 25)); [ "$_backoff" -gt 120 ] && _backoff=120
             sleep $_backoff
           done
-          if [ "${{ matrix.repo_name }}" = "linux-zen1th" ] && [ "${{ matrix.variant }}" = "rc" ]; then
-            # RC 產物檔名插入 -rc（如 linux-zen1th-rc-7.3.rc1-1-…），
-            # 包內 pkgname 保持 linux-zen1th 不變：repo-add 條目照常
+          if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ] && [ "${{ matrix.variant }}" = "rc" ]; then
+            # RC 產物檔名插入 -rc（如 linux-cachyos-cjktty-rc-7.3.rc1-1-…），
+            # 包內 pkgname 保持 linux-cachyos-cjktty 不變：repo-add 條目照常
             # 以版本號換代（vercmp 7.3.rc1 < 7.3.0，正式版發佈後自然回位），
             # 而清理步驟據檔名區分 rc/正式兩類，各自保留最新一份。
-            for f in linux-zen1th*-*.pkg.tar.zst; do
+            for f in linux-cachyos-cjktty*-*.pkg.tar.zst; do
               [ -e "$f" ] || continue
               case "$f" in *-rc-*) continue ;; esac
-              base="${f%%-[0-9]*}"   # linux-zen1th 或 …-headers
+              base="${f%%-[0-9]*}"   # linux-cachyos-cjktty 或 …-headers
               rest="${f#"$base"}"
               mv -v "$f" "${base}-rc${rest}"
             done
-            ls -lh linux-zen1th*.pkg.tar.zst
+            ls -lh linux-cachyos-cjktty*.pkg.tar.zst
           fi
           if [ "${{ matrix.repo_name }}" = "mesa-tkg-git" ]; then
             # ── LLVM soname 守門（防止上面的「鎖 ABI」改動被靜默回退）
@@ -4381,10 +4046,7 @@ jobs:
           [ "$_sysd_link" = 0 ] || exit 1
           if [ -n "$_sysd_dep" ]; then
             case " ${{ matrix.repo_name }} " in
-              *" qoder-gui-bin "*|*" qoder-gui-cn "*|*" codex-desktop-git "*|*" kcoreaddons-git "*|*" xdg-desktop-portal-git "*)
-                # xdg-desktop-portal-git：上游 meson 偵測到 systemd 就寫進 depends，
-                # 但產物沒有實際 NEEDED libsystemd.so.0（僅聲明；目標機 Artix 靠
-                # artix-archlinux-support 的虛擬 Provides 過關）。
+              *" qoder-gui-bin "*|*" qoder-gui-cn "*|*" codex-desktop-git "*|*" kcoreaddons-git "*)
                 echo "::warning::聲明 systemd 但未鏈接（已在白名單，目標機靠虛擬 Provides 過關）:$_sysd_dep" ;;
               *)
                 echo "::error::產物聲明了 systemd／systemd-libs 卻不在白名單:$_sysd_dep"; exit 1 ;;
@@ -4555,12 +4217,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ matrix.key }}
-          # tesseract-data-git 是 split pkgbase：每個語言一格 matrix，但 makepkg
-          # 每次都建出全部 125 個語言子包。若整包上傳，5 個 artifact 各含同樣
-          # 125 個同名檔案，deploy 端 merge-multiple 併發解壓互相截斷（run
-          # 43658667801 實測：86 個 zst 截斷、3 個 0 位元組被 repo-add 拒收，
-          # attempt 1 還把截斷包傳上了 release）。只上傳本格語言的包。
-          path: ${{ matrix.pkgbase == 'tesseract-data-git' && format('pkg_dir/{0}-*.pkg.tar.zst', matrix.key) || 'pkg_dir/*.pkg.tar.zst' }}
+          path: pkg_dir/*.pkg.tar.zst
           if-no-files-found: error
           overwrite: true
       - name: 上传产物到 artifact（重试：Actions 中转层偶发 403）
@@ -4572,12 +4229,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: pkg-${{ matrix.key }}
-          # tesseract-data-git 是 split pkgbase：每個語言一格 matrix，但 makepkg
-          # 每次都建出全部 125 個語言子包。若整包上傳，5 個 artifact 各含同樣
-          # 125 個同名檔案，deploy 端 merge-multiple 併發解壓互相截斷（run
-          # 43658667801 實測：86 個 zst 截斷、3 個 0 位元組被 repo-add 拒收，
-          # attempt 1 還把截斷包傳上了 release）。只上傳本格語言的包。
-          path: ${{ matrix.pkgbase == 'tesseract-data-git' && format('pkg_dir/{0}-*.pkg.tar.zst', matrix.key) || 'pkg_dir/*.pkg.tar.zst' }}
+          path: pkg_dir/*.pkg.tar.zst
           if-no-files-found: error
           overwrite: true
 
@@ -4609,9 +4261,7 @@ jobs:
         with:
           path: artifact-downloads
           pattern: pkg-*
-          # 刻意不用 merge-multiple：多個 artifact 含同名檔案時（split pkgbase
-          # 多格 matrix，見上方上傳步驟註釋），action 併發解壓到同一目錄會互相
-          # 截斷。改為各 artifact 落自己的子目錄，下一步「先到先得」整合。
+          merge-multiple: true
 
       - name: 检查是否有构建产物
         id: check_artifacts
@@ -4633,9 +4283,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p deploy
-          # 先到先得：同名包檔案只收第一份（split pkgbase 多格 matrix 時各
-          # artifact 內容相同，任取一份即可；cp -n 保證不會互相覆蓋）。
-          find artifact-downloads -name "*.pkg.tar.zst" -exec cp -n {} deploy/ \;
+          find artifact-downloads -name "*.pkg.tar.zst" -exec cp {} deploy/ \;
           cd deploy
           # 抓舊 DB 是整條流水線的生命線。抓不到卻繼續往下 repo-add，會產出「只含本輪
           # 產物」的半截庫；上傳後別輪的包全成孤兒，下一輪清理照半截庫把它們連環刪掉
@@ -4727,138 +4375,20 @@ jobs:
           else
             echo "::warning::取不到 Release 资产清单，本轮跳过幽灵条目检查"
           fi
-          # ── %CSIZE% 對齊（2026-11-14 稽核；run 43585469020 實測）─────────────
-          # pacman 把 DB 的 %CSIZE% 直接餵給 CURLOPT_MAXFILESIZE_LARGE
-          # （上游 lib/libalpm/sync.c: payload->max_size = pkg->size；
-          #  lib/libalpm/dload.c: 超限轉 CURLE_FILESIZE_EXCEEDED）。資產只要比
-          # 登記值大 1 byte，整包就抓不下來，報 "Maximum file size exceeded"；
-          # xfce4-power-manager-git 連錯 20 次就是這樣（DB 1251026 / 資產 1251112）。
-          # 同名資產被別輪重新上傳、DB 沒跟著重算時會發生（稽核 853 筆有 118 筆不符）。
-          # 上傳前一律校正：本輪產物用本地檔案大小，其餘用 Release 資產清單的 size。
-          release_id=$(gh api "repos/${{ github.repository }}/releases/tags/$REPO_RELEASE_TAG" \
-                       --jq .id 2>/dev/null | tail -1 || true)
-          gh api --paginate "repos/${{ github.repository }}/releases/$release_id/assets?per_page=100" \
-            --jq '.[] | [.name, .size] | @tsv' > /tmp/_wb_asset_sizes.tsv 2>/dev/null || :
-          if [ ! -s /tmp/_wb_asset_sizes.tsv ]; then
-            echo "::warning::取不到 Release 資產大小清單，本輪略過 %CSIZE% 校正"
-          fi
-          _wb_fix_csize() {
-            _wb_db="$1"
-            rm -rf _dbfix
-            mkdir -p _dbfix
-            tar -xzf "$_wb_db" -C _dbfix
-            _wb_changed=0
-            for _wb_d in _dbfix/*/desc; do
-              [ -f "$_wb_d" ] || continue
-              _wb_fn=$(awk '/^%FILENAME%$/{getline; print; exit}' "$_wb_d")
-              _wb_cs=$(awk '/^%CSIZE%$/{getline; print; exit}' "$_wb_d")
-              [ -n "$_wb_fn" ] && [ -n "$_wb_cs" ] || continue
-              _wb_key=${_wb_fn//:/.}
-              if [ -f "./$_wb_key" ]; then
-                _wb_local=$(stat -c %s "./$_wb_key")
-                _wb_rel=$(awk -F'\t' -v n="$_wb_key" '$1==n{print $2; exit}' /tmp/_wb_asset_sizes.tsv)
-                # 同名 Release 資產若已存在且比本輪本地产物大（同版本號重建的
-                # 必然結果：編譯非確定，大小每輪不同；run 43617328057 shard3
-                # #46 實測閘被這個打爆），上傳後留哪份不由這裡控——db 一律取
-                # max，保證 CSIZE ≥ 實際資產大小（CURLOPT_MAXFILESIZE 只怕
-                # db 登記值偏小；偏大只影響進度條，客戶端無感）。
-                if [ -n "$_wb_rel" ] && [ "$_wb_rel" -gt "$_wb_local" ]; then
-                  _wb_real=$_wb_rel
-                else
-                  _wb_real=$_wb_local
-                fi
-              else
-                _wb_real=$(awk -F'\t' -v n="$_wb_key" '$1==n{print $2; exit}' /tmp/_wb_asset_sizes.tsv)
-              fi
-              [ -n "$_wb_real" ] || continue
-              if [ "$_wb_real" != "$_wb_cs" ]; then
-                awk -v new="$_wb_real" '/^%CSIZE%$/{print; getline; print new; next} {print}' \
-                  "$_wb_d" > "$_wb_d.wb" && mv "$_wb_d.wb" "$_wb_d"
-                _wb_changed=$((_wb_changed + 1))
-              fi
-            done
-            ( cd _dbfix && find . -mindepth 1 -maxdepth 1 -printf '%P\n' \
-                | sort | tar -czf "../$_wb_db.wb" -T - )
-            mv "$_wb_db.wb" "$_wb_db"
-            echo "  %CSIZE% 校正 $_wb_db：$_wb_changed 筆"
-            rm -rf _dbfix
-          }
-          _wb_fix_csize junlin03-aur.db.tar.gz
-          _wb_fix_csize junlin03-aur.files.tar.gz
-          # pacman 實際請求的是無副檔名的 junlin03-aur.db / .files；repo-add 只更新
-          # .tar.gz，這兩份必須明確同步，否則客戶端永遠吃到落後一輪的 CSIZE。
-          # ⚠️ gh release download 抓下來的 `.db`／`.db.tar.gz` 在 CI 容器裡可能是
-          # **同一個 inode**（硬連結或 symlink）：直接 `cp -f a b` 會報
-          # "'a' and 'b' are the same file" 並讓整個 deploy 紅（run 43593991828
-          # 實測，離線用 curl 各別下載成兩個獨立檔時不會重現）。改成先寫獨立暫存檔
-          # 再 mv -f 換掉目錄項：兩者是否同源都能正確切開，也不會寫回原 inode。
-          _wb_sync_copy() {
-            cp -f "$1" "$2.wb-tmp"
-            mv -f "$2.wb-tmp" "$2"
-          }
-          _wb_sync_copy junlin03-aur.db.tar.gz junlin03-aur.db
-          _wb_sync_copy junlin03-aur.files.tar.gz junlin03-aur.files
-          cmp -s junlin03-aur.db.tar.gz junlin03-aur.db || {
-            echo "::error::junlin03-aur.db 與 .db.tar.gz 不同步，中止部署"; exit 1; }
-          cmp -s junlin03-aur.files.tar.gz junlin03-aur.files || {
-            echo "::error::junlin03-aur.files 與 .files.tar.gz 不同步，中止部署"; exit 1; }
-          # 上傳前硬閘：DB 裡任何一筆 CSIZE 小於對應資產大小就不准出庫。
-          rm -rf _dbcheck && mkdir _dbcheck
-          tar -xzf junlin03-aur.db.tar.gz -C _dbcheck
-          : > /tmp/_wb_db_csize.tsv
-          for _wb_d in _dbcheck/*/desc; do
-            [ -f "$_wb_d" ] || continue
-            awk '/^%FILENAME%$/{getline; f=$0; gsub(/:/, ".", f)} /^%CSIZE%$/{getline; print f "\t" $0}' \
-              "$_wb_d" >> /tmp/_wb_db_csize.tsv
-          done
-          if ! awk -F'\t' 'NR==FNR{a[$1]=$2; next} ($1 in a) && a[$1]+0 > $2+0 {print $1, a[$1], $2; n++} END{if(n>0) exit 1}' \
-                 /tmp/_wb_asset_sizes.tsv /tmp/_wb_db_csize.tsv > /tmp/_wb_over.tsv; then
-            echo "::error::DB 仍有 %CSIZE% 小於實際資產大小，中止部署"
-            cat /tmp/_wb_over.tsv
-            exit 1
-          fi
-          rm -rf _dbcheck
           rm -f junlin03-aur.db.tar.gz.old junlin03-aur.files.tar.gz.old
           ls -lh
 
       - name: 部署至 GitHub Releases
         if: steps.check_artifacts.outputs.has_artifacts == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-
-          # softprops/action-gh-release 對同名資產是先 DELETE 再 POST，141 個包
-          # 一輪 ~280 次寫入請求幾十秒打完，連續兩輪部署就觸發 GitHub 二級限流
-          # （run 43649212889／43658667801 實測：全部資產顯示 ✅ 上傳完畢，
-          # action 卻因中途一次 403 secondary rate limit 以非零碼退出，整條
-          # deploy 判紅）。改用 gh release upload --clobber：同名資產由服務端
-          # 原地替換，寫入請求減半；外麵包重試＋線性退避，撞上限流等窗口冷卻。
-          if ! gh release view "$REPO_RELEASE_TAG" --json id --jq .id >/dev/null 2>&1; then
-            gh release create "$REPO_RELEASE_TAG" --title "Custom Personal Repository"
-          fi
-          # 注意：mapfile 裡的 cd deploy 只在 process substitution 子殼生效，
-          # gh release upload 仍在 repo 根目錄執行；gh 對每個檔案參數做
-          # filepath.Glob（cmdutil.GlobPaths），匹配不到就報
-          # "no matches found for `./xxx`"（run 43676859814 實測，5 次重試
-          # 全是同一個錯，根本不是限流）。上傳一律在 deploy/ 裡執行。
-          mapfile -t assets < <(
-            cd deploy && ls -1 ./*.pkg.tar.zst ./junlin03-aur.db* ./junlin03-aur.files* 2>/dev/null)
-          if [ "${#assets[@]}" -eq 0 ]; then
-            echo "::error::deploy/ 下沒有可上傳的資產"
-            exit 1
-          fi
-          for _try in 1 2 3 4 5; do
-            if (cd deploy && gh release upload "$REPO_RELEASE_TAG" --clobber "${assets[@]}"); then
-              echo "✅ 部署完成（第 $_try 次嘗試，共 ${#assets[@]} 個資產）"
-              exit 0
-            fi
-            echo ">> 第 $_try 次上傳失敗，$((_try * 60)) 秒後重試"
-            sleep $((_try * 60))
-          done
-          echo "::error::連續 5 次上傳失敗，中止部署（已上傳部分保持原樣，不清理）"
-          exit 1
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: current-repo
+          name: "Custom Personal Repository"
+          prerelease: false
+          files: |
+            deploy/*.pkg.tar.zst
+            deploy/junlin03-aur.db*
+            deploy/junlin03-aur.files*
 
       - name: 清理旧版本与多余的包资产
         if: steps.check_artifacts.outputs.has_artifacts == 'true' && steps.build_db.outputs.db_restored == 'true'
