@@ -1622,13 +1622,14 @@ jobs:
           NEW_TTF_SHA=""
 
           case "$PKG" in
-            kpat-git|kmahjongg-git|kdeconnect-git)
+            kpat-git|kmahjongg-git|kdeconnect-git|kbreakout-git)
               # KDE -git 包：版本權威 = invent.kde.org tags API（去 v 前綴取最高）。
               # /PKGBUILD 的 pkgver() 同源（git describe），CI 只讀 API 判斷是否重建。
               case "$PKG" in
                 kdeconnect-git) _kde_path='network%2Fkdeconnect-kde' ;;
                 kpat-git)       _kde_path='games%2Fkpat' ;;
                 kmahjongg-git)  _kde_path='games%2Fkmahjongg' ;;
+                kbreakout-git)  _kde_path='games%2Fkbreakout' ;;
               esac
               curl -sfL --retry 3 "https://raw.githubusercontent.com/$GH_REPO/master/ci/kde-git-version.py" \
                 -o /tmp/kde-version.py || skip "抓不到 ci/kde-git-version.py"
