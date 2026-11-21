@@ -2968,8 +2968,8 @@ jobs:
                 echo '}'
               } >> PKGBUILD
               # 插在 _ci_force_config 之前：此时 prepare() 里补丁已套用完、源码树就位
-              sed -i -E 's|^([[:space:]]*)_ci_force_config \.\./config$|\1_ci_fix_fbcon_h\n\1_ci_fix_gud_fortify\n&|' PKGBUILD
-              grep -n '_ci_fix_fbcon_h' PKGBUILD
+              sed -i -E 's|^([[:space:]]*)_ci_force_config \.\./config$|\1_ci_fix_gud_fortify\n&|' PKGBUILD
+              grep -n '^[[:space:]]*_ci_fix_gud_fortify$' PKGBUILD
               ;;
             u1s1-bin)
               # 新版本時把 pkgver 換成 LATEST 讀到的值；pkgrel 保持 1。
