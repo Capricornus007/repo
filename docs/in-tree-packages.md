@@ -371,7 +371,7 @@ split：llvm-libs／llvm／llvm-lit／compiler-rt／lld／lldb／clang）：
     所以 clang-git 的 `provides` 也**拿掉** `clang-analyzer`／`clang-tools-extra`
     兩個虛名（留著等於讓 pacman 誤判依賴已滿足）。本機實查沒有任何已裝包依賴這
     兩個名字：依賴 `clang` 的是 doxygen、lldb、rust-bindgen-git、shiboken6-generator、
-    linux-zen1th-headers 這五顆，全部走 `clang` 本體。
+    linux-cachyos-cjktty-headers 這五顆，全部走 `clang` 本體。
     時效證據：run #443（job 114382764499）整包 2 時 31 分，沒撞 360；裁完只會更短。
   · **六包之外為什麼還多一颗 compiler-rt（依賴關係，不是湊數）**：用戶點名的六顆是
     llvm／llvm-libs／llvm-lit／clang／lld／lldb；`docs/upstream-pkgbuilds/clang.PKGBUILD:11`
@@ -470,7 +470,7 @@ split：llvm-libs／llvm／llvm-lit／compiler-rt／lld／lldb／clang）：
 
 ---
 
-## NVIDIA -beta 六顆（用戶 2026-10-11 點名四顆進本倉，我方追蹤 #170；2026-11-10 補 lib32 兩顆）
+## NVIDIA -beta 四顆（用戶 2026-10-11 點名全部進本倉，我方追蹤 #170）
 
 ⚠️ 先講清楚：**這四顆不是 in-tree 包**，本倉沒有它們的同名目錄，PKGBUILD 一律現取
 AUR。列進本檔只因為「拉取对应的套件仓库」那步給它們開了**顯式分支**（按 pkgbase
@@ -479,32 +479,16 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
   · **為什麼要自己出**：Artix 的 world／lib32 與 Arch 的 extra／testing 只有 stable
     那條 nvidia（615.78.08），`nvidia-beta*` 在 Arch 端 API 實測 404、在本機啟用的倉
     裡 `pacman -Si` 也查無 → -beta 分支唯一的來源是 AUR，版號只能追 AUR。
-  · **六顆包＝三個 pkgbase（重要）**：實查 `~/.cache/yay/nvidia-utils-beta/` 的
+  · **四顆包＝兩個 pkgbase（重要）**：實查 `~/.cache/yay/nvidia-utils-beta/` 的
     PKGBUILD 與 .SRCINFO，`pkgbase=nvidia-utils-beta`、
     `pkgname=('nvidia-utils-beta' 'opencl-nvidia-beta' 'nvidia-settings-beta')`，
-    一次 makepkg 產三顆；`nvidia-beta-dkms` 是另一個 pkgbase、只產一顆；
-    `lib32-nvidia-utils-beta` 也是 split pkgbase，
-    `pkgname=('lib32-nvidia-utils-beta' 'lib32-opencl-nvidia-beta')`，一次產兩顆。
-    AUR 的 git 倉**以 pkgbase 命名**，所以矩陣只能有 `nvidia-utils-beta`、
-    `nvidia-beta-dkms`、`lib32-nvidia-utils-beta` 三條；拿 `opencl-nvidia-beta`／
-    `nvidia-settings-beta`／`lib32-opencl-nvidia-beta` 去 clone 會 404（AUR RPC 實查
-    這三個名字的 `PackageBase` 分別是 `nvidia-utils-beta`、`nvidia-utils-beta`、
-    `lib32-nvidia-utils-beta`），而且同 pkgbase 並行會打出兩份同版本產物在 repo-add
-    那裡互相打架。收集與 repo-add 都是 `pkg_dir/*.pkg.tar.zst` 的 glob，split 不需要
-    額外接點（llvm-git／gstreamer 同形）。
-  · **2026-11-10 補 lib32-nvidia-utils-beta 的理由**：本機 `lib32-nvidia-utils
-    615.78.08-1`（Artix lib32，packager ndowens）depends `nvidia-utils=615.78.08`
-    ——**等號**。64 位 beta 已到 620.70.06，`nvidia-utils-beta` 只 provides
-    `nvidia-utils=620.70.06`，換代窗口一到 32 位那顆就找不到提供者（Steam 等 32 位
-    程式會裝不上）。AUR 的 `lib32-nvidia-utils-beta` 620.70.06-1 depends
-    `nvidia-utils-beta>=620.70.06`（**大於等於**，不是等號），與本倉的 beta 線對齊。
-    它需要 [multilib]（32 位依賴）**和** junlin03-aur（`nvidia-utils-beta` 是本倉
-    產物、不在任何官方倉），所以 kind: aur（借用 junlin03-aur 掛源＋
-    `--skipchecksums --nocheck`＋回推排除），[multilib] 由 build-packages.yml 的
-    repo_name 點名啟用（與 spirv-llvm-translator-git 同一手法）。
-    不收 `nvidia-beta`／`nvidia-open-beta`／`nvidia-open-egpu`：前兩者
-    `depends=('linux')` 釘 Arch 官方核心，本機跑自訂核心（cjktty／zencjk／zen1th）
-    用不了；egpu 那顆依賴 stable `nvidia-utils`，與 beta 衝突。
+    一次 makepkg 產三顆；`nvidia-beta-dkms` 是另一個 pkgbase、只產一顆。
+    AUR 的 git 倉**以 pkgbase 命名**，所以矩陣只能有 `nvidia-utils-beta` 與
+    `nvidia-beta-dkms` 兩條；拿 `opencl-nvidia-beta`／`nvidia-settings-beta` 去
+    clone 會 404（AUR RPC 實查這兩個名字的 `PackageBase` 都是 `nvidia-utils-beta`），
+    而且同 pkgbase 並行會打出兩份同版本產物在 repo-add 那裡互相打架。
+    收集與 repo-add 都是 `pkg_dir/*.pkg.tar.zst` 的 glob，split 不需要額外接點
+    （llvm-git／gstreamer 同形）。
   · **「本機裝的叫 nvidia-settings」是誤讀**：`pacman -Qi nvidia-settings` 是靠那顆的
     `provides = nvidia-settings=615.78.08` 解析過去的，實測 `%NAME%` 欄就是
     `nvidia-settings-beta`（DB 目錄 `/var/lib/pacman/local/nvidia-settings-beta-615.78.08-1`）。
@@ -515,7 +499,7 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
     `curl 'https://aur.archlinux.org/rpc/?v=5&type=info&arg[]=<包名>'` 取
     `.results[0].Version`，AUR 回的是**含 pkgrel 的整串**（實測 `615.78.08-1`）→
     `TARGET_PKGVER="${_nvver%-*}"`、`TARGET_PKGREL="${_nvver##*-}"`，兩段分別驗形，
-    驗不過就 `skip`。手法與 linux-zen1th「tag 尾號即 pkgrel」一致。
+    驗不過就 `skip`。手法與 linux-cachyos-cjktty「tag 尾號即 pkgrel」一致。
     整串不拆會拼出 `nvidia-utils-beta-615.78.08-1-1-…` 的資產名，「已在 release 裡」
     永不命中，等於每天白下 530MB＋409MB 重編。這兩顆 PKGBUILD 都**沒有** `pkgver()`，
     所以 plan 尾部「makepkg 會把 pkgrel 重置為 1」那段不生效，AUR 只抬 pkgrel 時
@@ -533,11 +517,9 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
     註：「artix 容器不能裝 devtools」那條是另一回事——「初始化」的代碼是
     `kind != artix` 才加 devtools（run #356 的教訓），與本組包選 aur 的理由無關。
   · **依賴就緒門檻（本輪補的，不是既有機制）**：`nvidia-beta-dkms` 的 depends 有
-    `nvidia-utils-beta=${pkgver}`（**等號硬釘版號**）；`lib32-nvidia-utils-beta` 的
-    depends 有 `nvidia-utils-beta>=${pkgver}`（**大於等於**）。那顆是同矩陣另一個 job
-    的產物、不在任何官方倉，冷啟動或 utils 那輪失敗時 `makepkg -s` 會
-    `target not found: nvidia-utils-beta` 直接判紅。本倉 plan 步既有的家族門檻只
-    `grep -- '-git$'`，抓不到這條沒有 -git 後綴的兄弟包 → 在這裡點名補上
+    `nvidia-utils-beta=${pkgver}`（**等號硬釘版號**）。本倉 plan 步既有的家族門檻只
+    `grep -- '-git$'`，抓不到這條沒有 -git 後綴的兄弟包 → 冷啟動時 `makepkg -s` 會
+    `target not found: nvidia-utils-beta` 直接判紅。已在 plan 的這條 case 點名補上
     `pacman -Si nvidia-utils-beta` 沒過就 `skip`，與 KDE／Wayland 家族同一套
     「本輪跳過、靠排程按依賴 DAG 逐層收斂」。
   · **與本倉既有包的關係（實測，不是推測）**：
@@ -546,8 +528,7 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
         `provides` 有 `nvidia-utils=615.78.08` → 那條依賴照樣解得開，本機實測
         `pacman -Qi nvidia-utils-beta` 的 Required By 已含 `nvidia-utils-openrc`。
       - 本機 `lib32-nvidia-utils 615.78.08-1`（Artix lib32，packager ndowens）depends
-        `nvidia-utils=615.78.08`——**等號**，靠我們的 provides 滿足。換代後由本倉
-        `lib32-nvidia-utils-beta` 接手（見上條）。
+        `nvidia-utils=615.78.08`——**等號**，靠我們的 provides 滿足。
       - `wlroots-git`（**AUR**，本倉 2026-11-01 已刪掉 in-tree 那份）depends
         `opengl-driver`，`nvidia-utils-beta` 也 provides 它 → 多個提供者，合法，不破洞。
       - `nvidia-settings-beta` depends `nvidia-utils-beta>=615.78.08`、
@@ -557,8 +538,6 @@ clone），而那個 step 的說明按本檔開頭的規矩不寫回 workflow。
       1. **等號釘依賴的換代窗口**：AUR beta 抬到 616.x 而 Artix 的 `lib32-nvidia-utils`
          仍寫 `nvidia-utils=615.78.08` 時，那顆 32 位包會一時找不到提供者，直到 Artix
          同步抬版。目前兩邊都是 615.78.08，所以是未來風險、不是現況。
-         2026-11-10 已補 `lib32-nvidia-utils-beta` 進本倉，換代後可直接改裝它
-         （`pacman -S lib32-nvidia-utils-beta`），不必等 Artix 同步。
       2. **產物是在 Arch 容器裡建的**：`kind: aur` 的容器是 `archlinux:base-devel`
          （不能換 artix 容器：見上條 kind 說明，而且 artix 容器 + kind≠artix 會去裝
          devtools 而恆紅，run #356 實測）。這四顆都是「解包 NVIDIA 官方 .run 再 install」
@@ -2237,138 +2216,3 @@ jbr21 因此沒有存在理由：`matrix/packages.json` 移除條目、目錄 `j
 nashira-git 的掛源點名也一併拿掉（它不再吃本倉的 jbr21）。**注意 jbr21 是本倉自己出的包，
 `Capricornus007/jbr21` 這種倉不存在也不需要存在**；卸載機上那顆 `jbr21` 系統套件要用
 `doas pacman -Rns jbr21`，卸前 `pactree -r jbr21` 實查只有它自己。
-
-## hermes-agent-git 退役／oh-my-pi-gui-git 新增（2026-11-12 用戶點名：「在我的自動構建倉庫跟我電腦上刪了 hermes-agent-git 然後加上裝上 https://github.com/nornzach/oh-my-pi-gui 這個 oh-my-pi-gui-git」）
-
-### 退役：hermes-agent-git
-- 2026-11-11 才加進來的 in-tree 包整組移除：`hermes-agent-git/`（PKGBUILD＋3 個 patch＋2 個 py）、
-  `matrix/packages-2.json` 的條目、本文件原段落，以及 `build-packages.yml`
-  「更新校驗和並回推」giant if 尾端的 `matrix.repo_name != 'hermes-agent-git'` 例外（改名給新包）。
-- 已發佈到 `current-repo` release 的
-  `hermes-agent-git-0.23.1.r1935.g3bcd071-1-x86_64.pkg.tar.zst` 也刪掉，並用
-  `repo-remove` 從 `junlin03-aur.db.tar.gz`／`junlin03-aur.files.tar.gz` 摘掉條目，
-  四個 DB 資產（`junlin03-aur.db*`／`junlin03-aur.files*`）一併回傳。
-  不這麼做會留下「DB 看得到、下載 404」的幽靈條目，讓整包升級事務中止（2026-09-23 實測）。
-- 本機：`pacman -Q hermes-agent-git` 已查無此包，`/opt/hermes-agent-git`、`/usr/bin/hermes`
-  都不存在；清掉 `/tmp` 裡的 hermes 建置樹與兩顆舊 `*.pkg.tar.zst`。
-  `~/.hermes/` 是使用者自己的設定／資料庫，屬於個資不是套件檔案，刻意保留未動。
-
-### 新增：oh-my-pi-gui-git
-`nornzach/oh-my-pi-gui`（omp coding agent 的 Electron 桌面 GUI，MIT，main HEAD
-`6c5dfcc`／package.json 0.9.40）。2026-11-12 查 AUR RPC：
-`oh-my-pi-gui`、`oh-my-pi-gui-git`、`hermes-agent-git` 全部 `resultcount=0`，
-所以配方是自己寫的，不是轉發 AUR。
-
-- **為什麼不是 -bin 掛 -git 名**：GUI 本體（main／preload／renderer → `app.asar`）
-  一律從 main HEAD 現場編：`bun install --frozen-lockfile` → `bun run build`
-  （含上游自己的「main bundle 不得殘留裸 import」自檢）→
-  `electron-builder --linux --dir`。追 release tag 會比 main 少提交，不符本倉「直追源碼」。
-- **唯一取預編二進位的是內嵌 omp sidecar**：上游 README／AGENTS.md 明確寫「單獨 clone 的
-  GUI 倉編不出 sidecar」，它必須放在 `nornzach/oh-my-pi` monorepo 的 `packages/gui/`；
-  上游同時給了合法替代路線——把可信且相容的預編 sidecar 放到 `resources/omp` 再打包，
-  `release-linux.yml` 自己也是這樣組 Linux 產物。`prepare()` 因此從
-  `https://github.com/nornzach/oh-my-pi-gui/releases/latest/download/latest-linux.yml`
-  現算版本、下載同 release 的 `omp_<ver>_amd64.deb`、用 yml 的 sha512（base64→hex）驗章，
-  再從 deb 抽出 `/opt/omp/resources/omp`。網址不寫死版本，上游發新版不必改配方；
-  校驗不符或資產消失直接紅，不靜默降級。全部走官方 GitHub 端點，沒有第三方鏡像。
-- **不碰家目錄**：`BUN_INSTALL_CACHE_DIR`／`npm_config_cache`／`ELECTRON_CACHE`／
-  `XDG_CACHE_HOME` 全導到 `$srcdir`；本機與 CI 都不留 bun／Electron 快取。
-- **版號公式**：`git describe --tags --long --abbrev=7 | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'`
-  → `0.9.40.r2.g6c5dfcc`。CI plan 的通用 -git 分支會 clone 第一個 `git+` 來源、
-  軟鏈 `oh-my-pi-gui`、跑同一支 `pkgver()`，公式必須逐字一致，否則每輪白編。
-- **接線**：`matrix/packages-2.json` 換成 `oh-my-pi-gui-git`（`in_tree: true`，不標 `kind`，
-  理由同上一包：標 `kind: aur` 會被加 `--skipchecksums --nocheck`）；shard 2 未滿 256。
-  「更新校驗和並回推」的例外改名指到本包（只有 `git+` 源、`sha256sums=('SKIP')`，
-  `updpkgsums` 只會白跑，且 in-tree 目錄沒有獨立倉可回推）。
-- **本機驗證（2026-11-12）**：`makepkg -f --nodeps` 全流程通過，`check()` 裡
-  `resources/omp --version` 回 `omp/18.18.6`；成品
-  `oh-my-pi-gui-git-0.9.40.r2.g6c5dfcc-1-x86_64.pkg.tar.zst`（347MB／裝後 610MB），
-  內含 `app.asar`、Electron 主程式、`/usr/bin/omp-gui`＋`oh-my-pi-gui` symlink、
-  `omp-gui.desktop`、hicolor 圖示與上游 MIT LICENSE。
-- **授權**：本倉配方依使用者全域規則採 TBWTFPL v114514
-  （<https://github.com/Capricornus007/tbwtfpl/blob/main/LICENSE>，已放進倉庫根目錄 `LICENSE`）；
-  被打包的軟體本體仍是上游 MIT，Electron／Chromium 授權檔由 electron-builder 自帶，不因打包改授權。
-- 觸發：`gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[{"key":"oh-my-pi-gui-git","repo_name":"oh-my-pi-gui-git","variant":"none","in_tree":true}]'`
-### 2026-11-12 追加：omp-gui 卡死修復＋zh-TW 語系（用戶回報「用 gui 刪除服務商很慢／omp cli 根本沒反應」「omp-gui 內的中文翻譯不全」）
-- **卡死根因**：`src/renderer/components/settings/ProviderConfigDialog.tsx` 在
-  `confirmDelete()` 與 `handleSubmit()` 都 `await refreshProviders(true)`，透過
-  `get_providers {forceRefresh:true}` 叫內嵌 sidecar 對**所有**已設定服務商做模型探索。
-  使用者 `~/.omp/agent/models.yml` 有 41 家服務商、約 4000 個模型；sidecar 的 RPC
-  佇列是序列的，這一等就讓對話框、整個 GUI 與內嵌 CLI 全部無回應，
-  而刪除流程還連做兩次（confirmDelete 一次＋overlay 關閉時 ProvidersWindow 的 load 一次）。
-  修法：改成不等待的快取讀取 `void refreshProviders()`，列表收斂交給
-  `model_catalog_update` push 與 `ProvidersWindow` 原有的 `refreshPending` 輪詢；
-  服務商探索只在使用者明確按重新整理時才強迫跑。**沒有降低任何功能或模型強度**。
-- **語系**：上游 `LANGUAGES` 只有 `en`／`ru`／`zh`（`zh.ts` 是簡中，且 35 個值與英文相同）。
-  補上以臺灣正體為基準的 `zh-TW`：`zh-TW.ts`（4129 鍵，與 zh.ts 鍵集合完全相同）、
-  `schema-zh-TW.ts`／`schema-option-zh-TW.ts`、Electron 原生選單 `native-zh-TW.ts`、
-  托盤 `native-tray-zh-TW.ts`，並把 `languageFromLocale()` 改成 `zh-TW/HK/Hant → zh-TW`。
-  舊的 `zh` 偏好值仍然有效（指向簡中），不會把既有使用者洗掉。
-  產生方式：OpenCC `s2twp.json` ＋臺灣用語表（服務商／設定／工作階段／重新整理／
-  檔案／程式／網路／預設…）；專有名詞（omp、OMP Core、Git、macOS、API、LSP、MCP、
-  Anthropic、models.yml…）保持原文。
-- **落地方式**：不 fork 上游、不推別人倉庫。七個附屬檔（修補腳本＋五個語系／字典檔＋
-  PKGBUILD）由本倉 in-tree 維護；`prepare()` 跑 `omp-gui-fixes.py`，它對每個上游片段
-  做「命中一次才改」的斷言並自證結果，上游改動時建置直接紅，不靜默出半修版本。
-- **驗證**：`bun run build` 通過、`main bundle is self-contained`；makepkg 全流程與
-  `check()` 綠，成品 app.asar 內可查到 zh-TW 語系與正體字串。
-
-
-
-## perchai-cli：進 CI、不進 pacman 包（2026-11-08 用戶點名，2026-11-12 落地）
-使用者原話：「把 `npm install -g perchai-cli` 這個加進自動構建倉庫去吧？就不用加到我電腦裡了」。
-落地成 `.github/workflows/perch-cli-toolchain.yml`：`workflow_dispatch` ＋每天排程，
-`sudo npm install -g perchai-cli@latest`（版本永遠取 npm registry 的 `dist-tags.latest`），
-裝完驗證 `perch` 在 PATH 並印出實際裝到的版本。
-
-**為什麼不是一個 in-tree 包**：查官方 registry 的 `perchai-cli@2.4.129`，
-`license: SEE LICENSE IN LICENSE`，把 tarball 的 `package/LICENSE` 解開是
-「Perch AI CLI Proprietary License」，明文禁止 copy／modify／distribute／sublicense。
-做成 `current-repo` 上可下載的 `.pkg.tar.zst` 會構成再散布，所以不上矩陣、
-不進 `junlin03-aur`、不上傳任何二進位資產，也不在使用者電腦安裝。
-若上游日後換成允許再散布的授權，再照 `omnirush-cli/` 的 npm 包範本評估。
-
-## flex-git（2026-11-15；run 43688123660 實測 doxygen-git 紅）
-
-### 為什麼必須有這顆（不是「也想 -git」，是 distro flex 已經壞了）
-`doxygen-git` 的構建紅在 flex 2.6.5–2.6.12 的兩個上游缺陷（run 43688123660 實測）：
-
-1. flex 2.6.5 把 `yy_fatal_error()` 改名 `yypanic()`，doxygen 的 `doxygen_lex.h`
-   仍呼叫 `yy_fatal_error` → `error: 'yy_fatal_error' was not declared in this scope`；
-2. flex 2.6.5 起 `yy_base` 表窄化成 `flex_int16_t`（flex bug #816），doxygen 的
-   `code.l` 產生的偏移超過 32767 → `error: narrowing conversion of '35988' from
-   'int' to 'flex_int16_t'`（C++ narrowing，直接紅）。
-
-上游 doxygen PR #12451（open）明確拒絕 flex 2.6.5–2.6.12，要求 2.6.4 或 ≥ 2.6.13。
-用戶政策（2026-11-15）：**依賴版本問題一律走源碼直出的 -git 版本**，不從 release
-tarball 或系統 flex 將就。所以這顆 flex-git 就是 doxygen-git 的 makedepends。
-
-### 收錄範圍
-- `pkgver()` 從上游 HEAD 現算（`git describe --tags --match 'v*'`，tag 形如 `v2.6.14`；
-  master HEAD = 6e285f26b，2026-11-15）。describe 錨點漂移時靠 `epoch=1` 避免被
-  repo-add 判降級而永遠拒收（同 make-git 的理由）。
-- git 版沒有預生成的 `configure`，`build()` 先跑 `./autogen.sh`（libtoolize +
-  autoreconf）再 `./configure --prefix=/usr && make`；`check()` 跑上游自帶測試套件
-  `make check`，不准 `-E` 排掉。
-- `makedepends` 補上整組 autotools 鏈（autoconf/automake/bison/gettext/help2man/
-  indent/libtool/m4/sed/texinfo）＋ `flex` 本身（AC_PROG_LEX 要一支 flex 來
-  bootstrap，系統那顆 2.6.10 夠用）。
-- `provides=('flex')`＋`conflicts=('flex')`：頂替的是安裝用的名字 `flex`。
-
-### 四接點
-1. `matrix/packages.json`：`{"key": "flex-git", "repo_name": "flex-git", "variant": "none"}`
-   （插在 doxygen-git 之後，總數 249 → 250）。
-2. `build-packages.yml` in-tree case 清單加 `flex-git`；回推校驗和 giant if 加
-   `!= 'flex-git'`（純 git 源，跑 updpkgsums 會撕檔）。
-3. `build-packages.yml` 的 plan 步依賴閘門：`doxygen-git) _extra_gate_deps="flex-git" ;;`
-   ——flex-git 未發佈前 `makepkg -s` 會 `target not found: flex-git` 直接判紅，
-   所以本輪跳過等下輪，符合本倉 DAG 收斂設計（spirv-tools-git 同款做法）。
-4. 本檔。
-
-### doxygen-git 側的改動
-`makedepends` 的 `flex` → `flex-git`，並在 PKGBUILD 註明理由（flex 2.6.5–2.6.12
-破壞 doxygen，上游 PR #12451 要求 ≥ 2.6.13）。
-
-### 裝機影響
-`pactree -r flex` 需自行評估：flex 是建置期工具（lex/yacc 鏈），執行期幾乎沒有
-反向依賴；`provides=('flex')` 讓所有 `makedepends=(flex)` 的包都能解到這顆。

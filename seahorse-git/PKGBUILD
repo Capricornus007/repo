@@ -14,7 +14,7 @@ url="https://wiki.gnome.org/Apps/Seahorse"
 arch=(x86_64)
 license=(GPL)
 options=(debug !strip)
-depends=(gtk4 libadwaita gcr-4 libsecret gpgme gnome-keyring libpwquality qrencode)
+depends=(gtk3 gcr libsecret gpgme gnome-keyring libpwquality libhandy)
 conflicts=('seahorse')
 makedepends=(libldap yelp-tools gobject-introspection vala git meson)
 provides=(seahorse x11-ssh-askpass)
@@ -24,7 +24,7 @@ sha256sums=('SKIP')
 
 pkgver() {
   cd ${pkgname%-git}
-  git describe --tags | sed 's/([^-]*-g)/r\1/;s/-/./g'
+  git describe --tags | sed 's/-/+/g'
 }
 
 prepare() {

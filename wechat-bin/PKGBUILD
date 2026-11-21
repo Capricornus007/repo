@@ -1,0 +1,82 @@
+# Maintainer: Capricornus007 <contact@capricornus007.com>
+# 上游: https://weixin.qq.com/ （AUR wechat-bin 基礎，版本由 deb control 拆包讀取）
+# 2026-11-22 用戶裁定：
+#   1) 版本號不信 AUR RPC／網頁顯示，一律拆上游 .deb 的 control 讀 Version:。
+#      （實測 AUR 顯示 4.1.13.26，上游 deb 其實已是 4.1.13.29）
+#   2) 附加 AUR wechat 的非沙盒修改：desktop entry 正名 com.tencent.wechat.desktop
+#      + alpm hook 清理舊 launcher；**不加入任何沙盒機制**（無 portable 依賴、
+#      無 config.toml/沙盒設定、無 bwrap）。
+pkgname=wechat-bin
+pkgver=4.1.13.29
+pkgrel=1
+epoch=1
+pkgdesc="微信 WeChat 官方 Linux 版（重新打包，版本拆包檢測，無沙盒）"
+arch=('x86_64' 'aarch64' 'loong64')
+url="https://weixin.qq.com/"
+license=('LicenseRef-proprietary')
+options=(!debug !strip)
+depends=(
+  nss xcb-util-renderutil xcb-util-keysyms xcb-util-image xcb-util-wm
+  libxkbcommon-x11 libxkbcommon libxcb gcc-libs nspr glibc zlib
+  libxcomposite glib2 libxrender libxext alsa-lib dbus libxrandr
+  fontconfig pango freetype2 libxfixes cairo libx11 expat libvlc
+  libxdamage libdrm mesa libglvnd libpulse hicolor-icon-theme
+)
+optdepends=(
+  'ttf-twemoji: emoji font for WeChat'
+  'libjack.so: libjack_plugin.so'
+  'at-spi2-core: accessibility in the browser part'
+  'xdg-desktop-portal-impl: file chooser / screen cast portal'
+)
+makedepends=(libarchive)
+
+# 官方站無版本化下載網址 → checksums SKIP，版本由 pkgver() 拆包讀取
+source=()
+source_x86_64=(wechat-x86-${pkgver}.deb::"https://dldir1v6.qq.com/weixin/Universal/Linux/WeChatLinux_x86_64.deb")
+source_aarch64=(wechat-arm-${pkgver}.deb::"https://dldir1v6.qq.com/weixin/Universal/Linux/WeChatLinux_arm64.deb")
+source_loong64=(wechat-loong64-${pkgver}.deb::"https://dldir1v6.qq.com/weixin/Universal/Linux/WeChatLinux_LoongArch.deb")
+md5sums_x86_64=('SKIP')
+md5sums_aarch64=('SKIP')
+md5sums_loong64=('SKIP')
+
+# 拆包讀真實版本（與 ci/deb-version.sh 同源邏輯）
+pkgver() {
+  tar -xf control.tar.xz ./control 2>/dev/null
+  sed -n 's/^Version: *//p' control | head -1
+}
+
+package() {
+  tar -xf data.tar.xz ./opt
+  cp -r opt "${pkgdir}/"
+  tar -xf data.tar.xz ./usr
+  cp -r usr "${pkgdir}/"
+
+  install -d "${pkgdir}/usr/share/licenses/${pkgname}"
+  echo "https://www.wechat.com/us/service_terms.html" > "${pkgdir}/usr/share/licenses/${pkgname}/ToS.txt"
+
+  # 原 launcher：/usr/bin/wechat -> /opt/wechat/wechat
+  ln -sf "/opt/wechat/wechat" "${pkgdir}/usr/bin/wechat"
+
+  # ---- AUR wechat 的非沙盒修改 ----
+  # desktop entry 正名為 com.tencent.wechat.desktop（避免與其他 wechat 包撞名）
+  local d="${pkgdir}/usr/share/applications"
+  [ -f "$d/wechat.desktop" ] && mv "$d/wechat.desktop" "$d/com.tencent.wechat.desktop"
+  sed -i 's|Exec=/usr/bin/wechat|Exec=/opt/wechat/wechat|g; s|Exec=wechat|Exec=/opt/wechat/wechat|g' "$d"/*.desktop 2>/dev/null || true
+
+  # alpm hook：升級後清掉舊 launcher / 舊 desktop（純清理，無沙盒）
+  install -d "${pkgdir}/usr/share/libalpm/hooks"
+  cat > "${pkgdir}/usr/share/libalpm/hooks/wechat-cleanup.hook" <<'HOOK'
+[Action]
+When = PostTransaction
+Exec = /usr/bin/bash -c "rm -f /usr/share/applications/wechat.desktop /usr/share/applications/com.tencent.wechatappex.desktop; ln -srf /opt/wechat/wechat /usr/bin/wechat || true"
+Depends = wechat-bin
+Description = Clean up legacy WeChat launcher and desktop entries
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Path
+Target = usr/bin/wechat
+Target = usr/share/applications/wechat.desktop
+HOOK
+}

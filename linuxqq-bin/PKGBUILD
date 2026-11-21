@@ -1,0 +1,64 @@
+# Maintainer: Capricornus007 <contact@capricornus007.com>
+# 上游: https://im.qq.com/linuxqq/
+# 2026-11-22 用戶裁定：版本號拆上游 .deb 的 control 讀取，不信 AUR 顯示。
+#   URL 中的 QQNT 目錄號 (9.9.37) 與 md5 prefix 由 ci/deb-version.sh 從 AUR
+#   最新 PKGBUILD 的 source URL 發現（AUR 維護者更新下載址比我們快），
+#   但 pkgver 一律以拆包所得 control Version 為準。
+pkgname=linuxqq-bin
+pkgver=3.2.35_54395
+pkgrel=1
+epoch=5
+pkgdesc="New Linux QQ based on Electron（版本拆包檢測）"
+arch=('x86_64' 'aarch64' 'loong64')
+url="https://im.qq.com/linuxqq"
+license=('LicenseRef-QQ')
+conflicts=("linuxqq" "${pkgname%-bin}-nt-bwrap")
+provides=("linuxqq=${pkgver/_/-}")
+depends=('nss' 'alsa-lib' 'gtk3' 'gjs' 'at-spi2-core' 'openjpeg2' 'openslide')
+optdepends=('libappindicator-gtk3: Ayatana indicators systray')
+options=(!strip !debug)
+
+# URL 結構: QQNT/<qqnt-ver>/beta/<md5-prefix>/linuxqq_<pkgver-with-dash>_<arch>.deb
+# 由 CI 更新（見 ci/deb-version.sh）；此處為當前上游最新版
+_qqnt=9.9.37
+_md5_prefix=816b3c79
+_src_prefix="${pkgname%-bin}_${pkgver/_/-}"
+source_x86_64=("https://qqdl.gtimg.cn/qqfile/QQNT/${_qqnt}/beta/${_md5_prefix}/${_src_prefix}_amd64.deb")
+source_aarch64=("https://qqdl.gtimg.cn/qqfile/QQNT/${_qqnt}/beta/${_md5_prefix}/${_src_prefix}_arm64.deb")
+source_loong64=("https://qqdl.gtimg.cn/qqfile/QQNT/${_qqnt}/beta/${_md5_prefix}/${_src_prefix}_loongarch64.deb")
+source=("${pkgname%-bin}.sh")
+sha512sums=('SKIP')
+sha512sums_x86_64=('SKIP')
+sha512sums_aarch64=('SKIP')
+sha512sums_loong64=('SKIP')
+
+# 拆包讀真實版本：control Version 3.2.35-54395 -> pkgver 3.2.35_54395
+pkgver() {
+  local ct
+  if [ -f control.tar.xz ]; then
+    tar -xf control.tar.xz ./control 2>/dev/null
+  elif [ -f control.tar.gz ]; then
+    tar -xzf control.tar.gz ./control 2>/dev/null
+  fi
+  sed -n 's/^Version: *//p' control 2>/dev/null | head -1 | sed 's/-/_/'
+}
+
+package() {
+  echo "  -> Extracting the data.tar.xz..."
+  bsdtar -xf data.tar.xz -C "${pkgdir}/"
+
+  echo "  -> Installing..."
+  install -Dm755 "${pkgname%-bin}.sh" "${pkgdir}/usr/bin/linuxqq"
+
+  # Launcher Fix
+  sed -i '3s!/opt/QQ/qq!linuxqq!' "${pkgdir}/usr/share/applications/qq.desktop"
+  # Icon Fix
+  sed -i '6s!/usr/share/icons/hicolor/512x512/apps/qq.png!qq!' "${pkgdir}/usr/share/applications/qq.desktop"
+
+  # License
+  install -Dm644 "${pkgdir}/opt/QQ/LICENSE.electron.txt" -t "${pkgdir}/usr/share/licenses/${pkgname}/"
+  install -Dm644 "${pkgdir}/opt/QQ/LICENSES.chromium.html" -t "${pkgdir}/usr/share/licenses/${pkgname}/"
+
+  # 移除自帶 libssh2（與系統衝突）
+  rm -fv "${pkgdir}"/opt/QQ/resources/app/{,avsdk/bugly/}libssh2.so.1
+}

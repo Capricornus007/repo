@@ -481,12 +481,6 @@
     "kind": "aur"
   },
   {
-    "key": "libfm-gtk2",
-    "repo_name": "libfm-gtk2",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
     "key": "playerctl-git",
     "repo_name": "playerctl-git",
     "variant": "none",
@@ -552,8 +546,7 @@
     "key": "gamemode-git",
     "repo_name": "gamemode-git",
     "variant": "none",
-    "kind": "artix",
-    "image": "artixlinux/artixlinux:base-devel"
+    "kind": "aur"
   },
   {
     "key": "vapoursynth-git",
@@ -666,145 +659,6 @@
     "key": "openvpn-git",
     "repo_name": "openvpn-git",
     "variant": "none",
-    "kind": "artix",
-    "image": "artixlinux/artixlinux:base-devel"
-  },
-  {
-    "key": "adwaita-icon-theme-git",
-    "repo_name": "adwaita-icon-theme-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "adwaita-cursors-git",
-    "repo_name": "adwaita-cursors-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "bun-git",
-    "repo_name": "bun-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "wget-git",
-    "repo_name": "wget-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "vim-git",
-    "repo_name": "vim-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "calibre-git",
-    "repo_name": "calibre-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "podofo-git",
-    "repo_name": "podofo-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "electron45-bin",
-    "repo_name": "electron45-bin",
-    "variant": "none",
-    "in_tree": true
-  },
-  {
-    "key": "spandsp-git",
-    "repo_name": "spandsp-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "orc-git",
-    "repo_name": "orc-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "libnsl-git",
-    "repo_name": "libnsl-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "libtirpc-git",
-    "repo_name": "libtirpc-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "qt5-virtualkeyboard-git",
-    "repo_name": "qt5-virtualkeyboard-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "xorg-server-tearfree-git",
-    "repo_name": "xorg-server-tearfree-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "lib32-openal-git",
-    "repo_name": "lib32-openal-git",
-    "variant": "none",
-    "kind": "multilib",
-    "in_tree": true
-  },
-  {
-    "key": "lib32-orc-git",
-    "repo_name": "lib32-orc-git",
-    "variant": "none",
-    "kind": "multilib",
-    "in_tree": true
-  },
-  {
-    "key": "lib32-sdl2-git",
-    "repo_name": "lib32-sdl2-git",
-    "variant": "none",
-    "kind": "multilib",
-    "in_tree": true
-  },
-  {
-    "key": "sdl2-git",
-    "repo_name": "sdl2-git",
-    "variant": "none",
     "kind": "aur"
-  },
-  {
-    "key": "lib32-libnsl-git",
-    "repo_name": "lib32-libnsl-git",
-    "variant": "none",
-    "kind": "multilib",
-    "in_tree": true
-  },
-  {
-    "key": "lib32-libtirpc-git",
-    "repo_name": "lib32-libtirpc-git",
-    "variant": "none",
-    "kind": "multilib",
-    "in_tree": true
   }
 ]

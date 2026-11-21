@@ -1,1 +1,6 @@
 64gram-desktop-bin/
+
+# 構建產物（2026-11-22）
+*.log
+*.pkg.tar.zst
+*.pkg.tar.gz

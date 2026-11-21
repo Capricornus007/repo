@@ -10,7 +10,7 @@
 
 pkgbase=gvfs-git
 _pkgbase=gvfs
-pkgname=(gvfs-git gvfs-{smb,afc,gphoto2,goa,mtp,nfs}-git)
+pkgname=(gvfs-git gvfs-{smb,afc,gphoto2,goa,mtp,nfs,google}-git)
 pkgver=1.58.0+3+g04b74878
 pkgrel=1
 pkgdesc="Virtual filesystem implementation for GIO"
@@ -20,8 +20,8 @@ license=(LGPL)
 depends=('avahi' 'dconf' 'fuse3' 'libarchive' 'libcdio-paranoia' 'libsoup3' 'udisks2' 'libsecret'
          'libbluray' 'libgudev' 'gcr' 'psmisc' 'gsettings-desktop-schemas>=3.34.0')
 makedepends=('dbus' 'libgphoto2' 'libimobiledevice' 'smbclient' 'docbook-xsl' 'gtk3' 'libmtp'
-             'gnome-online-accounts' 'libnfs' 'git' 'gtk-doc' 'python' 'meson'
-             'openssh' 'glib2-devel' 'msgraph')
+             'gnome-online-accounts' 'libnfs' 'libgdata' 'git' 'gtk-doc' 'python' 'meson'
+             'openssh' 'glib2-devel')
 source=("git+https://gitlab.gnome.org/GNOME/gvfs.git"
         gvfsd.hook)
 sha512sums=('SKIP'
@@ -29,7 +29,7 @@ sha512sums=('SKIP'
 
 pkgver() {
   cd $_pkgbase
-  git describe --tags | sed 's/([^-]*-g)/r\1/;s/-/./g'
+  git describe --tags | sed 's/-/+/g'
 }
 
 build() {
@@ -60,6 +60,7 @@ package_gvfs-git() {
               'gvfs-mtp: MTP device support'
               'gvfs-goa: gnome-online-accounts (e.g. OwnCloud) support'
               'gvfs-nfs: NFS support'
+              'gvfs-google: Google Drive support'
               'gtk3: Recent files support')
   provides=('gvfs')
   conflicts=('gvfs')
@@ -109,6 +110,9 @@ package_gvfs-git() {
     lib/gvfsd-nfs \
     share/gvfs/mounts/nfs.mount
 
+  _split google \
+    lib/gvfsd-google \
+    share/gvfs/mounts/google.mount
 }
 
 package_gvfs-smb-git() {
@@ -149,7 +153,7 @@ package_gvfs-mtp-git() {
 
 package_gvfs-goa-git() {
   pkgdesc+=" (Gnome Online Accounts backend; cloud storage)"
-  depends=("gvfs-git=$pkgver" 'gnome-online-accounts' 'msgraph')
+  depends=("gvfs-git=$pkgver" 'gnome-online-accounts')
   provides=('gvfs-goa')
   conflicts=('gvfs-goa')
 
@@ -166,5 +170,13 @@ package_gvfs-nfs-git() {
   mv "$srcdir/nfs" "$pkgdir/usr"
 }
 
+package_gvfs-google-git() {
+  pkgdesc+=" (Google Drive backend)"
+  depends=("gvfs-goa-git=$pkgver" 'libgdata')
+  provides=('gvfs-google')
+  conflicts=('gvfs-google')
+
+  mv "$srcdir/google" "$pkgdir/usr"
+}
 
 # vim:set sw=2 et:

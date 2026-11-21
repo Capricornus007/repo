@@ -16,7 +16,7 @@ license=('GPL')
 groups=('xfce4-goodies')
 depends=('libburn' 'libisofs' 'gtk3' 'libxfce4ui' 'gst-plugins-base-libs'
          'libgudev' 'desktop-file-utils')
-makedepends=('meson' 'git' 'exo' 'libxslt' 'docbook-xsl')
+makedepends=('meson' 'git' 'exo')
 provides=("${_pkgname}=${pkgver%%+*}")
 conflicts=("${_pkgname}")
 source=("${_pkgname}::git+https://gitlab.xfce.org/apps/${_pkgname}")
@@ -24,7 +24,7 @@ sha256sums=('SKIP')
 
 pkgver() {
   cd "${_pkgname}"
-  git describe --long --tags | sed -r "s:^${_pkgname}.::;s/^v//;s/^xfce-//;s/([^-]*-g)/r\1/;s/-/./g"
+  git describe --long --tags | sed -r "s:^${_pkgname}.::;s/^v//;s/^xfce-//;s/-/+/g"
 }
 
 build() {
@@ -33,9 +33,6 @@ build() {
     -D gudev=enabled
   )
 
-  # xsltproc --nonet 需要 XML catalog 把 docbook.xsl 的 URL 映射到本地檔案；
-  # docbook-xsl 裝好後 /etc/xml/catalog 就有這條映射。
-  export XML_CATALOG_FILES=/etc/xml/catalog
   arch-meson "${_pkgname}" build "${meson_options[@]}"
   meson compile -C build
 }
