@@ -626,11 +626,21 @@ jobs:
           # 移植自 lfs-pacman/feed-bot：全包 LTO 硬幹 + 完整 znver3 旗標 + 編譯器外掛。
           sed -i 's/!lto/lto/g' /etc/makepkg.conf
           grep -qE '^OPTIONS=\(.*lto' /etc/makepkg.conf || echo 'OPTIONS+=(lto)' >> /etc/makepkg.conf
-          cat ci/makepkg-flags.conf >> /etc/makepkg.conf
+          # 本 workflow 無 checkout step（見 mpv-git 註解）， ci/ 不在容器裡。
+          # 從本倉庫 master 的 raw URL 抓六最配置（與 mpv-git 同手法），重試 3 次。
+          _ci_base="https://raw.githubusercontent.com/${{ github.repository }}/master/ci"
+          for _try in 1 2 3; do
+            curl -sfL --retry 2 "$_ci_base/makepkg-flags.conf" -o /tmp/makepkg-flags.conf \
+              && curl -sfL --retry 2 "$_ci_base/gcc-znver3.sh" -o /tmp/gcc-znver3.sh \
+              && [ -s /tmp/makepkg-flags.conf ] && [ -s /tmp/gcc-znver3.sh ] && break
+            [ "$_try" = 3 ] && { echo "::error::抓不到 ci/ 六最配置（raw URL 3 次失敗）"; exit 1; }
+            sleep $((_try * 10))
+          done
+          cat /tmp/makepkg-flags.conf >> /etc/makepkg.conf
           sed -i 's/,--as-needed//g; s/ --as-needed//g' /etc/makepkg.conf
           sed -i 's|^LDFLAGS="|LDFLAGS="-lm |' /etc/makepkg.conf
           install -d /usr/local/bin
-          install -m755 ci/gcc-znver3.sh /usr/local/bin/gcc-znver3
+          install -m755 /tmp/gcc-znver3.sh /usr/local/bin/gcc-znver3
           for c in gcc g++ cc c++; do ln -sf /usr/local/bin/gcc-znver3 "/usr/local/bin/$c"; done
           echo "### 六最: $(grep -m1 CFLAGS= /etc/makepkg.conf)" >> "$GITHUB_STEP_SUMMARY"
           gcc -march=znver3 -dM -E - </dev/null | grep -m1 __znver3__ >> "$GITHUB_STEP_SUMMARY" 
