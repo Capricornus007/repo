@@ -1626,10 +1626,13 @@ jobs:
               # LibreWolf 版本權威 = librewolf.dev Forgejo source tags API（Arch nvchecker 同源）。
               # tag 格式 160.0.1-1 -> pkgver 160.0.1_1；round release 160.0-1 -> 160.0.0_1
               # （補 .0 避免 vercmp 比較問題，見 Arch README）。
+              curl -sfL --retry 3 "https://raw.githubusercontent.com/$GH_REPO/master/ci/librewolf-version.py" \
+                -o /tmp/lw-version.py || skip "抓不到 ci/librewolf-version.py"
               _lw_tags=$(curl -sfL --connect-timeout 20 --retry 3 \
                 "https://librewolf.dev/api/v1/repos/librewolf/source/tags" || true)
               [ -n "$_lw_tags" ] || skip "拿不到 LibreWolf tags"
-              TARGET_PKGVER=$(python3 -c "\$(printf '%s' 'aW1wb3J0IGpzb24sc3lzLHJlCmQ9anNvbi5sb2FkKHN5cy5zdGRpbikKYmVzdD1Ob25lCmZvciB0IGluIGQ6CiAgICBtPXJlLm1hdGNoKHIiXihcZCspKD86XC4oXGQrKSk/KD86XC4oXGQrKSk/LShcZCspJCIsIHRbIm5hbWUiXSkKICAgIGlmIG5vdCBtOiBjb250aW51ZQogICAgbWFqLG1pbm9yLHBhdGNoLHJlbD1baW50KHgpIGlmIHggZWxzZSAwIGZvciB4IGluIG0uZ3JvdXBzKCldCiAgICBrZXk9KG1haixtaW5vcixwYXRjaCxyZWwpCiAgICBpZiBiZXN0IGlzIE5vbmUgb3Iga2V5PmJlc3RbMF06IGJlc3Q9KGtleSwobWFqLG1pbm9yLHBhdGNoLHJlbCkpCmlmIG5vdCBiZXN0OiBzeXMuZXhpdCgxKQptYWosbWlub3IscGF0Y2gscmVsPWJlc3RbMV0KcHJpbnQoZiJ7bWFqfS57bWlub3J9LntwYXRjaH1fe3JlbH0iKQ==' | base64 -d)" <<< "$_lw_tags")
+              TARGET_PKGVER=$(printf '%s' "$_lw_tags" | python3 /tmp/lw-version.py) \
+                || skip "解析 LibreWolf 版本失敗"
               [ -n "$TARGET_PKGVER" ] || skip "解析 LibreWolf 版本失敗"
               sed -i "s/^pkgver=.*/pkgver=${TARGET_PKGVER}/" PKGBUILD
               echo "LibreWolf 最新版本: $TARGET_PKGVER"
