@@ -364,6 +364,8 @@ jobs:
           fi
 
       - name: 初始化容器源與建置環境（tkg／artix／makepkg，接上一歩）
+        env:
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
@@ -628,7 +630,7 @@ jobs:
           grep -qE '^OPTIONS=\(.*lto' /etc/makepkg.conf || echo 'OPTIONS+=(lto)' >> /etc/makepkg.conf
           # 本 workflow 無 checkout step（見 mpv-git 註解）， ci/ 不在容器裡。
           # 從本倉庫 master 的 raw URL 抓六最配置（與 mpv-git 同手法），重試 3 次。
-          _ci_base="https://raw.githubusercontent.com/${{ github.repository }}/master/ci"
+          _ci_base="https://raw.githubusercontent.com/$GH_REPO/master/ci"
           for _try in 1 2 3; do
             curl -sfL --retry 2 "$_ci_base/makepkg-flags.conf" -o /tmp/makepkg-flags.conf \
               && curl -sfL --retry 2 "$_ci_base/gcc-znver3.sh" -o /tmp/gcc-znver3.sh \
@@ -1640,7 +1642,7 @@ jobs:
               # 先從 AUR 最新 PKGBUILD 的 source 取得下游址（AUR 更新下載址較快），
               # 再拆該 deb 讀真實 Version 當 pkgver。
               # workflow 無 checkout，從 raw URL 抓 deb-version.sh（與六最配置同手法）
-              curl -sfL --retry 3 "https://raw.githubusercontent.com/${{ github.repository }}/master/ci/deb-version.sh" \
+              curl -sfL --retry 3 "https://raw.githubusercontent.com/$GH_REPO/master/ci/deb-version.sh" \
                 -o /tmp/deb-version.sh || skip "抓不到 ci/deb-version.sh"
               chmod +x /tmp/deb-version.sh
               case "$PKG" in
