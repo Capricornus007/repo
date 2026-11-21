@@ -1525,5 +1525,19 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "autofdo-git",
+    "repo_name": "autofdo-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "llvm-bolt-git",
+    "repo_name": "llvm-bolt-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]
