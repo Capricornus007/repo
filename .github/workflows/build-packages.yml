@@ -2903,31 +2903,32 @@ jobs:
               # 别出一颗看起来成功、其实没 CJK 的内核。
               avail=$(gh_api "https://api.github.com/repos/Capricornus007/cjktty-patches/contents/v${series%%.*}.x" \
                       | jq -r '.[].name' || true)
-              esc="${series//./\\.}"
-              pick=$(printf '%s\n' "$avail" | grep -E "^cjktty-${esc}(\.[0-9]+)?\.patch$" | sort -V | tail -n1 || true)
-              [ -n "$pick" ] && how="本线精确"
-              [ -n "$pick" ] || pick=$(printf '%s\n' "$avail" | grep -E "^cjktty-${esc}-rc[0-9]+\.patch$" | sort -V | tail -n1 || true)
-              [ -n "$pick" ] && how="本线 rc"
-              if [ -z "$pick" ]; then
-                pick=$(printf '%s\n' "$avail" | grep -E '^cjktty-.*\.patch$' | sort -V | tail -n1 || true)
-                how="跨线回退"
-                if [ -n "$pick" ]; then
-                  pb_series=$(printf '%s' "$pick" | sed -nE 's/^cjktty-([0-9]+\.[0-9]+).*/\1/p')
+              # 用獨立腳本挑補丁：本線精確 > 本線 rc > 不高於目標的最大版本
+              # （舊邏輯 sort -V|tail 會對 7.3 選到 7.4-rc1，字體數據補丁套不上而 prepare() 死）
+              curl -sfL --retry 3 "https://raw.githubusercontent.com/$GH_REPO/master/ci/cjktty-pick.sh" \
+                -o /tmp/cjktty-pick.sh || { echo "::error::抓不到 ci/cjktty-pick.sh"; exit 1; }
+              chmod +x /tmp/cjktty-pick.sh
+              pick=$(printf '%s\n' "$avail" | /tmp/cjktty-pick.sh "$series" || true)
+              how="本線"
+              if [ -n "$pick" ]; then
+                pb_series=$(printf '%s' "$pick" | sed -nE 's/^cjktty-([0-9]+\.[0-9]+).*/\1/p')
+                if [ "$pb_series" != "$series" ]; then
+                  how="跨線回退"
                   p_maj=${pb_series%%.*}; p_min=${pb_series##*.}
                   t_maj=${series%%.*};   t_min=${series##*.}
                   if [ "$p_maj" != "$t_maj" ]; then
-                    echo "::error::补丁 $pick 属 v${p_maj}.x，目标 $series 在 v${t_maj}.x —— 跨大版不回退"
+                    echo "::error::補丁 $pick 屬 v${p_maj}.x，目標 $series 在 v${t_maj}.x —— 跨大版不回退"
                     exit 1
                   fi
                   gap=$(( t_min - p_min ))
                   if [ "$gap" -gt 1 ]; then
-                    echo "::error::补丁线 $pb_series 与目标 $series 差 $gap 个次版本，超出「小版本漂移可耐受」的范围。"
-                    echo "::error::先去 Capricornus007/cjktty-patches 补一份 $series 的补丁再来，别硬出包。"
+                    echo "::error::補丁線 $pb_series 與目標 $series 差 $gap 個次版本，超出容忍範圍"
                     exit 1
                   fi
-                  echo "::warning::$series 没有专属 cjktty 补丁，跨线回退到 $pick（来自 $pb_series，差 $gap 个次版本；若 hunk 失败请先补补丁）"
+                  echo "::warning::$series 沒有專屬補丁，跨線回退到 $pick（來自 $pb_series，差 $gap；舊邏輯曾錯選 7.4-rc1 導致字體補丁失敗）"
                 fi
               fi
+              echo "選用 cjktty 補丁: ${pick:-（無）}（$how，目標線 $series）"
               [ -n "$pick" ] || { echo "错误：cjktty-patches 的 v${series%%.*}.x 里找不到任何可用补丁"; exit 1; }
               echo "选用 cjktty 补丁: $pick（$how，目标线 $series）"
               curl -sfL -o 0001-cjktty.patch \
