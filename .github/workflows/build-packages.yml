@@ -23,6 +23,10 @@ on:
 
 env:
   REPO_RELEASE_TAG: current-repo
+  # 全域 GH_REPO：以下多個 step 的 run 塊都用 ${GH_REPO} 抓本倉 raw 檔／API，
+  # 之前只在部分 step 的 env 宣告，導致「改寫 PKGBUILD」等 step 觸發
+  # unbound variable（cjktty-pick.sh/librewolf-version.py/deb-version.sh 全中）。
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   build-packages:
