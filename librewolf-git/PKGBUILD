@@ -103,7 +103,7 @@ options=(
 
 source=(
   https://librewolf.dev/api/packages/librewolf/generic/librewolf-source/$_pkgver/librewolf-$_pkgver.source.tar.gz
-  $pkgname.desktop
+  librewolf.desktop
 )
 
 sha256sums=('SKIP'  # source 由 CI 版本檢測更新，見 workflow
@@ -286,7 +286,7 @@ END
     "$pkgdir/usr/share/icons/hicolor/symbolic/apps/$pkgname-symbolic.png"
 
   # Install desktop file
-  install -Dvm644 ../$pkgname.desktop "$pkgdir/usr/share/applications/$pkgname.desktop"
+  install -Dvm644 ../librewolf.desktop "$pkgdir/usr/share/applications/librewolf.desktop"
 
   # Install a wrapper to avoid confusion about binary path
   install -Dvm755 /dev/stdin "$pkgdir/usr/bin/$pkgname" <<END

@@ -105,9 +105,13 @@ ARTIFACT_SHA="$API_SHA"
 
 # 從產物抽出捆绑的 Electron 版本（與 lib-dmg.sh detect_electron_version 同法）。
 mkdir -p "$work/extract"
-7z x -o"$work/extract" "$artifact" -y >/dev/null || die "無法解開產物"
+# 7z 解 macOS app 的 framework 嵌套符號連結（Versions/Current/* 指向另一個連結）
+# 會對 stderr 印 "ERROR: Dangerous link via another link was ignored" 並回非 0，
+# 但那Just macOS bundle 的正常結構，不影響我們要的 Info.plist。
+# 所以不拿 7z 返回碼當成功條件，改以「plist 是否真的解出」判定。
+7z x -o"$work/extract" "$artifact" -y >/dev/null 2>/dev/null || true
 plist="$(find "$work/extract" -maxdepth 12 -path '*Electron Framework.framework/Versions/A/Resources/Info.plist' -type f | head -1)"
-[[ -n "$plist" ]] || die "產物內找不到 Electron Framework Info.plist"
+[[ -n "$plist" ]] || die "無法解開產物（解不出 Electron Framework Info.plist）"
 NEW_ELECTRON="$(python3 -c 'import plistlib,sys; print(plistlib.load(open(sys.argv[1],"rb"))["CFBundleVersion"])' "$plist")"
 rm -rf "$work/extract"
 [[ "$NEW_ELECTRON" =~ ^[0-9]+(\.[0-9]+)*$ ]] || die "plist 裡的 Electron 版本格式異常：$NEW_ELECTRON"
