@@ -1511,5 +1511,12 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "perf-git",
+    "repo_name": "perf-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]

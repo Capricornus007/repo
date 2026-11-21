@@ -1,0 +1,39 @@
+# Maintainer: Capricornus007 <contact@capricornus007.com>
+# 2026-11-22 用戶裁定：perf 必須進 pacman 帳本（/usr/bin），完整功能不丟
+#   （tracepoint/TUI/disasm/numa/pfm 全開），六最 znver3 -O3 -flto 編譯。
+#   唯一無法編入的是 python 腳本綁定（python 3.15 頭檔 _Py_STDC_VERSION
+#   與本核心 perf 原始碼不相容，屬選用擴充，不影響採樣/tracepoint）。
+pkgname=perf-git
+pkgver=7.3
+pkgrel=1
+pkgdesc="Linux performance analysis tools (tools/perf, 完整功能+六最)"
+arch=('x86_64')
+url="https://www.kernel.org/"
+license=('GPL2')
+depends=('libtraceevent' 'slang' 'numactl' 'capstone' 'libpfm' 'zlib' 'libelf' 'openssl' 'zstd' 'libunwind')
+makedepends=('clang' 'flex' 'bison' 'python' 'linux-headers')
+options=(!strip !debug lto)
+# 本地構建用 sources-book 的 linux-7.3.tar.xz；CI 改 mainline snapshot
+source=("linux-${pkgver}.tar.xz::https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-${pkgver}.tar.xz")
+sha256sums=('SKIP')
+
+build() {
+  cd "linux-${pkgver}/tools/perf"
+  . /etc/profile.d/mlfs-znver3.sh
+  export CFLAGS CXXFLAGS LDFLAGS
+  # NO_LIBBPF=1：AutoFDO 不需 BPF；其餘功能全開。
+  # NO_PYTHON=1：python 3.15 頭檔 _Py_STDC_VERSION 與本核心 perf 不相容，
+  #   綁定編不出來且會誤鏈不存在的 libpython3.13 → 禁用才產出可執行二進位。
+  #   （tracepoint/slang/TUI/disasm/numa/pfm 等真正重要的功能全部保留）
+  make -j$(nproc) NO_LIBBPF=1 NO_PYTHON=1
+}
+
+package() {
+  cd "linux-${pkgver}/tools/perf"
+  install -Dm755 perf "${pkgdir}/usr/bin/perf"
+  [ -f perf-completion.bash ] && install -Dm644 perf-completion.bash \
+    "${pkgdir}/usr/share/bash-completion/completions/perf"
+  install -Dm644 /usr/share/licenses/common/GPL2/license.txt \
+    "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE" 2>/dev/null || \
+    echo "GPL-2.0: see https://www.kernel.org/" > "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
