@@ -172,10 +172,24 @@ git config --global user.name 'github-actions[bot]'
 git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
 msg="workbuddy-international-bin: upstream ${NEW_VER}-${NEW_BUILD} (auto-update)"
 
+# 通用推送：CI 與本機其他 workflow 併發推 master 時會被 reject（fetch first）。
+# 用 --rebase 保留本地 commit（不丟改動），重放到最新遠端後重試，最多 3 次。
+push_retry() {
+  local dir="$1" ref="$2" try=1
+  while [ "$try" -le 3 ]; do
+    if git -C "$dir" push origin "HEAD:$ref"; then return 0; fi
+    echo "[workbuddy-update] push 第 $try 次失敗，fetch + rebase 後重試"
+    git -C "$dir" fetch origin "$ref" || return 1
+    git -C "$dir" rebase "origin/$ref" || return 1
+    try=$((try + 1))
+  done
+  return 1
+}
+
 # 1) 父倉（鏡像；checkout 的 origin 已帶 GITHUB_TOKEN）。
 git add "$PKGDIR/PKGBUILD" "$PKGDIR/.SRCINFO"
 git commit -m "$msg"
-git push origin HEAD:master
+push_retry "$GITHUB_WORKSPACE" master || die "父倉 push 三次失敗"
 log "父倉已推送"
 
 # 2) 獨立倉（CI 通用分支 clone 的構建來源）。
@@ -183,7 +197,7 @@ git clone --depth 1 "https://x-access-token:${BUILD_TOKEN}@github.com/${OWNER}/$
 cp "$PKGDIR/PKGBUILD" "$PKGDIR/.SRCINFO" "$work/standalone/"
 git -C "$work/standalone" add PKGBUILD .SRCINFO
 git -C "$work/standalone" commit -m "$msg"
-git -C "$work/standalone" push origin HEAD:master
+push_retry "$work/standalone" master || die "獨立倉 push 三次失敗"
 log "獨立倉已推送"
 
 # 3) 觸發單包構建（盡力而為：失敗就等 build-packages 排程接手）。
