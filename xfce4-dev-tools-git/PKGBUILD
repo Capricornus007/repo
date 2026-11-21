@@ -17,7 +17,7 @@ arch=('i686' 'x86_64')
 url="https://gitlab.xfce.org/xfce/xfce4-dev-tools"
 license=('GPL-2.0-or-later')
 depends=('glib2' 'gtk-doc' 'pkg-config' 'make' 'intltool')
-makedepends=('git' 'meson' autoconf automake libtool)
+makedepends=('git' 'meson')
 optdepends=('docker: xfce-build helper script')
 conflicts=($_pkgname)
 replaces=($_pkgname)
@@ -35,23 +35,22 @@ pkgver() {
 	fi
 }
 
-prepare() {
-  cd "${srcdir}/${_gitname}"
-  NOCONFIGURE=1 ./autogen.sh
-}
-
+# 2026-11-22：上游 master 已刪除 autogen.sh（Xfce 全線遷移 meson，
+# autotools 支援移除），run #86 的 prepare() 紅在
+#   ./autogen.sh: No such file or directory
+# 改走 meson（makedepends 的 meson 本來就列著）。
 build() {
   cd "${srcdir}/${_gitname}"
 
-  ./configure \
+  meson setup build \
     --prefix=/usr \
     --sysconfdir=/etc \
     --localstatedir=/var \
-    --enable-maintainer-mode
-  make
+    --buildtype=plain
+  meson compile -C build
 }
 
 package() {
   cd "${srcdir}/${_gitname}"
-  make DESTDIR="${pkgdir}" install
+  meson install -C build --destdir "${pkgdir}"
 }

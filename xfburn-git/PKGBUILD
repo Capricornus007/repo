@@ -16,7 +16,7 @@ license=('GPL')
 groups=('xfce4-goodies')
 depends=('libburn' 'libisofs' 'gtk3' 'libxfce4ui' 'gst-plugins-base-libs'
          'libgudev' 'desktop-file-utils')
-makedepends=('meson' 'git' 'exo')
+makedepends=('meson' 'git' 'exo' 'libxslt')
 provides=("${_pkgname}=${pkgver%%+*}")
 conflicts=("${_pkgname}")
 source=("${_pkgname}::git+https://gitlab.xfce.org/apps/${_pkgname}")

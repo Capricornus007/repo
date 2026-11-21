@@ -20,7 +20,7 @@ license=('GPL-2.0-or-later')
 groups=('xfce4-git')
 depends=('libxfce4util-git' 'gtk3' 'xfconf-git' 'libgudev' 'libgtop' 'libepoxy'
          'hicolor-icon-theme')
-makedepends=('git' 'gtk-doc' 'gobject-introspection' 'vala' 'xfce4-dev-tools-git' 'meson')
+makedepends=('git' 'gtk-doc' 'gobject-introspection' 'vala' 'xfce4-dev-tools-git' 'meson' 'wayland-protocols')
 provides=("${_pkgname}=${pkgver%%+*}")
 conflicts=("${_pkgname}")
 replaces=("${_pkgname}")

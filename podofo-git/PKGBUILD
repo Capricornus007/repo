@@ -38,6 +38,20 @@ pkgver() {
   git describe --long --tags --abbrev=7 | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
 }
 
+prepare() {
+  cd "${srcdir}/${pkgname}"
+  # 2026-11-22：openssl 3+ 的 ASN1_STRING 是 opaque 型別，上游 CmsVerifyContext.cpp
+  # 還在直接摸 value->value.sequence->data / ->length（run #86：
+  #   error: invalid use of incomplete type 'ASN1_STRING'
+  # 容器 openssl 已是 4.1.0）。換成官方 accessor，語意不變。
+  sed -i \
+    -e 's|value->value\.sequence->data|ASN1_STRING_get0_data(value->value.sequence)|g' \
+    -e 's|value->value\.sequence->length|ASN1_STRING_length(value->value.sequence)|g' \
+    src/podofo/private/CmsVerifyContext.cpp
+  grep -q 'ASN1_STRING_get0_data' src/podofo/private/CmsVerifyContext.cpp \
+    || { echo "::error::podofo 的 ASN1_STRING accessor 改寫沒生效（上游源碼結構變了）"; exit 1; }
+}
+
 build() {
   cd "${srcdir}/${pkgname}"
   cmake -B build \

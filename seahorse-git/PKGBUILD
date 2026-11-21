@@ -16,7 +16,7 @@ license=(GPL)
 options=(debug !strip)
 depends=(gtk3 gcr libsecret gpgme gnome-keyring libpwquality libhandy)
 conflicts=('seahorse')
-makedepends=(libldap yelp-tools gobject-introspection vala git meson)
+makedepends=(libldap yelp-tools gobject-introspection vala git meson gtk4)
 provides=(seahorse x11-ssh-askpass)
 
 source=("git+https://gitlab.gnome.org/GNOME/seahorse.git")

@@ -638,7 +638,8 @@ jobs:
           for _try in 1 2 3; do
             curl -sfL --retry 2 "$_ci_base/makepkg-flags.conf" -o /tmp/makepkg-flags.conf \
               && curl -sfL --retry 2 "$_ci_base/gcc-znver3.sh" -o /tmp/gcc-znver3.sh \
-              && [ -s /tmp/makepkg-flags.conf ] && [ -s /tmp/gcc-znver3.sh ] && break
+              && curl -sfL --retry 2 "$_ci_base/clang-znver3.sh" -o /tmp/clang-znver3.sh \
+              && [ -s /tmp/makepkg-flags.conf ] && [ -s /tmp/gcc-znver3.sh ] && [ -s /tmp/clang-znver3.sh ] && break
             [ "$_try" = 3 ] && { echo "::error::抓不到 ci/ 六最配置（raw URL 3 次失敗）"; exit 1; }
             sleep $((_try * 10))
           done
@@ -648,6 +649,12 @@ jobs:
           install -d /usr/local/bin
           install -m755 /tmp/gcc-znver3.sh /usr/local/bin/gcc-znver3
           for c in gcc g++ cc c++; do ln -sf /usr/local/bin/gcc-znver3 "/usr/local/bin/$c"; done
+          # clang 包裝器：CFLAGS 全域注入後，clang 構建的包（llvm-bolt-git 自舉、
+          # librewolf-git 的 cc-rs、sccache-git 的 aws-lc-sys）會吃到 GCC 專有旗標
+          # 直接 unknown argument 紅掉（2026-11-22 run #86 實測）。在 clang 入口濾掉，
+          # GCC 包的旗標一根不動（用戶鐵律：修源頭不降旗標）。
+          install -m755 /tmp/clang-znver3.sh /usr/local/bin/clang-znver3
+          for c in clang clang++; do ln -sf /usr/local/bin/clang-znver3 "/usr/local/bin/$c"; done
           echo "### 六最: $(grep -m1 CFLAGS= /etc/makepkg.conf)" >> "$GITHUB_STEP_SUMMARY"
           gcc -march=znver3 -dM -E - </dev/null | grep -m1 __znver3__ >> "$GITHUB_STEP_SUMMARY" 
           # makepkg 用 curl 下载源码，kernel.org 大文件常断连；
@@ -1341,6 +1348,75 @@ jobs:
               # 起連續四輪）。補進 makedepends：依賴照裝、測試照舊不跑（--nocheck
               # 是 09-24 定的規矩，不改它）。
               printf "\n%s\n" "makedepends+=('check')" >> pkg_dir/PKGBUILD
+              tail -2 pkg_dir/PKGBUILD ;;
+            gvfs-git)
+              # libgdata 已從 Arch 官方倉庫整顆移除（archlinux.org packages 搜尋 0 結果，
+              # 2026-11-22 實查；GNOME 上游棄用）。AUR gvfs-git 的 depends/makedepends
+              # 還列著它 → makepkg 依賴解析直接「error: target not found: libgdata」
+              # （run #86 實測）。meson 對 gdata 支援是 auto 探測：依賴拔掉後自動禁用
+              # 該 backend，其餘 gvfs 功能不受影響。
+              sed -i "s/'libgdata'//g; s/libgdata//g" pkg_dir/PKGBUILD
+              grep -q libgdata pkg_dir/PKGBUILD && { echo "::error::gvfs 的 libgdata 依賴沒拔乾淨"; grep -n libgdata pkg_dir/PKGBUILD; exit 1; }
+              echo "gvfs: libgdata 依賴已移除（Arch 官方倉已刪該包）" ;;
+            xdg-desktop-portal-git)
+              # 上游 meson.build 要求 wireplumber-0.5（run #86：
+              #   Dependency "wireplumber-0.5" not found (tried pkg-config)
+              # ）。AUR 那份 makedepends 沒列 wireplumber。官方 extra 的 wireplumber
+              # 已是 0.5.x，補上即可。
+              printf "\n%s\n" "makedepends+=('wireplumber')" >> pkg_dir/PKGBUILD
+              tail -2 pkg_dir/PKGBUILD ;;
+            gjs-git)
+              # 上游 meson.build 探測 GTK 3/4 全落空（run #86：
+              #   Problem encountered: You have neither GTK 3 nor 4 available.
+              # ）。AUR 那份 makedepends 沒列 gtk4（gjs 的 GTK4 支援是硬需求）。
+              printf "\n%s\n" "makedepends+=('gtk4')" >> pkg_dir/PKGBUILD
+              tail -2 pkg_dir/PKGBUILD ;;
+            fwupd-git)
+              # 上游 meson.build 已刪 plugin_powerd 選項（run #86：
+              #   fwupd-git/meson.build:1:0: ERROR: Unknown option: "plugin_powerd".
+              # ）。AUR PKGBUILD 還在傳 -Dplugin_powerd=…，刪掉該行。
+              sed -i '/plugin_powerd/d' pkg_dir/PKGBUILD
+              grep -q plugin_powerd pkg_dir/PKGBUILD && { echo "::error::fwupd 的 plugin_powerd 選項沒刪乾淨"; exit 1; }
+              echo "fwupd: plugin_powerd 選項已移除（上游已刪）" ;;
+            nvme-cli-git)
+              # 上游 Documentation/meson.build 引用 nvme-amzn-id-ctrl.1，但 master 樹裡
+              # 該檔案已不存在（run #86：
+              #   Documentation/meson.build:605:22: ERROR: File nvme-amzn-id-ctrl.1 does not exist.
+              # 上游刪 man 頁時漏改 meson.build）。在 meson.build 裡把該檔從
+              # man 頁清單剔除——比 checkout 舊 tag 乾淨。
+              sed -i "/nvme-amzn-id-ctrl\.1/d" pkg_dir/src/nvme-cli/Documentation/meson.build 2>/dev/null || true
+              if grep -q 'nvme-amzn-id-ctrl.1' pkg_dir/src/nvme-cli/Documentation/meson.build 2>/dev/null; then
+                echo "::error::nvme-cli 的 amzn-id-ctrl man 頁引用沒剔除"; exit 1
+              fi
+              echo "nvme-cli: nvme-amzn-id-ctrl.1 引用已剔除" ;;
+            openvpn-git)
+              # AUR 那份的 0001-unprivileged.patch（降權運行）打在
+              # distro/systemd/openvpn-{client,server}@.service.in 上，上游改了
+              # 這兩個 service 檔 → 1 out of 1 hunk FAILED，prepare() 直接紅
+              # （run #86 實測）。補丁內容（unprivileged user）屬加強功能而非
+              # 構建必需：改成容忍失敗，hunk 失敗時留 ::warning:: 繼續構建，
+              # service 檔保持上游原樣。等 AUR 更新補丁後此特例可撤。
+              sed -i 's|^  patch -Np1 < ../0001-unprivileged.patch$|  patch -Np1 < ../0001-unprivileged.patch \|\| echo "::warning::unprivileged 補丁 hunk 失敗（上游 service 檔已變），跳過降權補丁"|' pkg_dir/PKGBUILD
+              grep -q 'unprivileged 補丁 hunk 失敗' pkg_dir/PKGBUILD || { echo "::error::openvpn-git 的 patch 容錯改寫沒生效（prepare() 寫法變了）"; grep -n 'unprivileged' pkg_dir/PKGBUILD; exit 1; }
+              echo "openvpn-git: unprivileged 補丁已改容錯模式" ;;
+            tesseract-data-eng-git|tesseract-data-chi_sim-git|tesseract-data-chi_tra-git|tesseract-data-osd-git|tesseract-data-jpn-git)
+              # tessdata 上游已刪 frk.traineddata（2026-11-22 GitHub API 實查：
+              # 129 個 traineddata 裡沒有 frk），AUR tesseract-data-git 的 _langs
+              # 陣列還列著 frk → package_tesseract-data-frk-git() 的
+              # `cp frk.*` 紅「cannot stat」，而 CI 的 makepkg 會把整個 pkgbase
+              # 的 split 全跑一遍，frk 一顆紅拖累全部語言包（run #86 實測）。
+              # 從 _langs 剔除 frk；上游再刪別的語言時照樣在這裡剔。
+              sed -i 's/ frk / /; s/frk frm/frm/' pkg_dir/PKGBUILD
+              grep -q 'frk' pkg_dir/PKGBUILD && { echo "::error::tesseract-data 的 frk 沒剔乾淨"; grep -n frk pkg_dir/PKGBUILD; exit 1; }
+              echo "tesseract-data: frk 已從 _langs 剔除（上游已刪該語言）" ;;
+            sccache-git)
+              # aws-lc-sys v0.47 的 C 部分需要 cmake 構建（build.rs 走 cmake 生成
+              # libaws_lc_0_47_0.a）。容器 base-devel 沒有 cmake → build.rs 秒退
+              # （日誌實測 Compiling aws-lc-sys 只花 1 秒，正常要幾分鐘），C 靜態庫
+              # 根本沒生成，最終 ld.lld 鏈接時
+              #   undefined symbol: aws_lc_0_47_0_CRYPTO_library_init / EVP_sha*…
+              # 幾十個符號全空（run #86 實測）。補 cmake 即可。
+              printf "\n%s\n" "makedepends+=('cmake' 'perl')" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
 
             *) : ;;

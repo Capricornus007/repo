@@ -51,7 +51,6 @@ build() {
     -D x11=enabled
     -D wayland=enabled
     -D gtk-layer-shell=enabled
-    -D upower=enabled
   )
 
   # arch-meson 是 Arch devtools 的殼子、Artix 容器裡查無（同 garcon-git 在
