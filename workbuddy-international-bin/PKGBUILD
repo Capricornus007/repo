@@ -4,15 +4,16 @@
 # project (see LICENSE.port-tool). Not affiliated with Tencent. See DISCLAIMER.
 
 pkgname=workbuddy-international-bin
-_pkgver=5.9.4.42593613
-_build=fa0a0901
+_pkgver=5.11.4.44121853
+_build=0026dff0
 _electronver=37.10.3
 pkgver=${_pkgver}_${_build}
 # pkgrel 3: 5.9.4 payload verification sync — upstream dropped better-sqlite3
 # entirely (zero references left in app.asar / cli tree), so the check list
 # loses that line and gains the @lydell node-pty Linux prebuild that 5.9.x
 # actually ships; pkgrel 2 was the workbuddyStorage at-rest shim (Fix 7).
-pkgrel=3
+# pkgrel 1: upstream 5.11.4.44121853-0026dff0 (workbuddy-update.yml auto-bump)
+pkgrel=1
 pkgdesc="AI Agent for everyday office work (international edition, unofficial Linux port)"
 arch=('x86_64')
 url="https://www.workbuddy.ai"
@@ -27,12 +28,12 @@ options=(!strip !debug)
 # canonical source. Version and DMG sha256 are published by the official update
 # API:  curl 'https://www.workbuddy.ai/v2/update?platform=workbuddy-darwin-x64'
 # The Electron runtime version matches the one bundled in the DMG.
-_dmg="WorkBuddy-darwin-x64-${_pkgver}-${_build}.dmg"
+_dmg="WorkBuddy-darwin-x64-5.11.4.44121853-0026dff0.zip"
 _electronzip="electron-v${_electronver}-linux-x64.zip"
-source=("${_dmg}::https://codebuddy-1328495429.cos.accelerate.myqcloud.com/workbuddy/saas/darwin-x64/WorkBuddy-darwin-x64-${_pkgver}-${_build}.dmg"
+source=("WorkBuddy-darwin-x64-5.11.4.44121853-0026dff0.zip::https://download.codebuddy.ai/workbuddy/saas/darwin-x64/WorkBuddy-darwin-x64-5.11.4.44121853-0026dff0.zip"
         "${_electronzip}::https://github.com/electron/electron/releases/download/v${_electronver}/${_electronzip}"
         "workbuddy-international.desktop")
-sha256sums=('435e3990168b5dbe1eed9ebd5e141f93085a29510bc2dd60ffd0bd63a219f0b2'
+sha256sums=('f17292ee0a9702670d739679b76d3a84a012dbd232f45c6479bf37cc00cf402c'
             'c0b4edd6bd9858cda4cf7ab299e69a2d3ecd2e5fcca78507bc0851ba35614660'
             '6fcbfa4cba8e730e603b68fcca484c7963aacdaf56a3f6c5c47ff320a5189e85')
 
