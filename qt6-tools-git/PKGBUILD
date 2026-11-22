@@ -1,0 +1,49 @@
+# 2026-11-22 in-tree（MLFS 装 kdeconnect-git 的 Qt6 栈；kdeconnect 的 optdepend
+# 'qt6-tools: for some runcommand plugin actions' 用戶要求一併裝上）。
+# dev 分支（5最）。makedepends 帶 clang/llvm：qdoc 需要它們（構建容器 Arch 有）。
+pkgname=qt6-tools-git
+pkgver=6.12.0.dev
+pkgrel=1
+pkgdesc='A cross-platform application and UI framework (Qt6 tools, dev branch)'
+arch=(x86_64)
+url='https://www.qt.io'
+license=(GPL-3.0-only LGPL-3.0-only)
+depends=(gcc-libs
+         glibc
+         qt6-base
+         qt6-declarative)
+makedepends=(git
+             cmake
+             ninja
+             clang
+             llvm)
+provides=('qt6-tools')
+conflicts=('qt6-tools')
+source=(git+https://github.com/qt/qttools.git#branch=dev)
+sha256sums=('SKIP')
+
+pkgver() {
+  cd qttools
+  _v=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null | sed 's/^v//;s/-.*//')
+  echo "${_v:-6.12.0}.dev"
+}
+
+build() {
+  cmake -B build -S qttools -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DINSTALL_ARCHDATADIR=lib/qt6 \
+    -DINSTALL_BINDIR=lib/qt6/bin \
+    -DINSTALL_LIBEXECDIR=lib/qt6 \
+    -DINSTALL_PLUGINSDIR=lib/qt6/plugins \
+    -DINSTALL_QMLDIR=lib/qt6/qml \
+    -DQT_BUILD_TESTS=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+
+  install -d "$pkgdir"/usr/share/licenses
+  ln -s /usr/share/licenses/qt6-tools "$pkgdir"/usr/share/licenses/$pkgname
+}

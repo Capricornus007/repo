@@ -1,0 +1,54 @@
+# 2026-11-22 in-tree（MLFS 装 kdeconnect-git 的 Qt6 栈）。
+# dev 分支（5最）。後端走 GStreamer（本機有 gstreamer + gst-plugins-base-libs +
+# libpulse；ffmpeg-full-git 也在矩陣，CMake 探到就多開 FFmpeg 後端，不強依賴）。
+pkgname=qt6-multimedia-git
+pkgver=6.12.0.dev
+pkgrel=1
+pkgdesc='Classes for audio, video, radio and camera functionality (Qt6 dev branch)'
+arch=(x86_64)
+url='https://www.qt.io'
+license=(GPL-2.0-only LGPL-3.0-only)
+depends=(gcc-libs
+         glibc
+         gstreamer
+         gst-plugins-base-libs
+         libpulse
+         qt6-base
+         qt6-declarative)
+makedepends=(git
+             cmake
+             ninja
+             libjpeg-turbo
+             libpng
+             ffmpeg)
+optdepends=('ffmpeg: FFmpeg 後端（GStreamer 之外的另一套播放管線）')
+provides=('qt6-multimedia')
+conflicts=('qt6-multimedia')
+source=(git+https://github.com/qt/qtmultimedia.git#branch=dev)
+sha256sums=('SKIP')
+
+pkgver() {
+  cd qtmultimedia
+  _v=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null | sed 's/^v//;s/-.*//')
+  echo "${_v:-6.12.0}.dev"
+}
+
+build() {
+  cmake -B build -S qtmultimedia -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DINSTALL_ARCHDATADIR=lib/qt6 \
+    -DINSTALL_BINDIR=lib/qt6/bin \
+    -DINSTALL_LIBEXECDIR=lib/qt6 \
+    -DINSTALL_PLUGINSDIR=lib/qt6/plugins \
+    -DINSTALL_QMLDIR=lib/qt6/qml \
+    -DQT_BUILD_TESTS=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+
+  install -d "$pkgdir"/usr/share/licenses
+  ln -s /usr/share/licenses/qt6-multimedia "$pkgdir"/usr/share/licenses/$pkgname
+}

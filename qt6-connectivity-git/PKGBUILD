@@ -1,0 +1,47 @@
+# 2026-11-22 in-tree（MLFS 装 kdeconnect-git 的 Qt6 栈；藍牙插件用）。
+# dev 分支（5最）。本機有 bluez/bluez-libs；NFC 沒有對應棧，CMake 自動關。
+pkgname=qt6-connectivity-git
+pkgver=6.12.0.dev
+pkgrel=1
+pkgdesc='Provides access to Bluetooth hardware (Qt6 dev branch)'
+arch=(x86_64)
+url='https://www.qt.io'
+license=(GPL-2.0-only LGPL-3.0-only)
+depends=(bluez-libs
+         gcc-libs
+         glibc
+         qt6-base
+         qt6-declarative)
+makedepends=(git
+             cmake
+             ninja)
+provides=('qt6-connectivity')
+conflicts=('qt6-connectivity')
+source=(git+https://github.com/qt/qtconnectivity.git#branch=dev)
+sha256sums=('SKIP')
+
+pkgver() {
+  cd qtconnectivity
+  _v=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null | sed 's/^v//;s/-.*//')
+  echo "${_v:-6.12.0}.dev"
+}
+
+build() {
+  cmake -B build -S qtconnectivity -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DINSTALL_ARCHDATADIR=lib/qt6 \
+    -DINSTALL_BINDIR=lib/qt6/bin \
+    -DINSTALL_LIBEXECDIR=lib/qt6 \
+    -DINSTALL_PLUGINSDIR=lib/qt6/plugins \
+    -DINSTALL_QMLDIR=lib/qt6/qml \
+    -DQT_BUILD_TESTS=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+
+  install -d "$pkgdir"/usr/share/licenses
+  ln -s /usr/share/licenses/qt6-connectivity "$pkgdir"/usr/share/licenses/$pkgname
+}

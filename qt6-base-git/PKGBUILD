@@ -34,6 +34,9 @@ depends=(bzip2
 makedepends=(git
              cmake
              ninja)
+# kdeconnect-git 等下游 depends 寫裸名 qt6-base，沒這行 pacman 解析不到
+provides=('qt6-base')
+conflicts=('qt6-base')
 optdepends=('gtk3: GTK platform theme support')
 source=(git+https://github.com/qt/qtbase.git#branch=dev)
 sha256sums=('SKIP')

@@ -1,0 +1,45 @@
+# 2026-11-22 in-tree（MLFS 装 kdeconnect-git 的 Qt6 栈）：仿 qt6-base-git 模式。
+# dev 分支（5最），provides 裸名讓 kdeconnect 的 depends=(qt6-shadertools) 可解析。
+pkgname=qt6-shadertools-git
+pkgver=6.12.0.dev
+pkgrel=1
+pkgdesc='Provides cross-platform, GLSL-compatible shader tools (Qt6 dev branch)'
+arch=(x86_64)
+url='https://www.qt.io'
+license=(GPL-3.0-only LGPL-3.0-only)
+depends=(gcc-libs
+         glibc
+         qt6-base)
+makedepends=(git
+             cmake
+             ninja)
+provides=('qt6-shadertools')
+conflicts=('qt6-shadertools')
+source=(git+https://github.com/qt/qtshadertools.git#branch=dev)
+sha256sums=('SKIP')
+
+pkgver() {
+  cd qtshadertools
+  _v=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null | sed 's/^v//;s/-.*//')
+  echo "${_v:-6.12.0}.dev"
+}
+
+build() {
+  cmake -B build -S qtshadertools -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DINSTALL_ARCHDATADIR=lib/qt6 \
+    -DINSTALL_BINDIR=lib/qt6/bin \
+    -DINSTALL_LIBEXECDIR=lib/qt6 \
+    -DINSTALL_PLUGINSDIR=lib/qt6/plugins \
+    -DINSTALL_QMLDIR=lib/qt6/qml \
+    -DQT_BUILD_TESTS=OFF
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+
+  install -d "$pkgdir"/usr/share/licenses
+  ln -s /usr/share/licenses/qt6-shadertools "$pkgdir"/usr/share/licenses/$pkgname
+}

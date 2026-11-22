@@ -1044,11 +1044,21 @@ jobs:
                 _aur_base="${{ matrix.pkgbase }}"
                 [ -n "$_aur_base" ] || _aur_base="${{ matrix.repo_name }}"
                 _aur_clone pkg_dir "https://aur.archlinux.org/${_aur_base}.git"
+              elif [ "${{ matrix.kind }}" = 'arch' ]; then
+                # Arch 官方穩定版包（ffmpeg-full-git 依賴鏈等）：從 Arch 官方 GitLab 取
+                # PKGBUILD。2026-11-22 實測預設分支已改名 main，master 全線 404
+                # （連下面 sway 那條舊寫法都拉不到了，同批修正）。
+                # pkgbase 欄位可選：拆分包（smbclient→samba、python-nautilus→nautilus-python）
+                # 的 repo 目錄名跟包名不同，用 pkgbase 覆寫。
+                mkdir pkg_dir
+                _pkgbase="${{ matrix.pkgbase }}"
+                [ -n "$_pkgbase" ] || _pkgbase="${{ matrix.repo_name }}"
+                curl -sfL "https://gitlab.archlinux.org/archlinux/packaging/packages/${_pkgbase}/-/raw/main/PKGBUILD" -o pkg_dir/PKGBUILD
               elif echo "${{ matrix.repo_name }}" | grep -qE '^(sway|wlroots|waybar|i3status)'; then
                 # 官方穩定版包（無 -git 後綴）：從 Arch 官方 GitLab 取 PKGBUILD
                 mkdir pkg_dir
                 _pkgbase="https://gitlab.archlinux.org/archlinux/packaging/packages/${{ matrix.repo_name }}"
-                curl -sfL "${_pkgbase}/-/raw/master/PKGBUILD" -o pkg_dir/PKGBUILD
+                curl -sfL "${_pkgbase}/-/raw/main/PKGBUILD" -o pkg_dir/PKGBUILD
               elif [ "${{ matrix.kind }}" = 'kde' ]; then
                 # KDE 家族 -git 包直接取 AUR 的 PKGBUILD（上游未改，無自有 fork）
                 git clone "https://aur.archlinux.org/${{ matrix.repo_name }}.git" pkg_dir
@@ -1061,6 +1071,9 @@ jobs:
       - name: 逐包修正 AUR 的 PKGBUILD（缺依賴、路徑假設、連結器）
         run: |
           set -euo pipefail
+          # Artix 禁 systemd：全局剝 PKGBUILD 的 systemd-libs（可選 feature 自動關；
+          # 真鏈 libsystemd.so.0 會被 NEEDED 檢查攔下）。
+          sed -i "s/'systemd-libs[^']*'//g" pkg_dir/PKGBUILD
           # 這些都是 AUR／上游自己的小毛病，與本倉打包流程無關。原先連同 clone 寫在
           # 上一步的 case 裡，結果那一步腳本太長，撞上 GitHub「max expression length
           # 21000」的解析上限（run #231 整個 workflow 因此無效、一個 job 都沒起）。
@@ -3320,7 +3333,7 @@ jobs:
       # （本地实测比对通过），所以本步骤对它本就是 no-op；它的 PKGBUILD 来自
       # chaotic-aur、不归本仓库维护，也不需要回推。跳过零损失。
       - name: 更新校验和并回推 PKGBUILD
-        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'android-ndk-30' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'libjpeg-turbo-git' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'svt-jpeg-xs-git' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'nodejs-git' && matrix.repo_name != 'brotli-git' && matrix.repo_name != 'nodejs-better-sqlite3-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.repo_name != 'htop-git' && matrix.repo_name != 'chafa-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix'
+        if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true' && matrix.repo_name != 'linux-cachyos-cjktty' && matrix.repo_name != 'kew-git' && matrix.repo_name != 'mpv-git' && matrix.repo_name != 'oh-my-pi-git' && matrix.repo_name != 'pysolfc-git' && matrix.repo_name != 'protonvpn-cli-community-git' && matrix.repo_name != 'dae-git' && matrix.repo_name != 'android-ndk-27' && matrix.repo_name != 'android-ndk-30' && matrix.repo_name != 'codex-desktop-git' && matrix.repo_name != 'element-desktop-nightly-bin' && matrix.repo_name != 'serein-git' && matrix.repo_name != 'nashira-git' && matrix.repo_name != 'qoder-cli' && matrix.repo_name != 'qoder-cli-cn' && matrix.repo_name != 'qoder-gui-bin' && matrix.repo_name != 'qoder-gui-cn' && matrix.repo_name != 'unicode-emoji' && matrix.repo_name != 'free-claude-code-git' && matrix.repo_name != 'bash-git' && matrix.repo_name != 'nodejs-better-sqlite3' && matrix.repo_name != 'qalculate-gtk-git' && matrix.repo_name != 'ttf-jetbrains-maple-mono-nf-xx-xx-xx' && matrix.repo_name != 'iwgtk-git' && matrix.repo_name != 'adguardhome-git'  && matrix.repo_name != 'tar-git' && matrix.repo_name != 'libjpeg-turbo-git' && matrix.repo_name != 'jbr25' && matrix.repo_name != 'svt-jpeg-xs-git' && matrix.repo_name != 'make-git' && matrix.repo_name != 'cmake-git' && matrix.repo_name != 'jq-git' && matrix.repo_name != 'multitail-git' && matrix.repo_name != 'amd-debug-tools-git' && matrix.repo_name != 'openai-codex-git' && matrix.repo_name != 'alacritty-sixel-git' && matrix.repo_name != 'fsearch-git' && matrix.repo_name != 'lmdb-git' && matrix.repo_name != 'qt6ct-git' && matrix.repo_name != 'nodejs-git' && matrix.repo_name != 'brotli-git' && matrix.repo_name != 'nodejs-better-sqlite3-git' && matrix.repo_name != 'npm-git' && matrix.repo_name != 'go-git'  && matrix.repo_name != 'gdu-git' && matrix.repo_name != 'gh-git' && matrix.repo_name != 'glab-git' && matrix.repo_name != 'actionlint-git' && matrix.repo_name != 'warp-plus-git' && matrix.repo_name != 'nwg-look-git' && matrix.repo_name != 'nvidia-utils-openrc' && matrix.repo_name != 'gstreamer-git' && matrix.repo_name != 'lib32-glib2' && matrix.repo_name != 'ccache-git' && matrix.repo_name != 'tcl-git' && matrix.repo_name != 'tk-git' && matrix.repo_name != 'spirv-llvm-translator-git' && matrix.repo_name != 'lib32-llvm-git' && matrix.repo_name != 'spirv-headers-git' && matrix.repo_name != 'spirv-tools-git' && matrix.repo_name != 'doxygen-git' && matrix.repo_name != 'crave' && matrix.repo_name != 'librime-git' && matrix.repo_name != 'opencc-git' && matrix.repo_name != 'tty-solitaire-git' && matrix.repo_name != 'htop-git' && matrix.repo_name != 'chafa-git' && matrix.kind != 'kde' && matrix.kind != 'tkg' && matrix.kind != 'wayland' && matrix.kind != 'aur' && matrix.kind != 'multilib' && matrix.kind != 'artix' && matrix.kind != 'arch'
         env:
           PKG: ${{ matrix.repo_name }}
           GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}

@@ -781,5 +781,397 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "qt6-shadertools-git",
+    "repo_name": "qt6-shadertools-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "qt6-declarative-git",
+    "repo_name": "qt6-declarative-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "qt6-tools-git",
+    "repo_name": "qt6-tools-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "qt6-wayland-git",
+    "repo_name": "qt6-wayland-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "qt6-multimedia-git",
+    "repo_name": "qt6-multimedia-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "qt6-connectivity-git",
+    "repo_name": "qt6-connectivity-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "knotifications-git",
+    "repo_name": "knotifications-git",
+    "variant": "none",
+    "kind": "kde"
+  },
+  {
+    "key": "kstatusnotifieritem-git",
+    "repo_name": "kstatusnotifieritem-git",
+    "variant": "none",
+    "kind": "kde"
+  },
+  {
+    "key": "qqc2-desktop-style-git",
+    "repo_name": "qqc2-desktop-style-git",
+    "variant": "none",
+    "kind": "kde"
+  },
+  {
+    "key": "solid-git",
+    "repo_name": "solid-git",
+    "variant": "none",
+    "kind": "kde"
+  },
+  {
+    "key": "libfakekey",
+    "repo_name": "libfakekey",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "sshfs",
+    "repo_name": "sshfs",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "devil",
+    "repo_name": "devil",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "avisynthplus",
+    "repo_name": "avisynthplus",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "frei0r-plugins",
+    "repo_name": "frei0r-plugins",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "gsm",
+    "repo_name": "gsm",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "ladspa",
+    "repo_name": "ladspa",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libunibreak",
+    "repo_name": "libunibreak",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libavc1394",
+    "repo_name": "libavc1394",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libbluray",
+    "repo_name": "libbluray",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libcaca",
+    "repo_name": "libcaca",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libcddb",
+    "repo_name": "libcddb",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libdc1394",
+    "repo_name": "libdc1394",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libdvdnav",
+    "repo_name": "libdvdnav",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libdvdread",
+    "repo_name": "libdvdread",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libiec61883",
+    "repo_name": "libiec61883",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libilbc",
+    "repo_name": "libilbc",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libopenmpt",
+    "repo_name": "libopenmpt",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "librabbitmq-c",
+    "repo_name": "librabbitmq-c",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libraw1394",
+    "repo_name": "libraw1394",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libmicrohttpd",
+    "repo_name": "libmicrohttpd",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "mbedtls3",
+    "repo_name": "mbedtls3",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libsoxr",
+    "repo_name": "libsoxr",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "ocl-icd",
+    "repo_name": "ocl-icd",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "opencolorio",
+    "repo_name": "opencolorio",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "openh264",
+    "repo_name": "openh264",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "openjpeg2",
+    "repo_name": "openjpeg2",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "openvino",
+    "repo_name": "openvino",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "rtmpdump",
+    "repo_name": "rtmpdump",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "rubberband",
+    "repo_name": "rubberband",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "smbclient",
+    "repo_name": "smbclient",
+    "variant": "none",
+    "kind": "arch",
+    "pkgbase": "samba"
+  },
+  {
+    "key": "snappy",
+    "repo_name": "snappy",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "sndio",
+    "repo_name": "sndio",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "svt-hevc",
+    "repo_name": "svt-hevc",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "leptonica",
+    "repo_name": "leptonica",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "twolame",
+    "repo_name": "twolame",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "v4l-utils",
+    "repo_name": "v4l-utils",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "zimg",
+    "repo_name": "zimg",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "vid.stab",
+    "repo_name": "vid.stab",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "vulkan-icd-loader",
+    "repo_name": "vulkan-icd-loader",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "l-smash",
+    "repo_name": "l-smash",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "xvidcore",
+    "repo_name": "xvidcore",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "spirv-tools",
+    "repo_name": "spirv-tools",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "python-nautilus",
+    "repo_name": "python-nautilus",
+    "variant": "none",
+    "kind": "arch",
+    "pkgbase": "nautilus-python"
+  },
+  {
+    "key": "chromaprint-fftw",
+    "repo_name": "chromaprint-fftw",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "flite1",
+    "repo_name": "flite1",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "jack",
+    "repo_name": "jack",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "opencv4",
+    "repo_name": "opencv4",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "rockchip-mpp",
+    "repo_name": "rockchip-mpp",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "vo-amrwbenc",
+    "repo_name": "vo-amrwbenc",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xavs",
+    "repo_name": "xavs",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xevd",
+    "repo_name": "xevd",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "xeve",
+    "repo_name": "xeve",
+    "variant": "none",
+    "kind": "aur"
+  },
+  {
+    "key": "sdl_gfx",
+    "repo_name": "sdl_gfx",
+    "variant": "none",
+    "kind": "aur"
   }
 ]
