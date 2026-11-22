@@ -211,7 +211,8 @@ jobs:
           fi
 
           if [ "${{ matrix.kind }}" = 'multilib' ] \
-             || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ]; then
+             || [ "${{ matrix.repo_name }}" = 'spirv-llvm-translator-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'lib32-libnghttp3' ]; then
             # spirv-llvm-translator-git 現在多切一顆 lib32-spirv-llvm-translator-git，
             # 而容器預設不啟用 [multilib]（run #471 實測 target not found: lib32-spirv-tools）。
             # lib32-* 需要 [multilib] 倉：容器預設只有 core/extra 且 [multilib] 是註解掉的。
@@ -1082,6 +1083,14 @@ jobs:
           # 11-23 稽核發現 12 顆包仍 !lto → 構建時強制翻轉（源頭衝突另修，不降旗標）。
           sed -i 's/!lto/lto/g' pkg_dir/PKGBUILD
           case "${{ matrix.repo_name }}" in
+            tinysparql)
+              # 零 systemd:Arch PKGBUILD makedepends 有 systemd,且 meson 預設裝 systemd user unit。
+              # 關 -D systemd_user_services=false 並剝 makedepends 的 systemd(不裁 D-Bus .service 功能)。
+              sed -i "s/'systemd'[[:space:]]*//g" pkg_dir/PKGBUILD
+              # Arch PKGBUILD 用 meson setup 配 -D 選項;直接在 meson 調用行追加關掉 systemd user unit
+              sed -i 's|\(meson setup [^\n]*\)|\1 -D systemd_user_services=false|' pkg_dir/PKGBUILD
+              grep -q 'systemd_user_services=false' pkg_dir/PKGBUILD || echo "::warning::tinysparql meson 選項注入未匹配,檢查 PKGBUILD build()"
+              ;;
             mesa-tkg-git)
               # ── LLVM 24 的 llvm-c/Target.h 要自己 include（2026-10-20 本地實測定位）
               # 症狀：build() 紅在

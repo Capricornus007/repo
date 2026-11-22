@@ -1173,5 +1173,56 @@
     "repo_name": "sdl_gfx",
     "variant": "none",
     "kind": "aur"
+  },
+  {
+    "key": "tinysparql",
+    "repo_name": "tinysparql",
+    "variant": "none",
+    "kind": "arch",
+    "pkgbase": "tinysparql"
+  },
+  {
+    "key": "libxss",
+    "repo_name": "libxss",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "nss",
+    "repo_name": "nss",
+    "variant": "none",
+    "kind": "arch",
+    "pkgbase": "nss"
+  },
+  {
+    "key": "lib32-libnghttp3",
+    "repo_name": "lib32-libnghttp3",
+    "variant": "none",
+    "kind": "arch",
+    "pkgbase": "lib32-libnghttp3"
+  },
+  {
+    "key": "libwnck3",
+    "repo_name": "libwnck3",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libxdmcp",
+    "repo_name": "libxdmcp",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libxau",
+    "repo_name": "libxau",
+    "variant": "none",
+    "kind": "arch"
+  },
+  {
+    "key": "libxshmfence",
+    "repo_name": "libxshmfence",
+    "variant": "none",
+    "kind": "arch"
   }
 ]
