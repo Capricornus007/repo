@@ -1354,7 +1354,7 @@ jobs:
             *) : ;;
           esac
       - name: 2026-11-22 紅包修復特例（獨立 step——主 step 已破 21000 表達式上限）
-        if: contains(fromJSON('["gvfs-git","xdg-desktop-portal-git","gjs-git","fwupd-git","nvme-cli-git","openvpn-git","tesseract-data-eng-git","tesseract-data-chi_sim-git","tesseract-data-chi_tra-git","tesseract-data-osd-git","tesseract-data-jpn-git","sccache-git","kvazaar-git","libx11-git"]'), matrix.repo_name)
+        if: contains(fromJSON('["gvfs-git","xdg-desktop-portal-git","gjs-git","fwupd-git","nvme-cli-git","openvpn-git","tesseract-data-eng-git","tesseract-data-chi_sim-git","tesseract-data-chi_tra-git","tesseract-data-osd-git","tesseract-data-jpn-git","sccache-git","kvazaar-git","libx11-git","localsend-git"]'), matrix.repo_name)
         run: |
           set -euo pipefail
           # 為什麼是獨立 step：上面的「逐包修正」run 塊已破 GitHub「max expression
@@ -1437,8 +1437,17 @@ jobs:
               #   multiple definition of 'kvz_intra_get_dir_luma_predictor_encry'
               # （run #80 實測）。上游源碼結構問題，非旗標誤報：按 makepkg-flags.conf
               # 既定方針「任一包炸就單包降回 !lto」，本包關 LTO。
-              printf "\n%s\n" "OPTIONS+=(!lto)" >> pkg_dir/PKGBUILD
+              # PKGBUILD 規範是小寫 options（大寫 OPTIONS 是 makepkg.conf 的，
+              # 且新版 makepkg source PKGBUILD 前已將其 readonly——run #81 實測
+              # 「line 48: OPTIONS: readonly variable」）。小寫 options 不受影響。
+              printf "\n%s\n" "options+=(!lto)" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
+            localsend-git)
+              # Flutter dart_build hook 在 /usr/local/bin 找鏈接器（[ld.lld, ld]），
+              # 容器 base-devel 的 ld 只在 /usr/bin →「Failed to find any of
+              # [ld.lld, ld] in LocalDirectory: '/usr/local/bin'」（run #74 實測）。
+              # 補一個 symlink 即可（dart 找到任一個就用）。
+              ln -sf /usr/bin/ld /usr/local/bin/ld ;;
             libx11-git)
               # GCC 16 + LTO 的 -Werror=array-bounds 誤報（run #73：
               #   imDefLkup.c:123:15: error: array subscript 4 is outside array bounds of 'char[8]'
