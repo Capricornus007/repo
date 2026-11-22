@@ -739,5 +739,47 @@
     "variant": "none",
     "kind": "kde",
     "in_tree": true
+  },
+  {
+    "key": "qt6-base-git",
+    "repo_name": "qt6-base-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "qt6-svg",
+    "repo_name": "qt6-svg",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "kdsingleapplication",
+    "repo_name": "kdsingleapplication",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "hicolor-icon-theme",
+    "repo_name": "hicolor-icon-theme",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "xcb-util-keysyms",
+    "repo_name": "xcb-util-keysyms",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "jdk25-temurin",
+    "repo_name": "jdk25-temurin",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]

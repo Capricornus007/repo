@@ -1,0 +1,17 @@
+# 2026-11-22 in-tree（MLFS 系统装 flameshot-git 的依赖链）：官方 extra 0.18 的
+# 原样转发——纯图标主题目录结构，无编译。AUR 无此包（官方静态包）。
+pkgname=hicolor-icon-theme
+pkgver=0.18
+pkgrel=1
+pkgdesc="Freedesktop.org Hicolor icon theme"
+arch=(any)
+url="https://wiki.freedesktop.org/www/Software/icon-theme/"
+license=(GPL2)
+source=("https://icon-theme.freedesktop.org/releases/${pkgname}-${pkgver}.tar.xz")
+sha256sums=('db0e50a80aa3bf64bb45cbca5cf9f75efd9348cf2ac690b907435238c3cf81d7')
+
+package() {
+  cd "${pkgname}-${pkgver}"
+  ./configure --prefix=/usr
+  make DESTDIR="${pkgdir}" install
+}

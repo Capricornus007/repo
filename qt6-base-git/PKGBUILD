@@ -1,0 +1,70 @@
+# 2026-11-22 in-tree（MLFS 系统装 flameshot-git 的依赖链）：基于 AUR qt6-base-git 改造。
+# 改造点（MLFS 无 systemd / libproxy）：
+#  1. depends 去 systemd-libs、libproxy
+#  2. CMake: -DFEATURE_journald=OFF -DFEATURE_libproxy=OFF
+pkgname=qt6-base-git
+pkgver=6.12.0.dev
+pkgrel=1
+pkgdesc='A cross-platform application and UI framework (Qt6 base, dev branch)'
+arch=(x86_64)
+url='https://www.qt.io'
+license=(GPL-2.0-only LGPL-3.0-only)
+depends=(bzip2
+         double-conversion
+         glibc
+         gcc-libs
+         glib2
+         glu
+         libdrm
+         libgl
+         libice
+         libsm
+         libx11
+         libxkbcommon-x11
+         openssl
+         pcre2
+         sqlite
+         xcb-util
+         xcb-util-image
+         xcb-util-keysyms
+         xcb-util-renderutil
+         xcb-util-wm
+         zlib
+         zstd)
+makedepends=(git
+             cmake
+             ninja)
+optdepends=('gtk3: GTK platform theme support')
+source=(git+https://github.com/qt/qtbase.git#branch=dev)
+sha256sums=('SKIP')
+
+pkgver() {
+  cd qtbase
+  _v=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null | sed 's/^v//;s/-.*//')
+  echo "${_v:-6.12.0}.dev"
+}
+
+build() {
+  cmake -B build -S qtbase -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DINSTALL_ARCHDATADIR=lib/qt6 \
+    -DINSTALL_BINDIR=lib/qt6/bin \
+    -DINSTALL_LIBEXECDIR=lib/qt6 \
+    -DINSTALL_PLUGINSDIR=lib/qt6/plugins \
+    -DINSTALL_QMLDIR=lib/qt6/qml \
+    -DINSTALL_SYSCONFDIR=/etc/xdg \
+    -DQT_BUILD_TESTS=OFF \
+    -DFEATURE_journald=OFF \
+    -DFEATURE_libproxy=OFF \
+    -DFEATURE_system_sqlite=ON \
+    -DQT_FEATURE_openssl_linked=ON
+  cmake --build build
+}
+
+package() {
+  DESTDIR="$pkgdir" cmake --install build
+
+  install -d "$pkgdir"/usr/share/licenses
+  ln -s /usr/share/licenses/qt6-base "$pkgdir"/usr/share/licenses/$pkgname
+}
