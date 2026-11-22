@@ -20,7 +20,7 @@ url="https://github.com/Capricornus007/alacritty"
 license=('Apache-2.0' 'MIT')
 depends=('freetype2' 'fontconfig' 'libxi' 'libxcursor' 'libxkbcommon' 'libxkbcommon-x11' 'libxrandr')
 makedepends=('rust' 'cargo' 'cmake' 'fontconfig' 'ncurses' 'desktop-file-utils' 'gdb' 'libxcb' 'git' 'scdoc')
-checkdepends=('ttf-dejavu') # for monospace fontconfig test
+checkdepends=('gnu-free-fonts') # for monospace fontconfig test (= 本機 ttf-font)
 provides=('alacritty')
 conflicts=('alacritty')
 source=("$_pkgname::git+https://github.com/Capricornus007/alacritty.git")

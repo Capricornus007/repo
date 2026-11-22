@@ -269,7 +269,7 @@ jobs:
 
           if [ "${{ matrix.repo_name }}" = 'gstreamer-git' ]; then
             # 字體是真的缺（base-devel 鏡像有 fontconfig 卻一顆字體都沒有）。
-            pacman -S --noconfirm --needed ttf-dejavu fontconfig gdk-pixbuf2 libjpeg-turbo libpng shared-mime-info
+            pacman -S --noconfirm --needed gnu-free-fonts fontconfig gdk-pixbuf2 libjpeg-turbo libpng shared-mime-info
             # ⚠️ 這整段每一步都要 `|| true`：CI run #399 就是被我这行害紅的——當時寫成
             # `gdk-pixbuf-query-loaders | grep -oE '...' | tr '\n' ' '`，grep 沒命中回 1，
             # 而這個 run 步驟開在 `set -o pipefail` 的 shell 裡，於是**makepkg 根本沒跑到**、
