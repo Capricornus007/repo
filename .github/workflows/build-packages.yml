@@ -1659,9 +1659,12 @@ jobs:
             echo "::error::makepkg 的 deptest 仍認為缺：$_miss —— 裸名又被同步庫搶走了"
             exit 1
           fi
-          [ -e /usr/lib/libplacebo.so.387 ] \
-            || { echo "::error::/usr/lib/libplacebo.so.387 不在，裝的不是本倉那顆"; exit 1; }
-          echo "::notice::ffmpeg-full-git 的 libplacebo 已換成本倉（$(pkg-config --modversion libplacebo 2>/dev/null || echo 查不到)），重鏈後才是 .so.387"
+          # libplacebo-git 每次升版 soname 就跟著走（7.387→.so.387、7.399→.so.399），
+          # 寫死 387 會在升版後假紅——直接問 pacman 這顆究竟裝了哪個 .so。
+          _lp_so="$(pacman -Ql libplacebo-git | awk '$2 ~ /libplacebo\.so\.[0-9]/ {print $2; exit}')"
+          [ -n "$_lp_so" ] && [ -e "$_lp_so" ] \
+            || { echo "::error::找不到 libplacebo-git 提供的 libplacebo.so.<N>（soname 隨版本變了？pacman -Ql 查不到）"; exit 1; }
+          echo "::notice::ffmpeg-full-git 的 libplacebo 已換成本倉（$(pkg-config --modversion libplacebo 2>/dev/null || echo 查不到)，soname $_lp_so）"
 
       - name: 云端编译 ffmpeg-full-git
         if: matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true'
@@ -3981,9 +3984,11 @@ jobs:
             echo "::error::pkg-config 回報 ${_ver:-空}，低於 mpv 要的 7.387.0——換包沒生效"
             exit 1
           fi
-          [ -e /usr/lib/libplacebo.so.387 ] \
-            || { echo "::error::/usr/lib/libplacebo.so.387 不在，裝的不是本倉那顆"; exit 1; }
-          echo "::notice::libplacebo 已換成本倉 ${_ver}，mpv 的 >=7.387.0 閘門這輪才可能過"
+          # 同上：soname 隨 libplacebo-git 版本走（7.399 → .so.399），別寫死 387。
+          _lp_so="$(pacman -Ql libplacebo-git | awk '$2 ~ /libplacebo\.so\.[0-9]/ {print $2; exit}')"
+          [ -n "$_lp_so" ] && [ -e "$_lp_so" ] \
+            || { echo "::error::找不到 libplacebo-git 提供的 libplacebo.so.<N>（soname 隨版本變了？pacman -Ql 查不到）"; exit 1; }
+          echo "::notice::libplacebo 已換成本倉 ${_ver}（soname $_lp_so），mpv 的 >=7.387.0 閘門這輪才可能過"
 
       - name: 安裝 libevent 2.2 建置鏈
         if: contains(fromJSON('["links-git","unbound-git","fstrm-git","libverto-git"]'), matrix.repo_name) && steps.plan.outputs.build == 'true'
