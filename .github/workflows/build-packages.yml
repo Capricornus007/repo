@@ -483,18 +483,8 @@ jobs:
             #   IgnorePkg   = 本機钉住（networkmanager/noto-fonts 等），在容器裡只会掩盖依赖问题
             #   DownloadUser= alpm 建不建得出来取决于镜像里有没有该用户，缺了会整批失败
             #   DisableDownloadTimeout = 目標機不分青紅皂白不超时；CI 要的是卡住就紅、換一輪重跑
-            # 【GitHub release 端點校驗損壞防護】2026-11-23 shard2 #94 實測:
-            # kwallet-git/kjobwidgets-git 裝 knotifications-git 時 checksum 恆不符,
-            # 重試 20 次每次都壞;但本機 curl 同一下載 5 次 checksum 全對。
-            # 根因:pacman 內置下載器對 GitHub release CDN 的回應處理有問題
-            # (content-encoding/重定向),改用 curl-based XferCommand(Arch 官方做法,
-            # 本機 MLFS 的 /usr/local/bin/pacman-xfer 同款)。--remove-on-error 確保
-            # 失敗時不留壞包進快取,--retry 扛 CDN 抖動。
-            printf '%s\n' \
-              '#!/bin/sh' \
-              'out=$1; url=$2' \
-              'exec curl -fL --remove-on-error --retry 5 --retry-delay 3 --connect-timeout 30 --max-time 300 -o "$out" "$url"' \
-              > /usr/local/bin/pacman-xfer
+            # release CDN 讓 pacman 內置下載器存壞包(checksum 恆不符),改用 curl(2026-11-23 #94)
+            printf '#!/bin/sh\nexec curl -fL --remove-on-error --retry 5 --connect-timeout 30 --max-time 300 -o "$1" "$2"\n' > /usr/local/bin/pacman-xfer
             chmod +x /usr/local/bin/pacman-xfer
             printf '%s\n' \
               '[options]' \
