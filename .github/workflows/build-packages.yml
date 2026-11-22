@@ -188,7 +188,13 @@ jobs:
             true
           fi
 
-          if [ "${{ matrix.kind }}" = 'kde' ]; then
+          if [ "${{ matrix.kind }}" = 'kde' ] \
+             || [ "${{ matrix.repo_name }}" = 'kwallet-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'kjobwidgets-git' ] \
+             || [ "${{ matrix.repo_name }}" = 'exo-git' ]; then
+            # 2026-11-22 shard2 #83 實測:這三顆在 matrix 標 kind:aur,
+            # 但它們是 KDE 框架(CMake find_package KF6Crash/Shiboken6),
+            # 沒有 kde kind 的預裝 → configure 紅。比照 kde 分支整套預裝。
             # 帶 Python bindings 的 KDE 框架（上游 CMakeLists 預設 BUILD_PYTHON_BINDINGS=ON）
             # 在 configure 要的、以及 build() 生成 bindings 要的，一整套：
             #   configure: find_package(Shiboken6)  → shiboken6（提供 Shiboken6Config.cmake）
@@ -208,6 +214,8 @@ jobs:
             # --assume-installed 讓求解器放行：不造假套件、也不動真實依賴。
             pacman -S --noconfirm --needed --assume-installed libclang \
               shiboken6 shiboken6-generator pyside6 python-build python-setuptools
+            # kwallet-git 需要 KF6Crash → kcrash-git(matrix 已有);其餘包多裝無害。
+            pacman -S --noconfirm --needed kcrash-git || true
           fi
 
           if [ "${{ matrix.kind }}" = 'multilib' ] \
@@ -1082,6 +1090,12 @@ jobs:
           # 六最鐵律：PKGBUILD 的 options=(!lto) 會蓋掉 /etc/makepkg.conf 的 lto，
           # 11-23 稽核發現 12 顆包仍 !lto → 構建時強制翻轉（源頭衝突另修，不降旗標）。
           sed -i 's/!lto/lto/g' pkg_dir/PKGBUILD
+          # 例外:kvazaar-git 的 8/10/12bit 三套 lib 各自定義同名函式
+          # kvz_intra_get_dir_luma_predictor_encry,LTO 鏈在一起必 multiple definition。
+          # 這不是「裁功能」而是上游源碼的結構性衝突,獨立關 LTO(只此一顆)。
+          if [ "${{ matrix.repo_name }}" = 'kvazaar-git' ]; then
+            sed -i 's/^options=(/options=(!lto /' pkg_dir/PKGBUILD
+          fi
           case "${{ matrix.repo_name }}" in
             tinysparql)
               # 零 systemd:Arch PKGBUILD makedepends 有 systemd,且 meson 預設裝 systemd user unit。
