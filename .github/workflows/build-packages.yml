@@ -1078,6 +1078,9 @@ jobs:
           # 上一步的 case 裡，結果那一步腳本太長，撞上 GitHub「max expression length
           # 21000」的解析上限（run #231 整個 workflow 因此無效、一個 job 都沒起）。
           # 現在 clone 留在上一步的通用分支，這裡只做 PKGBUILD 手術。
+          # 六最鐵律：PKGBUILD 的 options=(!lto) 會蓋掉 /etc/makepkg.conf 的 lto，
+          # 11-23 稽核發現 12 顆包仍 !lto → 構建時強制翻轉（源頭衝突另修，不降旗標）。
+          sed -i 's/!lto/lto/g' pkg_dir/PKGBUILD
           case "${{ matrix.repo_name }}" in
             mesa-tkg-git)
               # ── LLVM 24 的 llvm-c/Target.h 要自己 include（2026-10-20 本地實測定位）
