@@ -1453,15 +1453,13 @@ jobs:
               printf "\n%s\n" "export RUSTFLAGS=\"\${RUSTFLAGS:-} -C link-arg=-Wl,--allow-shlib-undefined\"" >> pkg_dir/PKGBUILD
               tail -3 pkg_dir/PKGBUILD ;;
             kvazaar-git)
-              # LTO 下多 bitdepth 庫（8/10/12bit）各自編譯的 intra.o 都非 static
-              # 定義了 kvz_intra_get_dir_luma_predictor_encry → ld 報
-              #   multiple definition of 'kvz_intra_get_dir_luma_predictor_encry'
-              # （run #80 實測）。上游源碼結構問題，非旗標誤報：按 makepkg-flags.conf
-              # 既定方針「任一包炸就單包降回 !lto」，本包關 LTO。
-              # PKGBUILD 規範是小寫 options（大寫 OPTIONS 是 makepkg.conf 的，
-              # 且新版 makepkg source PKGBUILD 前已將其 readonly——run #81 實測
-              # 「line 48: OPTIONS: readonly variable」）。小寫 options 不受影響。
-              printf "\n%s\n" "options+=(!lto)" >> pkg_dir/PKGBUILD
+              # 6最原則：LTO 保留不降級。run #80/#82 的 multiple definition 根因是
+              # GCC 10+ 默認 -fno-common：8/10/12bit 三套 lib 各自定義同一全域函式
+              # kvz_intra_get_dir_luma_predictor_encry → ld 認定重複定義。
+              # 補 -fcommon 回到 tentative definition 語義（跨 TU 合併為單一定義），
+              # 上游源碼不改、LTO 全開。（#80 時誤判成 LTO 問題加了 !lto，#82 證明
+              # 關 LTO 仍紅，根因是 -fno-common，已移除該降級。）
+              printf "\n%s\n" "export CFLAGS=\"\${CFLAGS:-} -fcommon\"" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
             localsend-git)
               # Flutter dart_build hook 在 /usr/local/bin 找鏈接器（[ld.lld, ld]），
@@ -1493,6 +1491,12 @@ jobs:
               # XIM 的 char[8] 緩衝按 4 字元下標存取是上游老代碼的已知形態，
               # GCC 16 的 LTO 路徑把它誤判成越界）。精準壓制該警告而非全關 LTO。
               printf "\n%s\n" "export CFLAGS=\"\$CFLAGS -Wno-error=array-bounds\"" >> pkg_dir/PKGBUILD
+              tail -2 pkg_dir/PKGBUILD ;;
+            tpm2-tss-git)
+              # OpenSSL 4.1 把 ASN1_STRING_length() 標 deprecated，tpm2-tss 的
+              # ifapi_verify_cert_chain.c 用它 + -Werror → run #75 build 失敗。
+              # 6最原則：API 仍可用、功能不砍，只降 -Werror 為警告。
+              printf "\n%s\n" "export CFLAGS=\"\${CFLAGS:-} -Wno-error=deprecated-declarations\"" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
 
             *) : ;;

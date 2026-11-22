@@ -299,7 +299,18 @@ prepare() {
     src="${src%.zst}"
     [[ $src = *.patch ]] || continue
     echo "Applying patch $src..."
-    git apply -3 < "../$src"
+    # 6最原則：補丁功能全部保留，不因上游已吸收而砍掉。
+    # upstream main 已合入 faac>=2.0 支援（0002 補丁語義），git apply -3
+    # 因此報 "Applied patch ... with conflicts"。用反向檢查判定「已上游化」
+    # 就跳過；真衝突（既不能正向也不能反向套用）才當錯誤，不靜默漏功能。
+    if git apply -3 < "../$src"; then
+      :
+    elif git apply --reverse --check < "../$src" 2>/dev/null; then
+      echo "  -> $src 已存在於上游（3way 反向檢查通過），跳過"
+    else
+      echo "  -> $src 3way 套用失敗且非已上游化，中止"
+      return 1
+    fi
   done
 
   cargo fetch --locked --target host-tuple \
