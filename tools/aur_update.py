@@ -26,7 +26,8 @@ CONTENT_RULES = {
         {"kind": "flutter", "channel": "beta"},
     ],
     # linux-cjktty 跟的是 Arch 的 core/linux（見 resolve_arch_pkg 的說明）。
-    # 跨大版會被上面那道补丁路徑守門擋下來，所以這裡只吃同次版本內的跟進。
+    # 跨大版仍會被补丁路徑守門擋下來；次版本變化現在會先查 cjktty-patches
+    # 有沒有對應補丁（resolve_cjktty_patch），有就自動連補丁路徑一起跟版。
     "linux-cjktty": [
         {"kind": "arch_pkg", "pkg": "linux", "repo": "core"},
     ],
@@ -193,6 +194,25 @@ def resolve_cachy_kernel():
     if not prel.isdigit():
         return None, f'tag {top} 的尾號 {prel!r} 不是 pkgrel'
     return (f'{parts[0]}.{parts[1]}', parts[2], prel), f'CachyOS/linux 最新正式版 {top} → {ver}-{prel}'
+
+
+def resolve_cjktty_patch(majmin):
+    """查 Capricornus007/cjktty-patches 的 v7.x/ 有沒有對應次版本的 cjktty 補丁。
+
+    命中優先序：cjktty-<majmin>.patch（正式版）→ cjktty-<majmin>-rcN.patch（取最大 N）。
+    回傳補丁檔名；查不到回 None（呼叫端維持「停下來等人」的保守行為）。
+    """
+    d = gh_json("repos/Capricornus007/cjktty-patches/contents/v7.x")
+    if not isinstance(d, list):
+        return None
+    names = [e.get('name', '') for e in d]
+    exact = f'cjktty-{majmin}.patch'
+    if exact in names:
+        return exact
+    rcs = [n for n in names if re.match(rf'^cjktty-{re.escape(majmin)}-rc(\d+)\.patch$', n)]
+    if rcs:
+        return sorted(rcs, key=lambda n: int(re.search(r'rc(\d+)', n).group(1)))[-1]
+    return None
 
 
 def resolve_arch_pkg(pkg, repo=None):
@@ -417,9 +437,22 @@ def compute(adir, cache):
                              f'会让写死的 cjktty 补丁路径失效 → 交给人处理')
                 continue
             if new_maj != old_maj:
-                notes.append(f'arch_pkg 算出 {aver}，次版本变了（{cur.group(1)}）——'
-                             f'补丁档名可能也要换，先不推')
-                continue
+                # 次版本變了：cjktty 補丁檔名寫死在 source= 裡（v7.x/cjktty-7.2-rc7.patch），
+                # 盲改 pkgver 會 404。先問 cjktty-patches 倉有沒有對應新次版本的補丁
+                # （2026-11-22 起有 cjktty-7.3.patch：7.3 把 fbcon_par 的 rotated 匿名
+                # 結構体重構成 struct fbcon_rotated，補丁第一個 hunk 已對著新結構體重做）；
+                # 有就連補丁路徑一起改寫（updpkgsums 會重算它的 sums），沒有才停下來等人。
+                _new_mm = '.'.join(new_maj)
+                _old_mm = '.'.join(old_maj)
+                _patch = resolve_cjktty_patch(_new_mm)
+                if not _patch:
+                    notes.append(f'arch_pkg 算出 {aver}，次版本变了（{cur.group(1)}）且 '
+                                 f'cjktty-patches 裡沒有 {_new_mm} 的補丁——补丁档名要人確認，先不推')
+                    continue
+                edits.append((rf'v7\.x/cjktty-{re.escape(_old_mm)}[^"\s]*\.patch',
+                              f'v7.x/{_patch}',
+                              f'cjktty 補丁 {_old_mm}→{_new_mm}（{_patch}）'))
+                notes.append(f'cjktty 補丁路徑 {_old_mm} → {_patch}')
             edits.append((r'^pkgver=.*$', f'pkgver={aver}', f'pkgver {cur.group(1)}->{aver}'))
             # config.x86_64 那條 URL 是 ${pkgver}-${pkgrel}，pkgrel 不同步就會 404。
             edits.append((r'^pkgrel=.*$', f'pkgrel={arel}', f'pkgrel {curl_.group(1)}->{arel}（跟 Arch 同步，URL 要用）'))
