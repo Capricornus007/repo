@@ -198,6 +198,16 @@ build() {
     #  lib/python3.*/site-packages/、include/），所以這裡把那個旗標照 super-build 設起來，
     # 讓 standalone 的產物清單與官方**逐檔相同**；package_*() 另外還有一道防呆。
     -Dis_pyside6_superproject_build=1
+    # ApiExtractor/CMakeLists.txt:91 的 find_package(LibXml2) 在子目錄建立
+    # LibXml2::LibXml2（匯入目標預設只在该目錄可見），Qt6 的
+    # __qt_internal_promote_target_to_global 接著想把它提升為 GLOBAL →
+    #   "Attempt to promote imported target LibXml2::LibXml2 to global scope
+    #    (by setting IMPORTED_GLOBAL) which is not built in this directory"
+    # configure 直接死（936 job 實測）。CMAKE_FIND_PACKAGE_TARGETS_GLOBAL=ON
+    # （CMake ≥3.24，本倉 cmake 必然滿足）讓 find_package 建立的目標一開始就是
+    # GLOBAL，提升成 no-op；這是 Qt 官方在 qtbase commit d2e85ced 明列的解法，
+    # 只調整匯入目標可見性，不裁任何功能、不降 LTO。
+    -DCMAKE_FIND_PACKAGE_TARGETS_GLOBAL=ON
   )
 
   cmake -S sources/shiboken6_generator -B build-generator "${_common[@]}"
