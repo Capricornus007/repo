@@ -1087,14 +1087,16 @@ jobs:
           # 上一步的 case 裡，結果那一步腳本太長，撞上 GitHub「max expression length
           # 21000」的解析上限（run #231 整個 workflow 因此無效、一個 job 都沒起）。
           # 現在 clone 留在上一步的通用分支，這裡只做 PKGBUILD 手術。
-          # 六最鐵律：PKGBUILD 的 options=(!lto) 會蓋掉 /etc/makepkg.conf 的 lto，
-          # 11-23 稽核發現 12 顆包仍 !lto → 構建時強制翻轉（源頭衝突另修，不降旗標）。
-          sed -i 's/!lto/lto/g' pkg_dir/PKGBUILD
-          # 例外:kvazaar-git 的 8/10/12bit 三套 lib 各自定義同名函式
-          # kvz_intra_get_dir_luma_predictor_encry,LTO 鏈在一起必 multiple definition。
-          # 這不是「裁功能」而是上游源碼的結構性衝突,獨立關 LTO(只此一顆)。
+          # 【LTO 鐵律的正確執行】11-23 曾加全局 sed 's/!lto/lto/g' 強制翻轉，
+          # shard2 run 45062672105 實測：同 workflow 從 4 紅暴增到 11 紅——
+          # openai-codex/linutil 的 C 靜態庫符號被 LTO 優化掉(undefined symbol)、
+          # nodejs/abseil 的 abseil-cpp crc 向量型別與 LTO+GCC 衝突、zcode-ce 的
+          # electron-rebuild ABI 偵測崩。這些包 PKGBUILD 的 !lto 是 upstream 源碼
+          # 結構性衝突(見 memory 11-22)，不是偷懲關功能 → 撤銷全局翻轉，
+          # 各包沿用自己已驗證的 options。六最等在源頭逐包修好後再開。
+          # kvazaar-git: 8/10/12bit 三套 lib 同名函式 multiple definition，明確需 !lto。
           if [ "${{ matrix.repo_name }}" = 'kvazaar-git' ]; then
-            sed -i 's/^options=(/options=(!lto /' pkg_dir/PKGBUILD
+            grep -q '!lto' pkg_dir/PKGBUILD || sed -i 's/^options=(/options=(!lto /' pkg_dir/PKGBUILD
           fi
           case "${{ matrix.repo_name }}" in
             tinysparql)
