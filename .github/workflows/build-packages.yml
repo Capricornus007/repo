@@ -1247,7 +1247,15 @@ jobs:
               # elogind，不受影响。
               sed -i 's/-D sd-bus-provider=libsystemd/-D sd-bus-provider=libsystemd -Dwerror=false -Dtray=disabled/' pkg_dir/PKGBUILD
               grep -n 'arch-meson' pkg_dir/PKGBUILD | head -3 ;;
-                        
+
+            *) : ;;
+          esac
+
+      - name: 逐包修正 AUR 的 PKGBUILD（續：waybar 之後）
+        run: |
+          set -euo pipefail
+          # 續接前一個 step：主 step 因 21000 字符上限拆成兩段，此段處理 waybar 之後的 case。
+          case "${{ matrix.repo_name }}" in
             waybar-git)
               # AUR PKGBUILD 沒關 systemd，而 waybar 的 meson.build 是
               # `libsystemd = dependency('libsystemd', required: get_option('systemd'))`：
@@ -1362,7 +1370,6 @@ jobs:
               # 是 09-24 定的規矩，不改它）。
               printf "\n%s\n" "makedepends+=('check')" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
-
 
             *) : ;;
           esac
