@@ -1104,7 +1104,13 @@ jobs:
             # LTO 把三套 .o 鏈到一起必 multiple definition(symbol from plugin 實測)。
             # -fcommon 只管全域變數、對函式無效 → 唯一解是此顆關 LTO。
             # 無條件加 !lto(不用 grep 判斷,避免比對到檔案內其他 !lto 文字)。
-            sed -i 's/!lto//g; s/^options=(/options=(!lto /' pkg_dir/PKGBUILD
+            if grep -q '^options=(' pkg_dir/PKGBUILD; then
+              sed -i 's/^options=(/options=(!lto /' pkg_dir/PKGBUILD
+            else
+              # AUR kvazaar PKGBUILD 沒有 options= 行 → 在 source= 前插入
+              sed -i '/^source=/i options=(!lto)' pkg_dir/PKGBUILD
+              grep -q '^options=(!lto' pkg_dir/PKGBUILD || sed -i '1i options=(!lto)' pkg_dir/PKGBUILD
+            fi
           fi
           case "${{ matrix.repo_name }}" in
             tinysparql)
