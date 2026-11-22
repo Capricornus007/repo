@@ -7,7 +7,8 @@
   {
     "key": "workbuddy-international-bin",
     "repo_name": "workbuddy-international-bin",
-    "variant": "none"
+    "variant": "none",
+    "in_tree": true
   },
   {
     "key": "android-apktool-bin",
