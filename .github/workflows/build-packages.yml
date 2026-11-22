@@ -1502,11 +1502,14 @@ jobs:
               printf "\n%s\n" "export RUSTFLAGS=\"\${RUSTFLAGS:-} -C link-arg=-Wl,--allow-shlib-undefined\"" >> pkg_dir/PKGBUILD
               tail -3 pkg_dir/PKGBUILD ;;
             kvazaar-git)
-              # LTO 已在上游 options 加 !lto 關閉(見 PKGBUILD 手術區)。
-              # #80/#82/#91/#94 反覆實測:symbol from plugin multiple definition
-              # 是 8/10/12bit 三套 lib 同名函式被 LTO 鏈一起,-fcommon 對函式無效。
-              # 關 LTO 是唯一解法(非裁功能,是上游源碼結構衝突)。
-              tail -2 pkg_dir/PKGBUILD ;;
+              # KVZ_SEL_ENCRYPTION 的 kvz_intra_get_dir_luma_predictor_encry 在
+              # intra.c 定義一次,但 8/10/12bit 三套 lib 各編一份、都導出同名全域
+              # 符號 → 鏈成 libkvazaar.la 必 multiple definition(memory #80/#82/#94)。
+              # -fcommon 只管全域變數、對函式無效;關 LTO 也仍紅(#94 實證)。
+              # 三份實作完全相同(只操作 cu_info_t、與位深無關)→ 讓連結器取
+              # 第一份即可,--allow-multiple-definition 是此類上游衝突的標準解。
+              sed -i 's/^build() {/build() {\n  export LDFLAGS="$LDFLAGS -Wl,--allow-multiple-definition"/' pkg_dir/PKGBUILD
+              tail -6 pkg_dir/PKGBUILD ;;
             localsend-git)
               # Flutter dart_build hook 在 /usr/local/bin 找鏈接器（[ld.lld, ld]），
               # 容器 base-devel 的 ld 只在 /usr/bin →「Failed to find any of
