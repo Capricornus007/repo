@@ -4003,6 +4003,22 @@ jobs:
           pkg-config --modversion libevent
           test -e /usr/lib/libevent-2.2.so.1
 
+      - name: doxygen-git 移除衝突的同步庫 flex（讓 makedepends 的 flex-git 裝得上）
+        if: matrix.repo_name == 'doxygen-git' && steps.plan.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          # doxygen-git（in-tree）的 makedepends 點名本倉源碼直出 flex-git（2.7.3，
+          # 刻意避開 2.6.5–2.6.12 破壞 doxygen 的 yy_fatal_error／yy_base 問題）。
+          # 但容器初始化可能已裝同步庫 flex-2.7.1，兩者 conflicts；makepkg -s 在
+          # --noconfirm 下對「Remove flex? [y/N]」預設 N →
+          #   "flex-git ... and flex-2.7.1-1 are in conflict" → unresolvable →
+          #   "Could not resolve all dependencies"（936 job 實測）。
+          # 先拔同步庫那顆（flex-git 版本更新，不降級、不裁功能），讓 makepkg 裝得上。
+          if pacman -Q flex >/dev/null 2>&1; then
+            pacman -Rdd --noconfirm flex
+            echo "::notice::已移除同步庫 flex，改由 makedepends 的 flex-git 提供"
+          fi
+
       - name: 云端编译 `.pkg.tar.zst`
         if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'
         env:
