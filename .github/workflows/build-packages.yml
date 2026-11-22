@@ -1370,7 +1370,11 @@ jobs:
               # 該 backend，其餘 gvfs 功能不受影響。
               sed -i "s/'libgdata'//g; s/libgdata//g" pkg_dir/PKGBUILD
               grep -q libgdata pkg_dir/PKGBUILD && { echo "::error::gvfs 的 libgdata 依賴沒拔乾淨"; grep -n libgdata pkg_dir/PKGBUILD; exit 1; }
-              echo "gvfs: libgdata 依賴已移除（Arch 官方倉已刪該包）" ;;
+              # 上游新加 OneDrive 後端（meson.build:449 硬要求 msgraph-1 >= 0.3，
+              # run #88 實測「Dependency msgraph-1 not found」）。官方 extra 已有
+              # msgraph 包，補依賴保功能（goa 探測在 assert 中已通過才會走到這）。
+              printf "\n%s\n" "makedepends+=('msgraph')" >> pkg_dir/PKGBUILD
+              echo "gvfs: libgdata 已移除、msgraph 已補" ;;
             xdg-desktop-portal-git)
               # 上游 meson.build 要求 wireplumber-0.5（run #86：
               #   Dependency "wireplumber-0.5" not found (tried pkg-config)
@@ -1423,14 +1427,18 @@ jobs:
               grep -q 'frk' pkg_dir/PKGBUILD && { echo "::error::tesseract-data 的 frk 沒剔乾淨"; grep -n frk pkg_dir/PKGBUILD; exit 1; }
               echo "tesseract-data: frk 已從 _langs 剔除（上游已刪該語言）" ;;
             sccache-git)
-              # aws-lc-sys v0.47 的 C 部分需要 cmake 構建（build.rs 走 cmake 生成
-              # libaws_lc_0_47_0.a）。容器 base-devel 沒有 cmake → build.rs 秒退
-              # （日誌實測 Compiling aws-lc-sys 只花 1 秒，正常要幾分鐘），C 靜態庫
-              # 根本沒生成，最終 ld.lld 鏈接時
-              #   undefined symbol: aws_lc_0_47_0_CRYPTO_library_init / EVP_sha*…
-              # 幾十個符號全空（run #86 實測）。補 cmake 即可。
+              # aws-lc-sys v0.47 的 C 部分走 cmake 構建。cmake 已補（makedepends），
+              # 但容器裝到的是 cmake 4.5.1——CMake 4 移除了對
+              # cmake_minimum_required < 3.5 的兼容，aws-lc 工程配置直接失敗，
+              # build.rs 靜默秒退（run #88 實測 Compiling aws-lc-sys 僅 0.7 秒），
+              # libaws_lc_0_47_0.a 沒生成 → 幾十個 aws_lc_0_47_0_* 符號 undefined。
+              # CMake 4 官方兼容開關：CMAKE_POLICY_VERSION_MINIMUM=3.5。
+              # 另外 /usr/lib/libLLVMSPIRVLib.so（llvm 拖進容器的）自身帶 undefined
+              # 符號，rustc 鏈接默認 --no-allow-shlib-undefined 直接拒絕 → 放寬。
               printf "\n%s\n" "makedepends+=('cmake' 'perl')" >> pkg_dir/PKGBUILD
-              tail -2 pkg_dir/PKGBUILD ;;
+              printf "\n%s\n" "export CMAKE_POLICY_VERSION_MINIMUM=3.5" >> pkg_dir/PKGBUILD
+              printf "\n%s\n" "export RUSTFLAGS=\"\${RUSTFLAGS:-} -C link-arg=-Wl,--allow-shlib-undefined\"" >> pkg_dir/PKGBUILD
+              tail -3 pkg_dir/PKGBUILD ;;
             kvazaar-git)
               # LTO 下多 bitdepth 庫（8/10/12bit）各自編譯的 intra.o 都非 static
               # 定義了 kvz_intra_get_dir_luma_predictor_encry → ld 報
@@ -1448,6 +1456,23 @@ jobs:
               # [ld.lld, ld] in LocalDirectory: '/usr/local/bin'」（run #74 實測）。
               # 補一個 symlink 即可（dart 找到任一個就用）。
               ln -sf /usr/bin/ld /usr/local/bin/ld ;;
+            seahorse-git)
+              # meson.build:46 硬要求 libadwaita-1（run #88 實測 not found）。
+              # 官方 extra 有 libadwaita，補 makedepends。
+              printf "\n%s\n" "makedepends+=('libadwaita')" >> pkg_dir/PKGBUILD
+              tail -2 pkg_dir/PKGBUILD ;;
+            thunar-git)
+              # 上游新加 libxfce4session-client-1 依賴（meson.build:72，
+              # run #88 實測 not found）。官方 extra 有 libxfce4session，補上。
+              printf "\n%s\n" "makedepends+=('libxfce4session')" >> pkg_dir/PKGBUILD
+              tail -2 pkg_dir/PKGBUILD ;;
+            lxsession-git)
+              # intltoolize 要複製 m4/intltool.m4，但源碼樹沒有 m4/ 目錄
+              # （run #88 實測「cp: cannot create regular file 'm4/intltool.m4'」
+              # → autoreconf 失敗）。在 autoreconf 前補 mkdir -p m4。
+              sed -i 's/^\(\s*\)autoreconf/\1mkdir -p m4\n\1autoreconf/' pkg_dir/PKGBUILD
+              grep -q 'mkdir -p m4' pkg_dir/PKGBUILD || { echo "::error::lxsession 的 mkdir -p m4 沒插進去"; exit 1; }
+              tail -3 pkg_dir/PKGBUILD ;;
             libx11-git)
               # GCC 16 + LTO 的 -Werror=array-bounds 誤報（run #73：
               #   imDefLkup.c:123:15: error: array subscript 4 is outside array bounds of 'char[8]'
