@@ -363,6 +363,9 @@ jobs:
             awk -v r="[$_bad]" '/^\[/{skip=($0==r)} skip==0' /etc/pacman.conf > /tmp/_pacman.conf && cp /tmp/_pacman.conf /etc/pacman.conf
           done
           echo "第三方倉已就緒：$(pacman -Sl chaotic-aur archlinuxcn arch4edu ownstuff andontie-aur herecura 2>/dev/null | wc -l) 個條目"
+          # GitHub release CDN 讓 pacman 內置下載器存壞包(checksum 恆不符,2026-11-23 #94)→ 用 curl
+          printf '#!/bin/sh\nexec curl -fL --remove-on-error --retry 5 --connect-timeout 30 --max-time 300 -o "$1" "$2"\n' > /usr/local/bin/pacman-xfer
+          chmod +x /usr/local/bin/pacman-xfer
 
           if [ "${{ matrix.repo_name }}" = 'fcitx5-qt-git' ]; then
             # fcitx5-qt-git 開了 ENABLE_QT4=On（用戶 2026-10-21：「請給三版 qt 都提供
@@ -483,9 +486,6 @@ jobs:
             #   IgnorePkg   = 本機钉住（networkmanager/noto-fonts 等），在容器裡只会掩盖依赖问题
             #   DownloadUser= alpm 建不建得出来取决于镜像里有没有该用户，缺了会整批失败
             #   DisableDownloadTimeout = 目標機不分青紅皂白不超时；CI 要的是卡住就紅、換一輪重跑
-            # release CDN 讓 pacman 內置下載器存壞包(checksum 恆不符),改用 curl(2026-11-23 #94)
-            printf '#!/bin/sh\nexec curl -fL --remove-on-error --retry 5 --connect-timeout 30 --max-time 300 -o "$1" "$2"\n' > /usr/local/bin/pacman-xfer
-            chmod +x /usr/local/bin/pacman-xfer
             printf '%s\n' \
               '[options]' \
               'HoldPkg     = pacman glibc' \
