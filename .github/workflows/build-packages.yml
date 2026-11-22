@@ -490,13 +490,11 @@ jobs:
             # (content-encoding/重定向),改用 curl-based XferCommand(Arch 官方做法,
             # 本機 MLFS 的 /usr/local/bin/pacman-xfer 同款)。--remove-on-error 確保
             # 失敗時不留壞包進快取,--retry 扛 CDN 抖動。
-            cat > /usr/local/bin/pacman-xfer <<'XFER'
-#!/bin/sh
-out=$1; url=$2
-exec curl -fL --remove-on-error --retry 5 --retry-delay 3 \
-  --connect-timeout 30 --max-time 300 \
-  -o "$out" "$url"
-XFER
+            printf '%s\n' \
+              '#!/bin/sh' \
+              'out=$1; url=$2' \
+              'exec curl -fL --remove-on-error --retry 5 --retry-delay 3 --connect-timeout 30 --max-time 300 -o "$out" "$url"' \
+              > /usr/local/bin/pacman-xfer
             chmod +x /usr/local/bin/pacman-xfer
             printf '%s\n' \
               '[options]' \
