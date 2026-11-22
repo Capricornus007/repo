@@ -3107,9 +3107,21 @@ jobs:
                 -o /tmp/cjktty-fix-patch.py || { echo "::error::抓不到 ci/cjktty-fix-patch.py"; exit 1; }
               python3 /tmp/cjktty-fix-patch.py 0001-cjktty.patch || exit 1
               sed -i -E 's|^[[:space:]]*"\$\{_cjktty_source\}/v[0-9]+\.x/cjktty-[^"]+\.patch"[[:space:]]*$|    "0001-cjktty.patch"|' PKGBUILD
-              curl -sfL -o cjktty-add-cjk32x32-font-data.patch \
-                "https://raw.githubusercontent.com/Capricornus007/cjktty-patches/master/cjktty-add-cjk32x32-font-data.patch"
-              sed -i -E 's|^[[:space:]]*"\$\{_cjktty_source\}/cjktty-add-cjk32x32-font-data\.patch"[[:space:]]*$|    "cjktty-add-cjk32x32-font-data.patch"|' PKGBUILD
+              # 32x32 字型補丁：主 cjktty patch（v7.x 全部版本）已內建
+              # font_cjk_32x32.c/.h 的完整字型資料與 .pref = 19。再打這支獨立
+              # 補丁會在 .c 的 pref hunk 上「Reversed (or previously applied)
+              # patch detected」→ .rej → prepare() 失敗（run #606 的 rc job 實測）。
+              # 只有主 patch 尚未含 32x32 資料時才注入；含資料時把 source 陣列
+              # 中該條目整行移除，避免 makepkg 仍去抓遠端原始補丁。
+              if grep -qE '^\+.*\.pref[[:space:]]*=[[:space:]]*19' 0001-cjktty.patch \
+                 && grep -q 'font_cjk_32x32\.h' 0001-cjktty.patch; then
+                echo "::notice::主 cjktty patch 已內建 32x32 字型資料，略過 cjktty-add-cjk32x32-font-data.patch"
+                sed -i -E '/^[[:space:]]*"\$\{_cjktty_source\}\/cjktty-add-cjk32x32-font-data\.patch"[[:space:]]*,?[[:space:]]*$/d' PKGBUILD
+              else
+                curl -sfL -o cjktty-add-cjk32x32-font-data.patch \
+                  "https://raw.githubusercontent.com/Capricornus007/cjktty-patches/master/cjktty-add-cjk32x32-font-data.patch"
+                sed -i -E 's|^[[:space:]]*"\$\{_cjktty_source\}/cjktty-add-cjk32x32-font-data\.patch"[[:space:]]*$|    "cjktty-add-cjk32x32-font-data.patch"|' PKGBUILD
+              fi
 
               # ---------- gud fortify 假阳性规避（CI-only，随 _ci_force_config 一起注入） ----------
               # 7.3-rc2 起 gud_connector.c 新增 memchr(mode, '\0', 16) 校验 TV mode 名

@@ -38,10 +38,18 @@ sha256sums=('f17292ee0a9702670d739679b76d3a84a012dbd232f45c6479bf37cc00cf402c'
             '6fcbfa4cba8e730e603b68fcca484c7963aacdaf56a3f6c5c47ff320a5189e85')
 
 prepare() {
-    # Extract the .app bundle out of the DMG
+    # Extract the .app bundle out of the DMG.
+    # 7-Zip 24.x rejects macOS framework symlink chains (Versions/Current -> A)
+    # with "Dangerous link via another link was ignored" and returns non-zero,
+    # even though the .app bundle extracts fine (those links are dead weight the
+    # Linux port deletes anyway). Tolerate that exit code, then verify the bundle
+    # really arrived so a genuine extraction failure still aborts the build.
     rm -rf "${srcdir}/dmg"
     mkdir -p "${srcdir}/dmg"
-    7z x -o"${srcdir}/dmg" "${srcdir}/${_dmg}" -y >/dev/null
+    7z x -o"${srcdir}/dmg" "${srcdir}/${_dmg}" -y >/dev/null 2>&1 || true
+    local app_bundle
+    app_bundle="$(find "${srcdir}/dmg" -maxdepth 2 -name '*.app' -type d | head -1)"
+    [[ -n "${app_bundle}" ]] || { error "7z 解出的 DMG 裡找不到 .app bundle"; return 1; }
 }
 
 build() {
