@@ -232,7 +232,7 @@ build() {
   # 六最無豁免：Rust 用 fat LTO，但 aws-lc-sys 的 C 部分由 cc crate 編譯，
   # 吃全域 CFLAGS 的 -flto 會讓 C 物件變 LLVM bitcode、rust-lld 連結時
   # aws_lc_0_45_0_* 全 undefined（run #144 實測）。去掉 C 側 -flto、
-  # Rust 側用 RUSTFLAGS -C lto=thin 保持 LTO 全開，功能零裁剪。
+  # Rust 側用 CARGO_PROFILE_RELEASE_LTO=thin 保持 LTO 全開，功能零裁剪。
   export CFLAGS="$(printf "%s" "${CFLAGS:-}" | sed -E "s/-flto(=auto|=thin|=[0-9]+)?//g")"
   export CXXFLAGS="$(printf "%s" "${CXXFLAGS:-}" | sed -E "s/-flto(=auto|=thin|=[0-9]+)?//g")"
   # proc-macro crate 對任何 -C lto（含 thin）都報 'lto cannot be used for
