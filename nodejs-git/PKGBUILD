@@ -38,6 +38,18 @@ pkgver() {
 build() {
   cd "node"
 
+  # 【源頭修復 GCC 16 不相容，不關 LTO】v8 內嵌 abseil 的
+  # crc_x86_arm_combined.cc 用 `return {}` 回傳 std::conditional_t<__vector>，
+  # GCC 16 對此型別推導失敗（本機 g++ 16.2.0 無 LTO 也重現，與 LTO 無關）。
+  # 改為顯式建構 return PclmulProduct<...>{} 即可（本地 -O3 -flto -march=znver3
+  # 編譯實證通過）。功能零裁剪、LTO 全開。
+  _crc=deps/v8/third_party/abseil-cpp/absl/crc/internal/crc_x86_arm_combined.cc
+  if [ -f "$_crc" ]; then
+    sed -i 's/return {};/return PclmulProduct<kVpclmulBytes>{};/' "$_crc"
+    grep -q 'return PclmulProduct<kVpclmulBytes>{};' "$_crc" \
+      || echo "::error::nodejs abseil 源頭修補未匹配"
+  fi
+
   # Node 27 trunk（27.0.0-pre，2026-10-23 起）把 QUIC 收成顯式開關：
   # configure 看到 --shared-nghttp3 而沒有 --experimental-quic 直接紅
   # 「ERROR: --shared-nghttp3 requires --experimental-quic」（run 39949228183
