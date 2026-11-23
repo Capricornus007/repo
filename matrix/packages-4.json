@@ -1252,5 +1252,12 @@
     "variant": "none",
     "in_tree": true,
     "no_deploy": true
+  },
+  {
+    "key": "pam-nologind",
+    "repo_name": "pam-nologind",
+    "variant": "none",
+    "in_tree": true,
+    "no_deploy": true
   }
 ]

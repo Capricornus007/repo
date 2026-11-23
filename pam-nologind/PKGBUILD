@@ -1,0 +1,90 @@
+# 方案C：官方 pam 关掉 logind/elogind（sd-bus），回退传统 utmp。
+# 基于 Artix 官方 pam 配方，改 -Delogind=enabled→disabled；logind 本就 disabled。
+# no_deploy：只验证能编、产物无 elogind NEEDED，不进 feed、不换系统 pam。
+# Maintainer: Tobias Powalowski <tpowa@archlinux.org>
+# Maintainer: Levente Polyak <anthraxx[at]archlinux[dot]org>
+# Contributor: judd <jvinet@zeroflux.org>
+
+pkgname=pam-nologind
+pkgver=1.7.3
+pkgrel=1
+pkgdesc="PAM without logind/elogind (sd-bus free, utmp fallback)"
+conflicts=("pam")
+arch=('x86_64')
+license=('GPL-2.0-only')
+url="http://linux-pam.org"
+depends=(
+  audit
+  glibc
+  libaudit.so
+  libcrypt.so
+  libnsl
+  libtirpc
+  libxcrypt
+  pambase
+)
+makedepends=(
+  docbook-xml
+  docbook-xsl
+  docbook5-xml
+  flex
+  git
+  libxslt
+  meson
+  w3m
+)
+provides=(
+  "pam=${pkgver}"
+  libpam.so
+  libpamc.so
+  libpam_misc.so
+)
+backup=(
+  etc/security/{access.conf,faillock.conf,group.conf,limits.conf,namespace.conf,namespace.init,pwhistory.conf,pam_env.conf,time.conf} 
+  etc/environment
+)
+source=("pam::git+https://github.com/linux-pam/linux-pam#tag=v${pkgver}"
+        "pam.tmpfiles")
+b2sums=('SKIP'
+        '36582c80020008c3810b311a2e126d2fb4ffc94e565ea4c0c0ab567fdb92943e269781ffa548550742feb685847c26c340906c7454dcc31df4e1e47d511d8d6f')
+
+prepare() {
+  cd "pam"
+  # apply patch from the source array (should be a pacman feature)
+  local src
+  for src in "${source[@]}"; do
+    src="${src%%::*}"
+    src="${src##*/}"
+    [[ $src = *.patch ]] || continue
+    echo "Applying patch ${src}..."
+    patch -Np1 < "../${src}"
+  done
+}
+
+build() {
+  arch-meson "pam" \
+    -Dlogind=disabled \
+    -Deconf=disabled \
+    -Dselinux=disabled \
+    -Delogind=disabled \
+    -Dpam_userdb=disabled \
+    -Dpwaccess=disabled \
+    -Dvendordir='' \
+    build
+  meson compile -C build
+}
+
+check() {
+  meson test -C build
+}
+
+package() {
+  meson install -C build --destdir "${pkgdir}"
+  install -Dm 644 pam.tmpfiles "${pkgdir}"/usr/lib/tmpfiles.d/${pkgname}.conf
+
+  # set unix_chkpwd uid
+  chmod +s "${pkgdir}"/usr/bin/unix_chkpwd
+
+  rm -fr "${pkgdir}"/usr/lib/systemd
+}
+
