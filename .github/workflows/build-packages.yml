@@ -1534,7 +1534,9 @@ jobs:
               [ -n "$_pkg_line" ] || { echo "::error::找不到 package()"; exit 1; }
               _close=$(awk -v s="$_pkg_line" 'NR>s && /^}/ {print NR; exit}' pkg_dir/PKGBUILD)
               [ -n "$_close" ] || { echo "::error::找不到 package() 結束大括號"; exit 1; }
-              sed -i "${_close}i\  # 零 systemd 鐵律：移除上游死檔案\n  rm -rf \"\$pkgdir/usr/lib/systemd\" \"\$pkgdir/etc/systemd\" \"\$pkgdir/usr/lib/sysusers.d\" \"\$pkgdir/usr/share/sysusers.d\" 2>/dev/null || true" pkg_dir/PKGBUILD
+              # 分兩條 sed 插入，避免單行 \n 在部分 sed 版本中不被解析為換行（導致 rm 被當作註解而不執行）。
+              sed -i "${_close}i\  # 零 systemd 鐵律：移除上游死檔案" pkg_dir/PKGBUILD
+              sed -i "${_close}i\  rm -rf \"\$pkgdir/usr/lib/systemd\" \"\$pkgdir/etc/systemd\" \"\$pkgdir/usr/lib/sysusers.d\" \"\$pkgdir/usr/share/sysusers.d\" 2>/dev/null || true" pkg_dir/PKGBUILD
               grep -q '零 systemd 鐵律' pkg_dir/PKGBUILD || { echo "::error::sysd 清理沒插進 pkg_dir/PKGBUILD"; exit 1; }
               tail -6 pkg_dir/PKGBUILD ;;
             seahorse-git)
