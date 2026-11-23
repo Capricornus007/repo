@@ -4265,6 +4265,27 @@ jobs:
             [ -e "$f" ] || continue
             chk="$PWD/.sysd-check-$$"; rm -rf "$chk"; mkdir -p "$chk"
             bsdtar -xf "$f" -C "$chk" 2>/dev/null
+            # 【用戶鐵律 2026-11-23：systemd 不只編譯旗標，文件夹/文件绝对不容许存在】
+            # 上一版只擋 NEEDED 連結與 .PKGINFO depend，openssh-git 仍把
+            # /usr/lib/systemd/system/ 空目錄帶進產物（實機 pacman -Ql 可見）。
+            # 這裡直接列舉產物內所有 systemd 路徑：
+            #   - /usr/lib/systemd/**   → systemd 本體單元/目錄，硬紅
+            #   - /etc/systemd/**       → systemd 設定，硬紅
+            #   - *.service/*.socket/*.timer/*.target/**.mount → 單元檔，硬紅
+            #   - libsystemd.so*        → 本體庫，硬紅
+            # 例外：/usr/include/elogind/systemd/*.h 是 elogind 的 API 相容頭
+            #   （Artix/OpenRC 上 sd-bus/sd-daemon 都靠它），不是 systemd 本體，保留。
+            _sysd_files=$(find "$chk" \( -path '*/usr/lib/systemd' -o -path '*/usr/lib/systemd/*' \
+                 -o -path '*/etc/systemd' -o -path '*/etc/systemd/*' \
+                 -o -path '*/usr/lib/systemd/system/*' -o -name 'libsystemd.so*' \
+                 -o \( -name '*.service' -o -name '*.socket' -o -name '*.timer' \
+                      -o -name '*.target' -o -name '*.mount' \) \
+                      -path '*/systemd/*' \) \
+                 2>/dev/null | grep -v '/usr/include/elogind/systemd/' | head -20)
+            if [ -n "$_sysd_files" ]; then
+              echo "::error::$f 產物含 systemd 文件/目錄（用戶鐵律：不容許一切存在）：$_sysd_files"
+              _sysd_link=1
+            fi
             if find "$chk" -type f \( -perm -u+x -o -name '*.so*' \) -print0 2>/dev/null \
                  | xargs -0 -r objdump -p 2>/dev/null \
                  | grep -qE 'NEEDED[[:space:]]+libsystemd\.so\.0'; then
