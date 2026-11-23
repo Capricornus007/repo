@@ -46,8 +46,13 @@ package() {
   cd "$_pkgbase"
   DESTDIR="$pkgdir" meson install -C build
   install -Dm644 "build/src/polkitbackend/50-default.rules" "$pkgdir/etc/polkit-1/rules.d"
-  install -Dm644 "$srcdir/polkit.conf" "$pkgdir/usr/lib/sysusers.d/polkit-consolekit.conf"
   install -m0644 "$srcdir/99-consolekit.rules" "$pkgdir/etc/polkit-1/rules.d"
   # 用戶鐵律：systemd 文件/目錄不容許存在（systemdsystemunitdir=foo 導向 /usr/foo）
-  rm -rf "$pkgdir"/usr/foo "$pkgdir"/{etc/systemd,usr/lib/systemd} 2>/dev/null || true
+  # sysusers.d 也是 systemd 設施（run 45105964856 實測被產物閘門 攔：polkit.conf、
+  # polkit-consolekit.conf）→ 整個刪掉；OpenRC 機器的 polkitd 用戶由 post_install 建。
+  rm -rf "$pkgdir"/usr/foo "$pkgdir"/{etc/systemd,usr/lib/systemd,usr/lib/sysusers.d} 2>/dev/null || true
+}
+
+post_install() {
+  getent passwd polkitd >/dev/null || useradd -r -d / -s /usr/bin/nologin -c 'PolicyKit daemon' polkitd
 }

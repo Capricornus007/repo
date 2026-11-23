@@ -235,8 +235,11 @@ build() {
   # Rust 側用 RUSTFLAGS -C lto=thin 保持 LTO 全開，功能零裁剪。
   export CFLAGS="$(printf "%s" "${CFLAGS:-}" | sed -E "s/-flto(=auto|=thin|=[0-9]+)?//g")"
   export CXXFLAGS="$(printf "%s" "${CXXFLAGS:-}" | sed -E "s/-flto(=auto|=thin|=[0-9]+)?//g")"
-  # proc-macro crate 不支援 fat LTO（run 45096369299 實測 zeroize_derive/serde_derive 全紅）→ 用 thin LTO，仍是六最 LTO、不關閉。
-  export RUSTFLAGS="${RUSTFLAGS:-} -C lto=thin -C embed-bitcode=yes"
+  # proc-macro crate 對任何 -C lto（含 thin）都報 'lto cannot be used for
+  # proc-macro'（run 45105964856 實測：RUSTFLAGS 裸 flag 會打到每個 rustc 調用）。
+  # 改用 CARGO_PROFILE_RELEASE_LTO：cargo 只對最終二進制做 LTO、自動跳過
+  # proc-macro crate，仍是六最 LTO、不關閉。
+  export CARGO_PROFILE_RELEASE_LTO=thin
   # prepare() 抓好的 V8 預構建檔位置（缺檔就讓 cargo 自己去問，錯誤資訊比較直觀）
   [ -f "${srcdir}/rusty_v8/env.sh" ] && source "${srcdir}/rusty_v8/env.sh"
   # codex-code-mode-host 是「完整套件」的必須檔（validate_package 會查），

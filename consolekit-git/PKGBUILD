@@ -41,6 +41,7 @@ build() {
     --with-xinitrc-dir=/etc/X11/xinit/xinitrc.d \
     --with-pam-module-dir=/usr/lib/security \
     --without-systemdsystemunitdir \
+    --disable-gtk-doc \
     --disable-cgroups \
     --disable-dependency-tracking
   make
