@@ -4278,7 +4278,7 @@ jobs:
                  -o -path '*/etc/systemd' -o -path '*/etc/systemd/*' \
                  -o -path '*/usr/lib/systemd/system/*' -o -name 'libsystemd.so*' \
                  -o -path '*/sysusers.d/*' \) \
-                 2>/dev/null | grep -v '/usr/include/elogind/systemd/' | head -20)
+                 2>/dev/null | grep -v '/usr/include/elogind/systemd/' | head -20 || true)
             if [ -n "$_sysd_files" ]; then
               echo "::error::$f 產物含 systemd 文件/目錄（用戶鐵律：不容許一切存在）：$_sysd_files"
               _sysd_link=1
