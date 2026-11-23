@@ -11,6 +11,7 @@ build 那條會 clone 上游 PKGBUILD 並實際執行 prepare()/build()（任意
 """
 import argparse, json, os, re, shlex, shutil, subprocess, sys, tempfile
 import urllib.parse, urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 AUR_HTTPS = "https://aur.archlinux.org/{base}.git"
 AUR_SSH = "ssh://aur@aur.archlinux.org/{base}.git"
@@ -50,9 +51,14 @@ CONTENT_RULES = {
 }
 
 
-def run(cmd, cwd=None):
-    return subprocess.run(cmd, shell=isinstance(cmd, str), cwd=cwd,
-                          capture_output=True, text=True)
+def run(cmd, cwd=None, timeout=None):
+    try:
+        return subprocess.run(cmd, shell=isinstance(cmd, str), cwd=cwd,
+                              capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired as e:
+        # 卡死的 clone/fetch 不能讓整條工作流無限期掛起（實測 cinnamon-control-center-git
+        # 的上游 clone 可以卡幾分鐘）。回一個帶 stderr 的失敗結果，讓呼叫端照原邏輯跳過。
+        return subprocess.CompletedProcess(cmd, 124, '', f'timeout after {timeout}s')
 
 
 def verkey(v):
@@ -341,15 +347,15 @@ def compute(adir, cache):
                     # 只要 refs 與 commit（describe / rev-list / tag 列舉），永遠不需要檔案內容。
                     # 實測 flutter-git 完整 clone 吃到 326MB 還沒抓完，blobless 同一倉 138MB，
                     # CI 裡這條會變成 26 包矩陣的瓶頸，所以一律 --filter=blob:none。
-                    r = run(['git', 'clone', '-q', '--filter=blob:none', url, d])
+                    r = run(['git', 'clone', '-q', '--filter=blob:none', url, d], timeout=240)
                     if r.returncode:
                         # 老 git / 不支援 partial clone 的伺服器：退回完整 clone。
                         run(['rm', '-rf', d])
-                        r = run(['git', 'clone', '-q', url, d])
+                        r = run(['git', 'clone', '-q', url, d], timeout=300)
                         if r.returncode:
                             ok = False; notes.append(f'clone 失敗 {url}'); break
                 else:
-                    run(['git', '-C', d, 'fetch', '-q', '--tags', '--force', 'origin'])
+                    run(['git', '-C', d, 'fetch', '-q', '--tags', '--force', 'origin'], timeout=120)
                 ref = f'origin/{branch}' if branch else '@{u}'
                 run(['git', '-C', d, 'checkout', '-q', '-B', 'bump', ref])
             if ok:
@@ -358,7 +364,7 @@ def compute(adir, cache):
                           f'pkgdir={shlex.quote(cache)}/pkg '
                           f'startdir={shlex.quote(adir)} && '
                           f'. {shlex.quote(os.path.join(adir, "PKGBUILD"))} >/dev/null 2>&1; pkgver')
-                r = run(['bash', '-c', script])
+                r = run(['bash', '-c', script], timeout=180)
                 cand = r.stdout.strip().splitlines()[-1].strip() if r.stdout.strip() else ''
                 if r.returncode or not cand or ' ' in cand:
                     notes.append(f'pkgver() 輸出不可信（{cand!r} rc={r.returncode}）')
@@ -399,8 +405,15 @@ def compute(adir, cache):
             cm = re.search(r'^_major=(\S+)', pb, re.M)
             cn = re.search(r'^_minor=(\S+)', pb, re.M)
             cr = re.search(r'^pkgrel=(\S+)', pb, re.M)
+            ct = re.search(r'^_tagrel=(\S+)', pb, re.M)
             if not (cm and cn and cr):
                 notes.append('cachy_kernel：PKGBUILD 缺 _major/_minor/pkgrel 任一項，放棄'); continue
+            # _tagrel 是 release tag 尾號（_srcname=cachyos-${_major}.${_minor}-${_tagrel}
+            # 直接拼進 source URL）。漏改它會讓新版本 + 舊 tagrel 拼出不存在的 tarball
+            # （2026-11-23：7.3.5-2 → 7.3.6 時 _tagrel 仍 2，updpkgsums 抓
+            # cachyos-7.3.6-2.tar.gz 404，白白空轉一輪）。有就必須同步跟 tag 尾號走。
+            if ct:
+                edits.append((r'^_tagrel=.*$', f'_tagrel={prel}', f'_tagrel {ct.group(1)}->{prel}（tag 尾號，_srcname 用）'))
             cur_v = f'{cm.group(1)}.{cn.group(1)}'
             if not is_newer(f'{major}.{minor}', cur_v):
                 notes.append(f'cachy_kernel：{why}，現值 {cur_v} 不比它舊 → 不推'); continue
@@ -654,46 +667,79 @@ def main():
         ap.error('要給 --bases 或 --file')
 
     os.makedirs(a.work, exist_ok=True)
-    results, seen = [], set()
+
+    # 探測階段併發：每包的 AUR RPC / clone / fetch / pkgver() 遠端探測彼此獨立，
+    # 各寫各的 adir 與 .cache，沒有共享可變狀態。串行版本實測 30 包要 8~9 分鐘
+    # （cinnamon-control-center-git 的 pkgver() 要 clone 一遍上游，單包就卡幾分鐘），
+    # 併發後總時間降到最慢那一包。推送/apply 仍舊串行——AUR 不接受同憑證並發寫。
+    # 先串行解析 pkgbase 並去重：split 包（xxx-headers）與主包共用同一個 adir/cache，
+    # 若讓兩條執行緒同時探測同一 pkgbase 會 races（rm -rf / clone / reset 互踩）。
+    # RPC 每包約 1 秒，28 包串行也只要 ~30 秒，這道串行化很便宜。
+    resolved, dedup = [], set()
     for name in bases:
         real, aurver = resolve_pkgbase(name)
         if not real:
-            results.append((name, 'FAIL', aurver))
-            print(f'{name:32s} 查無：{aurver}', flush=True); continue
-        if real != name:
-            print(f'{name:32s} → 不是獨立 pkgbase，實際是 {real} 的 split 包，併進去處理', flush=True)
-        if real in seen:
-            results.append((real, 'SKIP', '同 pkgbase，已處理過')); continue
-        seen.add(real)
+            resolved.append((name, 'FAIL', aurver, None))
+            continue
+        split_note = (f'{name} → 不是獨立 pkgbase，實際是 {real} 的 split 包，併進去處理'
+                      if real != name else None)
+        if split_note:
+            print(split_note, flush=True)
+        if real in dedup:
+            resolved.append((real, 'DUP', '同 pkgbase，已處理過', None))
+            continue
+        dedup.add(real)
+        resolved.append((real, None, None, split_note))
 
-        base = real
-        adir = os.path.join(a.work, base)
+    def probe(real):
+        adir = os.path.join(a.work, real)
         if not os.path.isdir(os.path.join(adir, '.git')):
             run(['rm', '-rf', adir])
-            if run(['git', 'clone', '-q', AUR_HTTPS.format(base=base), adir]).returncode:
-                results.append((base, 'FAIL', 'clone AUR 失敗')); print(f'{base:32s} clone 失敗', flush=True); continue
+            if run(['git', 'clone', '-q', AUR_HTTPS.format(base=real), adir]).returncode:
+                return (real, 'FAIL', 'clone AUR 失敗', None, None)
         # AUR 對未知路徑會給一個 rc=0 的**空倉**，PKGBUILD 不存在才會炸 FileNotFoundError。
-        # 上面 resolve_pkgbase 已經擋掉多數情況，這裡再守一次，空倉直接回報而不是拋例外。
         if not os.path.isfile(os.path.join(adir, 'PKGBUILD')):
-            results.append((base, 'FAIL', 'clone 回來是空倉（沒有 PKGBUILD）'))
-            print(f'{base:32s} 空倉，跳過', flush=True); continue
+            return (real, 'FAIL', 'clone 回來是空倉（沒有 PKGBUILD）', None, None)
         run(['git', '-C', adir, 'fetch', '-q', 'origin'])
         run(['git', '-C', adir, 'reset', '-q', '--hard', 'origin/master'])
-        ok, why = can_push(base, adir)
+        ok, why = can_push(real, adir)
         if not ok:
-            results.append((base, 'SKIP', f'不可推：{why}'))
-            print(f'{base:32s} 不動：{why}', flush=True); continue
+            return (real, 'SKIP', f'不可推：{why}', None, None)
         try:
-            edits, note = compute(adir, os.path.join(a.work, base + '.cache'))
+            edits, note = compute(adir, os.path.join(a.work, real + '.cache'))
         except Exception as e:
-            results.append((base, 'FAIL', f'{type(e).__name__}: {e}'))
-            print(f'{base:32s} 例外 {e}', flush=True); continue
+            return (real, 'FAIL', f'{type(e).__name__}: {e}', None, None)
+        return (real, 'PROBED', note, edits, adir)
+
+    to_probe = [(i, r) for i, (r, st, _, _) in enumerate(resolved) if st is None]
+    probed = {}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {pool.submit(probe, real): i for i, real in to_probe}
+        done_cnt = 0
+        for fut in as_completed(futures):
+            i = futures[fut]
+            probed[i] = fut.result()
+            done_cnt += 1
+            _r = probed[i]
+            print(f'[{done_cnt}/{len(to_probe)}] probe {_r[0]}: {_r[1]}', flush=True)
+
+    results = []
+    for i, (real, status, note, split_note) in enumerate(resolved):
+        if status == 'DUP':
+            results.append((real, 'SKIP', note)); continue
+        if status == 'FAIL':
+            results.append((real, 'FAIL', note)); print(f'{real:32s} 查無：{note}', flush=True); continue
+        _, st, note, edits, adir = probed[i]
+        if st in ('FAIL', 'SKIP'):
+            results.append((real, st, note))
+            print(f'{real:32s} {st}：{note}', flush=True)
+            continue
         if not edits:
-            results.append((base, 'SKIP', note)); print(f'{base:32s} 不動：{note}', flush=True); continue
-        msg = f'{base}: upstream update'
+            results.append((real, 'SKIP', note)); print(f'{real:32s} 不動：{note}', flush=True); continue
+        msg = f'{real}: upstream update'
         res = apply_bump(adir, edits, msg, a.push, not a.no_sums)
-        results.append((base, 'BUMP', f'{note} ⇒ {res}'))
-        print(f'{base:32s} {note} ⇒ {res}', flush=True)
+        results.append((real, 'BUMP', f'{note} ⇒ {res}'))
+        print(f'{real:32s} {note} ⇒ {res}', flush=True)
 
     print(json.dumps(results, ensure_ascii=False))
     if any(s == 'FAIL' for _, s, _ in results):
