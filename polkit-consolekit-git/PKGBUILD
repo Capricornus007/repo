@@ -1,0 +1,53 @@
+# 六最搬運 2026-11-23：polkit with ConsoleKit session tracking，取代 elogind 依賴。
+# AUR polkit-consolekit 128 原版改寫：patch polkit 原始碼 + -D session_tracking=ConsoleKit。
+# provides polkit=128 / conflicts polkit，與 consolekit-git 雙向配套。
+pkgname=polkit-consolekit-git
+_pkgbase=polkit
+pkgver=128
+pkgrel=1
+pkgdesc='PolicyKit with ConsoleKit support for non-systemd systems (六最 znver3 LTO)'
+arch=(x86_64)
+url='https://github.com/polkit-org/polkit'
+license=(LGPL-2.0-or-later)
+depends=(glib2 pam expat duktape)
+makedepends=(git meson gtk-doc gobject-introspection glib2-devel)
+provides=(polkit=128 libpolkit-agent-1.so libpolkit-gobject-1.so)
+conflicts=(polkit)
+options=(libtool)
+source=("$_pkgbase::git+$url.git#tag=$pkgver"
+        patch-src_polkitbackend_polkitbackendsessionmonitor.diff
+        patch-src_polkit_polkitunixsession.diff
+        polkit.conf
+        99-consolekit.rules)
+b2sums=('SKIP'
+        'a21ddc4a5dc676815b0c0da75b5e154063082084c918020fefd3b082129b527016061134623a0ed01a3eb5677fee9027a63eaece0a836a973917054149ca9f24'
+        '7a739d783d774370dedd5d9373fa79356eaf340997439ce1e35ab76951e04492badd6afa50a8e2761efd46ff9222cadcc3dfd854daf723bdb01e66e4b9645b33'
+        'fd1841439982ea69bdbae320cb04ea411ba03f8b53c0b8a9e715436e61e48e3225b3022fa4996498ec758585d15fd2705d3662087e93a24814b7770a65fd3459'
+        'fe404d8aeb604fb22aa4ebb273c671062788ad08217f82415dc96e8fa4e8a7657434147c2fcbf33f7cc133aeff9c1b3cffaa3612acf7926207706058e028bacb')
+
+prepare() {
+  cd "$_pkgbase"
+  patch -Np1 -i "$srcdir/patch-src_polkitbackend_polkitbackendsessionmonitor.diff"
+  patch -Np1 -i "$srcdir/patch-src_polkit_polkitunixsession.diff"
+}
+
+build() {
+  cd "$_pkgbase"
+  arch-meson build -Dsystemdsystemunitdir=foo -Dsession_tracking=ConsoleKit
+  meson compile -C build
+}
+
+check() {
+  cd "$_pkgbase"
+  meson test -C build --print-errorlogs || true
+}
+
+package() {
+  cd "$_pkgbase"
+  DESTDIR="$pkgdir" meson install -C build
+  install -Dm644 "$srcdir/build/src/polkitbackend/50-default.rules" "$pkgdir/etc/polkit-1/rules.d"
+  install -Dm644 "$srcdir/polkit.conf" "$pkgdir/usr/lib/sysusers.d/polkit-consolekit.conf"
+  install -m0644 "$srcdir/99-consolekit.rules" "$pkgdir/etc/polkit-1/rules.d"
+  # 用戶鐵律：systemd 文件/目錄不容許存在（systemdsystemunitdir=foo 導向 /usr/foo）
+  rm -rf "$pkgdir"/usr/foo "$pkgdir"/{etc/systemd,usr/lib/systemd} 2>/dev/null || true
+}

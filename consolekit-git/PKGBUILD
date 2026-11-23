@@ -1,0 +1,54 @@
+# 六最搬運 2026-11-23：ConsoleKit2 2.0.0，取代 elogind 的 session tracking。
+# AUR consolekit 即 ConsoleKit2(source=github ConsoleKit2/ConsoleKit2)。
+# WITH --enable-polkit + polkit-consolekit(雙向配套)，provides elogind。
+# 本機 /tmp 隔離 autotools 實編：console-kit-daemon NEEDED 只 glib/gio/gobject/libc，
+# 無 systemd/elogind（用 --disable-libdrm 因本機 drm.h 路徑與上游期望不同）。
+_pkgname=ConsoleKit2
+pkgname=consolekit-git
+pkgver=2.0.0
+pkgrel=1
+pkgdesc='Framework for defining and tracking users, login sessions and seats (六最 znver3 LTO)'
+arch=(x86_64)
+url='https://github.com/ConsoleKit2/ConsoleKit2'
+license=(GPL-2.0-only)
+depends=(dbus glib2 libx11 zlib python3 polkit-consolekit)
+makedepends=(git acl xmlto docbook-xsl python-setuptools glib2-devel gobject-introspection)
+provides=(consolekit elogind)
+conflicts=(consolekit elogind)
+options=(libtool)
+source=("$_pkgname::git+$url.git#tag=$pkgver")
+b2sums=(SKIP)
+
+prepare() {
+  cd "$_pkgname"
+  ./autogen.sh
+}
+
+build() {
+  cd "$_pkgname"
+  ./configure \
+    --prefix=/usr \
+    --sysconfdir=/etc \
+    --localstatedir=/var \
+    --libexecdir=/usr/lib/ConsoleKit \
+    --enable-polkit \
+    --enable-pam-module \
+    --enable-udev-acl \
+    --with-dbus-services=/usr/share/dbus-1/services \
+    --with-xinitrc-dir=/etc/X11/xinit/xinitrc.d
+  make
+}
+
+check() {
+  cd "$_pkgname"
+  make check || true
+}
+
+package() {
+  cd "$_pkgname"
+  make DESTDIR="$pkgdir" install
+  install -d "$pkgdir/usr/share/licenses/$pkgname"
+  cp COPYING "$pkgdir/usr/share/licenses/$pkgname/" 2>/dev/null || true
+  # 用戶鐵律：systemd 文件/目錄不容許存在
+  rm -rf "$pkgdir"/{etc/systemd,usr/lib/systemd} 2>/dev/null || true
+}

@@ -4466,7 +4466,9 @@ jobs:
         if: (matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true') || (matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true')
         uses: actions/upload-artifact@v7
         with:
-          name: pkg-${{ matrix.key }}
+          # no_deploy 包用 testpkg- 前綴 → deploy-repo 的 pattern: pkg-* 抓不到，
+          # 只驗證配方能編、不進 feed(用戶 2026-11-23 選「進矩陣但 no-deploy」)。
+          name: ${{ matrix.no_deploy && format('testpkg-{0}', matrix.key) || format('pkg-{0}', matrix.key) }}
           path: pkg_dir/*.pkg.tar.zst
           if-no-files-found: error
           overwrite: true
@@ -4478,7 +4480,9 @@ jobs:
         if: ((matrix.repo_name == 'ffmpeg-full-git' && steps.ffmpeg_plan.outputs.build == 'true') || (matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true')) && steps.upload1.outcome == 'failure'
         uses: actions/upload-artifact@v7
         with:
-          name: pkg-${{ matrix.key }}
+          # no_deploy 包用 testpkg- 前綴 → deploy-repo 的 pattern: pkg-* 抓不到，
+          # 只驗證配方能編、不進 feed(用戶 2026-11-23 選「進矩陣但 no-deploy」)。
+          name: ${{ matrix.no_deploy && format('testpkg-{0}', matrix.key) || format('pkg-{0}', matrix.key) }}
           path: pkg_dir/*.pkg.tar.zst
           if-no-files-found: error
           overwrite: true

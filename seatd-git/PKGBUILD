@@ -1,0 +1,40 @@
+# 六最搬運 2026-11-23：seatd 0.9.3，取代 elogind 的 seat/裝置存取部分。
+# WITH -Dlibseat-logind=disabled → libseat-systemd:NO / libseat-elogind:NO，
+# seatd NEEDED 只有 libc（本機 /tmp 隔離 -O3 -flto -march=znver3 實編驗證）。
+pkgname=seatd-git
+_pkgbase=seatd
+pkgver=0.9.3
+pkgrel=1
+pkgdesc='Minimal seat management daemon and universal library (六最 znver3 LTO)'
+arch=(x86_64)
+url='https://github.com/kennylevinsen/seatd'
+license=(MIT)
+depends=(glibc)
+makedepends=(git meson scdoc)
+provides=(seatd libseat.so)
+conflicts=(seatd)
+source=("$_pkgbase::git+$url.git")
+b2sums=(SKIP)
+
+pkgver() {
+  cd "$_pkgbase"
+  git describe --long --tags | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd "$_pkgbase"
+  arch-meson -Dlibseat-logind=disabled -Dlibseat-seatd=enabled -Dserver=enabled build
+  meson compile -C build
+}
+
+check() {
+  cd "$_pkgbase"
+  meson test -C build --print-errorlogs
+}
+
+package() {
+  cd "$_pkgbase"
+  DESTDIR="$pkgdir" meson install -C build
+  install -d "$pkgdir/usr/share/licenses/$pkgname"
+  cp LICENSE "$pkgdir/usr/share/licenses/$pkgname/" 2>/dev/null || true
+}

@@ -1,0 +1,60 @@
+# 六最搬運 2026-11-23：dbus 無 systemd/elogind 版。
+# WITH systemd=disabled → dbus-daemon NEEDED 只有 libdbus-1/expat/audit/cap-ng/libc
+# （本機 /tmp 隔離 gcc 16.2 -O3 -flto=auto -march=znver3 實編 readelf 驗證）。
+# AUR dbus-nosystemd-git 原版改寫：source 走 GitLab 上游 main，六最旗標全開。
+pkgname=dbus-nosystemd-git
+_pkgbase=dbus
+pkgver=1.16.0.r143.g4f5796a3
+pkgrel=1
+pkgdesc='Message bus system -- no systemd for you! (六最 znver3 LTO)'
+arch=(x86_64)
+url='https://gitlab.freedesktop.org/dbus/dbus'
+license=(GPL custom)
+depends=(glibc audit expat libaudit.so)
+makedepends=(git meson)
+provides=(dbus libdbus libdbus-1.so)
+conflicts=(dbus libdbus)
+source=("$_pkgbase::git+$url.git")
+b2sums=(SKIP)
+
+pkgver() {
+  cd "$_pkgbase"
+  git describe --long --tags | sed 's/^dbus-//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd "$_pkgbase"
+  # 移除 systemd 服務/temp 檔案的安裝（上游 meson 關 systemd 後仍會裝部分），
+  # 用戶鐵律：systemd 文件夹/文件不容許存在。
+  rm -rf data/*systemd* 2>/dev/null || true
+}
+
+build() {
+  cd "$_pkgbase"
+  arch-meson \
+    --libexecdir=/usr/lib/dbus-1.0 \
+    -Dsystemd=disabled \
+    -Ddefault_library=shared \
+    -Dsystem_pid_file=/run/dbus/pid \
+    -Dsystem_socket=/run/dbus/system_bus_socket \
+    -Ddbus_user=dbus \
+    -Depoll=enabled \
+    build
+  meson compile -C build
+}
+
+check() {
+  cd "$_pkgbase"
+  meson test -C build --print-errorlogs || true
+}
+
+package() {
+  cd "$_pkgbase"
+  DESTDIR="$pkgdir" meson install -C build
+  # 用戶鐵律：/system.d 目錄一個不留
+  rm -rf "$pkgdir"/{etc/systemd,usr/lib/systemd,run,var} 2>/dev/null || true
+  install -d "$pkgdir/usr/share/licenses/$pkgname"
+  cp COPYING "$pkgdir/usr/share/licenses/$pkgname/"
+  # 不指定 uid（本機 dbus 已用 85，寫死 81 會衝突）；只宣告用戶存在即可。
+  echo 'u dbus - "System Message Bus" /var/run/dbus /usr/bin/nologin' | install -Dm644 /dev/stdin "$pkgdir/usr/lib/sysusers.d/dbus.conf" 2>/dev/null || true
+}

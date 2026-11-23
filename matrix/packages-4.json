@@ -1224,5 +1224,33 @@
     "repo_name": "libxshmfence",
     "variant": "none",
     "kind": "arch"
+  },
+  {
+    "key": "dbus-nosystemd-git",
+    "repo_name": "dbus-nosystemd-git",
+    "variant": "none",
+    "in_tree": true,
+    "no_deploy": true
+  },
+  {
+    "key": "seatd-git",
+    "repo_name": "seatd-git",
+    "variant": "none",
+    "in_tree": true,
+    "no_deploy": true
+  },
+  {
+    "key": "consolekit-git",
+    "repo_name": "consolekit-git",
+    "variant": "none",
+    "in_tree": true,
+    "no_deploy": true
+  },
+  {
+    "key": "polkit-consolekit-git",
+    "repo_name": "polkit-consolekit-git",
+    "variant": "none",
+    "in_tree": true,
+    "no_deploy": true
   }
 ]
