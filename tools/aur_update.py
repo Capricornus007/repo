@@ -695,13 +695,23 @@ def main():
         adir = os.path.join(a.work, real)
         if not os.path.isdir(os.path.join(adir, '.git')):
             run(['rm', '-rf', adir])
-            if run(['git', 'clone', '-q', AUR_HTTPS.format(base=real), adir]).returncode:
-                return (real, 'FAIL', 'clone AUR 失敗', None, None)
+            # 這裡一定要有 timeout：併發 6 條執行緒同時 clone AUR，任一條遇到
+            # 斷流/卡連線若無超時就會永久掛住，as_completed 跟著無限期等，
+            # 整個 job 卡死（2026-11-23 run #45214230838 實測卡 21 分鐘無輸出）。
+            _c = run(['git', 'clone', '-q', AUR_HTTPS.format(base=real), adir], timeout=240)
+            if _c.returncode:
+                return (real, 'FAIL',
+                        f'clone AUR 失敗（rc={_c.returncode}{"；超時 240s" if _c.returncode == 124 else ""}）',
+                        None, None)
         # AUR 對未知路徑會給一個 rc=0 的**空倉**，PKGBUILD 不存在才會炸 FileNotFoundError。
         if not os.path.isfile(os.path.join(adir, 'PKGBUILD')):
             return (real, 'FAIL', 'clone 回來是空倉（沒有 PKGBUILD）', None, None)
-        run(['git', '-C', adir, 'fetch', '-q', 'origin'])
-        run(['git', '-C', adir, 'reset', '-q', '--hard', 'origin/master'])
+        _f = run(['git', '-C', adir, 'fetch', '-q', 'origin'], timeout=120)
+        if _f.returncode:
+            return (real, 'FAIL',
+                    f'fetch AUR 失敗（rc={_f.returncode}{"；超時 120s" if _f.returncode == 124 else ""}）',
+                    None, None)
+        run(['git', '-C', adir, 'reset', '-q', '--hard', 'origin/master'], timeout=30)
         ok, why = can_push(real, adir)
         if not ok:
             return (real, 'SKIP', f'不可推：{why}', None, None)
