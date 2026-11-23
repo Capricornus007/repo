@@ -25,7 +25,7 @@ makedepends=(
 )
 provides=("llvm-bolt")
 conflicts=("llvm-bolt")
-options=(!debug !lto) # Disabled LTO & Debug as build times are huge with them
+options=(!debug) # Disabled LTO & Debug as build times are huge with them
 source=("git+https://github.com/llvm/llvm-project.git")
 b2sums=('SKIP')
 
@@ -44,13 +44,12 @@ pkgver() {
 }
 
 build() {
-  # 六最 CPU 優化；保留上游 !lto（llvm-project 全量 + LTO 會爆 CI 360min，
+  # 六最 CPU 優化；!lto 已廢除（2026-11-23 用戶鐵律：無豁免，實測 LTO 是否爆 360min）
   # 屬上游正當判斷非擅自降旗標），其餘 znver3/O3 照給。
   # 六最 CFLAGS 內聯（CI 容器無本機 profile.d）
   export CFLAGS="${CFLAGS:-} -march=znver3 -mtune=znver3 -O3 -pipe -fno-plt"
   export CXXFLAGS="${CFLAGS}"
-  local _cmake_options=(
-    -G Ninja
+  local _cmake_options=(-G Ninja
     -S "llvm-project/llvm"
     -B build
     -W no-author
@@ -67,8 +66,7 @@ build() {
     -D LLVM_INSTALL_UTILS=ON
     -D BUILD_SHARED_LIBS=OFF
     -D LLVM_LINK_LLVM_DYLIB=OFF
-    -D LLVM_TARGETS_TO_BUILD='X86;AArch64'
-  )
+    -D LLVM_TARGETS_TO_BUILD='X86;AArch64')
   cmake "${_cmake_options[@]}"
   ninja -C build bolt
 }

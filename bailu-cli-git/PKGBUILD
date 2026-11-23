@@ -14,7 +14,7 @@ depends=('nodejs')
 makedepends=('git' 'npm')
 provides=('bailu-cli')
 conflicts=('bailu-cli')
-options=('!strip' '!lto')
+options=('!strip')
 
 source=("git+https://github.com/BaiLuAI/BaiLu-Cli.git")
 sha256sums=('SKIP')

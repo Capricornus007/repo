@@ -13,7 +13,7 @@ license=('GPL-3.0-or-later')
 depends=('pacman>6.1' 'git')
 optdepends=('sudo: privilege elevation' 'doas: privilege elevation')
 makedepends=('go-git')
-options=(!lto)
+options=(lto)  # 六最：显式 LTO（无豁免）
 conflicts=('yay')
 provides=('yay')
 source=("yay::git+https://github.com/Jguer/yay.git#branch=next")

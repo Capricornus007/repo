@@ -17,7 +17,7 @@ makedepends=('go' 'git')
 provides=('glab')
 conflicts=('glab')
 replaces=('glab' 'gitlab-glab')
-options=(!lto)
+options=(lto)  # 六最：显式 LTO（无豁免）
 # 上游倉叫 cli → 目錄名要寫成 glab 才與通用版本探測對得上。
 source=("glab::git+${url}.git")
 sha256sums=('SKIP')

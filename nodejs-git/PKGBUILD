@@ -14,7 +14,7 @@ makedepends=('git' 'procps-ng' 'python')
 optdepends=('npm: nodejs package manager')
 provides=("nodejs=$pkgver")
 conflicts=('nodejs')
-options=('!lto')
+options=()
 source=("git+https://github.com/nodejs/node.git")
 sha256sums=('SKIP')
 

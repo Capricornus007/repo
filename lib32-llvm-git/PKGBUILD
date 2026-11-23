@@ -57,7 +57,7 @@ license=('Apache-2.0 WITH LLVM-exception')
 #   會去摸到 64 位元那顆，連結階段才炸，那樣更難查。
 makedepends=(cmake ninja git python pkgconf lib32-gcc-libs lib32-zlib lib32-zstd
              lib32-libffi lib32-ncurses lib32-libxml2 lld)
-options=(staticlibs !emptydirs !lto)
+options=(staticlibs !emptydirs)
 _stage=
 _stage_init() {
   if [ -z "$srcdir" ]; then

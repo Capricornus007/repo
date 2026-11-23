@@ -47,7 +47,7 @@ optdepends=('postgresql-libs: PostgreSQL driver'
 replaces=('qt<=4.8.4')
 conflicts=(qt4 qt)
 provides=(qt4)
-options=('!lto') # Avoid static library issues
+options=()
 _pkgfqn=qt   # -git 版：源碼目錄就是 clone 下來的 qt（非 -git 那份是 tarball 解出的長目錄名）
 source=("qt::git+https://code.qt.io/qt/qt.git#branch=4.8"
         "qtconfig-qt4.desktop"

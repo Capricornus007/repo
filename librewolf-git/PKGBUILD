@@ -97,7 +97,7 @@ optdepends=(
 
 options=(
   !emptydirs
-  !lto
+  # 六最無豁免：LTO 保留（Firefox 系官方构建即用 LTO/PGO）
   !makeflags
 )
 

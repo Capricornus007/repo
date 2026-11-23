@@ -142,7 +142,7 @@ url="https://llvm.org/"
 license=('Apache-2.0 WITH LLVM-exception')
 makedepends=(cmake ninja git python swig perl libedit libffi ncurses zlib zstd
              libxml2 python-psutil lld libelf curl xz lib32-gcc-libs)
-options=(staticlibs !emptydirs !lto)
+options=(staticlibs !emptydirs)
 # ⚠️ `$_stage` 絕不能寫成頂層的 `_stage="$srcdir/stage"`（上一版就是這樣，紅在
 #   `mv: cannot stat '/stage/usr/include/llvm'`）：makepkg 是「先 source PKGBUILD、
 #   之後才算 srcdir」（本機 /usr/bin/makepkg 查實：source_safe "$BUILDFILE" 在 211 行、

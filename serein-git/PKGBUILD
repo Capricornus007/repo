@@ -58,7 +58,7 @@ optdepends=(
 provides=('serein')
 conflicts=('serein')
 replaces=('serein')
-options=('!debug' '!lto')
+options=('!debug')
 # 目錄名前綴 `serein::`（= ${pkgname%-git}）是必須的：CI 的通用 pkgver 探測把源克隆進
 # ${pkgname%-git} 再跑 pkgver()，對不上就會恆 skip（job 綠但永不產包）。
 source=("serein::git+https://github.com/${_upstream}.git#branch=main")
@@ -86,6 +86,8 @@ prepare() {
 build() {
     cd "$srcdir/serein"
     rm -rf -- dist
+    # 六最無豁免：Rust 代碼要 explicit fat LTO（makepkg 的 -flto 只管 C/C++）。
+    export RUSTFLAGS="${RUSTFLAGS:-} -C lto=fat -C embed-bitcode=yes"
     cargo xtask package --format dir
 }
 

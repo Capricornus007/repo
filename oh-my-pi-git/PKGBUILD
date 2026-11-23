@@ -49,7 +49,7 @@ provides=('omp')
 conflicts=('omp')
 depends=('glibc' 'gcc-libs' 'bun')
 makedepends=('git' 'rust' 'rustup' 'cmake' 'make')
-options=('!lto' '!strip')
+options=('!strip')
 
 # source 指向 Capricornus007/oh-my-pi（上游 can1357/oh-my-pi 的 fork）。
 # 理由：本倉出貨的 omp 需要包含 fork 的本地改動，而上游那份沒有：
@@ -103,6 +103,8 @@ prepare() {
 
 build() {
   cd "oh-my-pi"
+  # 六最無豁免：Rust native 部分要 explicit fat LTO。
+  export RUSTFLAGS="${RUSTFLAGS:-} -C lto=fat -C embed-bitcode=yes"
   bun install
   rustup install nightly
   rustup default nightly

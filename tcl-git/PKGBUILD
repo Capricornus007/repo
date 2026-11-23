@@ -14,7 +14,7 @@ depends=(zlib)
 # 所以 provides 寫 `tcl=$pkgver-$pkgrel` 就夠，不用猜對方钉的是哪個版本。
 provides=("tcl=$pkgver-$pkgrel")
 conflicts=(tcl)
-options=(staticlibs !lto)
+options=(staticlibs)
 # ⚠️ 分支選 core-8-6-branch（8.6 maintenance 尖端），不是 master：
 # 本機實測（2026-10-12）/usr/lib/python3.14/lib-dynload/_tkinter*.so 硬鏈 libtk8.6.so、
 # 而 master 那條是 Tcl 9.0a/Tk 8.7a，庫名換成 libtcl9.x.so／libtk8.7.so，

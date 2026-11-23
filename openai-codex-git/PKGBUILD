@@ -40,7 +40,7 @@ optdepends=(
   'git: for working with git repositories'
   'ripgrep: accelerated large-repo search'
 )
-options=('!lto')
+options=()
 source=("${pkgname%-git}::git+${url}.git" "exec-bin-recursion-limit.patch"
         "no-daemon-by-default.patch")
 b2sums=('SKIP' 'SKIP' 'SKIP')
