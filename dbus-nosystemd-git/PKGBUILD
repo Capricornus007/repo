@@ -64,6 +64,6 @@ package() {
   rm -rf "$pkgdir"/{etc/systemd,usr/lib/systemd,run,var} 2>/dev/null || true
   install -d "$pkgdir/usr/share/licenses/$pkgname"
   cp COPYING "$pkgdir/usr/share/licenses/$pkgname/"
-  # 不指定 uid（本機 dbus 已用 85，寫死 81 會衝突）；只宣告用戶存在即可。
-  echo 'u dbus - "System Message Bus" /var/run/dbus /usr/bin/nologin' | install -Dm644 /dev/stdin "$pkgdir/usr/lib/sysusers.d/dbus.conf" 2>/dev/null || true
+  # 零 systemd 鐵律：sysusers.d/dbus.conf 只被 systemd-sysusers 讀取，本機為 OpenRC
+  # （dbus 用戶已由系統既有 dbus 包建立，uid 85），此檔是死檔案且被 CI 硬閘攔下 → 不裝。
 }
