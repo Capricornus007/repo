@@ -1,0 +1,12 @@
+# configuration for /etc/init.d/adguardhome
+
+command_user="adguardhome:adguardhome" # user:group
+supervisor=supervise-daemon
+
+directory="/var/lib/adguardhome"
+cfgfile="$directory/AdGuardHome.yaml"
+#extra_args="--web-addr 0.0.0.0:3000 --logfile syslog"
+
+logdir="/var/log/adguardhome"   # 2026-09-30：原本被註解 → output_log 展開成 /output.log，adguardhome 使用者寫不了根目錄 → supervise-daemon 啟動即死而 rc-service 仍報 ok
+output_log="$logdir/output.log"
+#error_log="$logdir/error.log"

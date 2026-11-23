@@ -18,12 +18,14 @@ depends=(glibc)
 makedepends=(git go nodejs npm)
 provides=($_name)
 conflicts=($_name)
+# 六最搬運 2026-11-23：systemd .service + sysusers.d 全部移除，改裝 OpenRC
+# (/etc/init.d + /etc/conf.d)，服務腳本放在 /usr/lib/systemd/ 一個字節都不留。
 source=("git+$url.git"
-        "$_name.service"
-        "$_name.sysusers")
+        "$_name.initd"
+        "$_name.confd")
 b2sums=('SKIP'
-        'b668bf969fddf94b28a5ece22f69dd5879b01ccac3ddf18dfebbcec94fefe6bfaeb43f74d11b575406a686a86587cab72ed9693d6f85f8f420ab16cafc975ab9'
-        '39c0caacf9261d1be4668086701b4b207ec63f40f575dd322bdb37b1e6796ab89d7bbc56806867ddf11a0c71bcac5f62629518a3065cbcb2eea340ab8272abb4')
+        '75b11afcabd4fd34f17e8dde87a60b78cd5504e9eca9c6418e0fd07b1a3ca9635ab5c6aaa0033bd7cb78b14adea3f340f5bcf714a132a1fb0361c16aa30d83c6'
+        '6e624ab003e0135962489f652327248338e56ad14787cf5aaca3561c437a1f0136fa02e7e1624a4a1b98e7b5b4e4531af6ba7d5bf5262f92fe63abbfb611a2e7')
 
 pkgver() {
     cd AdGuardHome
@@ -62,8 +64,9 @@ build() {
 package() {
     install -Dm755 AdGuardHome/$_name -t "$pkgdir/usr/bin"
     install -Dm644 AdGuardHome/CHANGELOG.md -t "$pkgdir/usr/share/doc/$pkgname"
-    install -Dm644 $_name.service "$pkgdir/usr/lib/systemd/system/$_name.service"
-    install -Dm644 $_name.sysusers "$pkgdir/usr/lib/sysusers.d/$_name.conf"
+    # OpenRC 服務（用戶鐵律：零 systemd 文件/目錄）
+    install -Dm755 $_name.initd "$pkgdir/etc/init.d/$_name"
+    install -Dm644 $_name.confd "$pkgdir/etc/conf.d/$_name"
     install -d "$pkgdir/etc"
     ln -s /var/lib/$_name/AdGuardHome.yaml "$pkgdir/etc/$_name.yaml"
 }

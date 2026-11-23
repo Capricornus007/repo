@@ -4268,19 +4268,16 @@ jobs:
             # 【用戶鐵律 2026-11-23：systemd 不只編譯旗標，文件夹/文件绝对不容许存在】
             # 上一版只擋 NEEDED 連結與 .PKGINFO depend，openssh-git 仍把
             # /usr/lib/systemd/system/ 空目錄帶進產物（實機 pacman -Ql 可見）。
-            # 這裡直接列舉產物內所有 systemd 路徑：
-            #   - /usr/lib/systemd/**   → systemd 本體單元/目錄，硬紅
-            #   - /etc/systemd/**       → systemd 設定，硬紅
-            #   - *.service/*.socket/*.timer/*.target/**.mount → 單元檔，硬紅
-            #   - libsystemd.so*        → 本體庫，硬紅
-            # 例外：/usr/include/elogind/systemd/*.h 是 elogind 的 API 相容頭
-            #   （Artix/OpenRC 上 sd-bus/sd-daemon 都靠它），不是 systemd 本體，保留。
+            # 攔截所有 systemd 專用路徑（查證 OpenRC 服務只有 /etc/init.d、
+            # /etc/conf.d、/etc/runlevels，沒有 .service → .service 全屬 systemd）：
+            #   /usr/lib/systemd/**、/etc/systemd/**、libsystemd.so*、sysusers.d/**
+            # 不按 *.service 副檔名攔：D-Bus 激活檔 /usr/share/dbus-1/services/*
+            # 是 OpenRC 也在用的正當檔案，非 systemd unit。
+            # 例外：/usr/include/elogind/systemd/*.h 是 elogind API 相容頭，保留。
             _sysd_files=$(find "$chk" \( -path '*/usr/lib/systemd' -o -path '*/usr/lib/systemd/*' \
                  -o -path '*/etc/systemd' -o -path '*/etc/systemd/*' \
                  -o -path '*/usr/lib/systemd/system/*' -o -name 'libsystemd.so*' \
-                 -o \( -name '*.service' -o -name '*.socket' -o -name '*.timer' \
-                      -o -name '*.target' -o -name '*.mount' \) \
-                      -path '*/systemd/*' \) \
+                 -o -path '*/sysusers.d/*') \
                  2>/dev/null | grep -v '/usr/include/elogind/systemd/' | head -20)
             if [ -n "$_sysd_files" ]; then
               echo "::error::$f 產物含 systemd 文件/目錄（用戶鐵律：不容許一切存在）：$_sysd_files"
