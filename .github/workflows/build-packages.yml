@@ -1099,6 +1099,17 @@ jobs:
           # 結構性衝突(見 memory 11-22)，不是偷懲關功能 → 撤銷全局翻轉，
           # 各包沿用自己已驗證的 options。六最等在源頭逐包修好後再開。
           case "${{ matrix.repo_name }}" in
+            dbus-nosystemd-git)
+              # dispatch 帶進來的 packages 陣列沒有 in_tree 欄位 → 上一步 clone 到的是 AUR 原版
+              # PKGBUILD：它的 arch-meson 沒關 xml/doxygen/ducktype docs，而 --auto-features enabled
+              # 把 feature 全開 → meson.build:330 找 xsltproc 直接紅（run 45138666827/#159 實測）。
+              # 本倉 dbus-nosystemd-git/ 目錄的 PKGBUILD 已禁四個 docs feature + selinux + systemd，
+              # 且使用者隔離實編驗證過 dbus-daemon NEEDED 無 elogind/systemd → 無條件改用它。
+              curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/dbus-nosystemd-git/PKGBUILD" -o pkg_dir/PKGBUILD
+              [ -s pkg_dir/PKGBUILD ] && grep -q 'xml_docs=disabled' pkg_dir/PKGBUILD \
+                || { echo "::error::dbus 倉庫版 PKGBUILD 抓取失敗或無 docs 禁用"; exit 1; }
+              echo "dbus: 已改用倉庫版 PKGBUILD（禁 xml/doxygen/ducktype docs + selinux）"
+              ;;
             tinysparql)
               # 零 systemd:Arch PKGBUILD makedepends 有 systemd,且 meson 預設裝 systemd user unit。
               # 關 -D systemd_user_services=false 並剝 makedepends 的 systemd(不裁 D-Bus .service 功能)。
