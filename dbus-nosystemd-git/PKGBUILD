@@ -41,6 +41,9 @@ build() {
     -Depoll=enabled \
     -Dselinux=disabled \
     -Dapparmor=disabled \
+    -Dkqueue=disabled \
+    -Dlaunchd=disabled \
+    -Dx11_autolaunch=disabled \
     -Dxml_docs=disabled \
     -Ddoxygen_docs=disabled \
     -Dducktype_docs=disabled \
