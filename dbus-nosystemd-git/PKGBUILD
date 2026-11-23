@@ -40,6 +40,7 @@ build() {
     -Ddbus_user=dbus \
     -Depoll=enabled \
     -Dselinux=disabled \
+    -Dapparmor=disabled \
     -Dxml_docs=disabled \
     -Ddoxygen_docs=disabled \
     -Dducktype_docs=disabled \
