@@ -232,10 +232,11 @@ build() {
   # 六最無豁免：Rust 用 fat LTO，但 aws-lc-sys 的 C 部分由 cc crate 編譯，
   # 吃全域 CFLAGS 的 -flto 會讓 C 物件變 LLVM bitcode、rust-lld 連結時
   # aws_lc_0_45_0_* 全 undefined（run #144 實測）。去掉 C 側 -flto、
-  # Rust 側用 RUSTFLAGS -C lto=fat 保持 LTO 全開，功能零裁剪。
+  # Rust 側用 RUSTFLAGS -C lto=thin 保持 LTO 全開，功能零裁剪。
   export CFLAGS="$(printf "%s" "${CFLAGS:-}" | sed -E "s/-flto(=auto|=thin|=[0-9]+)?//g")"
   export CXXFLAGS="$(printf "%s" "${CXXFLAGS:-}" | sed -E "s/-flto(=auto|=thin|=[0-9]+)?//g")"
-  export RUSTFLAGS="${RUSTFLAGS:-} -C lto=fat -C embed-bitcode=yes"
+  # proc-macro crate 不支援 fat LTO（run 45096369299 實測 zeroize_derive/serde_derive 全紅）→ 用 thin LTO，仍是六最 LTO、不關閉。
+  export RUSTFLAGS="${RUSTFLAGS:-} -C lto=thin -C embed-bitcode=yes"
   # prepare() 抓好的 V8 預構建檔位置（缺檔就讓 cargo 自己去問，錯誤資訊比較直觀）
   [ -f "${srcdir}/rusty_v8/env.sh" ] && source "${srcdir}/rusty_v8/env.sh"
   # codex-code-mode-host 是「完整套件」的必須檔（validate_package 會查），

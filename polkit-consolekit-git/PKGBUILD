@@ -27,8 +27,8 @@ b2sums=('SKIP'
 
 prepare() {
   cd "$_pkgbase"
-  patch -Np1 -i "$srcdir/patch-src_polkitbackend_polkitbackendsessionmonitor.diff"
-  patch -Np1 -i "$srcdir/patch-src_polkit_polkitunixsession.diff"
+  patch "$srcdir/patch-src_polkitbackend_polkitbackendsessionmonitor.diff"
+  patch "$srcdir/patch-src_polkit_polkitunixsession.diff"
 }
 
 build() {
