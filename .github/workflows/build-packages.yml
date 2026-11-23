@@ -1098,20 +1098,6 @@ jobs:
           # electron-rebuild ABI 偵測崩。這些包 PKGBUILD 的 !lto 是 upstream 源碼
           # 結構性衝突(見 memory 11-22)，不是偷懲關功能 → 撤銷全局翻轉，
           # 各包沿用自己已驗證的 options。六最等在源頭逐包修好後再開。
-          # kvazaar-git: 8/10/12bit 三套 lib 同名函式 multiple definition，明確需 !lto。
-          if [ "${{ matrix.repo_name }}" = 'kvazaar-git' ]; then
-            # 8/10/12bit 三套 lib 各自定義同名函式 kvz_intra_get_dir_luma_predictor_encry,
-            # LTO 把三套 .o 鏈到一起必 multiple definition(symbol from plugin 實測)。
-            # -fcommon 只管全域變數、對函式無效 → 唯一解是此顆關 LTO。
-            # 無條件加 !lto(不用 grep 判斷,避免比對到檔案內其他 !lto 文字)。
-            if grep -q '^options=(' pkg_dir/PKGBUILD; then
-              sed -i 's/^options=(/options=(!lto /' pkg_dir/PKGBUILD
-            else
-              # AUR kvazaar PKGBUILD 沒有 options= 行 → 在 source= 前插入
-              sed -i '/^source=/i options=(!lto)' pkg_dir/PKGBUILD
-              grep -q '^options=(!lto' pkg_dir/PKGBUILD || sed -i '1i options=(!lto)' pkg_dir/PKGBUILD
-            fi
-          fi
           case "${{ matrix.repo_name }}" in
             tinysparql)
               # 零 systemd:Arch PKGBUILD makedepends 有 systemd,且 meson 預設裝 systemd user unit。
@@ -1502,13 +1488,20 @@ jobs:
               printf "\n%s\n" "export RUSTFLAGS=\"\${RUSTFLAGS:-} -C link-arg=-Wl,--allow-shlib-undefined\"" >> pkg_dir/PKGBUILD
               tail -3 pkg_dir/PKGBUILD ;;
             kvazaar-git)
-              # KVZ_SEL_ENCRYPTION 的 kvz_intra_get_dir_luma_predictor_encry 在
-              # intra.c 定義一次,但 8/10/12bit 三套 lib 各編一份、都導出同名全域
-              # 符號 → 鏈成 libkvazaar.la 必 multiple definition(memory #80/#82/#94)。
-              # -fcommon 只管全域變數、對函式無效;關 LTO 也仍紅(#94 實證)。
-              # 三份實作完全相同(只操作 cu_info_t、與位深無關)→ 讓連結器取
-              # 第一份即可,--allow-multiple-definition 是此類上游衝突的標準解。
-              sed -i 's/^build() {/build() {\n  export LDFLAGS="$LDFLAGS -Wl,--allow-multiple-definition"/' pkg_dir/PKGBUILD
+              # 【真正修源碼，不關 LTO】上游 multilib_rename.h 由 tools/gen_multilib_rename.py
+              # 用 nm 掃符號生成，漏了 KVZ_SEL_ENCRYPTION 的 kvz_intra_get_dir_luma_predictor_encry
+              # → 10/12bit 版沒被重命名成 *_10bit/*_12bit，三套 lib 鏈一起必 multiple definition。
+              # 補上 #define 讓它跟其他符號一樣帶位深後綴（源頭修復，LTO 全開、功能零裁剪）。
+              _rename=$(find pkg_dir -name multilib_rename.h -print -quit 2>/dev/null)
+              if [ -n "$_rename" ]; then
+                grep -q '^#define kvz_intra_get_dir_luma_predictor_encry ' "$_rename" \
+                  || sed -i 's|^#define kvz_intra_get_dir_luma_predictor |#define kvz_intra_get_dir_luma_predictor_encry   KVZ_MULTILIB_NAME(kvz_intra_get_dir_luma_predictor_encry)\n#define kvz_intra_get_dir_luma_predictor |' "$_rename"
+                grep -q '^#define kvz_intra_get_dir_luma_predictor_encry ' "$_rename" \
+                  && echo "kvazaar: multilib_rename.h 已補加密函式重命名" \
+                  || echo "::error::kvazaar multilib_rename.h 補重命名失敗"
+              else
+                echo "::error::kvazaar 找不到 multilib_rename.h，無法修源碼"
+              fi
               tail -6 pkg_dir/PKGBUILD ;;
             localsend-git)
               # Flutter dart_build hook 在 /usr/local/bin 找鏈接器（[ld.lld, ld]），
