@@ -248,7 +248,8 @@ build() {
     --bin codex \
     --bin codex-code-mode-host \
     --bin codex-exec \
-    --bin codex-linux-sandbox
+    --bin codex-linux-sandbox \
+    --bin codex-exec-server
 }
 
 package() {
@@ -279,6 +280,7 @@ package() {
     --package-dir "$_pkgdir_root" \
     --entrypoint-bin "$_bin/codex" \
     --code-mode-host-bin "$_bin/codex-code-mode-host" \
+    --exec-server-bin "$_bin/codex-exec-server" \
     --rg-bin /usr/bin/rg \
     --bwrap-bin /usr/bin/bwrap \
     --force

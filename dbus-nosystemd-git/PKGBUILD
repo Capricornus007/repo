@@ -11,7 +11,7 @@ arch=(x86_64)
 url='https://gitlab.freedesktop.org/dbus/dbus'
 license=(GPL custom)
 depends=(glibc audit expat libaudit.so)
-makedepends=(git meson)  # 文檔選項全 disabled → 不需 xsltproc/doxygen/ducktype(AUR 官方亦只 git meson)
+makedepends=(git meson)  # 文檔/selinux 全 disabled → 不需 xsltproc/doxygen/ducktype/libselinux(AUR 官方亦只 git meson)
 provides=(dbus libdbus libdbus-1.so)
 conflicts=(dbus libdbus)
 source=("$_pkgbase::git+$url.git")
@@ -39,6 +39,7 @@ build() {
     -Dsystem_socket=/run/dbus/system_bus_socket \
     -Ddbus_user=dbus \
     -Depoll=enabled \
+    -Dselinux=disabled \
     -Dxml_docs=disabled \
     -Ddoxygen_docs=disabled \
     -Dducktype_docs=disabled \
