@@ -16,11 +16,16 @@ makedepends=(git acl xmlto docbook-xsl python-setuptools glib2-devel gobject-int
 provides=(consolekit elogind)
 conflicts=(consolekit elogind)
 options=(libtool)
-source=("$_pkgname-$pkgver.tar.gz::$url/archive/refs/tags/$pkgver.tar.gz")
+source=("$_pkgname::git+$url.git")
 b2sums=(SKIP)
 
+pkgver() {
+  cd "$_pkgname"
+  git describe --long --tags | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
 build() {
-  cd "$_pkgname-$pkgver"
+  cd "$_pkgname"
   ./autogen.sh \
     --prefix=/usr \
     --sysconfdir=/etc \
@@ -47,7 +52,7 @@ check() {
 }
 
 package() {
-  cd "$_pkgname-$pkgver"
+  cd "$_pkgname"
   make DESTDIR="$pkgdir" install
   install -d "$pkgdir/usr/share/licenses/$pkgname"
   cp COPYING "$pkgdir/usr/share/licenses/$pkgname/" 2>/dev/null || true

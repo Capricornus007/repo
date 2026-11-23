@@ -14,7 +14,7 @@ makedepends=(git meson gtk-doc gobject-introspection glib2-devel)
 provides=(polkit=128 libpolkit-agent-1.so libpolkit-gobject-1.so)
 conflicts=(polkit)
 options=(libtool)
-source=("$_pkgbase::git+$url.git#tag=$pkgver"
+source=("$_pkgbase::git+$url.git"
         patch-src_polkitbackend_polkitbackendsessionmonitor.diff
         patch-src_polkit_polkitunixsession.diff
         polkit.conf
