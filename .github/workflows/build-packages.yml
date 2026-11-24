@@ -1413,7 +1413,7 @@ jobs:
             *) : ;;
           esac
       - name: 2026-11-22 紅包修復特例（獨立 step——主 step 已破 21000 表達式上限）
-        if: contains(fromJSON('["gvfs-git","xdg-desktop-portal-git","gjs-git","fwupd-git","nvme-cli-git","openvpn-git","tesseract-data-eng-git","tesseract-data-chi_sim-git","tesseract-data-chi_tra-git","tesseract-data-osd-git","tesseract-data-jpn-git","sccache-git","kvazaar-git","libx11-git","localsend-git","rsync-git","tumbler-git","unbound-git","tpm2-tss-git","elfutils-git","lxsession-git","seahorse-git","thunar-git"]'), matrix.repo_name)
+        if: contains(fromJSON('["gvfs-git","xdg-desktop-portal-git","gjs-git","fwupd-git","nvme-cli-git","openvpn-git","tesseract-data-eng-git","tesseract-data-chi_sim-git","tesseract-data-chi_tra-git","tesseract-data-osd-git","tesseract-data-jpn-git","sccache-git","kvazaar-git","libx11-git","localsend-git","rsync-git","tumbler-git","unbound-git","tpm2-tss-git","elfutils-git","lxsession-git","seahorse-git","thunar-git","krb5-git"]'), matrix.repo_name)
         run: |
           set -euo pipefail
           # 為什麼是獨立 step：上面的「逐包修正」run 塊已破 GitHub「max expression
@@ -1499,21 +1499,53 @@ jobs:
               printf "\n%s\n" "export RUSTFLAGS=\"\${RUSTFLAGS:-} -C link-arg=-Wl,--allow-shlib-undefined\"" >> pkg_dir/PKGBUILD
               tail -3 pkg_dir/PKGBUILD ;;
             kvazaar-git)
-              # 【真正修源碼，不關 LTO】上游 multilib_rename.h 由 tools/gen_multilib_rename.py
-              # 用 nm 掃符號生成，漏了 KVZ_SEL_ENCRYPTION 的 kvz_intra_get_dir_luma_predictor_encry
-              # → 10/12bit 版沒被重命名成 *_10bit/*_12bit，三套 lib 鏈一起必 multiple definition。
-              # 補上 #define 讓它跟其他符號一樣帶位深後綴（源頭修復，LTO 全開、功能零裁剪）。
-              _rename=$(find pkg_dir -name multilib_rename.h -print -quit 2>/dev/null)
-              if [ -n "$_rename" ]; then
-                grep -q '^#define kvz_intra_get_dir_luma_predictor_encry ' "$_rename" \
-                  || sed -i 's|^#define kvz_intra_get_dir_luma_predictor |#define kvz_intra_get_dir_luma_predictor_encry   KVZ_MULTILIB_NAME(kvz_intra_get_dir_luma_predictor_encry)\n#define kvz_intra_get_dir_luma_predictor |' "$_rename"
-                grep -q '^#define kvz_intra_get_dir_luma_predictor_encry ' "$_rename" \
-                  && echo "kvazaar: multilib_rename.h 已補加密函式重命名" \
-                  || echo "::error::kvazaar multilib_rename.h 補重命名失敗"
-              else
-                echo "::error::kvazaar 找不到 multilib_rename.h，無法修源碼"
-              fi
-              tail -6 pkg_dir/PKGBUILD ;;
+              # 【真正修源碼，不關 LTO】上游 src/multilib_rename.h 漏了 KVZ_SEL_ENCRYPTION 的
+              # kvz_intra_get_dir_luma_predictor_encry → 10/12bit 版沒被重命名成 *_10bit/*_12bit，
+              # 三套 lib 鏈一起必 multiple definition（run 45296720065 實測）。
+              # 【時機修正】本 step 在原始碼下載之前執行（原始碼要到「云端編譯」step 的
+              # makepkg 才抓），直接 find pkg_dir -name multilib_rename.h 必然找不到
+              # （run 45296720065 ::error::kvazaar 找不到 multilib_rename.h 即為此）。
+              # 改為把修補命令注入 prepare() 末尾——原始碼在 makepkg prepare 階段就位後自動跑。
+              # 用 awk 找 prepare() 的首個頂層 }，在其前插入 sed（不依賴行號）。
+              # 用 python 注入 prepare() 尾的 python3 heredoc（原始碼在 makepkg 的
+              # srcdir/kvazaar/ 下，prepare() 的 cwd 即 srcdir）。用 python 做頭檔替換，
+              # 徹底避開多層 shell/sed 的 \n 與 $ 轉義地獄。
+              python3 - pkg_dir/PKGBUILD <<'PYEOF'
+import sys
+p = sys.argv[1]
+s = open(p, encoding='utf-8').read()
+if 'kvz_intra_get_dir_luma_predictor_encry' in s:
+    print('kvazaar: PKGBUILD 已含修補，略過')
+    sys.exit(0)
+lines = s.splitlines()
+start = next((i for i, l in enumerate(lines) if l.startswith('prepare()')), None)
+if start is None:
+    sys.exit('kvazaar: 找不到 prepare()')
+close = next((i for i in range(start + 1, len(lines)) if lines[i] == '}'), None)
+if close is None:
+    sys.exit('kvazaar: 找不到 prepare() 結束大括號')
+patch = r'''  # 補上游 multilib_rename.h 漏掉的加密函式重命名（源頭修復，LTO 全開）
+  python3 - <<'KVPY'
+import io, sys
+p = 'kvazaar/src/multilib_rename.h'
+s = io.open(p, encoding='utf-8').read()
+old = '#define kvz_intra_get_dir_luma_predictor '
+new = ('#define kvz_intra_get_dir_luma_predictor_encry   KVZ_MULTILIB_NAME(kvz_intra_get_dir_luma_predictor_encry)\n'
+       '#define kvz_intra_get_dir_luma_predictor ')
+if 'kvz_intra_get_dir_luma_predictor_encry' not in s:
+    if old not in s:
+        sys.exit('kvazaar: multilib_rename.h 找不到錨點')
+    io.open(p, 'w', encoding='utf-8').write(s.replace(old, new, 1))
+KVPY
+  grep -q '^#define kvz_intra_get_dir_luma_predictor_encry ' kvazaar/src/multilib_rename.h \
+    || { echo "::error::kvazaar 補重命名失敗"; return 1; }'''.splitlines()
+lines[close:close] = patch
+open(p, 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
+print('kvazaar: prepare() 已注入 multilib_rename.h 修補')
+PYEOF
+              grep -q 'kvz_intra_get_dir_luma_predictor_encry' pkg_dir/PKGBUILD \
+                || { echo "::error::kvazaar prepare() 注入修補失敗"; exit 1; }
+              tail -18 pkg_dir/PKGBUILD ;;
             localsend-git)
               # Flutter dart_build hook 在 /usr/local/bin 找鏈接器（[ld.lld, ld]），
               # 容器 base-devel 的 ld 只在 /usr/bin →「Failed to find any of
@@ -1571,7 +1603,30 @@ jobs:
               # 注意：本 case 過去一直沒生效，因本 step 的 if 白名單漏了 tpm2-tss-git
               # （2026-11-24 補上）。
               printf "\n%s\n" "export CFLAGS=\"\${CFLAGS:-} -Wno-error=deprecated-declarations\"" >> pkg_dir/PKGBUILD
-              tail -2 pkg_dir/PKGBUILD ;;
+              # 零 systemd 鐵律：run 45296725444 實測 tpm2-tss 4.2.0.r51 的
+              # package() 會裝 usr/lib/sysusers.d/tpm2-tss.conf → Alter 硬閘攔下
+              # （編譯本身成功 Finished making，卡在 sysusers.d 殘留）。在 package()
+              # 右大括號前插入 rm（awk 找首個頂層 }，不依賴行號），與 rsync 分支同構。
+              _pkg_line=$(grep -n '^package()' pkg_dir/PKGBUILD | head -1 | cut -d: -f1)
+              [ -n "$_pkg_line" ] || { echo "::error::找不到 package()"; exit 1; }
+              _close=$(awk -v s="$_pkg_line" 'NR>s && /^}/ {print NR; exit}' pkg_dir/PKGBUILD)
+              [ -n "$_close" ] || { echo "::error::找不到 package() 結束大括號"; exit 1; }
+              sed -i "${_close}i\  # 零 systemd 鐵律：移除上游死檔案" pkg_dir/PKGBUILD
+              sed -i "${_close}i\  rm -rf \"\$pkgdir/usr/lib/systemd\" \"\$pkgdir/etc/systemd\" \"\$pkgdir/usr/lib/sysusers.d\" \"\$pkgdir/usr/share/sysusers.d\" 2>/dev/null || true" pkg_dir/PKGBUILD
+              grep -q '零 systemd 鐵律' pkg_dir/PKGBUILD || { echo "::error::sysd 清理沒插進 pkg_dir/PKGBUILD"; exit 1; }
+              tail -6 pkg_dir/PKGBUILD ;;
+            krb5-git)
+              # 零 systemd 鐵律：run 45296720065 實測 krb5-git 1.22.3.r162 的
+              # package() 會裝 /usr/lib/systemd（systemd unit），Alter 硬閘攔下。
+              # 與 rsync/tpm2 分支同構，在 package() 右大括號前插入 rm。
+              _pkg_line=$(grep -n '^package()' pkg_dir/PKGBUILD | head -1 | cut -d: -f1)
+              [ -n "$_pkg_line" ] || { echo "::error::找不到 package()"; exit 1; }
+              _close=$(awk -v s="$_pkg_line" 'NR>s && /^}/ {print NR; exit}' pkg_dir/PKGBUILD)
+              [ -n "$_close" ] || { echo "::error::找不到 package() 結束大括號"; exit 1; }
+              sed -i "${_close}i\  # 零 systemd 鐵律：移除上游死檔案" pkg_dir/PKGBUILD
+              sed -i "${_close}i\  rm -rf \"\$pkgdir/usr/lib/systemd\" \"\$pkgdir/etc/systemd\" \"\$pkgdir/usr/lib/sysusers.d\" \"\$pkgdir/usr/share/sysusers.d\" 2>/dev/null || true" pkg_dir/PKGBUILD
+              grep -q '零 systemd 鐵律' pkg_dir/PKGBUILD || { echo "::error::sysd 清理沒插進 pkg_dir/PKGBUILD"; exit 1; }
+              tail -6 pkg_dir/PKGBUILD ;;
             elfutils-git)
               # GCC 16 + LTO 把 libdwP.h 的 dwp_offset 誤判maybe-uninitialized
               # （run #93：libdwP.h:1364/1449 `may be used uninitialized
