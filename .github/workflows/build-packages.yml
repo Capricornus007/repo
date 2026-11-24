@@ -644,43 +644,14 @@ jobs:
             echo 'OPTIONS+=(!debug)'
           } >> /etc/makepkg.conf
 
-          # ---- 六最（v2.27 用戶鐵律：znver3/O3/LTO/PGO，遇衝突修源頭不降旗標）----
-          # 移植自 lfs-pacman/feed-bot：全包 LTO 硬幹 + 完整 znver3 旗標 + 編譯器外掛。
-          # 此處翻的是 /etc/makepkg.conf 的「預設值」——讓沒寫 options 的包默認開 LTO，
-          # 安全：PKGBUILD 自己宣告的 !lto 仍會覆蓋它（makepkg 語義）。
-          # 與 68456a3 已撤銷的「pkg_dir/PKGBUILD 強制 sed s/!lto/lto/g」不同：
-          # 後者會把上游結構性衝突包(openai-codex/nodejs/abseil/kvazaar)的 !lto 也翻掉，
-          # run 45062672105 實測 4 紅暴增 11 紅，故只撤 PKGBUILD 級翻轉、保留本機預設翻轉。
-          sed -i 's/!lto/lto/g' /etc/makepkg.conf
-          grep -qE '^OPTIONS=\(.*lto' /etc/makepkg.conf || echo 'OPTIONS+=(lto)' >> /etc/makepkg.conf
-          # 本 workflow 無 checkout step（見 mpv-git 註解）， ci/ 不在容器裡。
-          # 從本倉庫 master 的 raw URL 抓六最配置（與 mpv-git 同手法），重試 3 次。
-          _ci_base="https://raw.githubusercontent.com/$GH_REPO/master/ci"
-          for _try in 1 2 3; do
-            curl -sfL --retry 2 "$_ci_base/makepkg-flags.conf" -o /tmp/makepkg-flags.conf \
-              && curl -sfL --retry 2 "$_ci_base/gcc-znver3.sh" -o /tmp/gcc-znver3.sh \
-              && curl -sfL --retry 2 "$_ci_base/clang-znver3.sh" -o /tmp/clang-znver3.sh \
-              && curl -sfL --retry 2 "$_ci_base/pgo-train.sh" -o /tmp/pgo-train.sh \
-              && curl -sfL --retry 2 "$_ci_base/pgo-build.sh" -o /tmp/pgo-build.sh \
-              && [ -s /tmp/makepkg-flags.conf ] && [ -s /tmp/gcc-znver3.sh ] \
-              && [ -s /tmp/clang-znver3.sh ] && [ -s /tmp/pgo-train.sh ] && [ -s /tmp/pgo-build.sh ] && break
-            [ "$_try" = 3 ] && { echo "::error::抓不到 ci/ 六最配置（raw URL 3 次失敗）"; exit 1; }
-            sleep $((_try * 10))
-          done
-          install -m755 /tmp/pgo-train.sh /usr/local/bin/pgo-train
-          install -m755 /tmp/pgo-build.sh /usr/local/bin/pgo-build
-          cat /tmp/makepkg-flags.conf >> /etc/makepkg.conf
-          sed -i 's/,--as-needed//g; s/ --as-needed//g' /etc/makepkg.conf
-          sed -i 's|^LDFLAGS="|LDFLAGS="-lm |' /etc/makepkg.conf
-          install -d /usr/local/bin
-          install -m755 /tmp/gcc-znver3.sh /usr/local/bin/gcc-znver3
-          for c in gcc g++ cc c++; do ln -sf /usr/local/bin/gcc-znver3 "/usr/local/bin/$c"; done
-          # clang 包裝器：CFLAGS 全域注入後，clang 構建的包（llvm-bolt-git 自舉、
-          # librewolf-git 的 cc-rs、sccache-git 的 aws-lc-sys）會吃到 GCC 專有旗標
-          # 直接 unknown argument 紅掉（2026-11-22 run #86 實測）。在 clang 入口濾掉，
-          # GCC 包的旗標一根不動（用戶鐵律：修源頭不降旗標）。
-          install -m755 /tmp/clang-znver3.sh /usr/local/bin/clang-znver3
-          for c in clang clang++; do ln -sf /usr/local/bin/clang-znver3 "/usr/local/bin/$c"; done
+          # ---- 六最（znver3/O3/LTO/PGO，遇衝突修源頭不降旗標）----
+          # 主體抽到 ci/setup-sixmax.sh（本 workflow 無 checkout step，需從 raw URL 抓）。
+          # 抽離原因：此 setup step 的 run 塊已撞 GitHub 21000 表達式上限。
+          curl -sfL --retry 3 "https://raw.githubusercontent.com/$GH_REPO/master/ci/setup-sixmax.sh" \
+            -o /tmp/setup-sixmax.sh && [ -s /tmp/setup-sixmax.sh ] \
+            || { echo "::error::抓不到 ci/setup-sixmax.sh"; exit 1; }
+          install -m755 /tmp/setup-sixmax.sh /usr/local/bin/setup-sixmax
+          GH_REPO="$GH_REPO" /usr/local/bin/setup-sixmax
           echo "### 六最: $(grep -m1 CFLAGS= /etc/makepkg.conf)" >> "$GITHUB_STEP_SUMMARY"
           gcc -march=znver3 -dM -E - </dev/null | grep -m1 __znver3__ >> "$GITHUB_STEP_SUMMARY" 
           # makepkg 用 curl 下载源码，kernel.org 大文件常断连；
