@@ -1,0 +1,31 @@
+# 六最搬運 2026-11-25：XFCE thunar-media-tags-plugin（gitlab 源 master 尖端，配合 thunar-git 4.21）
+# 用户旧系统用过，主用 i3 + thunar-git 备用 DE，三插件全装（archive右键/媒体标签/自动挂载）。
+pkgname=thunar-media-tags-plugin-git
+_pkgname=thunar-media-tags-plugin
+pkgver=0.0.0.r0.g0000000
+pkgrel=1
+pkgdesc='thunar-media-tags-plugin from XFCE git master (六最 znver3 LTO)'
+arch=(x86_64)
+url='https://gitlab.xfce.org/thunar-plugins/thunar-media-tags-plugin'
+license=(GPL-2.0-or-later)
+depends=(thunar-git glib2 gtk3)
+makedepends=(git autoconf automake intltool gtk-doc xfce4-dev-tools)
+source=("::git+https://gitlab.xfce.org/thunar-plugins/thunar-media-tags-plugin.git#branch=master")
+sha256sums=(SKIP)
+
+pkgver() {
+  cd "$srcdir/$_pkgname"
+  git describe --tags --long 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' \
+    || printf 'r%s' "$(git rev-parse --short HEAD)"
+}
+
+build() {
+  cd "$srcdir/$_pkgname"
+  ./autogen.sh --prefix=/usr --disable-static --libexecdir=/usr/lib/xfce4/thunar-plugins
+  make
+}
+
+package() {
+  cd "$srcdir/$_pkgname"
+  make DESTDIR="$pkgdir" install
+}

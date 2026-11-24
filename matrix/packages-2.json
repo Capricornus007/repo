@@ -1093,5 +1093,26 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "thunar-archive-plugin-git",
+    "repo_name": "thunar-archive-plugin-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "thunar-media-tags-plugin-git",
+    "repo_name": "thunar-media-tags-plugin-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "thunar-volman-git",
+    "repo_name": "thunar-volman-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]
