@@ -633,8 +633,11 @@ jobs:
             echo ""
             echo "# ---- CI overrides ----"
             echo "MAKEFLAGS=\"-j$(nproc)\""
-            echo 'COMPRESSZST=(zstd -c -z -q --threads=0 -)'
-            echo 'COMPRESSXZ=(xz -c -z --threads=0 -)'
+            # 最高压缩档：zstd -19（--threads=0 多线程抵消最高档的耗时）。
+            # 實測同一 app.asar：zstd -19 = 56.7MB vs zstd 默認(3) 與 gzip -9 = 92.7MB；
+            # 用戶鐵律「哪個壓縮最大用哪個」，CI 與本機 /etc/makepkg.conf 統一釘 -19。
+            echo 'COMPRESSZST=(zstd -19 --threads=0 -c -z -q -)'
+            echo 'COMPRESSXZ=(xz -9 -T0 -c -z -)'
             # Arch 默认开着 debug，于是每个包都会多出一份 -debug 包。
             # 我们不需要它：没人装，只是白白占 Release 空间和编译时间。
             # OPTIONS+= 而不是直接赋值，保留上游其余默认项（strip/lto/purge 等）。
