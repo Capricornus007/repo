@@ -646,6 +646,11 @@ jobs:
 
           # ---- 六最（v2.27 用戶鐵律：znver3/O3/LTO/PGO，遇衝突修源頭不降旗標）----
           # 移植自 lfs-pacman/feed-bot：全包 LTO 硬幹 + 完整 znver3 旗標 + 編譯器外掛。
+          # 此處翻的是 /etc/makepkg.conf 的「預設值」——讓沒寫 options 的包默認開 LTO，
+          # 安全：PKGBUILD 自己宣告的 !lto 仍會覆蓋它（makepkg 語義）。
+          # 與 68456a3 已撤銷的「pkg_dir/PKGBUILD 強制 sed s/!lto/lto/g」不同：
+          # 後者會把上游結構性衝突包(openai-codex/nodejs/abseil/kvazaar)的 !lto 也翻掉，
+          # run 45062672105 實測 4 紅暴增 11 紅，故只撤 PKGBUILD 級翻轉、保留本機預設翻轉。
           sed -i 's/!lto/lto/g' /etc/makepkg.conf
           grep -qE '^OPTIONS=\(.*lto' /etc/makepkg.conf || echo 'OPTIONS+=(lto)' >> /etc/makepkg.conf
           # 本 workflow 無 checkout step（見 mpv-git 註解）， ci/ 不在容器裡。
@@ -1094,13 +1099,16 @@ jobs:
           # 上一步的 case 裡，結果那一步腳本太長，撞上 GitHub「max expression length
           # 21000」的解析上限（run #231 整個 workflow 因此無效、一個 job 都沒起）。
           # 現在 clone 留在上一步的通用分支，這裡只做 PKGBUILD 手術。
-          # 【LTO 鐵律的正確執行】11-23 曾加全局 sed 's/!lto/lto/g' 強制翻轉，
+          # 【LTO 鐵律的正確執行】11-23 曾在「PKGBUILD 手術」這一步加
+          # sed 's/!lto/lto/g' pkg_dir/PKGBUILD 強制翻轉上游 PKGBUILD 的 !lto，
           # shard2 run 45062672105 實測：同 workflow 從 4 紅暴增到 11 紅——
           # openai-codex/linutil 的 C 靜態庫符號被 LTO 優化掉(undefined symbol)、
           # nodejs/abseil 的 abseil-cpp crc 向量型別與 LTO+GCC 衝突、zcode-ce 的
           # electron-rebuild ABI 偵測崩。這些包 PKGBUILD 的 !lto 是 upstream 源碼
-          # 結構性衝突(見 memory 11-22)，不是偷懲關功能 → 撤銷全局翻轉，
-          # 各包沿用自己已驗證的 options。六最等在源頭逐包修好後再開。
+          # 結構性衝突(見 memory 11-22)，不是偷懶關功能 → 68456a3 已撤銷【PKGBUILD 級】
+          # 翻轉，各包沿用自己已驗證的 options。注意：setup 段（約 646 行）還有一條
+          # sed 's/!lto/lto/g' /etc/makepkg.conf 是翻「makepkg 預設值」，PKGBUILD 的
+          # !lto 仍會覆蓋它，兩者不同、不可混淆；六最等在源頭逐包修好後逐個打開。
           case "${{ matrix.repo_name }}" in
             dbus-nosystemd-git)
               # dispatch 帶進來的 packages 陣列沒有 in_tree 欄位 → 上一步 clone 到的是 AUR 原版
