@@ -1510,11 +1510,14 @@ jobs:
               ln -sf /usr/bin/ld /usr/local/bin/ld
               ln -sf /usr/bin/ar /usr/local/bin/ar
               ln -sf /usr/bin/llvm-ar /usr/local/bin/llvm-ar 2>/dev/null || true ;;
-            rsync-git|tumbler-git|unbound-git)
-              # 用戶鐵律：產物內一切 systemd 文件/目錄不容許存在。這三顆上游
+            rsync-git|tumbler-git|unbound-git|xfce4-notifyd-git)
+              # 用戶鐵律：產物內一切 systemd 文件/目錄不容許存在。這幾顆上游
               # package() 會裝 /usr/lib/systemd/system 或 sysusers.d（Artix 無 systemd，
               # 全是死檔案），但 Alter 硬閘會在打包後攔下 → 在 package() 右大括號前
               # 插入 rm（用 awk 找首個頂層 }，不依賴具體行號）。
+              # 2026-11-24: xfce4-notifyd-git 上游 package() 裝
+              #   /usr/lib/systemd/user/xfce4-notifyd.service（run #104 實測被硬閘攔下），
+              #   加入本清單清除。
               # 純單行 sed（多行續行會破壞 YAML block scalar 縮排）
               _pkg_line=$(grep -n '^package()' pkg_dir/PKGBUILD | head -1 | cut -d: -f1)
               [ -n "$_pkg_line" ] || { echo "::error::找不到 package()"; exit 1; }
