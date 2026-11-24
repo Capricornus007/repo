@@ -1,0 +1,46 @@
+# 六最搬运 2026-11-25：LxgwWenKaiGB 源码构建（-git 尖端 main 分支）
+# font.plan：「加入 LxgwWenkaiGB 自動構建其最新源碼直出」
+# 上游 Makefile: make build = venv → pip install requirements → sources/build.sh
+#    → gftools builder → post.py；依赖子模块 LxgwWenKai-shared。
+# 与 ttf-lxgw-wenkai-tc（用户要移除的繁体版）是不同包，保留 GB 简体版。
+pkgname=ttf-lxgw-wenkai-gb-git
+_pkgname=LxgwWenKaiGB
+pkgver=1.530.r0.g0000000
+pkgrel=1
+pkgdesc='LXGW WenKai GB font, built from latest main source (六最 git tip)'
+arch=('any')
+url='https://github.com/lxgw/LxgwWenKaiGB'
+license=('OFL-1.1')
+depends=('python')
+makedepends=('git' 'python' 'python-pip')
+options=('!strip')
+source=("$_pkgname::git+$url.git#branch=main")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/$_pkgname"
+  git describe --tags --long 2>/dev/null | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g' \
+    || printf 'r%s' "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+  cd "$srcdir/$_pkgname"
+  # 子模块：上游构建依赖 LxgwWenKai-shared
+  git submodule update --init --recursive
+}
+
+build() {
+  cd "$srcdir/$_pkgname"
+  # 上游 Makefile 自己会建 venv + pip install -Ur requirements.txt（见 Makefile
+  # 的 venv/touchfile 目标）。这里直接跑 make build 即可，不引入 uv 依赖。
+  # python 用系统 /usr/bin/python3（纳管中），不依赖手工装的 python3.15。
+  make build
+}
+
+package() {
+  cd "$srcdir/$_pkgname"
+  # font.plan：字体释放到 /usr/share/fonts/TTF/serif/
+  install -d "$pkgdir/usr/share/fonts/TTF/serif"
+  find . -name '*.ttf' -type f -exec install -m644 {} "$pkgdir/usr/share/fonts/TTF/serif/" \;
+  install -Dm644 OFL.txt "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
