@@ -53,12 +53,13 @@ case "$stage" in
       exit 1
     fi
     cp "$CONF_BAK" /etc/makepkg.conf
-    # conftest.gcda 污染：pass1 configure 每個 conftest 都寫 profile dir，
+    # conftest.gcda 污染：pass1 configure 每個 conftest（含 autotools 子測試
+    # conftest-<n> 變體）都寫 profile dir，
     # pass2 configure 路徑相同 → checksum 不匹配自檢炸(coreutils/attr 實測)。只清 conftest。
-    find "$pd" -name 'conftest.gcda' -delete 2>/dev/null || true
+    find "$pd" -name 'conftest*.gcda' -delete 2>/dev/null || true
     echo "::notice::PGO 訓練：${name}"
     run_train || true
-    find "$pd" -name 'conftest.gcda' -delete 2>/dev/null || true
+    find "$pd" -name 'conftest*.gcda' -delete 2>/dev/null || true
     gcda=$(find "$pd" -name '*.gcda' 2>/dev/null | wc -l)
     if [ "$gcda" -eq 0 ]; then
       cp "$CONF_BAK" /etc/makepkg.conf
