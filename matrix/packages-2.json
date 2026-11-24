@@ -1086,5 +1086,12 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "ttf-lxgw-wenkai-gb-git",
+    "repo_name": "ttf-lxgw-wenkai-gb-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]
