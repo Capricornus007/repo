@@ -1,121 +1,145 @@
-# Maintainer: Capricornus007 <capricornus007@users.noreply.github.com>
+# Maintainer: Capricornus007 <[REDACTED]>
 #
-# 本包從 ZCode-CE fork 源碼構建「官方最新基線＋CE 政策」，不是把閉源 AppImage 改名重發。
-# 3.17.2 更新的可複核輸入：
-#   · 官方開源基線 zai-org/ZCode v3.17.1 = a60ba6a7；
-#   · 官方 3.17.2 Linux x64 AppImage 由官方安裝頁連到
-#     https://cdn-zcode.z.ai/zcode/electron/releases/3.17.2/linux-x64/ZCode-3.17.2-linux-x64.AppImage
-#     SHA-256 = 4a522d45727454188c56833275ae5b4d588ac3b2b87eedee5f7d98f8553a12e1；
-#   · 閉源包只用於核對 version、ASAR/native 邊界與 Electron 合同，不會被本包混入或重新分發。
-#     完整 URL/雙雜湊/空 AppImage 簽章區段/3.16.3 差量見 CE 的 upstream-sync 台帳。
+# zcode-ce-git 4.0.0 —— 官方閉源 AppImage 拆包 + 遙測出口手術（CE 等價去遙測）重組包。
 #
-# CE 3.17.2-ce.1 把開源 v3.17.1 整版合併後，保留 fork 的遙測移除、自託管遠控、
-# Source Server 自癒與快取、終端 owner、引導確認及 ToolSearch 完整鏈；根版本對齊閉源 3.17.2。
-# 桌面 dependency、electron-builder 的 electronVersion 與鎖檔都指向 Electron 44.7.0；產物
-# 自帶該 runtime，所以本包不依賴、也不另裝系統 electron41/electron42/electron44。
+# 為什麼從源碼構建改成拆包重組（2026-11-24，使用者明確裁定）：
+#   舊的源碼構建（pnpm bundle:desktop）長期因 ssh2 `v8::Context has no member
+#   GetIsolate` + electron 44.7.0 node-abi 不認識而在 electron-rebuild 階段失敗
+#   （BuildGitPkgs #980 等）。使用者裁定：以官方閉源版最新 v4.0.0 為準，直接拆
+#   官方 AppImage 重組，包形態與已發布的 zcode-ce-git 3.17.2-ce 完全一致。
 #
-# 為什麼只建 pacman target（prepare() 裡 sed）：
-#   · bundle 預設一次建 AppImage+deb+rpm+pacman；AUR 只需要 pacman，rpm 又要求 rpmbuild。
-#   · bundle.mjs 的產物驗證接受任一目標副檔名，所以縮成 pacman 不降低產物門禁。
+# 權威源（可複核）：
+#   · 官方閉源 v4.0.0 Linux x64 AppImage（GitHub release 資產頁無 Linux 版，僅官方 CDN）：
+#     https://cdn-zcode.z.ai/zcode/electron/releases/4.0.0/linux-x64/ZCode-4.0.0-linux-x64.AppImage
+#     SHA256 = 2cedc5fceee1ffcc74b00cca292bfa86522cf7201ba8bc93d0c5500b6fefcc47
+#   · 包形態模板 = 已發布 zcode-ce-git 3.17.2-ce 包（取 .INSTALL/desktop/圖示/license/apparmor）：
+#     https://github.com/Capricornus007/repo/releases/download/current-repo/zcode-ce-git-3.17.2.ce.1.r459.gbefcd087-1-x86_64.pkg.tar.zst
+#     SHA256 = 1d51cfc4288884af0fcf8d87ba8e7dc0977476b0d7af2f00fbc36115970275c7
+#   · 遙測出口手術腳本 = 本倉 fork Capricornus007/Zcode-CE 的 aur/zcode-ce-rebuild/surgery_400.py
+#     （commit 8f7f4dd，遵循 CE 政策 docs/development/telemetry.md；等價 CE 提交 be778822）
 #
-# 構建環境對齊 CE release workflow：production、社區 runtime CDN、GitHub Electron/runtime
-# binaries mirror；`pnpm install --frozen-lockfile` 釘住 Electron 44 與 native staging 輸入。
-# `_giturl` 暫時指向使用者 fork 的同步線；CE 上游 main 吸收 3.17.2 後應切回
-# `https://github.com/Zcode-CE/Zcode-CE`。版本由 pkgver() 從 package.json＋git 現算，
-# 因此本檔維持矩陣 kind:aur 的回推校驗和排除。
-
-# 同步線名稱沿用歷史名稱；內容與 package.json 才是版本事實。
-_giturl='https://github.com/Capricornus007/Zcode-CE'
-_branch='sync/v3162-pr5'
+# 隱私（關鍵，不可跳過）：官方 app.asar 內含 ARMS/RUM + OTLP 遙測 SDK 與出口端點，
+#   prepare() 用 surgery_400.py 清空 endpoint/license key/event report URL/開關，
+#   8 項出口驗證全 0 才允许打包。宿主 retain 的 SDK 檔無出口、不初始化（與 CE 做法一致）。
+#   零 systemd 鐵律：產物不得有任何 systemd/sysusers 路徑。
 
 pkgname=zcode-ce-git
-pkgver=3.17.2.ce.1.r581.gdf777201
+pkgver=4.0.0
 pkgrel=1
-pkgdesc="ZCode 的開源社區版（官方 zai-org/ZCode 開源上游＋CE 修補），從源碼構建"
+pkgdesc="ZCode 官方閉源版 v4.0.0（官方 AppImage 拆包 + 遙測出口手術 CE 等價去遙測，保持 zcode-ce-git 包形態）"
 arch=('x86_64')
 url="https://github.com/Capricornus007/Zcode-CE"
 license=('Apache-2.0')
-# 與 electron-builder.config.js 的 PACMAN_RUNTIME_DEPENDENCIES 逐字一致（Arch 官方
-# 倉庫可解析的 Electron 運行時閉包；內層產物的 .PKGINFO 被剝掉，依賴由本檔宣告）。
 depends=('gtk3' 'nss' 'libxss' 'libxtst' 'libnotify' 'alsa-lib' 'mesa' 'xdg-utils')
-# libxcrypt-compat：electron-builder 自帶的 fpm 是 ruby 打包（fpm@2.1.4-fpm-1.17.0-
-# ruby-3.4.3-linux-amd64），其 ruby 要 libcrypt.so.1——首建 run 39984189532 實測
-# `ruby: error while loading shared libraries: libcrypt.so.1`，fpm process failed 127。
-# 本機實查該檔由 libxcrypt-compat 提供（pacman -Qo）。
-makedepends=('git' 'nodejs' 'pnpm' 'libarchive' 'libxcrypt-compat')
 provides=('zcode-ce')
 conflicts=('zcode-ce' 'zcode-ce-bin')
 options=('!strip')
+# .INSTALL 由 makepkg 從此腳本自動生成（chrome-sandbox setuid + desktop 快取刷新）
 install=zcode-ce-git.install
-source=("$pkgname::git+${_giturl}.git#branch=${_branch}")
-sha256sums=('SKIP')
 
-pkgver() {
-  cd "$pkgname"
-  # package.json 的 version 形如 3.17.2-ce.1；pacman 的 pkgver 不準連字號，換點號。
-  # ⚠️ 不能用 node -p：plan 步在 base-devel 容器裡跑，那時 makedepends 還沒裝
-  #   （nodejs 是 makepkg 裝的）→ command not found → 每輪 skip、永遠不出包。
-  #   sed 取第一個 "version" 欄（root package.json 的頂層 version 在最前面，
-  #   dependencies 是 "pkg": "^x.y.z" 形，不會誤中）。
-  local _v
-  _v=$(sed -n 's/^[[:space:]]*"version": *"\([^"]*\)".*/\1/p' package.json | head -n1 | tr '-' '.')
-  [ -n "$_v" ] || { echo "::error::package.json 解不出 version"; return 1; }
-  printf '%s.r%s.g%s' "$_v" "$(git rev-list --count HEAD)" "$(git rev-parse --short=8 HEAD)"
-}
+# npx 屬於 npm 包（nodejs 不提供），@electron/asar 用 npx 安裝；
+# python 跑手術腳本；libarchive 提供 bsdtar；zstd 壓縮。
+makedepends=('nodejs' 'npm' 'python' 'libarchive' 'zstd')
+
+source=(
+  "ZCode-4.0.0-linux-x64.AppImage::https://cdn-zcode.z.ai/zcode/electron/releases/4.0.0/linux-x64/ZCode-4.0.0-linux-x64.AppImage"
+  "template-3.17.2.pkg.tar.zst::https://github.com/Capricornus007/repo/releases/download/current-repo/zcode-ce-git-3.17.2.ce.1.r459.gbefcd087-1-x86_64.pkg.tar.zst"
+  "surgery_400.py::https://raw.githubusercontent.com/Capricornus007/Zcode-CE/8f7f4dd145e2a8472ab9a1fa96ef0adcaaba554e/aur/zcode-ce-rebuild/surgery_400.py"
+)
+sha256sums=(
+  '2cedc5fceee1ffcc74b00cca292bfa86522cf7201ba8bc93d0c5500b6fefcc47'
+  '1d51cfc4288884af0fcf8d87ba8e7dc0977476b0d7af2f00fbc36115970275c7'
+  'f8150e0730e0e0fa3b7605957630e6072711c9bc90564a6a7c7e494f542d2936'
+)
 
 prepare() {
-  cd "$pkgname"
-  # 只留 pacman target（理由見檔頭）。sed 後 grep 回證，改不動就紅——上游重排了
-  # target 陣列的寫法時，寧可紅也不要悄悄建出四份沒用的。
-  sed -i 's|target: \["AppImage", "deb", "rpm", "pacman"\]|target: ["pacman"]|' \
-    packages/desktop/electron-builder.config.js
-  grep -q 'target: \["pacman"\]' packages/desktop/electron-builder.config.js || {
-    echo "::error::electron-builder 的 linux target 改寫沒落地（上游改了 config 寫法？）"
-    return 1
-  }
-  # 打包完畢後 electron-builder 會照 publish 配置往 GitHub Release 上傳，
-  # 容器沒有（也不該有）GH_TOKEN → 「GitHub Personal Access Token is not set」
-  # 直接紅（run 39984189532/40044092974 實測；產物其實已經建好）。本包只產包
-  # 不發佈（發佈是 feed repo-add 的事），publish 拔成 null。app-update.yml 在
-  # packaging 階段就寫進資源目錄，不依賴 publish 步驟，更新配置不受影響。
-  sed -i '/^  publish: {$/,/^  },$/c\  publish: null,' \
-    packages/desktop/electron-builder.config.js
-  grep -q 'publish: null' packages/desktop/electron-builder.config.js || {
-    echo "::error::publish 配置沒拔掉（上游改了 config 佈局？）——沒 token 的容器必然死在發佈步驟"
-    return 1
-  }
-}
+  set -euo pipefail
+  cd "$srcdir"
 
-build() {
-  cd "$pkgname"
-  export ZCODE_ENV=production
-  export ZCODE_CDN_BASE_URL='https://cdn.eidolonmachine.xyz'
-  export ELECTRON_MIRROR='https://github.com/electron/electron/releases/download/'
-  export ELECTRON_BUILDER_BINARIES_MIRROR='https://github.com/electron-userland/electron-builder-binaries/releases/download/'
-  # --frozen-lockfile 與 CE release.yml 一致；鎖檔與源碼同倉，不會漂。
-  pnpm install --frozen-lockfile
-  # bundle:desktop 內部依次跑 prepare:runtime-assets → build → electron-builder →
-  # 產物校驗 → 體積審計（別在它前面單獨再跑 build，會重複做十分鐘的資產準備）。
-  pnpm bundle:desktop --os linux --arch x64
+  # npx 拉 @electron/asar 走 npm 鏡像（registry.npmjs.org 在部分網路不可達，
+  # 2026-11-24 本機試構建實測 ENOTFOUND；npmmirror 實測正常）。
+  export npm_config_registry=https://registry.npmmirror.com
+
+  # 1) 解官方 AppImage -> squashfs-root/
+  rm -rf squashfs-root
+  chmod +x ZCode-4.0.0-linux-x64.AppImage
+  ./ZCode-4.0.0-linux-x64.AppImage --appimage-extract >/dev/null
+
+  # 2) 解官方 app.asar -> asar-src/
+  rm -rf asar-src
+  npx --yes @electron/asar@4.3.2 extract squashfs-root/resources/app.asar asar-src
+
+  # 3) 遙測出口手術（8 項出口驗證全 0 才继续）
+  python surgery_400.py "$srcdir/asar-src"
+
+  # 4) 重打包 asar（native 邊界與官方一致：ssh2/node-pty/keyring/sharp）
+  rm -rf asar-patched
+  npx --yes @electron/asar@4.3.2 pack asar-src asar-patched/app.asar \
+    --unpack '*.{node,dll,dylib,exe}' \
+    --unpack-dir node_modules/node-pty/prebuilds/linux-x64
+
+  # 完整性：檔案數與 unpacked 邊界必須與官方一致（官方 4.0.0 = 31939 檔 / 4 native）
+  local _count
+  _count=$(npx --yes @electron/asar@4.3.2 list asar-patched/app.asar | wc -l)
+  echo ">> 手術後 asar 檔案數: $_count"
+  [ "$_count" -ge 31900 ] || { echo "::error::asar 檔案數異常（$_count），手術/重打包有誤"; return 1; }
 }
 
 package() {
-  cd "$pkgname"
-  # 取最新的 pacman 產物（dist 下可能有重試留下的多份，按 mtime 取新）。
-  local _artifact
-  _artifact=$(ls -t packages/desktop/dist/*.pkg.tar.zst | head -n1)
-  [ -n "$_artifact" ] || { echo "::error::dist 下沒有 .pkg.tar.zst 產物"; return 1; }
-  echo ">> 打包進 pkgdir 的產物：$_artifact"
+  set -euo pipefail
+  cd "$srcdir"
 
-  tar -xf "$_artifact" -C "$pkgdir" \
-    --exclude=.PKGINFO --exclude=.INSTALL --exclude=.MTREE --exclude=.BUILDINFO
+  local _stage="$srcdir/pkgstage"
+  rm -rf "$_stage"
+  mkdir -p "$_stage"
 
-  # 內層包的 .INSTALL 不隨內容複製（它是元數據），可執行入口由本檔補：
-  # CE 的安裝佈局是 /opt/ZCode-CE/zcode-ce（productName 目錄＋linuxExecutableName）。
-  local _app_bin="$pkgdir/opt/ZCode-CE/zcode-ce"
-  [ -e "$_app_bin" ] || { echo "::error::沒找到 /opt/ZCode-CE/zcode-ce（上游改佈局了？）"; return 1; }
-  install -d "$pkgdir/usr/bin"
-  ln -sf /opt/ZCode-CE/zcode-ce "$pkgdir/usr/bin/zcode-ce"
+  # 1) 從模板包取外殼（desktop/圖示/license/apparmor）
+  #    注意：.PKGINFO/.INSTALL/.MTREE/.BUILDINFO 绝不能手動放進 pkgdir——
+  #    makepkg 會從 PKGBUILD 自動生成這四個點檔案，手動放會觸發
+  #    「在軟體包根目錄找到點檔案」錯誤（2026-11-24 本機試構建 rc=5 實測）。
+  bsdtar -xf template-3.17.2.pkg.tar.zst -C "$_stage" \
+    usr/share/applications/zcode-ce.desktop \
+    usr/share/icons usr/share/licenses/zcode-ce-git/LICENSE \
+    opt/ZCode-CE/resources/apparmor-profile
 
-  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  # 2) 從解包 AppImage 取 Electron runtime + resources（跳過 app-update.yml：CE 形態無此檔）
+  cd squashfs-root
+  for f in LICENSE.electron.txt LICENSES.chromium.html chrome-sandbox \
+           chrome_100_percent.pak chrome_200_percent.pak chrome_crashpad_handler \
+           icudtl.dat libffmpeg.so libvk_swiftshader.so libvulkan.so.1 resources.pak \
+           snapshot_blob.bin v8_context_snapshot.bin vk_swiftshader_icd.json; do
+    [ -e "$f" ] && install -Dm644 "$f" "$_stage/opt/ZCode-CE/$f"
+  done
+  install -Dm755 zcode "$_stage/opt/ZCode-CE/zcode-ce"   # 官方主二進位 zcode -> zcode-ce
+  for f in locales/*.pak; do install -Dm644 "$f" "$_stage/opt/ZCode-CE/$f"; done
+  # resources 內容（官方 4.0.0）
+  for item in resources/*; do
+    case "$item" in
+      */app-update.yml) continue ;;
+    esac
+    if [ -d "$item" ]; then
+      cp -a "$item" "$_stage/opt/ZCode-CE/resources/"
+    else
+      install -Dm644 "$item" "$_stage/opt/ZCode-CE/resources/${item##*/}"
+    fi
+  done
+  cd "$srcdir"
+
+  # 3) 用遙測手術後的 asar 替換原始 asar（關鍵：禁止跳過）
+  install -Dm644 asar-patched/app.asar "$_stage/opt/ZCode-CE/resources/app.asar"
+  cp -a asar-patched/app.asar.unpacked "$_stage/opt/ZCode-CE/resources/"
+
+  # 4) /usr/bin 連結
+  mkdir -p "$_stage/usr/bin"
+  ln -sf /opt/ZCode-CE/zcode-ce "$_stage/usr/bin/zcode-ce"
+
+  # 5) 零 systemd 鐵律自檢（點檔案由 makepkg 自動生成，此處只放真實檔案）
+  if find "$_stage" -iname '*systemd*' -o -iname '*sysusers*' | grep -q .; then
+    echo "::error::產物違反零 systemd 鐵律"
+    find "$_stage" -iname '*systemd*' -o -iname '*sysusers*'
+    return 1
+  fi
+
+  # 6) 把 stage 的檔案樹放進 $pkgdir（makepkg 會把 $pkgdir 本身封裝成包）
+  cp -a "$_stage"/. "$pkgdir"/
 }
