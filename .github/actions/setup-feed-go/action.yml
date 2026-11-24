@@ -46,7 +46,7 @@ runs:
               exit 1
             fi
             # 2026-11-24 修源頭：不能用 /releases/latest——latest 是
-            # GitHub 按 published_at 自動選的，目前指向 morphe-apk-sources
+            # GitHub 按 published_at 自動選的，目前指向無 go-git 的 release
             # （0 個 go-git 資產），導致所有 uses 本 action 的 Go 倉 CI
             # 在「Install Go from the feed」這步全紅（sing-snell/sing-tun/
             # outbound 等實測 ::error::feed 裡沒有 go-git 資產）。
