@@ -82,6 +82,5 @@ jobs:
           {"key": "nvidia-utils-openrc", "repo_name": "nvidia-utils-openrc", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
           {"key": "nvidia-utils-beta", "repo_name": "nvidia-utils-beta", "variant": "none", "kind": "aur"},
           {"key": "nvidia-beta-dkms", "repo_name": "nvidia-beta-dkms", "variant": "none", "kind": "aur"},
-          {"key": "nvidia-open-beta-dkms", "repo_name": "nvidia-open-beta-dkms", "variant": "none", "kind": "aur"},
           {"key": "lib32-nvidia-utils-beta", "repo_name": "lib32-nvidia-utils-beta", "variant": "none", "kind": "aur"}
         ]
