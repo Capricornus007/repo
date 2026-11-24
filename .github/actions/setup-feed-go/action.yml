@@ -45,15 +45,17 @@ runs:
               echo "::error::容器裡沒有 jq，無法解析 feed 資產清單"
               exit 1
             fi
+            # 2026-11-24 修源頭：不能用 /releases/latest——latest 是
+            # GitHub 按 published_at 自動選的，目前指向 morphe-apk-sources
+            # （0 個 go-git 資產），導致所有 uses 本 action 的 Go 倉 CI
+            # 在「Install Go from the feed」這步全紅（sing-snell/sing-tun/
+            # outbound 等實測 ::error::feed 裡沒有 go-git 資產）。
+            # go-git 實際在 current-repo release（944 資產），精確查 tag
+            # 才穩定，且不依賴 make_latest 狀態。
+            # 注意：註解必須放在 pkg=$(...) 外面——放進 \ 續行鏈中間會造成
+            # shell 語法錯誤（sing-snell test #44 實測 exit 127）。
             pkg=$(curl -fsSL \
                     -H "Authorization: Bearer ${{ github.token }}" \
-                    # 2026-11-24 修源頭：不能用 /releases/latest——latest 是
-                    # GitHub 按 published_at 自動選的，目前指向 morphe-apk-sources
-                    # （0 個 go-git 資產），導致所有 uses 本 action 的 Go 倉 CI
-                    # 在「Install Go from the feed」這步全紅（sing-snell/sing-tun/
-                    # outbound 等實測 ::error::feed 裡沒有 go-git 資產）。
-                    # go-git 實際在 current-repo release（944 資產），精確查 tag
-                    # 才穩定，且不依賴 make_latest 狀態。
                     "https://api.github.com/repos/${{ inputs.repo }}/releases/tags/current-repo" \
                   | jq -r '.assets[] | select(.name | startswith("go-git-"))
                            | .browser_download_url' | head -n1)
