@@ -1507,42 +1507,9 @@ jobs:
               # （run 45296720065 ::error::kvazaar 找不到 multilib_rename.h 即為此）。
               # 改為把修補命令注入 prepare() 末尾——原始碼在 makepkg prepare 階段就位後自動跑。
               # 用 awk 找 prepare() 的首個頂層 }，在其前插入 sed（不依賴行號）。
-              # 用 python 注入 prepare() 尾的 python3 heredoc（原始碼在 makepkg 的
-              # srcdir/kvazaar/ 下，prepare() 的 cwd 即 srcdir）。用 python 做頭檔替換，
-              # 徹底避開多層 shell/sed 的 \n 與 $ 轉義地獄。
-              python3 - pkg_dir/PKGBUILD <<'PYEOF'
-import sys
-p = sys.argv[1]
-s = open(p, encoding='utf-8').read()
-if 'kvz_intra_get_dir_luma_predictor_encry' in s:
-    print('kvazaar: PKGBUILD 已含修補，略過')
-    sys.exit(0)
-lines = s.splitlines()
-start = next((i for i, l in enumerate(lines) if l.startswith('prepare()')), None)
-if start is None:
-    sys.exit('kvazaar: 找不到 prepare()')
-close = next((i for i in range(start + 1, len(lines)) if lines[i] == '}'), None)
-if close is None:
-    sys.exit('kvazaar: 找不到 prepare() 結束大括號')
-patch = r'''  # 補上游 multilib_rename.h 漏掉的加密函式重命名（源頭修復，LTO 全開）
-  python3 - <<'KVPY'
-import io, sys
-p = 'kvazaar/src/multilib_rename.h'
-s = io.open(p, encoding='utf-8').read()
-old = '#define kvz_intra_get_dir_luma_predictor '
-new = ('#define kvz_intra_get_dir_luma_predictor_encry   KVZ_MULTILIB_NAME(kvz_intra_get_dir_luma_predictor_encry)\n'
-       '#define kvz_intra_get_dir_luma_predictor ')
-if 'kvz_intra_get_dir_luma_predictor_encry' not in s:
-    if old not in s:
-        sys.exit('kvazaar: multilib_rename.h 找不到錨點')
-    io.open(p, 'w', encoding='utf-8').write(s.replace(old, new, 1))
-KVPY
-  grep -q '^#define kvz_intra_get_dir_luma_predictor_encry ' kvazaar/src/multilib_rename.h \
-    || { echo "::error::kvazaar 補重命名失敗"; return 1; }'''.splitlines()
-lines[close:close] = patch
-open(p, 'w', encoding='utf-8').write('\n'.join(lines) + '\n')
-print('kvazaar: prepare() 已注入 multilib_rename.h 修補')
-PYEOF
+              # 用 base64 承載注入腳本（避免 heredoc 多行在 YAML block scalar 的縮排
+              # 陷阱；原始碼在 makepkg 的 srcdir/kvazaar/ 下，prepare() cwd 即 srcdir）。
+              echo 'aW1wb3J0IHN5cwpwID0gc3lzLmFyZ3ZbMV0KcyA9IG9wZW4ocCwgZW5jb2Rpbmc9J3V0Zi04JykucmVhZCgpCmlmICdrdnpfaW50cmFfZ2V0X2Rpcl9sdW1hX3ByZWRpY3Rvcl9lbmNyeScgaW4gczoKICAgIHByaW50KCdrdmF6YWFyOiBQS0dCVUlMRCDlt7LlkKvkv67oo5zvvIznlaXpgY4nKQogICAgc3lzLmV4aXQoMCkKbGluZXMgPSBzLnNwbGl0bGluZXMoKQpzdGFydCA9IG5leHQoKGkgZm9yIGksIGwgaW4gZW51bWVyYXRlKGxpbmVzKSBpZiBsLnN0YXJ0c3dpdGgoJ3ByZXBhcmUoKScpKSwgTm9uZSkKaWYgc3RhcnQgaXMgTm9uZToKICAgIHN5cy5leGl0KCdrdmF6YWFyOiDmib7kuI3liLAgcHJlcGFyZSgpJykKY2xvc2UgPSBuZXh0KChpIGZvciBpIGluIHJhbmdlKHN0YXJ0ICsgMSwgbGVuKGxpbmVzKSkgaWYgbGluZXNbaV0gPT0gJ30nKSwgTm9uZSkKaWYgY2xvc2UgaXMgTm9uZToKICAgIHN5cy5leGl0KCdrdmF6YWFyOiDmib7kuI3liLAgcHJlcGFyZSgpIOe1kOadn+Wkp+aLrOiZnycpCnBhdGNoID0gcicnJyAgIyDoo5zkuIrmuLggbXVsdGlsaWJfcmVuYW1lLmgg5ryP5o6J55qE5Yqg5a+G5Ye95byP6YeN5ZG95ZCN77yI5rqQ6aCt5L+u5b6p77yMTFRPIOWFqOmWi++8iQogIHB5dGhvbjMgLSA8PCdLVlBZJwppbXBvcnQgaW8sIHN5cwpwID0gJ2t2YXphYXIvc3JjL211bHRpbGliX3JlbmFtZS5oJwpzID0gaW8ub3BlbihwLCBlbmNvZGluZz0ndXRmLTgnKS5yZWFkKCkKb2xkID0gJyNkZWZpbmUga3Z6X2ludHJhX2dldF9kaXJfbHVtYV9wcmVkaWN0b3IgJwpuZXcgPSAoJyNkZWZpbmUga3Z6X2ludHJhX2dldF9kaXJfbHVtYV9wcmVkaWN0b3JfZW5jcnkgICBLVlpfTVVMVElMSUJfTkFNRShrdnpfaW50cmFfZ2V0X2Rpcl9sdW1hX3ByZWRpY3Rvcl9lbmNyeSlcbicKICAgICAgICcjZGVmaW5lIGt2el9pbnRyYV9nZXRfZGlyX2x1bWFfcHJlZGljdG9yICcpCmlmICdrdnpfaW50cmFfZ2V0X2Rpcl9sdW1hX3ByZWRpY3Rvcl9lbmNyeScgbm90IGluIHM6CiAgICBpZiBvbGQgbm90IGluIHM6CiAgICAgICAgc3lzLmV4aXQoJ2t2YXphYXI6IG11bHRpbGliX3JlbmFtZS5oIOaJvuS4jeWIsOmMqOm7nicpCiAgICBpby5vcGVuKHAsICd3JywgZW5jb2Rpbmc9J3V0Zi04Jykud3JpdGUocy5yZXBsYWNlKG9sZCwgbmV3LCAxKSkKS1ZQWQogIGdyZXAgLXEgJ14jZGVmaW5lIGt2el9pbnRyYV9nZXRfZGlyX2x1bWFfcHJlZGljdG9yX2VuY3J5ICcga3ZhemFhci9zcmMvbXVsdGlsaWJfcmVuYW1lLmggXAogICAgfHwgeyBlY2hvICI6OmVycm9yOjprdmF6YWFyIOijnOmHjeWRveWQjeWkseaVlyI7IHJldHVybiAxOyB9JycnLnNwbGl0bGluZXMoKQpsaW5lc1tjbG9zZTpjbG9zZV0gPSBwYXRjaApvcGVuKHAsICd3JywgZW5jb2Rpbmc9J3V0Zi04Jykud3JpdGUoJ1xuJy5qb2luKGxpbmVzKSArICdcbicpCnByaW50KCdrdmF6YWFyOiBwcmVwYXJlKCkg5bey5rOo5YWlIG11bHRpbGliX3JlbmFtZS5oIOS/ruijnCcpCg==' | base64 -d | python3 - pkg_dir/PKGBUILD
               grep -q 'kvz_intra_get_dir_luma_predictor_encry' pkg_dir/PKGBUILD \
                 || { echo "::error::kvazaar prepare() 注入修補失敗"; exit 1; }
               tail -18 pkg_dir/PKGBUILD ;;
