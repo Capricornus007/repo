@@ -53,13 +53,18 @@ case "$stage" in
       exit 1
     fi
     cp "$CONF_BAK" /etc/makepkg.conf
-    # conftest.gcda 污染：pass1 configure 每個 conftest（含 autotools 子測試
-    # conftest-<n> 變體）都寫 profile dir，
-    # pass2 configure 路徑相同 → checksum 不匹配自檢炸(coreutils/attr 實測)。只清 conftest。
-    find "$pd" -name 'conftest*.gcda' -delete 2>/dev/null || true
+    # conftest.gcda 污染（run 45380396175 acl 實測、lfs-pacman 817a48e 本機 gcc16 復現確認）：
+    # pass1 configure 把每個 conftest 的 profile 寫成 $PD/#<來源路徑以#分隔>#conftest.gcda
+    # ——basename 以 '#' 開頭，不是 'conftest'！舊的 find -name 'conftest*.gcda'
+    # （含 e0d30b9 的「通配」）從來沒匹配到，清理形同虛設。
+    # pass2 的 -fprofile-use 讀到 pass1 殘留 → configure 每個 conftest.c 控制流不同 →
+    # gcc -Werror=coverage-mismatch → configure 誤判「cannot compute suffix of executables」失敗。
+    # 正確 glob 是 '*conftest*.gcda'（前綴也要有 *）；真實來源 .gcda 不含 conftest 字樣、
+    # 完整保留 → pass2 PGO 零降級、無豁免。
+    find "$pd" -name '*conftest*.gcda' -delete 2>/dev/null || true
     echo "::notice::PGO 訓練：${name}"
     run_train || true
-    find "$pd" -name 'conftest*.gcda' -delete 2>/dev/null || true
+    find "$pd" -name '*conftest*.gcda' -delete 2>/dev/null || true
     gcda=$(find "$pd" -name '*.gcda' 2>/dev/null | wc -l)
     if [ "$gcda" -eq 0 ]; then
       cp "$CONF_BAK" /etc/makepkg.conf
