@@ -1413,7 +1413,7 @@ jobs:
             *) : ;;
           esac
       - name: 2026-11-22 紅包修復特例（獨立 step——主 step 已破 21000 表達式上限）
-        if: contains(fromJSON('["gvfs-git","xdg-desktop-portal-git","gjs-git","fwupd-git","nvme-cli-git","openvpn-git","tesseract-data-eng-git","tesseract-data-chi_sim-git","tesseract-data-chi_tra-git","tesseract-data-osd-git","tesseract-data-jpn-git","sccache-git","kvazaar-git","libx11-git","localsend-git","rsync-git","tumbler-git","unbound-git"]'), matrix.repo_name)
+        if: contains(fromJSON('["gvfs-git","xdg-desktop-portal-git","gjs-git","fwupd-git","nvme-cli-git","openvpn-git","tesseract-data-eng-git","tesseract-data-chi_sim-git","tesseract-data-chi_tra-git","tesseract-data-osd-git","tesseract-data-jpn-git","sccache-git","kvazaar-git","libx11-git","localsend-git","rsync-git","tumbler-git","unbound-git","tpm2-tss-git","elfutils-git"]'), matrix.repo_name)
         run: |
           set -euo pipefail
           # 為什麼是獨立 step：上面的「逐包修正」run 塊已破 GitHub「max expression
@@ -1568,7 +1568,17 @@ jobs:
               # OpenSSL 4.1 把 ASN1_STRING_length() 標 deprecated，tpm2-tss 的
               # ifapi_verify_cert_chain.c 用它 + -Werror → run #75 build 失敗。
               # 6最原則：API 仍可用、功能不砍，只降 -Werror 為警告。
+              # 注意：本 case 過去一直沒生效，因本 step 的 if 白名單漏了 tpm2-tss-git
+              # （2026-11-24 補上）。
               printf "\n%s\n" "export CFLAGS=\"\${CFLAGS:-} -Wno-error=deprecated-declarations\"" >> pkg_dir/PKGBUILD
+              tail -2 pkg_dir/PKGBUILD ;;
+            elfutils-git)
+              # GCC 16 + LTO 把 libdwP.h 的 dwp_offset 誤判maybe-uninitialized
+              # （run #93：libdwP.h:1364/1449 `may be used uninitialized
+              #  [-Werror=maybe-uninitialized]` → lto-wrapper fatal → ld failed）。
+              # 上游初始化邏輯在 LTO 跨模組分析下被誤判；精準降該警告為非錯誤，
+              # 功能與 LTO 都保留（6最原則）。
+              printf "\n%s\n" "export CFLAGS=\"\${CFLAGS:-} -Wno-error=maybe-uninitialized\"" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
 
             *) : ;;
