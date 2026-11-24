@@ -1079,5 +1079,12 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "egl-wayland2-git",
+    "repo_name": "egl-wayland2-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]
