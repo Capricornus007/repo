@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# 改動 PKGBUILD 但沒動 pkgver/pkgrel 時，自動把 pkgrel +1。
+#
+# 為什麼要這個：CI 判斷「要不要重建」只看版號 —— build-packages.yml 的 plan 步驟
+# 拿 pkgbase-pkgver-pkgrel 去比 release 裡已有的資產名，命中就 skip。於是「上游沒
+# 動、只有我改了 PKGBUILD」這種修護會被跳過，修好了卻上不了車（今天 codex 那幾筆
+# 就是這種：pkgver 由上游 commit 算出，上游沒動它就不變）。手動 +1 容易忘，所以
+# 在 commit 時自動做。
+#
+# 只在「實質內容變了、而 pkgver/pkgrel 都沒變」時才 +1：
+#   · 只改註解／空行／行尾空白 → 不 +1（不會觸發無意義重建）
+#   · pkgver 或 pkgrel 已經動過 → 不 +1（尊重人自己寫的）
+#
+# 用法：bump-pkgrel            # pre-commit 模式，掃 staged 的 PKGBUILD
+#       bump-pkgrel <檔案>...  # 指定檔案（測試用）
+set -uo pipefail
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$root" || exit 0
+
+if [ "$#" -gt 0 ]; then
+  files=("$@")
+else
+  mapfile -t files < <(git diff --cached --name-only --diff-filter=ACM | grep -E '(^|/)PKGBUILD$' || true)
+fi
+[ "${#files[@]}" -gt 0 ] || exit 0
+
+# 去掉整行註解、空行與行尾空白，只留會影響打包的實質內容
+norm() { sed -E 's/[[:space:]]+$//; /^[[:space:]]*#/d; /^[[:space:]]*$/d'; }
+var_of() { printf '%s\n' "$1" | sed -nE "s/^[[:space:]]*$2=['\"]?([^'\"[:space:]]*).*/\1/p" | head -n1; }
+
+changed=0
+for f in "${files[@]}"; do
+  [ -f "$f" ] || continue
+  if ! git rev-parse --verify -q HEAD >/dev/null; then
+    echo "bump-pkgrel：倉庫還沒有 HEAD（首次提交），跳過"
+    exit 0
+  fi
+  old=$(git show "HEAD:$f" 2>/dev/null | norm) || old=""
+  new=$(norm < "$f")
+
+  [ "$old" != "$new" ] || continue                       # 實質內容沒變
+  ov=$(var_of "$old" pkgver); nv=$(var_of "$new" pkgver)
+  or_=$(var_of "$old" pkgrel); nr=$(var_of "$new" pkgrel)
+  [ -n "$nv" ] && [ -n "$nr" ] || { echo "bump-pkgrel：$f 讀不到 pkgver/pkgrel，請人工確認"; continue; }
+  [ "$ov" = "$nv" ] || continue                          # pkgver 變了 → 本來就會重建
+  [ "$or_" = "$nr" ] || continue                         # 人已自行 +1
+
+  # epoch 變動本身就是換代訊號（CI 的 plan 拿 pkgbase-pkgver-pkgrel 比資產，
+  # 而資產名前綴帶 epoch，例如 dae-git-1.2.1.1…），此時再動 pkgrel 只是疊噪音。
+  oe=$(var_of "$old" epoch); ne=$(var_of "$new" epoch)
+  if [ "$oe" != "$ne" ]; then
+    echo "bump-pkgrel：$f 的 epoch ${oe:-無} → ${ne:-無} 已是換代訊號，pkgrel 保持 $nr"
+    continue
+  fi
+
+  # 有 pkgver() 的包（所有 -git 包）：makepkg 只要算出的 pkgver 與檔內靜態值不同，
+  # 就會把 **pkgrel 重置為 1**（PKGBUILD(5) 的 check_package），CI 的資產比對也按 1 算
+  # （見 build-packages.yml 那段註解）。對這類包 +1 pkgrel 對產物檔名完全沒影響，
+  # 只會讓檔裡的數字每輪無意義遞增 → 直接跳過。
+  if grep -qE '^[[:space:]]*pkgver\(\)' "$f"; then
+    echo "bump-pkgrel：$f 定義了 pkgver()，makepkg 會把 pkgrel 重置為 1 → 抬它無效，跳過"
+    continue
+  fi
+
+  # 點分 pkgrel（如 1.1）只進最後一段，跟 makepkg 的習慣一致
+  last="${nr##*.}"
+  if [[ "$last" =~ ^[0-9]+$ ]]; then
+    if [[ "$nr" == *.* ]]; then
+      newrel="${nr%.*}.$((10#$last + 1))"
+    else
+      newrel="$((10#$last + 1))"
+    fi
+  else
+    echo "bump-pkgrel：$f 的 pkgrel=$nr 結尾不是數字，跳過（請手動處理）"
+    continue
+  fi
+
+  sed -i -E "s/^([[:space:]]*pkgrel=).*/\1${newrel}/" "$f"
+  git add -- "$f"
+  echo "bump-pkgrel：$f 的 pkgrel $nr → $newrel（上游版號未變，僅 PKGBUILD 有實質改動）"
+  changed=1
+done
+exit 0
