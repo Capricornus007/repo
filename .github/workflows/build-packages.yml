@@ -4569,6 +4569,27 @@ jobs:
           mkdir -p deploy
           find artifact-downloads -name "*.pkg.tar.zst" -exec cp {} deploy/ \;
           cd deploy
+          # ── 損壞產物隔離（2026-11-24 實測慘案）──────────────────────────
+          # actions/download-artifact@v8 偶發把 .pkg.tar.zst 下成 Zstd 資料損壞
+          # （run #99 有 6 個 tesseract-data-* 包 `Zstd decompression failed:
+          #  Data corruption detected`）。repo-add 是「全有或全無」：只要餵進去
+          # 一個損壞包，就回 `Package database was not modified due to errors` 並
+          # 以 exit 1 結束 —— 整個 db 一條都不更新，本輪所有正常新包（如
+          # libxfce4util-git）都入不了庫，下游 20+ 包因 pacman 解析不到依賴連環紅。
+          # 解法：repo-add 前逐包做 Zstd/tar 完整性校驗，損壞的移出 deploy/ 隔離，
+          # 只讓健全包進 db。這些損壞包在上輪 db 仍有舊條目、pacman 仍裝得到，
+          # 下一輪傳輸正常時自然更新；绝不能因為少數損壞包拖垮整庫。
+          mkdir -p quarantine
+          _corrupt=0
+          for _f in ./*.pkg.tar.zst; do
+            [ -e "$_f" ] || continue
+            if ! bsdtar -tf "$_f" >/dev/null 2>&1; then
+              echo "::warning::artifact 損壞（Zstd/tar 無法解讀），隔離不入库：${_f##*/}"
+              mv "$_f" quarantine/
+              _corrupt=$((_corrupt + 1))
+            fi
+          done
+          echo "損壞產物隔離數: $_corrupt"
           # 抓舊 DB 是整條流水線的生命線。抓不到卻繼續往下 repo-add，會產出「只含本輪
           # 產物」的半截庫；上傳後別輪的包全成孤兒，下一輪清理照半截庫把它們連環刪掉
           # （2026-11-02 實測：Xfce 全鏈／gst-*／llvm 反覆從 DB 消失，deploy 卻報 success）。
