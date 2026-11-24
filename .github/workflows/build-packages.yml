@@ -660,10 +660,13 @@ jobs:
             curl -sfL --retry 2 "$_ci_base/makepkg-flags.conf" -o /tmp/makepkg-flags.conf \
               && curl -sfL --retry 2 "$_ci_base/gcc-znver3.sh" -o /tmp/gcc-znver3.sh \
               && curl -sfL --retry 2 "$_ci_base/clang-znver3.sh" -o /tmp/clang-znver3.sh \
-              && [ -s /tmp/makepkg-flags.conf ] && [ -s /tmp/gcc-znver3.sh ] && [ -s /tmp/clang-znver3.sh ] && break
+              && curl -sfL --retry 2 "$_ci_base/pgo-train.sh" -o /tmp/pgo-train.sh \
+              && [ -s /tmp/makepkg-flags.conf ] && [ -s /tmp/gcc-znver3.sh ] \
+              && [ -s /tmp/clang-znver3.sh ] && [ -s /tmp/pgo-train.sh ] && break
             [ "$_try" = 3 ] && { echo "::error::抓不到 ci/ 六最配置（raw URL 3 次失敗）"; exit 1; }
             sleep $((_try * 10))
           done
+          install -m755 /tmp/pgo-train.sh /usr/local/bin/pgo-train
           cat /tmp/makepkg-flags.conf >> /etc/makepkg.conf
           sed -i 's/,--as-needed//g; s/ --as-needed//g' /etc/makepkg.conf
           sed -i 's|^LDFLAGS="|LDFLAGS="-lm |' /etc/makepkg.conf
@@ -4225,6 +4228,47 @@ jobs:
           # `RPC failed; HTTP 502 … HTTP/2 stream 7 reset by server`）。
           # 這三個變數 git 一定吃，不管系統/全域 config 檔或 NOSYSTEM。
           _mp_env="${_mp_env}GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.version GIT_CONFIG_VALUE_0=HTTP/1.1 "
+
+          # ===== 六最 v2.26：全量兩段式 PGO（移植自 lfs-pacman/ci/build-recipe.sh）=====
+          # 權威源 /home/avatar/Downloads/lfs-pacman/ci/build-recipe.sh + pgo-train.sh。
+          # 流程：pass1 -fprofile-generate 插樁編譯(--noarchive) → pgo-train 收 .gcda
+          #       → 零 .gcda 判紅(六最無豁免，不出無 profile 包) → pass2 -fprofile-use
+          #       重編出最終包。makepkg -p 自訂 conf 會踩 readonly OPTIONS，故直接對
+          #       /etc/makepkg.conf 追加旗標、兩段前後快照還原(權威源 run 43623494641 實測)。
+          _pgo_name="${{ matrix.repo_name }}"
+          _pgo_pd="/tmp/pgo-data-${_pgo_name}"
+          _pgo_bak="/tmp/makepkg.conf.pgo-bak-${_pgo_name}"
+          echo "::notice::PGO 兩段式開始：${_pgo_name}（profile dir=${_pgo_pd}）"
+          cp /etc/makepkg.conf "$_pgo_bak"
+          rm -rf "$_pgo_pd" src pkg; mkdir -p "$_pgo_pd"; chown -R builder "$_pgo_pd" 2>/dev/null || true
+          # PGO 旗標必須同時進 LDFLAGS：LTO 下最終連結由 lto1 重編，dhcpcd 類
+          # 「編譯用 CFLAGS、連結只用 LDFLAGS」的構建系統會漏 libgcov → __gcov_* 未定義。
+          printf '\n# PGO pass1 (六最)\nCFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nCXXFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nLDFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nOPTIONS=(!strip docs !libtool staticlibs emptydirs zipman purge !debug lto)\n' \
+            "$_pgo_pd" "$_pgo_pd" "$_pgo_pd" >> /etc/makepkg.conf
+          # pass1 只編插樁樹、不出包(--noarchive)；沿用主構建的 flags 但去掉 -f(force 重建由 rm src/pkg 保證)。
+          _pgo_p1_flags=$(printf '%s' "$flags" | sed -E 's/ -f([ ]|$)/ /g')
+          if ! $_runas "${_mp_env}makepkg $_pgo_p1_flags --noarchive" 2>&1 | tee /tmp/makepkg-pgo-pass1.log; then
+            cp "$_pgo_bak" /etc/makepkg.conf
+            echo "::error::PGO pass1 插樁編譯失敗：${_pgo_name}（六最無豁免，修源頭）"; exit 1
+          fi
+          cp "$_pgo_bak" /etc/makepkg.conf
+          # conftest.gcda 污染：pass1 configure 每個 conftest 都寫 profile dir，
+          # pass2 configure 路徑相同 → checksum 不匹配自檢炸(coreutils/attr 實測)。只清 conftest。
+          find "$_pgo_pd" -name 'conftest.gcda' -delete 2>/dev/null || true
+          echo "::notice::PGO 訓練：${_pgo_name}"
+          $_runas "cd '$PWD' && /usr/local/bin/pgo-train '$PWD' '$_pgo_pd'" 2>&1 | tee /tmp/makepkg-pgo-train.log || true
+          find "$_pgo_pd" -name 'conftest.gcda' -delete 2>/dev/null || true
+          _pgo_gcda=$(find "$_pgo_pd" -name '*.gcda' 2>/dev/null | wc -l)
+          if [ "$_pgo_gcda" -eq 0 ]; then
+            cp "$_pgo_bak" /etc/makepkg.conf
+            echo "::error::${_pgo_name} PGO 訓練零 .gcda（六最無豁免，不出無 profile 包；修 /usr/local/bin/pgo-train 訓練負載）"
+            exit 1
+          fi
+          echo "::notice::PGO 訓練收到 $_pgo_gcda 個 .gcda：${_pgo_name}"
+          rm -rf src pkg
+          printf '\n# PGO pass2 (六最)\nCFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -fprofile-partial-training"\nCXXFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -fprofile-partial-training"\nLDFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -fprofile-partial-training"\n' \
+            "$_pgo_pd" "$_pgo_pd" "$_pgo_pd" >> /etc/makepkg.conf
+          # ===== PGO pass1 + 訓練結束；下面 until 迴圈即 pass2 最終構建（出 .pkg.tar.zst）=====
           until $_runas "${_mp_env}makepkg $flags" 2>&1 | tee /tmp/makepkg.log; do
             _mp=$((_mp + 1))
             bad=$(grep -oE '^:: File [^ ]+ is corrupted' /tmp/makepkg.log | awk '{print $3}' | sort -u || true)
@@ -4243,6 +4287,10 @@ jobs:
             _backoff=$((_mp * 25)); [ "$_backoff" -gt 120 ] && _backoff=120
             sleep $_backoff
           done
+          # PGO pass2 完成，還原 /etc/makepkg.conf（移除 -fprofile-use 等追加旗標），
+          # 避免污染同 job 後續任何 makepkg 呼叫（六最：訓練 profile 本身保留供 AutoFDO 參考）。
+          [ -f "$_pgo_bak" ] && cp "$_pgo_bak" /etc/makepkg.conf
+          echo "::notice::PGO 兩段式完成：${_pgo_name}（$_pgo_gcda 個 .gcda 餵進 pass2）"
           if [ "${{ matrix.repo_name }}" = "linux-cachyos-cjktty" ] && [ "${{ matrix.variant }}" = "rc" ]; then
             # RC 產物檔名插入 -rc（如 linux-cachyos-cjktty-rc-7.3.rc1-1-…），
             # 包內 pkgname 保持 linux-cachyos-cjktty 不變：repo-add 條目照常
