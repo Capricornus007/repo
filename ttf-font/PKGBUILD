@@ -1,0 +1,51 @@
+# font.plan（2026-11-25）：一个 ttf-font 包提供虚拟 ttf-font（满足 alacritty-sixel-git
+# /librewolf-git 等的依赖）；组合三个字体源，各自放 serif/monospace/sans-serif：
+#   ① LXGW WenKai GB：从 main 源码直出(make build) → /usr/share/fonts/TTF/serif/
+#   ② Fusion JetBrainsMapleMono：pre release zip → /usr/share/fonts/TTF/monospace/
+#   ③ 筑紫B丸.ttf（Tsukushi B Maru）：托管在本仓 font-source release → sans-serif/
+pkgname=ttf-font
+pkgver=1.0.20261125
+pkgrel=1
+pkgdesc='Unified TTF font package (WenKai GB serif + JetBrains Maple Mono + Tsukushi B Maru), provides ttf-font'
+arch=('any')
+url='https://github.com/lxgw/LxgwWenKaiGB'
+license=('OFL-1.1' 'custom')
+provides=('ttf-font')
+# ① wenkaiGB 源码(含子模块)；② Fusion pre zip；③ 筑紫B丸（本仓 release，asset 名 ASCII）
+source=("wenkaigb::git+https://github.com/lxgw/LxgwWenKaiGB.git#branch=main"
+        'JetBrainsMapleMono-NF-XX-XX-XX.zip::https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono/releases/download/pre/JetBrainsMapleMono-NF-XX-XX-XX.zip'
+        'TsukushiBMaru.ttf::https://github.com/Capricornus007/repo/releases/download/font-source/TsukushiBMaru.ttf')
+sha256sums=('SKIP' 'SKIP' '2ebb2c576ab7ef866e82f7b2abd4bbbb65e4f12ad8a5c184f1d67509321a01a0')
+
+prepare() {
+  cd "$srcdir/wenkaigb"
+  git submodule update --init --recursive
+}
+
+build() {
+  cd "$srcdir/wenkaigb"
+  # 上游 Makefile: venv → pip install -Ur requirements.txt → sources/build.sh → gftools → post.py
+  # 用系统 python3（纳管中），不依赖手工装的 python3.15。
+  make build
+}
+
+package() {
+  install -d "$pkgdir/usr/share/fonts/TTF"/{serif,monospace,sans-serif}
+
+  # ① WenKai GB → serif
+  find "$srcdir/wenkaigb" -name '*.ttf' -type f \
+    -exec install -m644 {} "$pkgdir/usr/share/fonts/TTF/serif/" \;
+  # ② Fusion JetBrains Maple Mono → monospace
+  find "$srcdir" -maxdepth 1 -type f -name '*.ttf' \
+    -exec install -m644 {} "$pkgdir/usr/share/fonts/TTF/monospace/" \;
+  if ! ls "$srcdir"/*.ttf >/dev/null 2>&1; then
+    # zip 里的字体可能在子目录
+    find "$srcdir" -type f -name '*.ttf' ! -path '*/wenkaigb/*' \
+      -exec install -m644 {} "$pkgdir/usr/share/fonts/TTF/monospace/" \;
+  fi
+  # ③ 筑紫B丸 → sans-serif（固定名）
+  install -m644 "$srcdir/TsukushiBMaru.ttf" "$pkgdir/usr/share/fonts/TTF/sans-serif/"
+
+  install -d "$pkgdir/usr/share/licenses/$pkgname"
+  install -m644 "$srcdir/wenkaigb/OFL.txt" "$pkgdir/usr/share/licenses/$pkgname/OFL-WenKaiGB"
+}

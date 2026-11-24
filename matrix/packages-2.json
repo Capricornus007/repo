@@ -1086,5 +1086,12 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "ttf-font",
+    "repo_name": "ttf-font",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]
