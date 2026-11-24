@@ -1,0 +1,105 @@
+# Maintainer: Capricornus007
+# 搬运自 AUR nvidia-open-beta（上游维护者 dbermond），epoch 1 / 620.73.04-1，2026-11-25。
+# 本仓惯例：in-tree 配方 + 矩阵 kind:aur（挂 junlin03-aur 源 / 跳过 checksum 回推 /
+# --skipchecksums --nocheck）；pkgver/pkgrel 由 plan 步查 AUR RPC 自动跟踪（AUR 的
+# Version 带 epoch 前缀 `1:`，plan 会去掉它再拆 pkgver/pkgrel）。
+# 零 systemd：AUR 原版无 systemd 依赖，原样保留。
+# AUR 原版 split：本 pkgbase 同时产出 nvidia-open-beta 与 nvidia-open-beta-dkms，
+#   两个目录共用同一份 PKGBUILD，矩阵只建 nvidia-open-beta 一条。
+# options 的 !lto 是上游对内核模块的硬性要求（内核模块不走用户态 LTO），非降级。
+
+# Maintainer: Daniel Bermond <dbermond@archlinux.org>
+
+pkgbase=nvidia-open-beta
+pkgname=(
+    'nvidia-open-beta'
+    'nvidia-open-beta-dkms')
+pkgver=620.73.04
+pkgrel=1
+epoch=1
+pkgdesc='NVIDIA open kernel modules (beta version)'
+arch=('x86_64')
+url='https://github.com/NVIDIA/open-gpu-kernel-modules/'
+license=('MIT AND GPL-2.0-only')
+makedepends=(
+    'linux-headers')
+options=('!buildflags' '!lto' '!strip')
+source=("https://download.nvidia.com/XFree86/NVIDIA-kernel-module-source/NVIDIA-kernel-module-source-${pkgver}.tar.xz"
+        '110-nvidia-open-change-dkms-conf.patch'
+        '120-nvidia-open-linux-rt-gift.patch'
+        '130-nvidia-open-reproducible-build.patch'
+        '140-nvidia-open-gcc-sls.patch')
+sha256sums=('3a107b31b22d6f5c8da34e5e22a66e38ccdb7a92ee23266d0e064d3b9635c93f'
+            '82f0cda42d4ee26f9d5f4995e752b69b0587eff268da33ba53d92cf10314d2de'
+            'b0f62a78f749ff3a104197c12b6d885352adcf35fb5ecf00c4cd4c51b4195e45'
+            '7f7cf450e909dd36c9cb37b4fc4a7ddce4d4b9554ad54b5d4738e61f8b746b66'
+            'f8dbbf00401890bf1e43b53a62ce77ac88dc56772ad17816974c0efa6cad2f17')
+
+prepare() {
+    patch -d "NVIDIA-kernel-module-source-${pkgver}" -Np1 -i "${srcdir}/110-nvidia-open-change-dkms-conf.patch"
+    patch -d "NVIDIA-kernel-module-source-${pkgver}" -Np1 -i "${srcdir}/120-nvidia-open-linux-rt-gift.patch"
+    patch -d "NVIDIA-kernel-module-source-${pkgver}" -Np1 -i "${srcdir}/130-nvidia-open-reproducible-build.patch"
+    patch -d "NVIDIA-kernel-module-source-${pkgver}" -Np1 -i "${srcdir}/140-nvidia-open-gcc-sls.patch"
+    
+    [ -d dkms-src ] && rm -rf dkms-src
+    cp -a "NVIDIA-kernel-module-source-${pkgver}/kernel-open" dkms-src
+}
+
+build() {
+    local -x KERNEL_UNAME
+    
+    # allow usage of custom kernel and building in a chroot
+    if [ -d "/usr/lib/modules/$(uname -r)" ]
+    then
+        KERNEL_UNAME="$(uname -r)"
+    else
+        KERNEL_UNAME="$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d | sed -n 's|.*/||;1p')"
+    fi
+    
+    unset -v SYSSRC
+    make -C "NVIDIA-kernel-module-source-${pkgver}" modules
+}
+
+package_nvidia-open-beta() {
+    depends=(
+        'libglvnd'
+        'linux'
+        "nvidia-utils-beta>=${pkgver%.*}")
+    provides=("nvidia-open=${pkgver}" 'NVIDIA-MODULE')
+    conflicts=('nvidia-open' 'NVIDIA-MODULE')
+    
+    local _kernver
+    if [ -d "/usr/lib/modules/$(uname -r)" ]
+    then
+        _kernver="$(<"/usr/lib/modules/$(uname -r)/build/version")"
+    else
+        _kernver="$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d | head -n1)"
+        _kernver="$(<"/usr/lib/modules/${_kernver##*/}/build/version")"
+    fi
+    
+    install -D -m644 "NVIDIA-kernel-module-source-${pkgver}/kernel-open"/*.ko -t "${pkgdir}/usr/lib/modules/${_kernver}/extramodules"
+    install -D -m644 "NVIDIA-kernel-module-source-${pkgver}/COPYING" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    find "$pkgdir" -name '*.ko' -exec zstd --rm -19 {} +
+    
+    install -D -m644 <(printf '%s\n' 'options nvidia NVreg_OpenRmEnableUnsupportedGpus=1') "${pkgdir}/usr/lib/modprobe.d/nvidia-open.conf"
+}
+
+package_nvidia-open-beta-dkms() {
+    pkgdesc="$(sed 's/(\(beta[[:space:]]version\)/(module sources; \1/' <<< "$pkgdesc")"
+    depends=(
+        'dkms'
+        'libglvnd'
+        "nvidia-utils-beta>=${pkgver%.*}")
+    provides=("nvidia-open=${pkgver}" 'NVIDIA-MODULE')
+    conflicts=('nvidia-open' 'NVIDIA-MODULE')
+    
+    install -D -m644 "NVIDIA-kernel-module-source-${pkgver}/src/nvidia/_out/Linux_x86_64/nv-kernel.o" \
+        dkms-src/nvidia/nv-kernel.o_binary
+    install -D -m644 "NVIDIA-kernel-module-source-${pkgver}/src/nvidia-modeset/_out/Linux_x86_64/nv-modeset-kernel.o" \
+        dkms-src/nvidia-modeset/nv-modeset-kernel.o_binary
+    install -d -m755 "${pkgdir}/usr/src"
+    cp -dr --no-preserve='ownership' dkms-src "${pkgdir}/usr/src/nvidia-${pkgver}"
+    install -D -m644 "NVIDIA-kernel-module-source-${pkgver}/COPYING" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+    
+    install -D -m644 <(printf '%s\n' 'options nvidia NVreg_OpenRmEnableUnsupportedGpus=1') "${pkgdir}/usr/lib/modprobe.d/nvidia-open.conf"
+}

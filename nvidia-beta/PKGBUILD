@@ -1,0 +1,59 @@
+# Maintainer: Capricornus007
+# 搬运自 AUR nvidia-beta（上游维护者 dbermond），620.73.04-1，2026-11-25。
+# 本仓惯例：in-tree 配方 + 矩阵 kind:aur（挂 junlin03-aur 源 / 跳过 checksum 回推 /
+# --skipchecksums --nocheck）；pkgver/pkgrel 由 plan 步查 AUR RPC 自动跟踪。
+# 零 systemd：AUR 原版无 systemd 依赖，原样保留。
+# ⚠ 这颗是「非 DKMS」版：模块在构建时针对容器里的内核头编译。要随任意 linux-zen1th
+#   内核自动重编请用 nvidia-beta-dkms / nvidia-open-beta-dkms（本仓同批搬运）。
+
+# Maintainer : Daniel Bermond <dbermond@archlinux.org>
+# Contributor: Det <nimetonmaili g-mail>
+# Contributor: Ng Oon-Ee
+# Contributor: Dan Vratil
+
+pkgname=nvidia-beta
+pkgver=620.73.04
+pkgrel=1
+pkgdesc="NVIDIA kernel module (beta version)"
+arch=('x86_64')
+url='https://www.nvidia.com/'
+license=('LicenseRef-Custom')
+makedepends=(
+    'dkms'
+    'linux-headers')
+provides=("nvidia=${pkgver}" "nvidia-beta=${pkgver}" 'NVIDIA-MODULE')
+conflicts=('nvidia')
+options=('!strip')
+_pkg="NVIDIA-Linux-${CARCH}-${pkgver}-no-compat32"
+source=("http://us.download.nvidia.com/XFree86/Linux-${CARCH}/${pkgver}/${_pkg}.run"
+        '110-nvidia-change-dkms-conf.patch')
+sha256sums=('91f162952fa1d7a4fbdcc7a1a3a0266dfa079007be43d7235e5a6896bf29172a'
+            '5d68186863c94fe239663fb439811e73d1a4a8eea9a9bd4a6311c22447a81baf')
+
+prepare() {
+    # extract the source file
+    [ -d "$_pkg" ] && rm -rf "$_pkg"
+    printf '%s\n' "  -> Self-Extracting ${_pkg}.run..."
+    sh "${_pkg}.run" --extract-only
+    ln -s kernel "${_pkg}/nvidia-${pkgver}"
+    
+    patch -d "$_pkg" -Np1 -i "${srcdir}/110-nvidia-change-dkms-conf.patch"
+}
+
+build() {
+    fakeroot dkms build --dkmstree "$srcdir" --sourcetree "${srcdir}/${_pkg}" -m "nvidia/${pkgver}" -k "$(</usr/src/linux/version)"
+}
+
+package() {
+    depends=(
+        'libglvnd'
+        'linux'
+        "nvidia-utils-beta=${pkgver}")
+    
+    local _kernver
+    _kernver="$(</usr/src/linux/version)"
+    
+    install -D -m644 "nvidia/${pkgver}/${_kernver}/${CARCH}/module"/* -t "${pkgdir}/usr/lib/modules/${_kernver}/extramodules"
+    install -D -m644 "${_pkg}/LICENSE" -t "${pkgdir}/usr/share/licenses/${pkgname}"
+    find "$pkgdir" -name '*.ko' -exec zstd --rm -19 {} +
+}

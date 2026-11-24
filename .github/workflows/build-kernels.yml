@@ -68,6 +68,10 @@ jobs:
       # · 掛低频線（本檔）而不是 155 項的 -git 線：NVIDIA 的 beta 分支不像 git 那樣
       #   天天動，每天查一次 AUR RPC 足夠；單輪還要下載 530MB＋409MB 的 .run。
       #   逐包的依賴與換代分析寫進 docs/in-tree-packages.md 的 NVIDIA -beta 段。
+      # 2026-11-25 补：搬全 AUR 9 个 beta 包。split 规则：open-beta-dkms 与 open-beta
+      # 共用 pkgbase（nvidia-open-beta），矩阵只建 open-beta-dkms 一条；lib32 两包共用
+      # pkgbase（lib32-nvidia-utils-beta），只建一条。注释必须在 JSON 块外（写进去会
+      # 让 fromJSON 解析失败，见 build-git-packages.yml 的踩坑记录）。
       packages: |
         [
           {"key": "snd-pcsp-dkms", "repo_name": "snd-pcsp-dkms", "variant": "none"},
@@ -77,5 +81,7 @@ jobs:
           {"key": "linux-cachyos-cjktty-rc", "repo_name": "linux-cachyos-cjktty", "variant": "rc"},
           {"key": "nvidia-utils-openrc", "repo_name": "nvidia-utils-openrc", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
           {"key": "nvidia-utils-beta", "repo_name": "nvidia-utils-beta", "variant": "none", "kind": "aur"},
-          {"key": "nvidia-beta-dkms", "repo_name": "nvidia-beta-dkms", "variant": "none", "kind": "aur"}
+          {"key": "nvidia-beta-dkms", "repo_name": "nvidia-beta-dkms", "variant": "none", "kind": "aur"},
+          {"key": "nvidia-open-beta-dkms", "repo_name": "nvidia-open-beta-dkms", "variant": "none", "kind": "aur"},
+          {"key": "lib32-nvidia-utils-beta", "repo_name": "lib32-nvidia-utils-beta", "variant": "none", "kind": "aur"}
         ]
