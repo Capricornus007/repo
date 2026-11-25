@@ -24,20 +24,11 @@ prepare() {
 
 build() {
   cd "$srcdir/wenkaigb"
-  # 上游 Makefile: venv → pip install -Ur requirements.txt → sources/build.sh → gftools → post.py
-  # 用系统 python3（纳管中），不依赖手工装的 python3.15。
-  # 诊断探针（run 45523120419 实测：touch venv/touchfile 后 0.007s 无声死，本地无法复现）：
-  # stdbuf 强制行缓冲保住 make 的 echo；死后打印 rc/cgroup OOM 事件/内存峰值/磁盘。
-  echo "=== diag: make=$(make --version | head -1)"
-  echo "=== diag: df $(df -h /__w 2>/dev/null | tail -1)"
-  echo "=== diag: mem $(free -m | head -2 | tail -1)"
-  stdbuf -oL -eL make build
-  _rc=$?
-  echo "=== diag: make rc=$_rc"
-  echo "=== diag: cgroup memory.events:"; cat /sys/fs/cgroup/memory.events 2>/dev/null || true
-  echo "=== diag: memory.peak:"; cat /sys/fs/cgroup/memory.peak 2>/dev/null || true
-  echo "=== diag: dmesg tail:"; dmesg 2>/dev/null | tail -8 || true
-  return $_rc
+  # 上游 Makefile: venv → merge → export → post.py，是按串行设计的——
+  # build: venv merge export 三个目标里 merge/export 没声明依赖 venv，
+  # CI 的 makepkg 带 -j 并行时 merge/export 抢跑（venv/bin/activate 尚不存在）
+  # → Error 1（run 45524416960 诊断探针实锤）。-j1 强制串行，尊重上游设计。
+  make -j1 build
 }
 
 package() {
