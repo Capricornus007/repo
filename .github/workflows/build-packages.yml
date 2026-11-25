@@ -4720,6 +4720,32 @@ jobs:
           rm -f junlin03-aur.db.tar.gz.old junlin03-aur.files.tar.gz.old
           ls -lh
 
+      # 2026-11-25 實測（ttf-font 第六跑）：current-repo 資產數逼近 GitHub 硬上限
+      # 1000，softprops 上傳直接 Validation Failed: file_count limited to 1000。
+      # 原有的「清理舊版本」步驟排在上傳之後，來不及。本步在上傳前修剪：
+      # 新 DB 的 %FILENAME% 集合 = 應存在的包資產，不在集合裡的舊資產（舊版本/
+      # 已摘除包）先刪，資產數恆等於「包數 + db/files」，遠離上限。
+      - name: 上传前修剪（GitHub 1000 资产硬上限）
+        if: steps.check_artifacts.outputs.has_artifacts == 'true'
+        run: |
+          set -euo pipefail
+          cd deploy
+          tar -xzOf junlin03-aur.db.tar.gz --wildcards '*/desc' 2>/dev/null \
+            | awk '/^%FILENAME%$/{getline;print}' | tr ':' '.' | sort -u > /tmp/keep.txt
+          for f in junlin03-aur.db junlin03-aur.db.tar.gz junlin03-aur.files junlin03-aur.files.tar.gz; do
+            echo "$f" >> /tmp/keep.txt
+          done
+          release_id=$(gh api "repos/${{ github.repository }}/releases/tags/$REPO_RELEASE_TAG" --jq .id)
+          total=0; deleted=0
+          while IFS=$'\t' read -r aname aid; do
+            total=$((total+1))
+            grep -qxF "$aname" /tmp/keep.txt && continue
+            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$aid" >/dev/null 2>&1 || true
+            deleted=$((deleted+1))
+          done < <(gh api "repos/${{ github.repository }}/releases/$release_id/assets?per_page=100" --paginate \
+            --jq '.[] | .name + "\t" + (.id|tostring)')
+          echo "修剪前資產 $total 個，刪除 $deleted 個，剩 $((total-deleted)) 個（上限 1000）"
+
       - name: 部署至 GitHub Releases
         if: steps.check_artifacts.outputs.has_artifacts == 'true'
         uses: softprops/action-gh-release@v3
