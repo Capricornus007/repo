@@ -8,6 +8,11 @@ arch=(x86_64)
 url='https://gcc.gnu.org'
 license=(GPL-3.0-or-later LGPL-3.0-or-later GFDL-1.3-or-later)
 makedepends=(binutils)
+# 六最 LTO 對 gcc 自身構建最敏感：run #92（job 139443918892）實測 LTO 連結
+# libgcc_s.so 時炸「invalid attempt to declare external version name as
+# default in symbol `__gttf2@@GCC_4.3.0'」。按 ci/makepkg-flags.conf 定下的
+# 政策「任一包炸就單包降回 !lto」，此處單包關 LTO，其餘六最旗標不動。
+options=(!lto)
 source=("gcc-16.2.0.tar.xz::https://ftp.gnu.org/gnu/gcc/gcc-16.2.0/gcc-16.2.0.tar.xz"
         "gmp-6.3.0.tar.xz::https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz"
         "mpfr-4.2.2.tar.xz::https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.xz"

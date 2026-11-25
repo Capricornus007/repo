@@ -8,7 +8,7 @@ arch=(x86_64)
 url='https://sourceforge.net/projects/psmisc/files/psmisc/psmisc-23.7.tar.xz'
 license=(GPL-3.0-or-later)
 
-source=("psmisc-23.7.tar.xz")
+source=("https://sourceforge.net/projects/psmisc/files/psmisc/psmisc-23.7.tar.xz")
 sha256sums=('SKIP')
 
 build() {

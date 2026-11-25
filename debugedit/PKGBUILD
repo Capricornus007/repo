@@ -8,7 +8,7 @@ arch=(x86_64)
 url='https://sourceware.org/pub/debugedit/debugedit-5.2.tar.xz'
 license=(GPL-3.0-or-later)
 
-source=("debugedit-5.2.tar.xz")
+source=("https://sourceware.org/pub/debugedit/5.2/debugedit-5.2.tar.xz")
 sha256sums=('SKIP')
 
 build() {

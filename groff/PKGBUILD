@@ -8,7 +8,7 @@ arch=(x86_64)
 url='https://ftp.gnu.org/gnu/groff/groff-1.24.2.tar.gz'
 license=(GPL-3.0-or-later)
 
-source=("groff-1.24.2.tar.gz")
+source=("https://ftp.gnu.org/gnu/groff/groff-1.24.2.tar.gz")
 sha256sums=('SKIP')
 
 build() {

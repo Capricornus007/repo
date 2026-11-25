@@ -8,7 +8,7 @@ arch=(x86_64)
 url='https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz'
 license=(GPL-3.0-or-later)
 
-source=("make-4.4.1.tar.gz")
+source=("https://ftp.gnu.org/gnu/make/make-4.4.1.tar.gz")
 sha256sums=('SKIP')
 
 build() {

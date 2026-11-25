@@ -8,7 +8,7 @@ arch=(x86_64)
 url='https://ftp.gnu.org/gnu/which/which-2.23.tar.gz'
 license=(GPL-3.0-or-later)
 
-source=("which-2.23.tar.gz")
+source=("https://ftp.gnu.org/gnu/which/which-2.23.tar.gz")
 sha256sums=('SKIP')
 
 build() {

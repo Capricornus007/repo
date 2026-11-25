@@ -8,7 +8,7 @@ arch=(x86_64)
 url='https://ftp.gnu.org/gnu/grep/grep-3.12.tar.xz'
 license=(GPL-3.0-or-later)
 
-source=("grep-3.12.tar.xz")
+source=("https://ftp.gnu.org/gnu/grep/grep-3.12.tar.xz")
 sha256sums=('SKIP')
 
 build() {

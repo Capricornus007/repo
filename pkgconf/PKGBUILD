@@ -8,7 +8,7 @@ arch=(x86_64)
 url='https://distfiles.amperecomputing.com/blfs/pkgconf-3.0.10.tar.gz'
 license=(GPL-3.0-or-later)
 
-source=("pkgconf-3.0.10.tar.gz")
+source=("https://github.com/pkgconf/pkgconf/releases/download/pkgconf-3.0.10/pkgconf-3.0.10.tar.gz")
 sha256sums=('SKIP')
 
 build() {
