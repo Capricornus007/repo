@@ -2117,7 +2117,7 @@ jobs:
               SRC_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
                         for s in "${source[@]}"; do printf "%s\n" "$s"; done' \
                 | sed -E 's/^git\+//; s/#[^:]*$//; s/^[^:]*:://' \
-                | grep -E '^https?://' | head -n1)
+                | grep -E '^https?://' | head -n1 || true)
               rm -rf /tmp/gitpkg-src
               git clone "$SRC_URL" /tmp/gitpkg-src || skip "clone $PKG 上游失败"
               if [ "$PKG" = "mpv-git" ]; then
@@ -2157,7 +2157,7 @@ jobs:
               SRC_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
                         for s in "${source[@]}"; do printf "%s\n" "$s"; done' \
                 | sed -E 's/^git\+//; s/#[^:]*$//; s/^[^:]*:://' \
-                | grep -E '^https?://' | head -n1)
+                | grep -E '^https?://' | head -n1 || true)
               rm -rf /tmp/gitpkg-src
               git clone "$SRC_URL" /tmp/gitpkg-src || skip "clone $PKG 上游失败"
               TARGET_PKGVER=$(git -C /tmp/gitpkg-src describe --long --tags --exclude 'latest' \
@@ -2175,7 +2175,7 @@ jobs:
               SRC_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
                         for s in "${source[@]}"; do printf "%s\n" "$s"; done' \
                 | sed -E 's/^git\+//; s/#[^:]*$//; s/^[^:]*:://' \
-                | grep -E '^https?://' | head -n1)
+                | grep -E '^https?://' | head -n1 || true)
               rm -rf /tmp/gitpkg-src
               git clone "$SRC_URL" /tmp/gitpkg-src || skip "clone $PKG 上游失败"
               TARGET_PKGVER=$(git -C /tmp/gitpkg-src describe --tags --long --match 'v[0-9]*' \
@@ -2191,7 +2191,7 @@ jobs:
               SRC_URL=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
                         for s in "${source[@]}"; do printf "%s\n" "$s"; done' \
                   | sed -E 's/^git\+//; s/#[^:]*$//; s/^[^:]*:://' \
-                  | grep -E '^https?://' | head -n1)
+                  | grep -E '^https?://' | head -n1 || true)
               rm -rf /tmp/agh-src
               git clone --quiet --filter=blob:none "$SRC_URL" /tmp/agh-src/AdGuardHome \
                 || skip "clone AdGuardHome 上游失敗"
@@ -2331,7 +2331,7 @@ jobs:
               _codex_url=$(bash -c 'source ./PKGBUILD >/dev/null 2>&1;
                         for s in "${source[@]}"; do printf "%s\n" "$s"; done' \
                 | sed -E 's/^[^:]*:://; s/^git\+//' \
-                | grep -E '^https?://' | head -n1)
+                | grep -E '^https?://' | head -n1 || true)
               _codex_head=$(git ls-remote "$_codex_url" HEAD 2>/dev/null \
                 | awk '{print substr($1,1,8); exit}')
               _codex_deb=$(curl -fsSL --connect-timeout 15 \

@@ -26,8 +26,11 @@ md5sums=('SKIP')
 
 pkgver () {
   cd "${srcdir}/${pkgname}"
+  # 2026-11-25 修根因：原寫法 `git rev-list --count makepkg` 引用名為 makepkg 的
+  # 本地分支——makepkg 根本不會建這個 ref，pkgver() 必炸（run 45666987811 實測
+  # capstone-git 進不了 feed 的根因）。改用 HEAD，版本格式不變：日期.提交數.短hash。
   _date=`date +"%Y%m%d"`
-  echo "$_date.$(git rev-list --count makepkg).$(git rev-parse --short makepkg)"
+  echo "$_date.$(git rev-list --count HEAD).$(git rev-parse --short HEAD)"
   #git log -1 --date=short --format="%cd.%h" | tr -d -
 }
 
