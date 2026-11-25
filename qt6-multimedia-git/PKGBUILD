@@ -13,8 +13,8 @@ depends=(gcc-libs
          gstreamer
          gst-plugins-base-libs
          libpulse
-         qt6-base
-         qt6-declarative)
+         qt6-base-git
+         qt6-declarative-git)
 makedepends=(git
              cmake
              ninja

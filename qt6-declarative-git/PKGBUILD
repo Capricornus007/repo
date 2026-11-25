@@ -10,8 +10,8 @@ license=(GPL-2.0-only LGPL-3.0-only)
 depends=(gcc-libs
          glibc
          glib2
-         qt6-base
-         qt6-shadertools)
+         qt6-base-git
+         qt6-shadertools-git)
 makedepends=(git
              cmake
              ninja
