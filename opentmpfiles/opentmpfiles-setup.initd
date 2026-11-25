@@ -1,0 +1,14 @@
+#!/sbin/openrc-run
+# 六最 2026-11-25：opentmpfiles-setup 開機服務（零 systemd 血統）
+# 執行 tmpfiles.d 的創建/權限類指令（d/f/L/z 等），不帶 --clean。
+description="Create and populate volatile tmpfiles.d paths"
+
+command="/usr/bin/opentmpfiles"
+output_log="/var/log/opentmpfiles.log"
+error_log="/var/log/opentmpfiles.log"
+
+depend() {
+	need localmount
+	after bootmisc opensysusers
+	before dbus
+}

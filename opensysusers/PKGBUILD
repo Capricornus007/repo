@@ -1,0 +1,22 @@
+# 六最 2026-11-25：opensysusers —— sysusers.d 處理器（零 systemd 血統重寫）。
+# 原版 opensysusers（OpenRC 生態，William Hubbs 系）已死，本包功能續作。
+# 指令子集 u/g/m，冪等，三層目錄（/usr/lib → /usr/local/lib → /etc 後者覆蓋）。
+pkgname=opensysusers
+pkgver=20261125
+pkgrel=1
+pkgdesc='Process sysusers.d fragments to create system users/groups (六最零血統重寫)'
+arch=(any)
+url='https://github.com/systemd/systemd/blob/main/docs/USERS-GROUPS.md'
+license=(GPL-2.0-only)
+depends=(shadow openrc)
+provides=(sysusers.d-handler)
+conflicts=(esysusers)
+backup=(var/log/opensysusers.log)
+source=("opensysusers.sh"
+        "opensysusers.initd")
+sha256sums=('SKIP' 'SKIP')
+
+package() {
+  install -Dm755 "$srcdir/opensysusers.sh" "$pkgdir/usr/bin/opensysusers"
+  install -Dm755 "$srcdir/opensysusers.initd" "$pkgdir/etc/init.d/opensysusers"
+}

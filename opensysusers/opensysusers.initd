@@ -1,0 +1,15 @@
+#!/sbin/openrc-run
+# 六最 2026-11-25：opensysusers 開機服務（零 systemd 血統）
+# 在 localmount 後、大多數服務前創建 sysusers.d 定義的系統用戶/組。
+description="Create system users and groups from sysusers.d"
+
+command="/usr/bin/opensysusers"
+command_args=""
+output_log="/var/log/opensysusers.log"
+error_log="/var/log/opensysusers.log"
+
+depend() {
+	need localmount
+	after bootmisc
+	before dbus
+}

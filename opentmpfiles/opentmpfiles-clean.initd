@@ -1,0 +1,15 @@
+#!/sbin/openrc-run
+# 六最 2026-11-25：opentmpfiles-clean 定時清理服務（零 systemd 血統）
+# 替代 systemd-tmpfiles-clean.timer：openrc 下用 cron 觸發（本腳本提供 start 執行一次清理）。
+# 建議 crontab: 0 3 * * * /sbin/rc-service opentmpfiles-clean start
+description="Clean aged tmpfiles.d paths (q/Q/r/R with age)"
+
+command="/usr/bin/opentmpfiles"
+command_args="--clean"
+output_log="/var/log/opentmpfiles-clean.log"
+error_log="/var/log/opentmpfiles-clean.log"
+
+depend() {
+	need localmount
+	after opentmpfiles-setup
+}

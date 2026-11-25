@@ -1,0 +1,32 @@
+# 六最 2026-11-25：opentmpfiles —— tmpfiles.d 處理器（零 systemd 血統重寫）。
+# 原版 opentmpfiles（OpenRC 生態）已死，本包功能續作。
+# 指令子集 f F w d D p L c b q Q r R x X z Z；%m/%b 佔位符；四層目錄後者覆蓋。
+# 兩個 openrc 服務：setup（boot 建目錄/權限）+ clean（年齡清理，配 cron 每日）。
+pkgname=opentmpfiles
+pkgver=20261125
+pkgrel=1
+pkgdesc='Process tmpfiles.d fragments: create/clean volatile paths (六最零血統重寫)'
+arch=(any)
+url='https://www.freedesktop.org/software/systemd/man/latest/tmpfiles.d.html'
+license=(GPL-2.0-only)
+depends=(openrc findutils coreutils shadow)
+provides=(tmpfiles.d-handler)
+conflicts=(etmpfiles)
+source=("opentmpfiles.sh"
+        "opentmpfiles-setup.initd"
+        "opentmpfiles-clean.initd")
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+  install -Dm755 "$srcdir/opentmpfiles.sh" "$pkgdir/usr/bin/opentmpfiles"
+  install -Dm755 "$srcdir/opentmpfiles-setup.initd" "$pkgdir/etc/init.d/opentmpfiles-setup"
+  install -Dm755 "$srcdir/opentmpfiles-clean.initd" "$pkgdir/etc/init.d/opentmpfiles-clean"
+  # 每日清理的 cron 提示（不強加，註釋形式）
+  install -dm755 "$pkgdir/etc/cron.daily"
+  cat > "$pkgdir/etc/cron.daily/opentmpfiles-clean" <<'EOF'
+#!/bin/sh
+# 每日 tmpfiles.d 年齡清理（六最）
+/sbin/rc-service opentmpfiles-clean start >/dev/null 2>&1 || /usr/bin/opentmpfiles --clean
+EOF
+  chmod 755 "$pkgdir/etc/cron.daily/opentmpfiles-clean"
+}
