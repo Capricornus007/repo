@@ -1278,7 +1278,7 @@
     "key": "lib32-libnghttp3-git",
     "repo_name": "lib32-libnghttp3-git",
     "variant": "none",
-    "kind": "aur",
+    "kind": "multilib",
     "in_tree": true
   },
   {

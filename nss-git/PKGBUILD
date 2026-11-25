@@ -65,6 +65,10 @@ build() {
     --system-sqlite
   )
 
+  # 2026-11-25：in-tree 檔案經 Contents API（raw）下載會丟失執行位，
+  # run 45683404559 實測「../certdata2pem.py: Permission denied」→ 補 chmod。
+  chmod +x ../certdata2pem.py ../bundle.sh
+
   cd certs
   ../certdata2pem.py
 

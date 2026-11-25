@@ -16,7 +16,10 @@ arch=('i686' 'x86_64')
 url="https://github.com/google/brotli"
 license=('MIT')
 depends=('glibc' 'python')
-makedepends=('git' 'python-build' 'python-installer' 'python-setuptools' 'python-wheel')
+# 2026-11-25：上游 pyproject.toml 的 build-system.requires 加了 python 的
+# pkgconfig 模組，python -m build --no-isolation 會驗證 import
+# （run 45688451079 實測「Unmet dependencies: pkgconfig」）→ 補 python-pkgconfig。
+makedepends=('git' 'python-build' 'python-installer' 'python-setuptools' 'python-wheel' 'python-pkgconfig')
 provides=("python-brotli=$pkgver")
 conflicts=('python-brotli')
 source=("git+https://github.com/google/brotli.git")
