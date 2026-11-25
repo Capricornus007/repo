@@ -985,12 +985,6 @@
   "kind": "aur"
  },
  {
-  "key": "bash",
-  "repo_name": "bash",
-  "variant": "none",
-  "in_tree": true
- },
- {
   "key": "autoconf",
   "repo_name": "autoconf",
   "variant": "none",

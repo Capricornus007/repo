@@ -45,6 +45,14 @@ case "$stage" in
     mkdir -p "$pd"; chown -R builder "$pd" 2>/dev/null || true
     printf '\n# PGO pass1 (六最)\nCFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nCXXFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nLDFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nOPTIONS=(!strip docs !libtool staticlibs emptydirs zipman purge !debug lto)\n' \
       "$pd" "$pd" "$pd" >> /etc/makepkg.conf
+    # 2026-11-25（librewolf 實測）：Rust 的 cargo-linker 用 -nodefaultlibs 連結，
+    # clang 的 -fprofile-generate 不會自動補 compiler-rt profile 執行庫 →
+    #   ld.lld: undefined symbol: __llvm_profile_instrument_target / _memop
+    # 顯式把庫加進 LDFLAGS；靜態庫無符號引用時 linker 不會拉進來，對純 GCC 包無害。
+    _rt=$(clang -print-resource-dir 2>/dev/null)/lib/linux/libclang_rt.profile-x86_64.a
+    if [ -f "$_rt" ]; then
+      printf 'LDFLAGS+=" %s"\n' "$_rt" >> /etc/makepkg.conf
+    fi
     # pass1 只編插樁樹、不出包(--noarchive)；去掉 -f(force 重建由 rm src/pkg 保證)。
     p1flags=$(printf '%s' "$flags" | sed -E 's/ -f([ ]|$)/ /g')
     if ! (cd "$pkgdir" && run_makepkg "$p1flags --noarchive") 2>&1 | tee /tmp/makepkg-pgo-pass1.log; then
