@@ -55,6 +55,7 @@ makedepends=('git' 'cmake' 'boost' 'gtest' 'ninja')
 provides=("$_pkgname" "$_pkgname=1.17.0")
 conflicts=("$_pkgname")
 source=("git+https://github.com/rime/librime.git"
+        "git+https://github.com/gabime/spdlog.git"
         "git+https://github.com/lotem/librime-octagram.git"
         "git+https://github.com/hchunhui/librime-lua.git"
         "git+https://github.com/rime/librime-charcode.git"
@@ -64,7 +65,7 @@ source=("git+https://github.com/rime/librime.git"
         'opencc-empty-conversion-chain.patch'
         'lua-u8string-cxx20.patch'
         'proto-capnp-2-text-reader.patch')
-sha512sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+sha512sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
 
 pkgver() {
   # ⚠️ 不能假設「$srcdir/$_pkgname 一定存在可以 cd」：CI 的「更新校验和并回推
@@ -103,6 +104,12 @@ pkgver() {
 
 prepare() {
   cd librime
+  # 2026-11-25：上游 CMakeLists 要求 bundled spdlog（靜態鏈結），
+  # 配方的 git source 沒有 --recurse-submodules → deps/spdlog 空。
+  # 直接掛一份最新 spdlog 進去（尖端原則）。
+  mkdir -p deps
+  rm -rf deps/spdlog
+  ln -sf "$srcdir/spdlog" deps/spdlog
   # capnp 2.0 的 kj 標頭要求 C++20（#error "This code requires C++20"），
   # 而上游釘 17 → 抬到 20。實測這一筆就把 420 個錯誤壓到 12 個。
   # 2026-11-25：上游 CMakeLists 改版讓舊 patch 的 hunk 行號失效（CI #... 實測
