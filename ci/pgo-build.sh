@@ -49,9 +49,12 @@ case "$stage" in
     # clang 的 -fprofile-generate 不會自動補 compiler-rt profile 執行庫 →
     #   ld.lld: undefined symbol: __llvm_profile_instrument_target / _memop
     # 顯式把庫加進 LDFLAGS；靜態庫無符號引用時 linker 不會拉進來，對純 GCC 包無害。
-    _rt=$(clang -print-resource-dir 2>/dev/null)/lib/linux/libclang_rt.profile-x86_64.a
-    if [ -f "$_rt" ]; then
-      printf 'LDFLAGS+=" %s"\n' "$_rt" >> /etc/makepkg.conf
+    # 用 -l 讓 lld 從 resource dir 自己找，避免硬編路徑/符號連結失效
+    # （CI 實測硬編路徑寫進去後錯誤依舊 → 該 .a 在容器裡是壞的 symlink）。
+    # 若找到 Static 檔，直接用 -l 名稱；同時加 -L 指向 resource lib/linux。
+    _rt_dir="$(clang -print-resource-dir 2>/dev/null)/lib/linux"
+    if [ -d "$_rt_dir" ]; then
+      printf 'LDFLAGS+=" -L%s -lclang_rt.profile-x86_64"\n' "$_rt_dir" >> /etc/makepkg.conf
     fi
     # pass1 只編插樁樹、不出包(--noarchive)；去掉 -f(force 重建由 rm src/pkg 保證)。
     p1flags=$(printf '%s' "$flags" | sed -E 's/ -f([ ]|$)/ /g')
