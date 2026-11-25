@@ -1,0 +1,47 @@
+# 六最搬運 2026-11-25：u1s1-cli-cn（AI 代理 CLI，中国站版——CLI 默认连中国站 u1s1app.com）。
+# 上游分发：tarball 自带 node 运行时 + u1s1-cli 应用 + bash 启动器（dirname $0 相对路径，可重定位）。
+# 坑：站点对非浏览器 UA 返回 500（curl 默认 UA / makepkg DLAGENTS 都会被拦），
+#     所以下载放 build() 里手动 curl -A 浏览器 UA，不走 source 数组。
+# 用户实证：GUI 版 deb 在 /releases/app/latest/deb；CLI 版 tarball 在 /releases/u1s1-cli-{VER}-linux-x64.tar.gz，
+#     版本号从 /releases/LATEST 取（同样要浏览器 UA）。
+pkgname=u1s1-cli-cn
+pkgver=1.20.2
+pkgrel=1
+pkgdesc='u1s1 AI agent CLI (中国站版，自带 node 运行时，零 systemd 依赖)'
+arch=(x86_64)
+url='https://u1s1app.com'
+license=(custom)
+depends=(bash)
+optdepends=(dbus)
+source=()
+sha256sums=()
+options=(!strip)
+
+_pkgurl="https://u1s1app.com/releases"
+_ua="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+
+pkgver() {
+  # LATEST 端点要浏览器 UA
+  curl -fsSL -A "$_ua" --connect-timeout 10 "$_pkgurl/LATEST" 2>/dev/null \
+    || echo "$pkgver"
+}
+
+build() {
+  local ver
+  ver=$(curl -fsSL -A "$_ua" --connect-timeout 10 "$_pkgurl/LATEST" 2>/dev/null) \
+    || ver="$pkgver"
+  case "$ver" in *[!0-9.]*|"") ver="$pkgver" ;; esac
+  msg2 "下载 u1s1-cli v$ver"
+  curl -fSL -A "$_ua" --retry 3 --retry-delay 3 \
+    "$_pkgurl/u1s1-cli-$ver-linux-x64.tar.gz" -o "$srcdir/u1s1-cli.tar.gz"
+  mkdir -p "$srcdir/u1s1-pkg"
+  tar -xzf "$srcdir/u1s1-cli.tar.gz" -C "$srcdir/u1s1-pkg"
+}
+
+package() {
+  # 启动器 dirname $0 相对路径 → 整体放 /usr/lib/u1s1，软链进 PATH
+  install -dm755 "$pkgdir/usr/lib"
+  cp -r "$srcdir/u1s1-pkg/u1s1" "$pkgdir/usr/lib/u1s1"
+  install -dm755 "$pkgdir/usr/bin"
+  ln -s /usr/lib/u1s1/u1s1 "$pkgdir/usr/bin/u1s1"
+}

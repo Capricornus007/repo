@@ -1132,5 +1132,11 @@
   "repo_name": "syslog-ng-openrc",
   "variant": "none",
   "in_tree": true
+ },
+ {
+  "key": "u1s1-cli-cn",
+  "repo_name": "u1s1-cli-cn",
+  "variant": "none",
+  "in_tree": true
  }
 ]
