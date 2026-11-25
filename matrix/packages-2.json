@@ -1,1118 +1,1124 @@
 [
-  {
-    "key": "cython-git",
-    "repo_name": "cython-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "davs2-git",
-    "repo_name": "davs2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "dex-git",
-    "repo_name": "dex-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "dkms-git",
-    "repo_name": "dkms-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "dmenu-git",
-    "repo_name": "dmenu-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "dosfstools-git",
-    "repo_name": "dosfstools-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "double-conversion-git",
-    "repo_name": "double-conversion-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "e2fsprogs-git",
-    "repo_name": "e2fsprogs-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "efivar-git",
-    "repo_name": "efivar-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "egl-wayland-git",
-    "repo_name": "egl-wayland-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "eglexternalplatform-git",
-    "repo_name": "eglexternalplatform-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "elementary-icon-theme-git",
-    "repo_name": "elementary-icon-theme-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "elfutils-git",
-    "repo_name": "elfutils-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "ell-git",
-    "repo_name": "ell-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "ethtool-git",
-    "repo_name": "ethtool-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "exo-git",
-    "repo_name": "exo-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "expat-git",
-    "repo_name": "expat-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "faac-git",
-    "repo_name": "faac-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "faad2-git",
-    "repo_name": "faad2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "fakechroot-git",
-    "repo_name": "fakechroot-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "fakeroot-git",
-    "repo_name": "fakeroot-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "file-git",
-    "repo_name": "file-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "flac-git",
-    "repo_name": "flac-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "flex-git",
-    "repo_name": "flex-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "fmt-git",
-    "repo_name": "fmt-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "fontconfig-git",
-    "repo_name": "fontconfig-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "freetype2-git",
-    "repo_name": "freetype2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "fribidi-git",
-    "repo_name": "fribidi-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "fstrm-git",
-    "repo_name": "fstrm-git",
-    "variant": "none",
-    "kind": "artix",
-    "image": "artixlinux/artixlinux:base-devel",
-    "in_tree": true
-  },
-  {
-    "key": "fuse3-git",
-    "repo_name": "fuse3-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "garcon-git",
-    "repo_name": "garcon-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "gc-git",
-    "repo_name": "gc-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gdbm-git",
-    "repo_name": "gdbm-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gdk-pixbuf2-git",
-    "repo_name": "gdk-pixbuf2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gettext-git",
-    "repo_name": "gettext-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "gflags-git",
-    "repo_name": "gflags-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "ghostscript-git",
-    "repo_name": "ghostscript-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "giflib-git",
-    "repo_name": "giflib-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "glew-git",
-    "repo_name": "glew-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "glfw-git",
-    "repo_name": "glfw-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "glow-git",
-    "repo_name": "glow-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "glslang-git",
-    "repo_name": "glslang-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "glu-git",
-    "repo_name": "glu-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gnome-font-viewer-git",
-    "repo_name": "gnome-font-viewer-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gnutls-git",
-    "repo_name": "gnutls-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "goverlay-git",
-    "repo_name": "goverlay-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gperftools-git",
-    "repo_name": "gperftools-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gpgme-git",
-    "repo_name": "gpgme-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "graphene-git",
-    "repo_name": "graphene-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "graphite-git",
-    "repo_name": "graphite-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "groff-git",
-    "repo_name": "groff-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "gsettings-desktop-schemas-git",
-    "repo_name": "gsettings-desktop-schemas-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "hicolor-icon-theme-git",
-    "repo_name": "hicolor-icon-theme-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "hidapi-git",
-    "repo_name": "hidapi-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "highway-git",
-    "repo_name": "highway-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "hunspell-git",
-    "repo_name": "hunspell-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "icu-git",
-    "repo_name": "icu-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "imagemagick-git",
-    "repo_name": "imagemagick-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "inetutils-git",
-    "repo_name": "inetutils-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "innoextract-git",
-    "repo_name": "innoextract-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "iproute2-git",
-    "repo_name": "iproute2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "iptables-git",
-    "repo_name": "iptables-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "iputils-git",
-    "repo_name": "iputils-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "iw-git",
-    "repo_name": "iw-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "iwd-git",
-    "repo_name": "iwd-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "jansson-git",
-    "repo_name": "jansson-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "jbigkit-git",
-    "repo_name": "jbigkit-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "jemalloc-git",
-    "repo_name": "jemalloc-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "json-c-git",
-    "repo_name": "json-c-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "json-glib-git",
-    "repo_name": "json-glib-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "jsoncpp-git",
-    "repo_name": "jsoncpp-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kaccounts-integration-git",
-    "repo_name": "kaccounts-integration-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kbd-git",
-    "repo_name": "kbd-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kbookmarks-git",
-    "repo_name": "kbookmarks-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kcmutils-git",
-    "repo_name": "kcmutils-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kcontacts-git",
-    "repo_name": "kcontacts-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kdeclarative-git",
-    "repo_name": "kdeclarative-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kdegraphics-mobipocket-git",
-    "repo_name": "kdegraphics-mobipocket-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kdialog-git",
-    "repo_name": "kdialog-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "keyutils-git",
-    "repo_name": "keyutils-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kio-git",
-    "repo_name": "kio-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kirigami-git",
-    "repo_name": "kirigami-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kirigami-addons-git",
-    "repo_name": "kirigami-addons-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kitemmodels-git",
-    "repo_name": "kitemmodels-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kitty-git",
-    "repo_name": "kitty-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kjobwidgets-git",
-    "repo_name": "kjobwidgets-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kparts-git",
-    "repo_name": "kparts-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kpeople-git",
-    "repo_name": "kpeople-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kpty-git",
-    "repo_name": "kpty-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "krb5-git",
-    "repo_name": "krb5-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kservice-git",
-    "repo_name": "kservice-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "ktextwidgets-git",
-    "repo_name": "ktextwidgets-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kvazaar-git",
-    "repo_name": "kvazaar-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kwallet-git",
-    "repo_name": "kwallet-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "kwindowsystem-git",
-    "repo_name": "kwindowsystem-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "l-smash-git",
-    "repo_name": "l-smash-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "lapack-git",
-    "repo_name": "lapack-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "lcevcdec-git",
-    "repo_name": "lcevcdec-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "ldns-git",
-    "repo_name": "ldns-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "less-git",
-    "repo_name": "less-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libao-git",
-    "repo_name": "libao-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libarchive-git",
-    "repo_name": "libarchive-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libaribcaption-git",
-    "repo_name": "libaribcaption-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libass-git",
-    "repo_name": "libass-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libassuan-git",
-    "repo_name": "libassuan-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libavif-git",
-    "repo_name": "libavif-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libb2-git",
-    "repo_name": "libb2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libbpf-git",
-    "repo_name": "libbpf-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libbs2b-git",
-    "repo_name": "libbs2b-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libbsd-git",
-    "repo_name": "libbsd-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libburn-git",
-    "repo_name": "libburn-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libcap-ng-git",
-    "repo_name": "libcap-ng-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libcdio-git",
-    "repo_name": "libcdio-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libcdio-paranoia-git",
-    "repo_name": "libcdio-paranoia-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libcups-git",
-    "repo_name": "libcups-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libcupsfilters-git",
-    "repo_name": "libcupsfilters-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libdca-git",
-    "repo_name": "libdca-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libdecor-git",
-    "repo_name": "libdecor-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libdeflate-git",
-    "repo_name": "libdeflate-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libdisplay-info-git",
-    "repo_name": "libdisplay-info-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libdovi-git",
-    "repo_name": "libdovi-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libdrm-git",
-    "repo_name": "libdrm-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libebml-git",
-    "repo_name": "libebml-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libepoxy-git",
-    "repo_name": "libepoxy-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libevdev-git",
-    "repo_name": "libevdev-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libexif-git",
-    "repo_name": "libexif-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libfdk-aac-git",
-    "repo_name": "libfdk-aac-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libffi-git",
-    "repo_name": "libffi-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libfm-qt-git",
-    "repo_name": "libfm-qt-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libgit2-git",
-    "repo_name": "libgit2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libglvnd-git",
-    "repo_name": "libglvnd-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libgme-git",
-    "repo_name": "libgme-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libgpg-error-git",
-    "repo_name": "libgpg-error-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libimobiledevice-git",
-    "repo_name": "libimobiledevice-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libimobiledevice-glue-git",
-    "repo_name": "libimobiledevice-glue-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libinih-git",
-    "repo_name": "libinih-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libisofs-git",
-    "repo_name": "libisofs-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libjxl-git",
-    "repo_name": "libjxl-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libkexiv2-git",
-    "repo_name": "libkexiv2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libklvanc-git",
-    "repo_name": "libklvanc-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libksba-git",
-    "repo_name": "libksba-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "liblc3-git",
-    "repo_name": "liblc3-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libmanette-git",
-    "repo_name": "libmanette-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libmd-git",
-    "repo_name": "libmd-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libmicrodns-git",
-    "repo_name": "libmicrodns-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libmicrohttpd-git",
-    "repo_name": "libmicrohttpd-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libmnl-git",
-    "repo_name": "libmnl-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libmodplug-git",
-    "repo_name": "libmodplug-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libmpc-git",
-    "repo_name": "libmpc-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libmpd-git",
-    "repo_name": "libmpd-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libmysofa-git",
-    "repo_name": "libmysofa-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libnet-git",
-    "repo_name": "libnet-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libnetfilter_conntrack-git",
-    "repo_name": "libnetfilter_conntrack-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libnfnetlink-git",
-    "repo_name": "libnfnetlink-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libnftnl-git",
-    "repo_name": "libnftnl-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libnghttp2-git",
-    "repo_name": "libnghttp2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libngtcp2-git",
-    "repo_name": "libngtcp2-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libnl-git",
-    "repo_name": "libnl-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libogg-git",
-    "repo_name": "libogg-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libpcap-git",
-    "repo_name": "libpcap-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libpciaccess-git",
-    "repo_name": "libpciaccess-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libpgm-git",
-    "repo_name": "libpgm-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libplist-git",
-    "repo_name": "libplist-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libppd-git",
-    "repo_name": "libppd-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libpsl-git",
-    "repo_name": "libpsl-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libqmi-git",
-    "repo_name": "libqmi-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "librist-git",
-    "repo_name": "librist-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "librsvg-git",
-    "repo_name": "librsvg-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "librsync-git",
-    "repo_name": "librsync-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libsamplerate-git",
-    "repo_name": "libsamplerate-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libseccomp-git",
-    "repo_name": "libseccomp-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libshout-git",
-    "repo_name": "libshout-git",
-    "variant": "none",
-    "kind": "aur"
-  },
-  {
-    "key": "libevent-git",
-    "repo_name": "libevent-git",
-    "variant": "none",
-    "kind": "artix",
-    "image": "artixlinux/artixlinux:base-devel",
-    "in_tree": true
-  },
-  {
-    "key": "libverto-git",
-    "repo_name": "libverto-git",
-    "variant": "none",
-    "kind": "artix",
-    "image": "artixlinux/artixlinux:base-devel",
-    "in_tree": true
-  },
-  {
-    "key": "openssl-git",
-    "repo_name": "openssl-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "lib32-openssl-git",
-    "repo_name": "lib32-openssl-git",
-    "variant": "none",
-    "kind": "multilib",
-    "in_tree": true
-  },
-  {
-    "key": "lib32-libngtcp2-git",
-    "repo_name": "lib32-libngtcp2-git",
-    "variant": "none",
-    "kind": "multilib",
-    "in_tree": true
-  },
-  {
-    "key": "bailu-cli-git",
-    "repo_name": "bailu-cli-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "egl-wayland2-git",
-    "repo_name": "egl-wayland2-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "ttf-font",
-    "repo_name": "ttf-font",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "thunar-archive-plugin-git",
-    "repo_name": "thunar-archive-plugin-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "thunar-media-tags-plugin-git",
-    "repo_name": "thunar-media-tags-plugin-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  },
-  {
-    "key": "thunar-volman-git",
-    "repo_name": "thunar-volman-git",
-    "variant": "none",
-    "kind": "aur",
-    "in_tree": true
-  }
+ {
+  "key": "cython-git",
+  "repo_name": "cython-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "davs2-git",
+  "repo_name": "davs2-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "dex-git",
+  "repo_name": "dex-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "dkms-git",
+  "repo_name": "dkms-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "dmenu-git",
+  "repo_name": "dmenu-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "dosfstools-git",
+  "repo_name": "dosfstools-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "double-conversion-git",
+  "repo_name": "double-conversion-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "e2fsprogs-git",
+  "repo_name": "e2fsprogs-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "efivar-git",
+  "repo_name": "efivar-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "egl-wayland-git",
+  "repo_name": "egl-wayland-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "eglexternalplatform-git",
+  "repo_name": "eglexternalplatform-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "elementary-icon-theme-git",
+  "repo_name": "elementary-icon-theme-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "elfutils-git",
+  "repo_name": "elfutils-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "ell-git",
+  "repo_name": "ell-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "ethtool-git",
+  "repo_name": "ethtool-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "exo-git",
+  "repo_name": "exo-git",
+  "variant": "none",
+  "kind": "aur",
+  "in_tree": true
+ },
+ {
+  "key": "expat-git",
+  "repo_name": "expat-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "faac-git",
+  "repo_name": "faac-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "faad2-git",
+  "repo_name": "faad2-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "fakechroot-git",
+  "repo_name": "fakechroot-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "fakeroot-git",
+  "repo_name": "fakeroot-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "file-git",
+  "repo_name": "file-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "flac-git",
+  "repo_name": "flac-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "flex-git",
+  "repo_name": "flex-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "fmt-git",
+  "repo_name": "fmt-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "fontconfig-git",
+  "repo_name": "fontconfig-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "freetype2-git",
+  "repo_name": "freetype2-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "fribidi-git",
+  "repo_name": "fribidi-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "fstrm-git",
+  "repo_name": "fstrm-git",
+  "variant": "none",
+  "kind": "artix",
+  "image": "artixlinux/artixlinux:base-devel",
+  "in_tree": true
+ },
+ {
+  "key": "fuse3-git",
+  "repo_name": "fuse3-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "garcon-git",
+  "repo_name": "garcon-git",
+  "variant": "none",
+  "kind": "aur",
+  "in_tree": true
+ },
+ {
+  "key": "gc-git",
+  "repo_name": "gc-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "gdbm-git",
+  "repo_name": "gdbm-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "gdk-pixbuf2-git",
+  "repo_name": "gdk-pixbuf2-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "gettext-git",
+  "repo_name": "gettext-git",
+  "variant": "none",
+  "kind": "aur",
+  "in_tree": true
+ },
+ {
+  "key": "gflags-git",
+  "repo_name": "gflags-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "ghostscript-git",
+  "repo_name": "ghostscript-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "giflib-git",
+  "repo_name": "giflib-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "glew-git",
+  "repo_name": "glew-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "glfw-git",
+  "repo_name": "glfw-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "glow-git",
+  "repo_name": "glow-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "glslang-git",
+  "repo_name": "glslang-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "glu-git",
+  "repo_name": "glu-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "gnome-font-viewer-git",
+  "repo_name": "gnome-font-viewer-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "gnutls-git",
+  "repo_name": "gnutls-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "goverlay-git",
+  "repo_name": "goverlay-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "gperftools-git",
+  "repo_name": "gperftools-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "gpgme-git",
+  "repo_name": "gpgme-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "graphene-git",
+  "repo_name": "graphene-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "graphite-git",
+  "repo_name": "graphite-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "groff-git",
+  "repo_name": "groff-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "gsettings-desktop-schemas-git",
+  "repo_name": "gsettings-desktop-schemas-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "hicolor-icon-theme-git",
+  "repo_name": "hicolor-icon-theme-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "hidapi-git",
+  "repo_name": "hidapi-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "highway-git",
+  "repo_name": "highway-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "hunspell-git",
+  "repo_name": "hunspell-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "icu-git",
+  "repo_name": "icu-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "imagemagick-git",
+  "repo_name": "imagemagick-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "inetutils-git",
+  "repo_name": "inetutils-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "innoextract-git",
+  "repo_name": "innoextract-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "iproute2-git",
+  "repo_name": "iproute2-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "iptables-git",
+  "repo_name": "iptables-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "iputils-git",
+  "repo_name": "iputils-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "iw-git",
+  "repo_name": "iw-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "iwd-git",
+  "repo_name": "iwd-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "jansson-git",
+  "repo_name": "jansson-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "jbigkit-git",
+  "repo_name": "jbigkit-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "jemalloc-git",
+  "repo_name": "jemalloc-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "json-c-git",
+  "repo_name": "json-c-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "json-glib-git",
+  "repo_name": "json-glib-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "jsoncpp-git",
+  "repo_name": "jsoncpp-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kaccounts-integration-git",
+  "repo_name": "kaccounts-integration-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kbd-git",
+  "repo_name": "kbd-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kbookmarks-git",
+  "repo_name": "kbookmarks-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kcmutils-git",
+  "repo_name": "kcmutils-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kcontacts-git",
+  "repo_name": "kcontacts-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kdeclarative-git",
+  "repo_name": "kdeclarative-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kdegraphics-mobipocket-git",
+  "repo_name": "kdegraphics-mobipocket-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kdialog-git",
+  "repo_name": "kdialog-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "keyutils-git",
+  "repo_name": "keyutils-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kio-git",
+  "repo_name": "kio-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kirigami-git",
+  "repo_name": "kirigami-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kirigami-addons-git",
+  "repo_name": "kirigami-addons-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kitemmodels-git",
+  "repo_name": "kitemmodels-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kitty-git",
+  "repo_name": "kitty-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kjobwidgets-git",
+  "repo_name": "kjobwidgets-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kparts-git",
+  "repo_name": "kparts-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kpeople-git",
+  "repo_name": "kpeople-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kpty-git",
+  "repo_name": "kpty-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "krb5-git",
+  "repo_name": "krb5-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kservice-git",
+  "repo_name": "kservice-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "ktextwidgets-git",
+  "repo_name": "ktextwidgets-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kvazaar-git",
+  "repo_name": "kvazaar-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kwallet-git",
+  "repo_name": "kwallet-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "kwindowsystem-git",
+  "repo_name": "kwindowsystem-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "l-smash-git",
+  "repo_name": "l-smash-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "lapack-git",
+  "repo_name": "lapack-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "lcevcdec-git",
+  "repo_name": "lcevcdec-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "ldns-git",
+  "repo_name": "ldns-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "less-git",
+  "repo_name": "less-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libao-git",
+  "repo_name": "libao-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libarchive-git",
+  "repo_name": "libarchive-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libaribcaption-git",
+  "repo_name": "libaribcaption-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libass-git",
+  "repo_name": "libass-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libassuan-git",
+  "repo_name": "libassuan-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libavif-git",
+  "repo_name": "libavif-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libb2-git",
+  "repo_name": "libb2-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libbpf-git",
+  "repo_name": "libbpf-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libbs2b-git",
+  "repo_name": "libbs2b-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libbsd-git",
+  "repo_name": "libbsd-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libburn-git",
+  "repo_name": "libburn-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libcap-ng-git",
+  "repo_name": "libcap-ng-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libcdio-git",
+  "repo_name": "libcdio-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libcdio-paranoia-git",
+  "repo_name": "libcdio-paranoia-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libcups-git",
+  "repo_name": "libcups-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libcupsfilters-git",
+  "repo_name": "libcupsfilters-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libdca-git",
+  "repo_name": "libdca-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libdecor-git",
+  "repo_name": "libdecor-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libdeflate-git",
+  "repo_name": "libdeflate-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libdisplay-info-git",
+  "repo_name": "libdisplay-info-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libdovi-git",
+  "repo_name": "libdovi-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libdrm-git",
+  "repo_name": "libdrm-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libebml-git",
+  "repo_name": "libebml-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libepoxy-git",
+  "repo_name": "libepoxy-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libevdev-git",
+  "repo_name": "libevdev-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libexif-git",
+  "repo_name": "libexif-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libfdk-aac-git",
+  "repo_name": "libfdk-aac-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libffi-git",
+  "repo_name": "libffi-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libfm-qt-git",
+  "repo_name": "libfm-qt-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libgit2-git",
+  "repo_name": "libgit2-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libglvnd-git",
+  "repo_name": "libglvnd-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libgme-git",
+  "repo_name": "libgme-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libgpg-error-git",
+  "repo_name": "libgpg-error-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libimobiledevice-git",
+  "repo_name": "libimobiledevice-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libimobiledevice-glue-git",
+  "repo_name": "libimobiledevice-glue-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libinih-git",
+  "repo_name": "libinih-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libisofs-git",
+  "repo_name": "libisofs-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libjxl-git",
+  "repo_name": "libjxl-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libkexiv2-git",
+  "repo_name": "libkexiv2-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libklvanc-git",
+  "repo_name": "libklvanc-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libksba-git",
+  "repo_name": "libksba-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "liblc3-git",
+  "repo_name": "liblc3-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libmanette-git",
+  "repo_name": "libmanette-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libmd-git",
+  "repo_name": "libmd-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libmicrodns-git",
+  "repo_name": "libmicrodns-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libmicrohttpd-git",
+  "repo_name": "libmicrohttpd-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libmnl-git",
+  "repo_name": "libmnl-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libmodplug-git",
+  "repo_name": "libmodplug-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libmpc-git",
+  "repo_name": "libmpc-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libmpd-git",
+  "repo_name": "libmpd-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libmysofa-git",
+  "repo_name": "libmysofa-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libnet-git",
+  "repo_name": "libnet-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libnetfilter_conntrack-git",
+  "repo_name": "libnetfilter_conntrack-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libnfnetlink-git",
+  "repo_name": "libnfnetlink-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libnftnl-git",
+  "repo_name": "libnftnl-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libnghttp2-git",
+  "repo_name": "libnghttp2-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libngtcp2-git",
+  "repo_name": "libngtcp2-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libnl-git",
+  "repo_name": "libnl-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libogg-git",
+  "repo_name": "libogg-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libpcap-git",
+  "repo_name": "libpcap-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libpciaccess-git",
+  "repo_name": "libpciaccess-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libpgm-git",
+  "repo_name": "libpgm-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libplist-git",
+  "repo_name": "libplist-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libppd-git",
+  "repo_name": "libppd-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libpsl-git",
+  "repo_name": "libpsl-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libqmi-git",
+  "repo_name": "libqmi-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "librist-git",
+  "repo_name": "librist-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "librsvg-git",
+  "repo_name": "librsvg-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "librsync-git",
+  "repo_name": "librsync-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libsamplerate-git",
+  "repo_name": "libsamplerate-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libseccomp-git",
+  "repo_name": "libseccomp-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libshout-git",
+  "repo_name": "libshout-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
+  "key": "libevent-git",
+  "repo_name": "libevent-git",
+  "variant": "none",
+  "kind": "artix",
+  "image": "artixlinux/artixlinux:base-devel",
+  "in_tree": true
+ },
+ {
+  "key": "libverto-git",
+  "repo_name": "libverto-git",
+  "variant": "none",
+  "kind": "artix",
+  "image": "artixlinux/artixlinux:base-devel",
+  "in_tree": true
+ },
+ {
+  "key": "openssl-git",
+  "repo_name": "openssl-git",
+  "variant": "none",
+  "kind": "aur",
+  "in_tree": true
+ },
+ {
+  "key": "lib32-openssl-git",
+  "repo_name": "lib32-openssl-git",
+  "variant": "none",
+  "kind": "multilib",
+  "in_tree": true
+ },
+ {
+  "key": "lib32-libngtcp2-git",
+  "repo_name": "lib32-libngtcp2-git",
+  "variant": "none",
+  "kind": "multilib",
+  "in_tree": true
+ },
+ {
+  "key": "bailu-cli-git",
+  "repo_name": "bailu-cli-git",
+  "variant": "none",
+  "kind": "aur",
+  "in_tree": true
+ },
+ {
+  "key": "egl-wayland2-git",
+  "repo_name": "egl-wayland2-git",
+  "variant": "none",
+  "kind": "aur",
+  "in_tree": true
+ },
+ {
+  "key": "ttf-font",
+  "repo_name": "ttf-font",
+  "variant": "none",
+  "kind": "aur",
+  "in_tree": true
+ },
+ {
+  "key": "thunar-archive-plugin-git",
+  "repo_name": "thunar-archive-plugin-git",
+  "variant": "none",
+  "kind": "aur",
+  "in_tree": true
+ },
+ {
+  "key": "thunar-media-tags-plugin-git",
+  "repo_name": "thunar-media-tags-plugin-git",
+  "variant": "none",
+  "kind": "aur",
+  "in_tree": true
+ },
+ {
+  "key": "thunar-volman-git",
+  "repo_name": "thunar-volman-git",
+  "variant": "none",
+  "kind": "aur",
+  "in_tree": true
+ },
+ {
+  "key": "sioyek-git",
+  "repo_name": "sioyek-git",
+  "variant": "none",
+  "in_tree": true
+ }
 ]
