@@ -1,0 +1,18 @@
+# 六最搬運 2026-11-25：syslog-ng 的 openrc 服務腳本（腳本自寫，見 syslog-ng.initd）。
+# 用戶拍板 syslog-ng 取代 metalog（要 source→filter→destination 清晰配置語法）。
+pkgname=syslog-ng-openrc
+pkgver=20261125
+pkgrel=1
+pkgdesc='OpenRC init script for syslog-ng (六最自寫，supervise-daemon 監管)'
+arch=(any)
+url='https://github.com/syslog-ng/syslog-ng'
+license=(GPL-2.0-only)
+depends=(syslog-ng-git openrc)
+provides=(syslog-ng-openrc logger-openrc)
+conflicts=(metalog-openrc rsyslog-openrc sysklogd-openrc)
+source=("syslog-ng.initd")
+sha256sums=('SKIP')
+
+package() {
+  install -Dm755 "$srcdir/syslog-ng.initd" "$pkgdir/etc/init.d/syslog-ng"
+}

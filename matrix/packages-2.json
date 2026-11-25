@@ -1120,5 +1120,17 @@
   "repo_name": "sioyek-git",
   "variant": "none",
   "in_tree": true
+ },
+ {
+  "key": "syslog-ng-git",
+  "repo_name": "syslog-ng-git",
+  "variant": "none",
+  "in_tree": true
+ },
+ {
+  "key": "syslog-ng-openrc",
+  "repo_name": "syslog-ng-openrc",
+  "variant": "none",
+  "in_tree": true
  }
 ]

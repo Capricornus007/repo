@@ -1,0 +1,73 @@
+# 六最搬運 2026-11-25：syslog-ng（用戶拍板取代 metalog——要 source→filter→destination 清晰配置）。
+# 借 Arch 官方 PKGBUILD 精簡：桌面單機只要核心，砍掉 kafka/mongodb/redis/amqp/smtp/snmp/
+# sql/geoip2/python 全部模塊（那些是 Arch 拆 10 個子包的企業級依賴）。
+# -git 跟上游尖端。零 systemd：--disable-systemd，日誌直接寫文件。
+pkgname=syslog-ng-git
+pkgver=4.12.0
+pkgrel=1
+pkgdesc='Next-generation syslogd with advanced networking and filtering capabilities (六最精簡核心版)'
+arch=(x86_64)
+url='https://github.com/syslog-ng/syslog-ng'
+license=(GPL-2.0-or-later LGPL-2.1-or-later)
+depends=(glib2 openssl pcre2 json-c curl libcap util-linux)
+makedepends=(git autoconf-archive pkgconf bison flex)
+provides=(syslog-ng logger)
+conflicts=(syslog-ng metalog rsyslog sysklogd)
+source=("syslog-ng::git+https://github.com/syslog-ng/syslog-ng.git")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd syslog-ng
+  git describe --long --tags | sed 's/^syslog-ng-//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+build() {
+  cd syslog-ng
+  export PYTHON=python3
+  ./autogen.sh
+  ./configure \
+    --prefix=/usr \
+    --sbindir=/usr/bin \
+    --sysconfdir=/etc/syslog-ng \
+    --libexecdir=/usr/lib/syslog-ng \
+    --localstatedir=/var/lib/syslog-ng \
+    --disable-systemd \
+    --disable-kafka --disable-mongodb --disable-redis --disable-amqp \
+    --disable-smtp --disable-snmp --disable-sql --disable-geoip2 \
+    --disable-python --disable-pacct --disable-sun-streams \
+    --disable-linux-caps \
+    --enable-manpages
+  make
+}
+
+package() {
+  cd syslog-ng
+  make DESTDIR="$pkgdir" install
+
+  # 預設配置：基礎文件日誌（/var/log/messages.log 等），不含 journal/imuxsock 依賴
+  install -dm755 "$pkgdir/etc/syslog-ng/conf.d"
+  cat > "$pkgdir/etc/syslog-ng/syslog-ng.conf" <<'CONF'
+@version: 4
+@include "scl.conf"
+@include "conf.d/*.conf"
+
+source src {
+  internal();
+  unix-dgram("/dev/log");
+  file("/proc/kmsg" program-override("kernel") flags(kernel));
+};
+
+destination messages { file("/var/log/messages.log"); };
+log { source(src); destination(messages); };
+CONF
+
+  # logrotate 配置
+  install -dm755 "$pkgdir/etc/logrotate.d"
+  cat > "$pkgdir/etc/logrotate.d/syslog-ng" <<'ROT'
+/var/log/messages.log {
+  postrotate
+    /usr/bin/syslog-ng-ctl reload || true
+  endscript
+}
+ROT
+}

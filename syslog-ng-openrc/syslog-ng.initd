@@ -1,0 +1,14 @@
+#!/sbin/openrc-run
+# 六最 2026-11-25：syslog-ng 系統級服務（零 systemd，supervise-daemon 監管）
+description="syslog-ng system logger"
+
+supervisor=supervise-daemon
+command="/usr/bin/syslog-ng"
+command_args="--foreground --no-caps"
+pidfile="/run/syslog-ng.pid"
+
+depend() {
+	need localmount
+	after bootmisc clock hostname
+	provide logger
+}
