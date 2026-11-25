@@ -2284,3 +2284,85 @@ makedepends 補 git、拿掉 `?signed`/`validpgpkeys`——CI 容器沒有維護
 - 5 條目加進 `matrix/packages-4.json`（加後 203 條，上限 250），格式照 qt6-base-git：
   `{"key":"…","repo_name":"…","variant":"none","kind":"aur","in_tree":true}`。
 - 未動 `.github/workflows/`（21000 位元組 step 預算守門）。
+
+## AUR 刪包搶救第二波（2026-11-25；四顆：bubblewrap-suid-git、python-brotli-git、python-capstone-git、ttf-jetbrains-maple-mono-nf-xx-xx-xx-pre）
+
+四顆全部進 `matrix/packages-4.json`（與第一波同檔分片，加後 207 條），格式一律
+`{"key":"<名>","repo_name":"<名>","variant":"none","kind":"aur","in_tree":true}`。
+`kind: aur` 同時讓「更新校驗和並回推」的 giant if 天然排除這四顆（`matrix.kind != 'aur'`），
+git 源的 SKIP 與 ttf 的釘死 sha 都不會被 CI 改寫。
+
+### 先勘誤：四顆裡有兩顆其實沒被刪
+
+「`git ls-remote https://aur.archlinux.org/<pkgname>.git` 為空」**不是刪包證據**：
+AUR 的 git 倉以 **pkgbase** 命名，分包用 pkgname 去查當然空。2026-11-26 實查：
+
+- `bubblewrap-suid-git`：pkgbase 是 `bubblewrap-git`，AUR 倉活著
+  （Chocobo1 維護，Last Modified 2026-02），RPC 也查得到。
+- `python-brotli-git`：pkgbase 是 `brotli-git`，AUR 倉活著，同樣是分包。
+- `python-capstone-git`：RPC `resultcount=0`，**真刪了**。
+- `ttf-jetbrains-maple-mono-nf-xx-xx-xx-pre`：RPC 查無，**真不存在**。
+
+### bubblewrap-suid-git（in-tree 保險）
+
+`bubblewrap-suid-git/PKGBUILD` 逐字拷貝 AUR `bubblewrap-git` 的現行配方
+（split：`bubblewrap-git` + `bubblewrap-suid-git`，suid 那顆 `chmod u+s`）。
+AUR 明明活著為什麼還 in-tree 化：哪天 AUR 真刪，本倉配方照常出兩顆包；
+且 feed 目前**連 bubblewrap 系都沒有**（2026-11-26 查 `junlin03-aur.db` 無此名），
+這一條順便把 `bubblewrap-git` 也補進 feed。pkgver() 是 tag 基準
+（`0.11.0.rN.gHASH`），裸 clone 可算，plan 探測無障礙。
+
+### python-brotli-git（獨立目錄，與 brotli-git 分包並存）
+
+基底＝Arch 官方 `python-brotli` 轉 git 源（`https://github.com/google/brotli.git`），
+構建方式與本倉 `brotli-git/` 分包的 python 子包一致：倉庫根目錄的 `setup.py`
+自帶 brotli C 源編譯（`USE_SYSTEM_BROTLI` 未設時不碰 pkgconfig），wheel 自足，
+`depends=(glibc python)`。契約：`provides/conflicts python-brotli`。
+注意 `brotli-git/` 分包也產出同名 `python-brotli-git`——兩顆擇一安裝，
+同時裝會檔案衝突（pacman 會擋）。feed 現況連 `brotli-git` 本體都不在
+（2026-11-26 查 db 無此名，原因未查），這顆獨立目錄不依賴 brotli-git 的建置狀態。
+
+### python-capstone-git（真刪包；wheel 自足，不依賴 capstone-git）
+
+基底＝AUR 歷史配方＋本倉 `capstone-git/` 分包的 python 子包，上游
+`https://github.com/capstone-engine/capstone.git#branch=next`。
+兩個關鍵決定，都查過上游實物（`bindings/python/setup.py`、`capstone/__init__.py`）：
+
+1. **depends 只寫 `python`，不寫 capstone-git**：setup.py 的 `build_py`
+   會自己用 cmake 編一份 shared `libcapstone.so` 打進 wheel（`capstone/lib/`），
+   runtime 載入順序是 `LIBCAPSTONE_PATH` → wheel 內建 → 系統路徑，
+   wheel 自足。硬寫 `capstone-git` 會卡死：**capstone-git 目前不在 feed**，
+   根因見下一條。
+2. **pkgver() 用 tag 基準（`5.0.9.rN.gHASH`，與 brotli-git 同款），不用 AUR
+   原版的 `git rev-list --count makepkg`**：那個寫法依賴 makepkg 在 VCS
+   checkout 時建的本地分支 `makepkg`（`/usr/share/makepkg/source/git.sh`：
+   `git checkout --force --no-track -B makepkg "$ref"`）。makepkg 真跑構建時
+   沒問題，但 **CI plan 步的版本探測是裸 `git clone`，沒有那個分支** →
+   pkgver() 必失敗 → 每輪 skip → 永不上架。這就是 capstone-git 進不了 feed
+   的根因（2026-11-26 查 db 無此名；本倉 `capstone-git/PKGBUILD` 逐字保留了
+   AUR 的 makepkg 分支式 pkgver()，屬既有問題，不在本波動它的目錄）。
+   makedepends 補 `cmake`（同 capstone-git 的 2026-11-02 教訓：setup.py 內部
+   呼叫 cmake）。
+
+### ttf-jetbrains-maple-mono-nf-xx-xx-xx-pre（照抄本體，觸發條件不同）
+
+`ttf-jetbrains-maple-mono-nf-xx-xx-xx-pre/PKGBUILD` 照抄本體目錄，僅改
+pkgname 加一級 `-pre`。與本體的唯一差異是**觸發條件**：本體在 plan 步有專屬
+case（比對上游 release 資產 sha256、換檔自動抬 pkgrel 並回推）；本包名不在
+任何 case 清單（workflow 本波不動），走通用分支——無 `pkgver()` →
+`TARGET_PKGVER=` 靜態 `pre`，靠「產物是否已在 release 裡」判斷：**首輪建一次，
+之後版號不變就不再重建**，上游換檔不會驅動本包。`sha256sums` 是 2026-11-26
+實查 release API 的真值（`e339e2a1…`，與本體當前值一致）；要跟新檔需人工換
+sha 並抬 pkgrel。另加 `conflicts=('ttf-jetbrains-maple-mono-nf-xx-xx-xx')`：
+兩顆裝的是同一組字體檔（同 source、同安裝路徑），明寫 conflicts 讓 pacman
+給出擇一提示，而不是裸報檔案衝突。
+
+### 觸發方式
+
+```
+gh workflow run build-one-package.yml -R Capricornus007/repo -f packages='[
+ {"key":"bubblewrap-suid-git","repo_name":"bubblewrap-suid-git","variant":"none","kind":"aur","in_tree":true},
+ {"key":"python-brotli-git","repo_name":"python-brotli-git","variant":"none","kind":"aur","in_tree":true},
+ {"key":"python-capstone-git","repo_name":"python-capstone-git","variant":"none","kind":"aur","in_tree":true},
+ {"key":"ttf-jetbrains-maple-mono-nf-xx-xx-xx-pre","repo_name":"ttf-jetbrains-maple-mono-nf-xx-xx-xx-pre","variant":"none","kind":"aur","in_tree":true}]'
+```

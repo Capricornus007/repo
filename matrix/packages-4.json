@@ -1294,5 +1294,33 @@
     "variant": "none",
     "kind": "aur",
     "in_tree": true
+  },
+  {
+    "key": "bubblewrap-suid-git",
+    "repo_name": "bubblewrap-suid-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "python-brotli-git",
+    "repo_name": "python-brotli-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "python-capstone-git",
+    "repo_name": "python-capstone-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "ttf-jetbrains-maple-mono-nf-xx-xx-xx-pre",
+    "repo_name": "ttf-jetbrains-maple-mono-nf-xx-xx-xx-pre",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]

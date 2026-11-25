@@ -1,0 +1,42 @@
+# 來源：本倉 ttf-jetbrains-maple-mono-nf-xx-xx-xx/PKGBUILD 照抄，僅改 pkgname 加
+# 一級 -pre 後綴（AUR 上這個名字查無——RPC resultcount=0，git 倉亦空，真刪包／
+# 或從未上過 AUR；用戶端點名要這顆名字進 feed）。
+#
+# 與本體的差異只有「觸發條件」：
+#   本體在 build-packages.yml 的 plan 步有專屬 case（比對上游 release 資產的
+#   sha256、換檔自動抬 pkgrel 並回推）；本包名不在任何 case 清單，走通用分支——
+#   無 pkgver() → TARGET_PKGVER=靜態 "pre"，靠「產物是否已在 release 裡」判斷，
+#   即：首輪建一次，之後版號不變就不再重建。上游換檔不會驅動本包（sha256 是
+#   2026-11-26 實查 release API 的真值；要跟新檔需人工抬 pkgrel 並換 sha）。
+#   本包 matrix 條目帶 kind: aur，天然被「更新校驗和並回推」的 giant if 排除，
+#   sha256sums 不會被 CI 改寫。
+#
+# conflicts 本體：兩顆裝的是同一組字體檔（同 source、同安裝路徑），同時安裝
+# 必檔案衝突；明寫 conflicts 讓 pacman 給出可讀的擇一提示，而不是裸報衝突。
+
+pkgname=ttf-jetbrains-maple-mono-nf-xx-xx-xx-pre
+_rel_tag=pre
+pkgver=pre
+pkgrel=1
+pkgdesc="JetBrains Maple Mono: The free and open-source font fused with JetBrains Mono & Maple Mono (pre-release asset)"
+arch=('any')
+url="https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono"
+license=('OFL')
+source=("https://github.com/SpaceTimee/Fusion-JetBrainsMapleMono/releases/download/${_rel_tag}/JetBrainsMapleMono-NF-XX-XX-XX.zip")
+sha256sums=('e339e2a157728bc67798d7364c6c5cfd12a889d34cc61da284b89f6b7e64f04d')
+provides=('ttf-font')
+conflicts=('ttf-jetbrains-maple-mono-nf-xx-xx-xx')
+
+package() {
+  _fontname=JetBrains-Maple-Mono-NF-XX-XX
+  # Create font directory
+  install -dm755 "$pkgdir/usr/share/fonts/TTF"
+
+  # Install all font files
+  for font in *.ttf; do
+    install -Dm644 "$font" "$pkgdir/usr/share/fonts/TTF/monospace/$font"
+  done
+
+  # Install license file
+  install -Dm644 "LICENSE.txt" "$pkgdir/usr/share/licenses/${_fontname}/LICENSE.txt"
+}

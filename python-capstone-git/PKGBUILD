@@ -1,0 +1,64 @@
+# 來源：AUR python-capstone-git（已刪，RPC 查無）＋本倉 capstone-git/ 分包的
+# python 子包配方。上游 https://github.com/capstone-engine/capstone.git（next 分支）。
+#
+# 與 capstone-git 分包的關鍵差異——depends 不寫 capstone-git：
+#   bindings/python 的 setup.py 在 build_py 階段自己用 cmake 編一份 shared
+#   libcapstone.so 打進 wheel（capstone/lib/），runtime 載入順序是
+#   LIBCAPSTONE_PATH → wheel 內建 lib → 系統路徑（__init__.py _path_list 實查），
+#   所以這顆 wheel 自足，depends 只需 python。硬寫 capstone-git 反而卡死：
+#   capstone-git 目前不在 feed（其 pkgver() 用 `git rev-list --count makepkg`，
+#   依賴 makepkg 在 VCS checkout 時建的本地分支 makepkg——見
+#   /usr/share/makepkg/source/git.sh 的 `git checkout -B makepkg`；CI plan 步
+#   是裸 git clone，沒有那個分支 → pkgver() 必失敗 → 每輪 skip → 永不上架）。
+#
+# pkgver() 刻意用 tag 基準（與 brotli-git 同款），不用 AUR 原版的 makepkg 分支式：
+# plan 步的版本探測是裸 clone，tag 式在裸 clone 下也能算出，否則永遠 skip。
+
+pkgname=python-capstone-git
+pkgver=5.0.9.r2827.g6a37b560
+pkgrel=1
+pkgdesc="Python bindings for the capstone disassembly framework (git master)"
+arch=('i686' 'x86_64')
+url="http://www.capstone-engine.org/"
+license=(BSD-3-Clause)
+depends=('python')
+makedepends=(
+  'git'
+  'cmake'
+  'python'
+  'python-build'
+  'python-installer'
+  'python-setuptools'
+  'python-wheel')
+provides=("python-capstone=$pkgver")
+conflicts=('python-capstone')
+source=("${pkgname}::git+https://github.com/capstone-engine/capstone.git#branch=next")
+md5sums=('SKIP')
+
+pkgver() {
+  cd "${srcdir}/${pkgname}"
+
+  _tag=$(git tag -l --sort -v:refname | grep -E '^v?[0-9\.]+$' | head -n1)
+  _rev=$(git rev-list --count "${_tag}"..HEAD)
+  _hash=$(git rev-parse --short HEAD)
+  printf "%s.r%s.g%s" "${_tag}" "${_rev}" "${_hash}"
+}
+
+build() {
+  cd "${srcdir}/${pkgname}/bindings/python"
+
+  python -m build --wheel --no-isolation
+}
+
+check() {
+  # 綁定要裝進 $pkgdir 才能載入；與 capstone-git 分包同款留空。
+  cd "${srcdir}/${pkgname}"
+}
+
+package() {
+  cd "${srcdir}/${pkgname}/bindings/python"
+
+  python -m installer --destdir="${pkgdir}" dist/*.whl
+  install -Dm 644 LICENSE.TXT -t "${pkgdir}/usr/share/licenses/${pkgname}"
+}
+# vim:set ts=2 sw=2 et:
