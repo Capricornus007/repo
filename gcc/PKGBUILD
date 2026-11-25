@@ -1,0 +1,39 @@
+# 六最納管 2026-11-25（任務#37）：gcc 16.2.0，LFS 式捆綁 gmp/mpfr/mpc/isl。
+# 構建時解包四個依賴進源碼樹改名（LFS 標準做法），不單獨出包。
+pkgname=gcc
+pkgver=16.2.0
+pkgrel=1
+pkgdesc='GNU Compiler Collection (LFS 同源構建，六最納管)'
+arch=(x86_64)
+url='https://gcc.gnu.org'
+license=(GPL-3.0-or-later LGPL-3.0-or-later GFDL-1.3-or-later)
+makedepends=(binutils)
+source=("gcc-16.2.0.tar.xz::https://ftp.gnu.org/gnu/gcc/gcc-16.2.0/gcc-16.2.0.tar.xz"
+        "gmp-6.3.0.tar.xz::https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz"
+        "mpfr-4.2.2.tar.xz::https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.2.tar.xz"
+        "mpc-1.3.1.tar.gz::https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz"
+        "isl-0.27.tar.xz::https://libisl.sourceforge.io/isl-0.27.tar.xz")
+sha256sums=('SKIP' 'SKIP' 'SKIP' 'SKIP' 'SKIP')
+
+prepare() {
+  cd gcc-16.2.0
+  # LFS 標準：依賴解包進源碼樹改名，gcc 自動內部構建
+  tar -xf "$srcdir/gmp-6.3.0.tar.xz" && mv gmp-6.3.0 gmp
+  tar -xf "$srcdir/mpfr-4.2.2.tar.xz" && mv mpfr-4.2.2 mpfr
+  tar -xf "$srcdir/mpc-1.3.1.tar.gz" && mv mpc-1.3.1 mpc
+  tar -xf "$srcdir/isl-0.27.tar.xz" && mv isl-0.27 isl
+}
+
+build() {
+  cd gcc-16.2.0
+  mkdir -p build && cd build
+  ../configure --prefix=/usr     --enable-languages=c,c++     --disable-multilib     --disable-bootstrap     --with-system-zlib     --enable-default-pie     --enable-default-ssp
+  make
+}
+
+package() {
+  cd gcc-16.2.0/build
+  make DESTDIR="$pkgdir" install
+  # 去掉系統已有的 cc 鏈接衝突：make install 已建 gcc，補 cc → gcc
+  ln -sf gcc "$pkgdir/usr/bin/cc"
+}

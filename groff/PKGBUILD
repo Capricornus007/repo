@@ -1,0 +1,23 @@
+# 六最納管 2026-11-25（任務#37，鐵律25）：LFS 同源版本源碼構建，pacman 接管所有權。
+# 系統現有同名無主命令（LFS 自建），本包版本釘系統現版本，裝即接管非升級。
+pkgname=groff
+pkgver=1.24.2
+pkgrel=1
+pkgdesc='groff (LFS 同源構建，六最納管)'
+arch=(x86_64)
+url='https://ftp.gnu.org/gnu/groff/groff-1.24.2.tar.gz'
+license=(GPL-3.0-or-later)
+
+source=("groff-1.24.2.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "groff-1.24.2"
+  ./configure --prefix=/usr
+  make
+}
+
+package() {
+  cd "groff-1.24.2"
+  make DESTDIR="$pkgdir" install
+}

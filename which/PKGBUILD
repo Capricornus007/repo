@@ -1,0 +1,23 @@
+# 六最納管 2026-11-25（任務#37，鐵律25）：LFS 同源版本源碼構建，pacman 接管所有權。
+# 系統現有同名無主命令（LFS 自建），本包版本釘系統現版本，裝即接管非升級。
+pkgname=which
+pkgver=2.23
+pkgrel=1
+pkgdesc='which (LFS 同源構建，六最納管)'
+arch=(x86_64)
+url='https://ftp.gnu.org/gnu/which/which-2.23.tar.gz'
+license=(GPL-3.0-or-later)
+
+source=("which-2.23.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "which-2.23"
+  ./configure --prefix=/usr
+  make
+}
+
+package() {
+  cd "which-2.23"
+  make DESTDIR="$pkgdir" install
+}

@@ -1,0 +1,23 @@
+# 六最納管 2026-11-25（任務#37，鐵律25）：LFS 同源版本源碼構建，pacman 接管所有權。
+# 系統現有同名無主命令（LFS 自建），本包版本釘系統現版本，裝即接管非升級。
+pkgname=binutils
+pkgver=2.47
+pkgrel=1
+pkgdesc='binutils (LFS 同源構建，六最納管)'
+arch=(x86_64)
+url='https://sourceware.org/pub/binutils/releases/binutils-2.47.tar.xz'
+license=(GPL-3.0-or-later)
+
+source=("binutils-2.47.tar.xz")
+sha256sums=('SKIP')
+
+build() {
+  cd "binutils-2.47"
+  ./configure --prefix=/usr
+  make
+}
+
+package() {
+  cd "binutils-2.47"
+  make DESTDIR="$pkgdir" install
+}

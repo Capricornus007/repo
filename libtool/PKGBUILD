@@ -1,0 +1,23 @@
+# 六最納管 2026-11-25（任務#37，鐵律25）：LFS 同源版本源碼構建，pacman 接管所有權。
+# 系統現有同名無主命令（LFS 自建），本包版本釘系統現版本，裝即接管非升級。
+pkgname=libtool
+pkgver=2.6.2
+pkgrel=1
+pkgdesc='libtool (LFS 同源構建，六最納管)'
+arch=(x86_64)
+url='https://ftp.gnu.org/gnu/libtool/libtool-2.6.2.tar.xz'
+license=(GPL-3.0-or-later)
+
+source=("libtool-2.6.2.tar.xz")
+sha256sums=('SKIP')
+
+build() {
+  cd "libtool-2.6.2"
+  ./configure --prefix=/usr
+  make
+}
+
+package() {
+  cd "libtool-2.6.2"
+  make DESTDIR="$pkgdir" install
+}

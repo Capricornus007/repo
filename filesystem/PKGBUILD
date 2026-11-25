@@ -1,0 +1,27 @@
+# 六最納管 2026-11-25（任務#37）：filesystem —— 目錄樹與基礎帳號文件接管。
+# 只接管已存在的路徑所有權，不動內容；/etc/passwd 等標記 backup（用戶編輯受保護）。
+pkgname=filesystem
+pkgver=20261125
+pkgrel=1
+pkgdesc='Base MLFS filesystem (六最納管：目錄樹所有權)'
+arch=(x86_64)
+url='https://www.linuxfromscratch.org/lfs/'
+license=(custom)
+backup=(etc/passwd etc/group etc/shadow etc/gshadow etc/fstab etc/hosts
+        etc/hostname etc/hosts.equiv etc/shells)
+source=()
+sha256sums=()
+
+package() {
+  # 目錄樹所有權（已存在，pacman 接管；不存在的補建）
+  for d in etc etc/profile.d usr usr/bin usr/lib usr/local var var/log var/spool \
+           run home root tmp mnt media srv opt srv/ftp; do
+    install -dm755 "$pkgdir/$d"
+  done
+  install -dm1777 "$pkgdir/tmp" "$pkgdir/var/tmp"
+  install -dm555 "$pkgdir/proc" "$pkgdir/sys" "$pkgdir/dev" 2>/dev/null || true
+  # 基礎帳號文件接管（backup 標記保護用戶編輯）
+  for f in passwd group shadow gshadow fstab hosts hostname shells; do
+    [ -e "/etc/$f" ] && install -m644 "/etc/$f" "$pkgdir/etc/$f"
+  done
+}
