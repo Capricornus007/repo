@@ -52,7 +52,7 @@
 #   空格），因此不需要 CN 包那套目錄改名 + desktop Exec 重寫 + 殘留掃描。
 
 pkgname=qoder-gui-bin
-pkgver=0.5.5
+pkgver=0.5.18
 pkgrel=2
 # 2026-09-19 本包從「Qoder IDE」改裝成「Qoder 桌面端」，版號因此從 IDE 的 1.31.0
 # 掉回桌面端的 0.4.2；DB 裡那顆 1.31.0-1 被 vercmp 判成比較新，repo-add 每輪都回
@@ -95,7 +95,7 @@ depends=(
   'nss'                   # libnss3.so + libnssutil3.so + libsmime3.so
   'pango'                 # libpango-1.0.so.0
   'shared-mime-info'      # desktop 註冊 x-scheme-handler/qoder 需要 mime 資料庫觸發器
-  'systemd-libs'          # libudev.so.1（Artix 有獨立 systemd-libs，不需要 systemd）
+            # libudev.so.1（Artix 有獨立 systemd-libs，不需要 systemd）
 )
 # AUR 上的 'qoder'（"qoder beta"）是同一個桌面端的另一種打包，會搶 /opt/Qoder 與
 # qoder.desktop。本包不提供任何 virtual（qoder-cli 已 conflicts 'qoder'，若這裡再
@@ -107,7 +107,7 @@ sha256sums=('SKIP')
 
 source_x86_64=("Qoder-linux-x86_64-${pkgver}.rpm::https://download.qoder.com/qoder-app/releases/${pkgver}/Qoder-linux-x86_64.rpm")
 # 校驗和取自上面 manifest.json 中 id=linux-rpm-x64 的 sha256 欄位；CI 升版時同步改寫。
-sha256sums_x86_64=('f03579a510922a07b64c0cd30b721d2bde8814de832383a5ffd832414b0db34e')
+sha256sums_x86_64=('3b0598b8db6110bf530b3b953875609b0aadea5aeef872d4f9ba627b33a77da4')
 
 package() {
   local rpm="Qoder-linux-x86_64-${pkgver}.rpm"
