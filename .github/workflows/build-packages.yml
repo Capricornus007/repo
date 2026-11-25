@@ -954,7 +954,13 @@ jobs:
               # 上游 mesa 已把 anti-lag 從 vulkan-layers 的允許值移除，tkg 那串的判定條件
               # （有 commit 54fe5b04 就加 anti-lag）現在恆真 → meson 直接 ERROR（#406 實測）。
               # 只關掉他們 cfg 裡的開關、不改他們的 PKGBUILD；chaotic 修好後這行等於沒做。
-              sed -i 's/^_antilag="true"/_antilag="false"/' pkg_dir/customization.cfg ;;
+              sed -i 's/^_antilag="true"/_antilag="false"/' pkg_dir/customization.cfg
+              # 2026-11-25：模板的 -D b_pie=true 讓 32 位構建（_build32）的 build 工具
+              # vtn_bindgen2 用 -pie 鏈接非 PIC 的 libnir 32 位對象 →
+              # ld.lld: relocation R_386_32 cannot be used against local symbol
+              # （run 45600815551 實錘，四連紅）。b_pie 只是 ASLR 安全特性，
+              # 關掉不影響 mesa 功能；chaotic 改好後這行等於沒做。
+              sed -i 's/-D b_pie=true/-D b_pie=false/' pkg_dir/PKGBUILD ;;
             iwgtk-git)
               # 本倉 in-tree 維護的自建包：用戶自建的 AUR 無同名包。取本倉 master 的 PKGBUILD。
               # （2026-11-01 刪掉同分支上的 wlroots-git：它從來沒進矩陣、倉庫也沒出貨過，
