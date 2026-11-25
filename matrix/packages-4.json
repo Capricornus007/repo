@@ -1259,5 +1259,40 @@
     "variant": "none",
     "in_tree": true,
     "no_deploy": true
+  },
+  {
+    "key": "tinysparql-git",
+    "repo_name": "tinysparql-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "libnghttp3-git",
+    "repo_name": "libnghttp3-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "lib32-libnghttp3-git",
+    "repo_name": "lib32-libnghttp3-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "nss-git",
+    "repo_name": "nss-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
+  },
+  {
+    "key": "libwnck3-git",
+    "repo_name": "libwnck3-git",
+    "variant": "none",
+    "kind": "aur",
+    "in_tree": true
   }
 ]

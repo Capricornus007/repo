@@ -2216,3 +2216,71 @@ jbr21 因此沒有存在理由：`matrix/packages.json` 移除條目、目錄 `j
 nashira-git 的掛源點名也一併拿掉（它不再吃本倉的 jbr21）。**注意 jbr21 是本倉自己出的包，
 `Capricornus007/jbr21` 這種倉不存在也不需要存在**；卸載機上那顆 `jbr21` 系統套件要用
 `doas pacman -Rns jbr21`，卸前 `pactree -r jbr21` 實查只有它自己。
+
+## AUR 刪包搶救（2026-11-25）
+
+AUR 上 5 顆 `-git` 包被刪除：AUR RPC info 查無、`git clone` 得到空倉庫，
+CI 既有「`-git` 結尾 → clone AUR」路徑必紅。改為 in-tree：矩陣設 `in_tree: true`，
+CI 改抓本倉 `<repo_name>/` 目錄的 PKGBUILD 構建。基底全部取 Arch 官方打包
+GitLab 的穩定版 PKGBUILD 轉 `-git`（source 改上游 git、加 `pkgver()`、
+makedepends 補 git、拿掉 `?signed`/`validpgpkeys`——CI 容器沒有維護者簽章金鑰）。
+
+### tinysparql-git
+
+- **基底**：`gitlab.archlinux.org/archlinux/packaging/packages/tinysparql`（3.12.0）。
+- **上游源**：`git+https://gitlab.gnome.org/GNOME/tinysparql.git`（master）。
+- **pkgver()**：`git describe --long --tags | sed 's/\([^-]*-g\)/r\1/;s/-/./g'`
+  → `3.12.0.rN.ghash`（GNOME tag 為純版號）。
+- **provides 契約**：`tinysparql`、`tracker3`、`libtinysparql-3.0.so`；
+  `conflicts/replaces=('tracker3<=3.7.3-2')` 照官方。下游（如 tracker3 時代的依賴方）
+  以裸名 depends，靠 provides 解析。
+- **Artix 適配**：官方 makedepends 的 `systemd` 拿掉，meson 加
+  `-Dsystemd_user_services=false`（已核對上游 `meson_options.txt` 確有此選項）；
+  官方的 `tinysparql-docs` split 拿掉，文件併入主包。
+
+### libnghttp3-git
+
+- **基底**：`gitlab.archlinux.org/archlinux/packaging/packages/libnghttp3`
+  （原專案名 `nghttp3`，Arch 已改名，GitLab 上 `nghttp3` 路徑 404；1.19.0）。
+- **上游源**：`git+https://github.com/ngtcp2/nghttp3.git`（master），
+  子模組 `munit`/`sfparse` 照官方 prepare 以本地相對路徑接回。
+- **pkgver()**：`git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'`
+  → `1.19.0.rN.ghash`（上游 tag 為 `v1.19.0`）。
+- **provides 契約**：`libnghttp3`＋`libnghttp3.so`（soname 契約照官方），
+  `conflicts=('libnghttp3')`。
+
+### lib32-libnghttp3-git
+
+- **基底**：`gitlab.archlinux.org/archlinux/packaging/packages/lib32-libnghttp3`（1.19.0）。
+- **上游源**：同上（同一份 git 源，`CC='gcc -m32'`、`--libdir=/usr/lib32`）。
+- **pkgver()**：同 libnghttp3-git。
+- **provides 契約**：`lib32-libnghttp3`＋`libnghttp3.so`；`depends=('lib32-glibc' 'libnghttp3')`
+  照官方（64 位元本體由本倉 `libnghttp3-git` provides 滿足）。
+
+### nss-git
+
+- **基底**：`gitlab.archlinux.org/archlinux/packaging/packages/nss`（3.134），
+  附屬檔 `bundle.sh`、`certdata2pem.py` 原樣收入（b2sum 與官方一致）。
+- **上游源**：官方用 `hg+https://hg.mozilla.org/projects/nss#tag=NSS_3_134_RTM`；
+  改 `git+https://github.com/nss-dev/nss.git`（官方 GitHub mirror，tag 命名同為
+  `NSS_x_y_z_RTM`），其餘建置邏輯（certdata2pem 換內建信任、bundle.sh 出
+  ca-bundle、nss.pc/nss-config 手工生成、p11-kit-trust symlink）逐行保留。
+- **pkgver()**：`git describe --long --tags | sed 's/^NSS_//;s/_RTM//;s/\([^-]*-g\)/r\1/;s/-/./g;s/_/./g'`
+  → `3.134.rN.ghash`。
+- **provides 契約**：split 包 `nss-git`＋`ca-certificates-mozilla-git`，
+  分別 provides/conflicts 裸名 `nss`、`ca-certificates-mozilla`；
+  makedepends 的 `mercurial` 換成 `git`。
+
+### libwnck3-git
+
+- **基底**：`gitlab.archlinux.org/archlinux/packaging/packages/libwnck3`（43.3）。
+- **上游源**：`git+https://gitlab.gnome.org/GNOME/libwnck.git`（master）。
+- **pkgver()**：`git describe --long --tags | sed 's/\([^-]*-g\)/r\1/;s/-/./g'`
+  → `43.3.rN.ghash`。
+- **provides 契約**：`libwnck3`，`conflicts=('libwnck3')`。
+
+### 接線
+
+- 5 條目加進 `matrix/packages-4.json`（加後 203 條，上限 250），格式照 qt6-base-git：
+  `{"key":"…","repo_name":"…","variant":"none","kind":"aur","in_tree":true}`。
+- 未動 `.github/workflows/`（21000 位元組 step 預算守門）。

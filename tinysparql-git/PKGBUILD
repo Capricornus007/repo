@@ -1,0 +1,78 @@
+# 2026-11-25 in-tree（AUR 刪包搶救）：AUR 的 tinysparql-git 已刪除（RPC 查無、clone 空倉），
+# 改由本倉構建。基於 Arch 官方 tinysparql PKGBUILD 轉 -git：
+#  1. source 改 GNOME GitLab master（原為 tag 固定 tarball/git）
+#  2. 加 pkgver()（git describe）
+#  3. Artix 容器無 systemd：makedepends 去 systemd，meson 加 -Dsystemd_user_services=false
+#  4. 拿掉 docs split（文件併入主包）與 ?signed/validpgpkeys（CI 無簽章金鑰）
+pkgname=tinysparql-git
+pkgver=3.12.0
+pkgrel=1
+pkgdesc="Low-footprint RDF triple store with SPARQL 1.1 interface"
+url="https://tinysparql.org/"
+arch=(x86_64)
+license=(GPL-2.0-or-later)
+depends=(
+  avahi
+  glib2
+  glibc
+  icu
+  json-glib
+  libgcc
+  libsoup3
+  libstemmer
+  libxml2
+  sqlite
+)
+makedepends=(
+  asciidoc
+  bash-completion
+  dbus
+  gi-docgen
+  git
+  glib2-devel
+  gobject-introspection
+  meson
+  python-dbus
+  python-gobject
+  python-tappy
+  vala
+)
+checkdepends=(man-db)
+source=("git+https://gitlab.gnome.org/GNOME/tinysparql.git")
+b2sums=('SKIP')
+
+# 下游（tracker3 時代）以裸名 depends，沒這幾行 pacman 解析不到
+provides=('tinysparql'
+          'tracker3'
+          'libtinysparql-3.0.so')
+conflicts=('tinysparql' 'tracker3<=3.7.3-2')
+replaces=('tracker3<=3.7.3-2')
+
+pkgver() {
+  cd tinysparql
+  git describe --long --tags | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd tinysparql
+}
+
+build() {
+  local meson_options=(
+    -D tests_tap_protocol=true
+    -D systemd_user_services=false
+  )
+
+  arch-meson tinysparql build "${meson_options[@]}"
+  meson compile -C build
+}
+
+check() {
+  dbus-run-session meson test -C build --print-errorlogs -t 3
+}
+
+package() {
+  meson install -C build --no-rebuild --destdir "$pkgdir"
+}
+
+# vim:set sw=2 sts=-1 et:

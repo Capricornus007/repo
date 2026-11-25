@@ -1,0 +1,64 @@
+# 2026-11-25 in-tree（AUR 刪包搶救）：AUR 的 libwnck3-git 已刪除（RPC 查無、clone 空倉），
+# 改由本倉構建。基於 Arch 官方 libwnck3 PKGBUILD 轉 -git：
+#  1. source 改 GNOME GitLab master（原為 tag 固定）
+#  2. 加 pkgver()（git describe）
+#  3. 拿掉 ?signed/validpgpkeys（CI 無簽章金鑰）
+pkgname=libwnck3-git
+pkgver=43.3
+pkgrel=1
+pkgdesc="Library to manage X windows and workspaces (for e.g. pagers or tasklists)"
+url="https://gitlab.gnome.org/GNOME/libwnck"
+arch=(x86_64)
+license=(LGPL-2.0-or-later)
+depends=(
+  at-spi2-core
+  cairo
+  gdk-pixbuf2
+  glib2
+  glibc
+  gtk3
+  libx11
+  libxrender
+  libxres
+  pango
+  startup-notification
+)
+makedepends=(
+  git
+  glib2-devel
+  gobject-introspection
+  gtk-doc
+  meson
+)
+source=(
+  "git+https://gitlab.gnome.org/GNOME/libwnck.git"
+)
+b2sums=('SKIP')
+
+# 下游 depends 裸名 libwnck3，沒這幾行 pacman 解析不到
+provides=('libwnck3')
+conflicts=('libwnck3')
+
+pkgver() {
+  cd libwnck
+  git describe --long --tags | sed 's/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd libwnck
+}
+
+build() {
+  arch-meson libwnck build -D gtk_doc=true
+  meson compile -C build
+}
+
+check() {
+  meson test -C build --print-errorlogs
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+}
+
+# vim:set sw=2 sts=-1 et:
