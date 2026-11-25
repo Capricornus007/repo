@@ -1106,13 +1106,15 @@ jobs:
               grep -q 'systemd_user_services=false' pkg_dir/PKGBUILD || echo "::warning::tinysparql meson 選項注入未匹配,檢查 PKGBUILD build()"
               ;;
             mesa-tkg-git)
-              # ── 2026-11-25：chaotic 模板的 -D b_pie=true 讓 32 位構建（_build32）的
-              # build 工具 vtn_bindgen2 用 -pie 鏈接非 PIC 的 libnir 32 位對象 →
-              # ld.lld R_386_32 relocation 錯（run 45600815551 四連紅）。
-              # b_pie 只是 ASLR 特性，關掉不影響功能。放本 step 因「拉取」step 已
-              # 逼近 GitHub 單 step 21000 字元硬上限（20442/21000，註解也計入）。
-              sed -i 's/-D b_pie=true/-D b_pie=false/' pkg_dir/PKGBUILD
-              grep -q 'b_pie=false' pkg_dir/PKGBUILD || echo "::warning::b_pie sed 未匹配，chaotic 模板可能已改，檢查"
+              # ── 2026-11-25：arch-meson 宏預設注入 -D b_pie=true，讓 32 位構建
+              # （_build32）的 build 工具 vtn_bindgen2 用 -pie 鏈接非 PIC 的 libnir
+              # 32 位對象 → ld.lld R_386_32 relocation 錯（run 45600815551 四連紅）。
+              # PKGBUILD 裡沒有字面 b_pie（它來自 arch-meson 宏，sed PKGBUILD 匹配
+              # 不到、run 45660785991 warning 實錘），改往 customization.cfg 的
+              # _additional_meson_flags 追加 -Db_pie=false——該變數在 arch-meson
+              # 參數列末尾，meson 後者覆蓋前者。b_pie 只是 ASLR 特性。
+              sed -i 's/^_additional_meson_flags="\(--strip --buildtype release\)"/_additional_meson_flags="\1 -Db_pie=false"/' pkg_dir/customization.cfg
+              grep -q 'Db_pie=false' pkg_dir/customization.cfg || echo "::warning::b_pie 注入未匹配，chaotic cfg 可能已改，檢查"
               # ── LLVM 24 的 llvm-c/Target.h 要自己 include（2026-10-20 本地實測定位）
               # 症狀：build() 紅在
               #   src/amd/llvm/ac_llvm_util.c:20:4: error: call to undeclared function
