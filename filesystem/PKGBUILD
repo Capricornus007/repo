@@ -7,8 +7,9 @@ pkgdesc='Base MLFS filesystem (六最納管：目錄樹所有權)'
 arch=(x86_64)
 url='https://www.linuxfromscratch.org/lfs/'
 license=(custom)
-backup=(etc/passwd etc/group etc/shadow etc/gshadow etc/fstab etc/hosts
-        etc/hostname etc/hosts.equiv etc/shells)
+# ⚠️ 刻意不打包 /etc/passwd 等帳號／網路設定檔：配方在 Arch CI 容器裡構建，
+#    那裡的 /etc/passwd 是容器預設值，裝到 MLFS 會覆蓋用戶帳號（avatar 消失）。
+#    這些檔案維持無主，不被本包接管——安全優先於「全部有主」。
 source=()
 sha256sums=()
 
@@ -19,9 +20,4 @@ package() {
     install -dm755 "$pkgdir/$d"
   done
   install -dm1777 "$pkgdir/tmp" "$pkgdir/var/tmp"
-  install -dm555 "$pkgdir/proc" "$pkgdir/sys" "$pkgdir/dev" 2>/dev/null || true
-  # 基礎帳號文件接管（backup 標記保護用戶編輯）
-  for f in passwd group shadow gshadow fstab hosts hostname shells; do
-    [ -e "/etc/$f" ] && install -m644 "/etc/$f" "$pkgdir/etc/$f"
-  done
 }

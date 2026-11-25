@@ -6,16 +6,15 @@ pkgdesc='Common licenses (六最納管)'
 arch=(any)
 url='https://www.gnu.org/licenses/'
 license=(custom)
-source=()
-sha256sums=()
+# 字型/許可證全文在 source 階段抓取（package() 階段不保證有網路）
+source=("GPL-3.0::https://www.gnu.org/licenses/gpl-3.0.txt"
+        "LGPL-3.0::https://www.gnu.org/licenses/lgpl-3.0.txt"
+        "GFDL-1.3::https://www.gnu.org/licenses/fdl-1.3.txt")
+sha256sums=('SKIP' 'SKIP' 'SKIP')
 
 package() {
   install -dm755 "$pkgdir/usr/share/licenses/common"
-  # GPL-3.0 全文（GNU 官方）
-  curl -fsSL "https://www.gnu.org/licenses/gpl-3.0.txt" \
-    -o "$pkgdir/usr/share/licenses/common/GPL-3.0" || true
-  curl -fsSL "https://www.gnu.org/licenses/lgpl-3.0.txt" \
-    -o "$pkgdir/usr/share/licenses/common/LGPL-3.0" || true
-  curl -fsSL "https://www.gnu.org/licenses/fdl-1.3.txt" \
-    -o "$pkgdir/usr/share/licenses/common/GFDL-1.3" || true
+  for f in GPL-3.0 LGPL-3.0 GFDL-1.3; do
+    install -m644 "$srcdir/$f" "$pkgdir/usr/share/licenses/common/$f"
+  done
 }
