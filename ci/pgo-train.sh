@@ -19,9 +19,11 @@ if [ -n "$python_bin" ] && [ -x "$python_bin" ]; then
   ( cd "${python_bin%/*}" && timeout 900 ./python -m test --pgo >/dev/null 2>&1 ) || true
 fi
 
-# 1) 限時 make check（部分 profile 勝過沒有；-k 忽略單項測試失敗）
+# 1) 限時 make check/test（部分 profile 勝過沒有；-k 忽略單項測試失敗）
+#    test 目標（shard3 #89 re2-git 實測：純 C++ 庫無可執行檔可冒煙，零 gcda；
+#    re2 的 Makefile 只有 test: 沒有 check:，測試套件是唯一能執行庫代碼的負載）
 find src -maxdepth 5 -name Makefile 2>/dev/null | sort | while read -r mk; do
-  grep -qE '^check[:( ]' "$mk" 2>/dev/null || continue
+  grep -qE '^(check|test)[:( ]' "$mk" 2>/dev/null || continue
   d=$(dirname "$mk")
   echo "train: make check @ ${d#src/}（≤15 分鐘）"
   ( cd "$d" && timeout 900 make check -k >/dev/null 2>&1 ) || true
