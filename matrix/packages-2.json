@@ -1138,5 +1138,11 @@
   "repo_name": "u1s1-cli-cn",
   "variant": "none",
   "in_tree": true
+ },
+ {
+  "key": "auracle-git",
+  "repo_name": "auracle-git",
+  "variant": "none",
+  "in_tree": true
  }
 ]

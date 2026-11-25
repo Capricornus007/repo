@@ -1,0 +1,50 @@
+# 六最搬運 2026-11-25：auracle-git（零 systemd 血統版）。
+# 上游 falconindy/auracle 的事件循環深度綁定 sd-event（libsystemd），
+# 本包帶六最移植補丁：sd-event → libevent（io/timer/signal/defer/child 全換，
+# libaur_test 22/22 過、實測 AUR 查詢正常，見補丁提交說明）。
+# 依賴全部無血統：pacman(libalpm) abseil-cpp fmt glaze libcurl libevent。
+pkgname=auracle-git
+pkgver=r427.33f9097
+pkgrel=1
+pkgdesc='A flexible client for the AUR (六最零 systemd 移植版：sd-event→libevent)'
+arch=(x86_64)
+url="https://github.com/falconindy/auracle"
+license=('MIT')
+depends=('pacman' 'abseil-cpp' 'fmt' 'libcurl.so' 'libevent')
+makedepends=('meson' 'git' 'glaze' 'perl')
+checkdepends=('python' 'gtest')
+provides=("${pkgname%-git}" 'aur-query-client')
+conflicts=("${pkgname%-git}")
+source=("git+$url"
+        "0001-systemd-sd-event-libevent.patch")
+sha256sums=('SKIP' 'SKIP')
+
+pkgver() {
+  cd "${pkgname%-git}"
+  printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
+}
+
+prepare() {
+  cd "${pkgname%-git}"
+  patch -Np1 -i "$srcdir/0001-systemd-sd-event-libevent.patch"
+}
+
+build() {
+  cd "${pkgname%-git}"
+  local meson_args=(
+    --prefix=/usr
+    --libexecdir=lib
+    --sbindir=bin
+    --buildtype=plain
+  )
+  arch-meson "${pkgname%-git}" build "${meson_args[@]}"
+  meson compile -C build
+}
+
+check() {
+  meson test -C build --print-errorlogs
+}
+
+package() {
+  meson install -C build --destdir "$pkgdir"
+}

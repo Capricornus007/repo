@@ -1,0 +1,630 @@
+From 0e4aeddb16bd4071e80226aec2f0e609d30cd8c5 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=E9=82=A3=E5=80=8B=E5=91=86=E8=90=8C=E5=9C=A8=E5=B1=B1?=
+ =?UTF-8?q?=E5=A4=96?= <5h1n38r16h7.d14m0nd@gmail.com>
+Date: Wed, 25 Nov 2026 12:59:30 +0900
+Subject: [PATCH] =?UTF-8?q?=E4=BA=8B=E4=BB=B6=E5=BE=AA=E7=8E=AF=E5=8E=BB?=
+ =?UTF-8?q?=20systemd=20=E8=A1=80=E7=BB=9F=EF=BC=9Asd-event=20=E2=86=92=20?=
+ =?UTF-8?q?libevent?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- sd_event_add_io → event_new(EV_READ|EV_WRITE|EV_PERSIST) + curl_multi_assign
+- sd_event_add_time → evtimer 非持久重掛
+- sd_event_add_signal → evsignal（SIGINT 取消 / SIGCHLD 收割 git 子進程）
+- sd_event_add_defer → event_base_once
+- sd_event_add_child → SIGCHLD + waitpid 迴圈（si_status 語義對齊：0 ok / 15 cancelled）
+- meson: libsystemd → libevent
+- 測試：libaur_test 22/22 過；libauracle_test 僅原版就掛的 FormatTest.CustomDateTimeFormat（環境相關，零回歸）
+- 實測：auracle info sioyek-git 經新事件循環查回真實 AUR 數據
+---
+ meson.build       |   4 +-
+ src/aur/client.cc | 400 ++++++++++++++++++++++++----------------------
+ 2 files changed, 208 insertions(+), 196 deletions(-)
+
+diff --git a/meson.build b/meson.build
+index 386a241..8c4eb98 100644
+--- a/meson.build
++++ b/meson.build
+@@ -31,7 +31,7 @@ endif
+ libalpm = dependency('libalpm')
+ libcurl = dependency('libcurl')
+ libfmt = dependency('fmt')
+-libsystemd = dependency('libsystemd')
++libevent = dependency('libevent')
+ gtest = declare_dependency(
+     dependencies: [
+         dependency(
+@@ -82,7 +82,7 @@ libaur = declare_dependency(
+         src/aur/response.cc src/aur/response.hh
+       '''.split(),
+             ),
+-            dependencies: [abseil, libcurl, libsystemd],
++            dependencies: [abseil, libcurl, libevent],
+             include_directories: ['src'],
+         ),
+     ],
+diff --git a/src/aur/client.cc b/src/aur/client.cc
+index 165e56d..a6ae9a0 100644
+--- a/src/aur/client.cc
++++ b/src/aur/client.cc
+@@ -1,13 +1,25 @@
+ // SPDX-License-Identifier: MIT
++// 六最零血統移植 2026-11-25：sd-event → libevent（event_base）。
++// 原版的事件循環心臟是 systemd 的 sd-event（41 處引用），本版全部換成 libevent：
++//   sd_event_add_io    → event_new(EV_READ|EV_WRITE|EV_PERSIST) + curl_multi_assign
++//   sd_event_add_time  → evtimer（非持久，每次重掛）
++//   sd_event_add_signal→ evsignal_new（SIGINT 取消 / SIGCHLD 收割 git 子進程）
++//   sd_event_add_defer → event_base_once
++//   sd_event_add_child → SIGCHLD + waitpid 迴圈（libevent 無 child watcher）
++// 行為語義與原版一致：Ctrl-C 取消在途工作、git clone 異步收割、curl multi 集成。
+ #include "aur/client.hh"
+ 
+ #include <curl/curl.h>
++#include <signal.h>
+ #include <stdio.h>
+-#include <systemd/sd-event.h>
++#include <sys/wait.h>
+ #include <unistd.h>
+ 
++#include <event2/event.h>
++
+ #include <filesystem>
+ #include <fstream>
++#include <map>
+ #include <print>
+ #include <string_view>
+ #include <variant>
+@@ -17,95 +29,14 @@
+ #include "absl/status/status.h"
+ #include "absl/strings/str_cat.h"
+ #include "absl/strings/strip.h"
++#include "absl/time/clock.h"
++#include "absl/time/time.h"
+ 
+ namespace fs = std::filesystem;
+ 
+ namespace aur {
+ 
+-class ClientImpl : public Client {
+- public:
+-  explicit ClientImpl(Client::Options options = Options());
+-  ~ClientImpl() override;
+-
+-  ClientImpl(const ClientImpl&) = delete;
+-  ClientImpl& operator=(const ClientImpl&) = delete;
+-
+-  ClientImpl(ClientImpl&&) = default;
+-  ClientImpl& operator=(ClientImpl&&) = default;
+-
+-  void QueueRpcRequest(const RpcRequest& request,
+-                       RpcResponseCallback callback) override;
+-
+-  void QueueRawRequest(const HttpRequest& request,
+-                       RawResponseCallback callback) override;
+-
+-  void QueueCloneRequest(const CloneRequest& request,
+-                         CloneResponseCallback callback) override;
+-
+-  // Wait for all pending requests to complete. Returns non-zero if any request
+-  // failed or was cancelled by a callback.
+-  int Wait() override;
+-
+- private:
+-  using ActiveRequests =
+-      absl::flat_hash_set<std::variant<CURL*, sd_event_source*>>;
+-
+-  template <typename ResponseHandlerType>
+-  void QueueHttpRequest(const HttpRequest& request,
+-                        ResponseHandlerType::CallbackType callback);
+-
+-  template <typename ResponseHandlerType>
+-  void QueueRpcRequest(const RpcRequest& request,
+-                       ResponseHandlerType::CallbackType callback);
+-
+-  int FinishRequest(CURL* curl, CURLcode result, bool dispatch_callback);
+-  int FinishRequest(sd_event_source* source);
+-
+-  int CheckFinished();
+-  void CancelAll();
+-  void Cancel(const ActiveRequests::value_type& request);
+-
+-  enum class DebugLevel {
+-    // No debugging.
+-    NONE,
+-
+-    // Enable Curl's verbose output to stderr
+-    VERBOSE_STDERR,
+-
+-    // Enable Curl debug handler, write outbound requests made to a file
+-    REQUESTS,
+-  };
+-
+-  static int SocketCallback(CURLM* curl, curl_socket_t s, int action,
+-                            void* userdata, void* socketptr);
+-  int DispatchSocketCallback(curl_socket_t s, int action, sd_event_source* io);
+-
+-  static int TimerCallback(CURLM* curl, long timeout_ms, void* userdata);
+-  int DispatchTimerCallback(long timeout_ms);
+-
+-  static int OnCurlIO(sd_event_source* s, int fd, uint32_t revents,
+-                      void* userdata);
+-  static int OnCurlTimer(sd_event_source* s, uint64_t usec, void* userdata);
+-  static int OnCloneExit(sd_event_source* s, const siginfo_t* si,
+-                         void* userdata);
+-  static int OnCancel(sd_event_source* s, void* userdata);
+-  static int OnSigint(sd_event_source* s, const struct signalfd_siginfo* si,
+-                      void* userdata);
+-
+-  Options options_;
+-
+-  CURLM* curl_multi_;
+-  ActiveRequests active_requests_;
+-
+-  sigset_t saved_ss_{};
+-  sd_event* event_ = nullptr;
+-  sd_event_source* timer_ = nullptr;
+-  sd_event_source* sigint_ = nullptr;
+-  bool cancelled_ = false;
+-
+-  DebugLevel debug_level_ = DebugLevel::NONE;
+-  std::ofstream debug_stream_;
+-};
++class ClientImpl;
+ 
+ namespace {
+ 
+@@ -219,6 +150,88 @@ class CloneResponseHandler : public TypedResponseHandler<CloneResponse> {
+ 
+ }  // namespace
+ 
++class ClientImpl : public Client {
++ public:
++  explicit ClientImpl(Client::Options options = Options());
++  ~ClientImpl() override;
++
++  ClientImpl(const ClientImpl&) = delete;
++  ClientImpl& operator=(const ClientImpl&) = delete;
++
++  ClientImpl(ClientImpl&&) = default;
++  ClientImpl& operator=(ClientImpl&&) = default;
++
++  void QueueRpcRequest(const RpcRequest& request,
++                       RpcResponseCallback callback) override;
++
++  void QueueRawRequest(const HttpRequest& request,
++                       RawResponseCallback callback) override;
++
++  void QueueCloneRequest(const CloneRequest& request,
++                         CloneResponseCallback callback) override;
++
++  // Wait for all pending requests to complete. Returns non-zero if any request
++  // failed or was cancelled by a callback.
++  int Wait() override;
++
++ private:
++  // 在途請求：curl 句柄（HTTP）或 git 子進程 pid（clone）。
++  using ActiveRequests =
++      absl::flat_hash_set<std::variant<CURL*, pid_t>>;
++
++  template <typename ResponseHandlerType>
++  void QueueHttpRequest(const HttpRequest& request,
++                        ResponseHandlerType::CallbackType callback);
++
++  int FinishRequest(CURL* curl, CURLcode result, bool dispatch_callback);
++  int FinishRequest(pid_t pid);
++
++  int CheckFinished();
++  void CancelAll();
++  void Cancel(const ActiveRequests::value_type& request);
++
++  enum class DebugLevel {
++    // No debugging.
++    NONE,
++
++    // Enable Curl's verbose output to stderr
++    VERBOSE_STDERR,
++
++    // Enable Curl debug handler, write outbound requests made to a file
++    REQUESTS,
++  };
++
++  static int SocketCallback(CURLM* curl, curl_socket_t s, int action,
++                            void* userdata, void* socketptr);
++  int DispatchSocketCallback(curl_socket_t s, int action, struct event* io);
++
++  static int TimerCallback(CURLM* curl, long timeout_ms, void* userdata);
++  int DispatchTimerCallback(long timeout_ms);
++
++  static void OnCurlIO(evutil_socket_t fd, short events, void* userdata);
++  static void OnCurlTimer(evutil_socket_t, short, void* userdata);
++  static void OnSigchld(evutil_socket_t, short, void* userdata);
++  static void OnCancel(evutil_socket_t, short, void* userdata);
++  static void OnSigint(evutil_socket_t, short, void* userdata);
++
++  Options options_;
++
++  CURLM* curl_multi_;
++  ActiveRequests active_requests_;
++
++  // git 子進程收割表：pid → handler（SIGCHLD 統一 waitpid 後分發）。
++  std::map<pid_t, CloneResponseHandler*> child_handlers_;
++
++  event_base* base_ = nullptr;
++  struct event* timer_ = nullptr;
++  struct event* sigint_ = nullptr;
++  struct event* sigchld_ = nullptr;
++  bool cancelled_ = false;
++
++  DebugLevel debug_level_ = DebugLevel::NONE;
++  std::ofstream debug_stream_;
++};
++
+ ClientImpl::ClientImpl(Options options) : options_(std::move(options)) {
+   curl_global_init(CURL_GLOBAL_SSL);
+   curl_multi_ = curl_multi_init();
+@@ -234,19 +247,16 @@ ClientImpl::ClientImpl(Options options) : options_(std::move(options)) {
+                     &ClientImpl::TimerCallback);
+   curl_multi_setopt(curl_multi_, CURLMOPT_TIMERDATA, this);
+ 
+-  sigset_t ss{};
+-  sigaddset(&ss, SIGCHLD);
+-  sigaddset(&ss, SIGINT);
+-  sigprocmask(SIG_BLOCK, &ss, &saved_ss_);
++  base_ = event_base_new();
+ 
+-  sd_event_default(&event_);
++  // libevent 用 sigaction + self-pipe 收信號，不需要（也不能）先遮蔽信號：
++  // 原版遮蔽 SIGINT/SIGCHLD 是為了讓 sd-event 的 signalfd 接手，本版直接交給
++  // evsignal。Ctrl-C 取消在途工作的語義不變。
++  sigint_ = evsignal_new(base_, SIGINT, &ClientImpl::OnSigint, this);
++  event_add(sigint_, nullptr);
+ 
+-  // Blocked above so sd-event can pick it up via signalfd instead of the
+-  // default disposition tearing the process down immediately: a Ctrl-C
+-  // should cancel in-flight work the same way an internal failure does
+-  // (including giving an in-flight git clone a chance to react to SIGTERM),
+-  // not abandon it mid-write.
+-  sd_event_add_signal(event_, &sigint_, SIGINT, &ClientImpl::OnSigint, this);
++  sigchld_ = evsignal_new(base_, SIGCHLD, &ClientImpl::OnSigchld, this);
++  event_add(sigchld_, nullptr);
+ 
+   std::string_view debug = GetEnv("AURACLE_DEBUG");
+   if (absl::ConsumePrefix(&debug, "requests:")) {
+@@ -261,11 +271,12 @@ ClientImpl::~ClientImpl() {
+   curl_multi_cleanup(curl_multi_);
+   curl_global_cleanup();
+ 
+-  sd_event_source_unref(timer_);
+-  sd_event_source_unref(sigint_);
+-  sd_event_unref(event_);
+-
+-  sigprocmask(SIG_SETMASK, &saved_ss_, nullptr);
++  if (timer_ != nullptr) {
++    event_free(timer_);
++  }
++  event_free(sigint_);
++  event_free(sigchld_);
++  event_base_free(base_);
+ 
+   if (debug_stream_.is_open()) {
+     debug_stream_.close();
+@@ -277,33 +288,28 @@ void ClientImpl::Cancel(const ActiveRequests::value_type& request) {
+                               FinishRequest(curl, CURLE_ABORTED_BY_CALLBACK,
+                                             /*dispatch_callback=*/false);
+                             },
+-                            [this](sd_event_source* source) {
+-                              // Give git a chance to exit on its own. Leave the
+-                              // source in active_requests_ -- it's reaped
+-                              // normally by OnCloneExit once the process
+-                              // actually exits, same as an unforced completion.
+-                              if (sd_event_source_send_child_signal(
+-                                      source, SIGTERM, nullptr, 0) >= 0) {
++                            [this](pid_t pid) {
++                              // 給 git 機會自己退出：SIGTERM 後由 OnSigchld 的
++                              // waitpid 正常收割（與原版 sd_event 的語義一致）。
++                              if (kill(pid, SIGTERM) == 0) {
+                                 return;
+                               }
+ 
+-                              FinishRequest(source);
++                              FinishRequest(pid);
+                             }},
+              request);
+ }
+ 
+-int ClientImpl::OnCancel(sd_event_source*, void* userdata) {
++void ClientImpl::OnCancel(evutil_socket_t, short, void* userdata) {
+   auto* client = static_cast<ClientImpl*>(userdata);
+ 
+   // Cancel() no longer always removes an entry synchronously (a SIGTERM'd
+-  // git child is reaped asynchronously via its normal exit callback), so
+-  // walk a snapshot rather than draining active_requests_ in place.
++  // git child is reaped asynchronously via OnSigchld), so walk a snapshot
++  // rather than draining active_requests_ in place.
+   ActiveRequests snapshot = client->active_requests_;
+   for (const auto& request : snapshot) {
+     client->Cancel(request);
+   }
+-
+-  return 0;
+ }
+ 
+ void ClientImpl::CancelAll() {
+@@ -313,31 +319,28 @@ void ClientImpl::CancelAll() {
+ 
+   cancelled_ = true;
+ 
+-  sd_event_source* cancel;
+-  sd_event_add_defer(event_, &cancel, &ClientImpl::OnCancel, this);
+-  active_requests_.insert(cancel);
++  // sd_event_add_defer 的等價物：下一輪循環迭代時觸發。
++  event_base_once(base_, -1, 0, &ClientImpl::OnCancel, this, nullptr);
+ }
+ 
+-// static
+-int ClientImpl::OnSigint(sd_event_source*, const struct signalfd_siginfo*,
+-                         void* userdata) {
++void ClientImpl::OnSigint(evutil_socket_t, short, void* userdata) {
+   static_cast<ClientImpl*>(userdata)->CancelAll();
+-
+-  return 0;
+ }
+ 
+ // static
+ int ClientImpl::SocketCallback(CURLM*, curl_socket_t s, int action,
+                                void* userdata, void* sockptr) {
+   auto* client = static_cast<ClientImpl*>(userdata);
+-  auto* io = static_cast<sd_event_source*>(sockptr);
++  auto* io = static_cast<struct event*>(sockptr);
+   return client->DispatchSocketCallback(s, action, io);
+ }
+ 
+ int ClientImpl::DispatchSocketCallback(curl_socket_t s, int action,
+-                                       sd_event_source* io) {
++                                       struct event* io) {
+   if (action == CURL_POLL_REMOVE) {
+-    sd_event_source_unref(io);
++    if (io != nullptr) {
++      event_free(io);
++    }
+ 
+     // Don't call CheckFinished() here: this callback runs from inside
+     // curl_multi_socket_action(), and CheckFinished() may run a completion
+@@ -350,25 +353,23 @@ int ClientImpl::DispatchSocketCallback(curl_socket_t s, int action,
+     return 0;
+   }
+ 
+-  uint32_t events = 0;
++  short events = 0;
+   if (action & CURL_CSELECT_IN) {
+-    events |= EPOLLIN;
++    events |= EV_READ;
+   }
+   if (action & CURL_CSELECT_OUT) {
+-    events |= EPOLLOUT;
++    events |= EV_WRITE;
+   }
+ 
+   if (io != nullptr) {
+-    if (sd_event_source_set_io_events(io, events) < 0) {
+-      return -1;
+-    }
+-
+-    if (sd_event_source_set_enabled(io, SD_EVENT_ON) < 0) {
+-      return -1;
+-    }
++    // 事件類型變了（libevent 需 del → assign → add 重掛）。
++    event_del(io);
++    event_assign(io, base_, s, events | EV_PERSIST, &ClientImpl::OnCurlIO,
++                 this);
++    event_add(io, nullptr);
+   } else {
+-    if (sd_event_add_io(event_, &io, s, events, &ClientImpl::OnCurlIO, this) <
+-        0) {
++    io = event_new(base_, s, events | EV_PERSIST, &ClientImpl::OnCurlIO, this);
++    if (io == nullptr || event_add(io, nullptr) != 0) {
+       return -1;
+     }
+ 
+@@ -380,39 +381,36 @@ int ClientImpl::DispatchSocketCallback(curl_socket_t s, int action,
+   return 0;
+ }
+ 
+-// static
+-int ClientImpl::OnCurlIO(sd_event_source*, int fd, uint32_t revents,
+-                         void* userdata) {
++void ClientImpl::OnCurlIO(evutil_socket_t fd, short events, void* userdata) {
+   auto* client = static_cast<ClientImpl*>(userdata);
+ 
+   int action = 0;
+-  if (revents & EPOLLIN) {
++  if (events & EV_READ) {
+     action |= CURL_CSELECT_IN;
+   }
+-  if (revents & EPOLLOUT) {
++  if (events & EV_WRITE) {
+     action |= CURL_CSELECT_OUT;
+   }
+ 
+   int unused;
+-  if (curl_multi_socket_action(client->curl_multi_, fd, action, &unused) !=
+-      CURLM_OK) {
+-    return -EINVAL;
++  if (curl_multi_socket_action(client->curl_multi_, static_cast<curl_socket_t>(fd),
++                               action, &unused) != CURLM_OK) {
++    return;
+   }
+ 
+-  return client->CheckFinished();
++  client->CheckFinished();
+ }
+ 
+-// static
+-int ClientImpl::OnCurlTimer(sd_event_source*, uint64_t, void* userdata) {
++void ClientImpl::OnCurlTimer(evutil_socket_t, short, void* userdata) {
+   auto* client = static_cast<ClientImpl*>(userdata);
+ 
+   int unused;
+   if (curl_multi_socket_action(client->curl_multi_, CURL_SOCKET_TIMEOUT, 0,
+                                &unused) != CURLM_OK) {
+-    return -EINVAL;
++    return;
+   }
+ 
+-  return client->CheckFinished();
++  client->CheckFinished();
+ }
+ 
+ // static
+@@ -423,27 +421,23 @@ int ClientImpl::TimerCallback(CURLM*, long timeout_ms, void* userdata) {
+ 
+ int ClientImpl::DispatchTimerCallback(long timeout_ms) {
+   if (timeout_ms < 0) {
+-    if (sd_event_source_set_enabled(timer_, SD_EVENT_OFF) < 0) {
+-      return -1;
++    if (timer_ != nullptr) {
++      event_del(timer_);
+     }
+ 
+     return 0;
+   }
+ 
+-  uint64_t usec =
+-      absl::ToUnixMicros(absl::Now() + absl::Milliseconds(timeout_ms));
++  struct timeval tv {
++    timeout_ms / 1000, (timeout_ms % 1000) * 1000
++  };
+ 
+   if (timer_ != nullptr) {
+-    if (sd_event_source_set_time(timer_, usec) < 0) {
+-      return -1;
+-    }
+-
+-    if (sd_event_source_set_enabled(timer_, SD_EVENT_ONESHOT) < 0) {
+-      return -1;
+-    }
++    event_del(timer_);
++    event_add(timer_, &tv);
+   } else {
+-    if (sd_event_add_time(event_, &timer_, CLOCK_REALTIME, usec, 0,
+-                          &ClientImpl::OnCurlTimer, this) < 0) {
++    timer_ = event_new(base_, -1, 0, &ClientImpl::OnCurlTimer, this);
++    if (timer_ == nullptr || event_add(timer_, &tv) != 0) {
+       return -1;
+     }
+   }
+@@ -474,9 +468,9 @@ int ClientImpl::FinishRequest(CURL* curl, CURLcode result,
+   return r;
+ }
+ 
+-int ClientImpl::FinishRequest(sd_event_source* source) {
+-  active_requests_.erase(source);
+-  sd_event_source_unref(source);
++int ClientImpl::FinishRequest(pid_t pid) {
++  active_requests_.erase(pid);
++  child_handlers_.erase(pid);
+   return 0;
+ }
+ 
+@@ -505,9 +499,13 @@ int ClientImpl::Wait() {
+   cancelled_ = false;
+ 
+   while (!active_requests_.empty()) {
+-    if (sd_event_run(event_, 10000) < 0) {
+-      return -EIO;
+-    }
++    // 與原版 sd_event_run(event_, 10000) 語義對齊：最多等 10 秒醒一次，
++    // 防止任何邊界情況下無事件可等時空轉。
++    struct timeval tv {
++      10, 0
++    };
++    event_base_loopexit(base_, &tv);
++    event_base_loop(base_, EVLOOP_ONCE);
+   }
+ 
+   return cancelled_ ? -ECANCELED : 0;
+@@ -553,25 +551,46 @@ void ClientImpl::QueueHttpRequest(const HttpRequest& request,
+ }
+ 
+ // static
+-int ClientImpl::OnCloneExit(sd_event_source* source, const siginfo_t* si,
+-                            void* userdata) {
+-  auto* handler = static_cast<CloneResponseHandler*>(userdata);
+-
+-  handler->client()->FinishRequest(source);
++void ClientImpl::OnSigchld(evutil_socket_t, short, void* userdata) {
++  auto* client = static_cast<ClientImpl*>(userdata);
+ 
+-  absl::Status status;
+-  switch (si->si_status) {
+-    case 0:
+-      break;
+-    case 15:
+-      status = absl::CancelledError("cancelled");
++  // 收割所有已退出的子進程；tracked 的（git clone）分發完成回調，
++  // 未 tracked 的（理論上不該有）靜默收割防殭屍。
++  int status = 0;
++  while (true) {
++    pid_t pid = waitpid(-1, &status, WNOHANG);
++    if (pid <= 0) {
+       break;
+-    default:
+-      status = absl::InternalError(absl::StrCat(
+-          "git exited with unexpected exit status ", si->si_status));
+-  }
++    }
++
++    auto it = client->child_handlers_.find(pid);
++    if (it == client->child_handlers_.end()) {
++      continue;
++    }
+ 
+-  return handler->Finalize(std::move(status));
++    auto* handler = it->second;
++    client->FinishRequest(pid);
++
++    // 對齊原版 sd_event_add_child 的 siginfo_t.si_status 語義：
++    // 正常退出取 WEXITSTATUS；被信號殺死取 WTERMSIG（15 = SIGTERM → cancelled）。
++    int exit_status = WIFEXITED(status)   ? WEXITSTATUS(status)
++                    : WIFSIGNALED(status) ? WTERMSIG(status)
++                                          : -1;
++
++    absl::Status s;
++    switch (exit_status) {
++      case 0:
++        break;
++      case 15:
++        s = absl::CancelledError("cancelled");
++        break;
++      default:
++        s = absl::InternalError(absl::StrCat(
++            "git exited with unexpected exit status ", exit_status));
++    }
++
++    handler->Finalize(std::move(s));
++  }
+ }
+ 
+ void ClientImpl::QueueCloneRequest(const CloneRequest& request,
+@@ -621,15 +640,8 @@ void ClientImpl::QueueCloneRequest(const CloneRequest& request,
+     _exit(127);
+   }
+ 
+-  sd_event_source* child;
+-  sd_event_add_child(event_, &child, pid, WEXITED, &ClientImpl::OnCloneExit,
+-                     handler);
+-
+-  // Backstop only: Cancel() sends SIGTERM itself and waits for the process
+-  // to exit normally through OnCloneExit.
+-  sd_event_source_set_child_process_own(child, true);
+-
+-  active_requests_.emplace(child);
++  child_handlers_.emplace(pid, handler);
++  active_requests_.emplace(pid);
+ }
+ 
+ void ClientImpl::QueueRawRequest(const HttpRequest& request,
+-- 
+2.56.1
+
