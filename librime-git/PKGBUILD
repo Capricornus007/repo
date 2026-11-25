@@ -105,7 +105,12 @@ prepare() {
   cd librime
   # capnp 2.0 的 kj 標頭要求 C++20（#error "This code requires C++20"），
   # 而上游釘 17 → 抬到 20。實測這一筆就把 420 個錯誤壓到 12 個。
-  git apply -v "$srcdir/cxx20-for-capnp-2.patch"
+  # 2026-11-25：上游 CMakeLists 改版讓舊 patch 的 hunk 行號失效（CI #... 實測
+  # patch does not apply）；改用 sed 比對字面值，上游行號再怎麼漂移都不受影響。
+  sed -i 's/set(CMAKE_CXX_STANDARD 17)/set(CMAKE_CXX_STANDARD 20)/' CMakeLists.txt
+  sed -i 's/-std=c++17/-std=c++20/g' CMakeLists.txt
+  grep -q 'set(CMAKE_CXX_STANDARD 20)' CMakeLists.txt \
+    || { echo "::error::librime C++20 替換失敗（上游改寫了变量？）" >&2; return 1; }
   git apply -v "$srcdir/opencc-empty-conversion-chain.patch"
 
   cd ../librime-lua
