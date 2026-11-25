@@ -262,6 +262,17 @@ pkgver() {
   printf '%s_r%s.g%s\n' "$v" "$(git rev-list --count HEAD)" "${sha}"
 }
 
+_clang_safe_flags() {
+  local f out=()
+  for f in $1; do
+    case "$f" in
+      -fipa-pta|-fdevirtualize-at-ltrans|-fgraphite-identity|-floop-nest-optimize|-flto=auto) ;;
+      *) out+=("$f") ;;
+    esac
+  done
+  echo "${out[*]}"
+  }
+
 prepare() {
   cd $_pkgbase
   # 內附的 Findzstd.cmake 與系統 zstd 不同步時會炸（Arch 同款）；
@@ -282,6 +293,11 @@ prepare() {
     return 1
   fi
   cd ..
+  # 過濾必須落在 configure **之前**：GCC 專有旗標是這裡烙進 CMake cache 的
+  # （builtins-cache-Release.cmake 繼承 CMAKE_C_FLAGS），build() 再濾已來不及。
+  CFLAGS="$(_clang_safe_flags "$CFLAGS")"
+  CXXFLAGS="$(_clang_safe_flags "$CXXFLAGS")"
+  export CFLAGS CXXFLAGS
   cmake -S $_pkgbase/llvm -B build "${_cmakeargs[@]}" \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_C_FLAGS_RELEASE='-O2 -DNDEBUG' \
@@ -290,6 +306,15 @@ prepare() {
 
 build() {
   _stage_init || return 1
+  # 六最 2026-11-25（run #1022 實測）：自舉後 in-tree clang 由 cmake 用絕對路徑
+  # 直接調用，ci/clang-znver3.sh 包裝器（PATH 層）攔不到，而 CMake cache 裡的
+  # CFLAGS 原樣帶著 GCC 專有旗標（-fipa-pta/-fdevirtualize-at-ltrans/
+  # -fgraphite-identity/-floop-nest-optimize/-flto=auto）→ builtins 配置階段
+  #   clang: error: unknown argument: '-floop-nest-optimize'
+  # 與包裝器同一份清單，在配方層濾掉（GCC 構建的包不受影響，旗標一根不動）。
+  CFLAGS="$(_clang_safe_flags "$CFLAGS")"
+  CXXFLAGS="$(_clang_safe_flags "$CXXFLAGS")"
+  export CFLAGS CXXFLAGS
   cmake --build build -j"$(nproc)"
   rm -rf "$_stage"
   DESTDIR="$_stage" cmake --install build

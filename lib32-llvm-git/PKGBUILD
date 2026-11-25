@@ -150,6 +150,20 @@ prepare() {
   export CXXFLAGS="$CXXFLAGS -m32"
   export LDFLAGS="$LDFLAGS -m32"
   export PKG_CONFIG=i686-pc-linux-gnu-pkg-config
+  # 六最 2026-11-25：與 llvm-git 同款——in-tree clang 攔不到包裝器，GCC 專有
+  # 旗標須在 configure 前於配方層濾掉（清單同 ci/clang-znver3.sh）。
+  _clang_safe_flags() {
+    local f out=()
+    for f in $1; do
+      case "$f" in
+        -fipa-pta|-fdevirtualize-at-ltrans|-fgraphite-identity|-floop-nest-optimize|-flto=auto) ;;
+        *) out+=("$f") ;;
+      esac
+    done
+    echo "${out[*]}"
+  }
+  export CFLAGS="$(_clang_safe_flags "$CFLAGS")"
+  export CXXFLAGS="$(_clang_safe_flags "$CXXFLAGS")"
   cmake -S "$_pkgbase/llvm" -B build "${_cmakeargs[@]}" \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_C_FLAGS_RELEASE='-O2 -DNDEBUG' \
