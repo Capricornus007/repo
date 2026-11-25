@@ -2344,7 +2344,7 @@ jobs:
                   | jq -r '.assets[].name' 2>/dev/null || true)
                 _codex_last=$(printf '%s\n' "$_codex_assets" \
                   | grep -E "^${PKGBASE}-[0-9].*\.r[0-9]+\.g[0-9a-f]{8}-" \
-                  | sort -V | tail -n1)
+                  | sort -V | tail -n1 || true)
                 if [ -z "$_codex_last" ]; then
                   echo "release 里还没有 codex 资产，照常构建"
                 else
