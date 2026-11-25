@@ -1211,6 +1211,15 @@ jobs:
               grep -q cu2qu-v pkg_dir/PKGBUILD \
                 || { echo "::error::cu2qu 的 venv 注入失敗（build() 錨點變了）"; exit 1; }
               sed -n "/^build() {/,+4p" pkg_dir/PKGBUILD ;;
+            inetutils-git)
+              # 六最 2026-11-25：摘掉 ping 讓給 iputils（Artix 同款兩包並存——
+              # MLFS/LFS 的 inetutils 自帶 ping，與 iputils 的 /usr/bin/ping 文件衝突；
+              # 舊系統實證就是 inetutils(無 ping)+iputils(有 ping) 並存）。
+              # AUR 配方 configure 是逐程序 enable 風格，錨 --enable-ftp 注入。
+              sed -i 's/    --enable-ftp /    --disable-ping \\\n    --enable-ftp /' pkg_dir/PKGBUILD
+              grep -q -- '--disable-ping' pkg_dir/PKGBUILD \
+                || { echo "::error::inetutils-git 的 --disable-ping 注入失敗（錨點變了）"; exit 1; }
+              sed -n '/disable-ping/,+1p' pkg_dir/PKGBUILD ;;
             i3blocks-git)
               # 實物查證（`gh release download` 那顆 1.5.r11.g9a06a38-1，tar -tf 全清單）：
               # 整包都落在 /usr/local 底下——usr/local/bin/i3blocks、
