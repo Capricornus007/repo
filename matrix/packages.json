@@ -1488,5 +1488,11 @@
   "repo_name": "polkit-consolekit-git",
   "variant": "none",
   "in_tree": true
+ },
+ {
+  "key": "sioyek-git",
+  "repo_name": "sioyek-git",
+  "variant": "none",
+  "in_tree": true
  }
 ]

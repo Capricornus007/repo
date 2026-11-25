@@ -1,0 +1,49 @@
+# 六最搬運 2026-11-25：Sioyek（PDF 查看器，用戶終選——暗色模式硬需求下的最強匹配）。
+# 上游 ahrm/sioyek：F8 一鍵暗色 + preserve_image_colors_in_dark_mode（正文反色、圖像保留原色），
+# vim 鍵位、智能跳轉、portal 分屏對照；開發活躍（2026-11 仍有提交）但 release 慢 → -git 跟尖端。
+# 借用 AUR sioyek-git 配方（Qt6 + libmupdf + standard-path 補丁），補丁存本目錄。
+# 用戶系統 Qt6 全庫在裝（qt6-* 全套），依賴無縫。
+pkgname=sioyek-git
+pkgver=2.0.0.r1170.g1e2f8037
+pkgrel=1
+pkgdesc='PDF viewer for research papers and technical books (F8 dark mode, image-color preserving)'
+arch=(x86_64)
+license=(GPL3)
+url='https://github.com/ahrm/sioyek'
+depends=(libmupdf qt6-speech qt6-declarative qt6-svg)
+optdepends=(qt6-wayland)
+makedepends=(git qt6-3d)
+provides=(sioyek)
+conflicts=(sioyek)
+source=("git+https://github.com/ahrm/sioyek.git#branch=development"
+        "standard-path-mupdf-build.patch")
+sha256sums=('SKIP'
+            '3f781450b34cf06bb3d9f5499c197f8be1fb6b9d25a77f98b03a226149a096c1')
+
+pkgver() {
+  cd "sioyek"
+  git describe --long --tags | sed 's/^v//;s/\([^-]*-g\)/r\1/;s/-/./g'
+}
+
+prepare() {
+  cd "sioyek"
+
+  patch --forward --strip=1 --input="${srcdir}/standard-path-mupdf-build.patch"
+  sed -i 's/<C-S-o>$/<C-S-O>/' pdf_viewer/keys.config
+}
+
+build() {
+  cd sioyek
+  qmake6 "CONFIG+=linux_app_image" pdf_viewer_build_config.pro
+  make
+}
+
+package() {
+  cd "sioyek"
+  make INSTALL_ROOT="${pkgdir}/" install
+  install -D tutorial.pdf -t "${pkgdir}/usr/share/sioyek"
+  install -Dm644 -t "${pkgdir}/usr/share/sioyek" pdf_viewer/keys.config pdf_viewer/prefs.config
+  install -Dm644 -t "${pkgdir}/usr/share/man/man1" resources/sioyek.1
+  install -d "${pkgdir}/usr/share/sioyek/shaders"
+  cp -r pdf_viewer/shaders/* "${pkgdir}/usr/share/sioyek/shaders"
+}
