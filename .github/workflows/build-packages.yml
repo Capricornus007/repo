@@ -3495,6 +3495,14 @@ jobs:
           # kernel.org 偶尔会 reset 大文件的 HTTP/2 连接，删掉半截文件重试。
           # 注意：第一次不能删——上面可能刚从 kernel-sources-cache 拿到完整文件。
           sums_updated=false
+          # 2026-11-25：無（非空）source 陣列的 meta 包（filesystem，shard3 run #92 實錘）
+          # updpkgsums 必報「PKGBUILD does not contain sources to update」，
+          # 重試 5 次純燒時長還判紅。空陣列直接視為已更新，跳過整個重試迴圈。
+          if ! grep -qE '^[[:space:]]*source[0-9]*=' PKGBUILD \
+             || grep -qE '^[[:space:]]*source[0-9]*=[[:space:]]*\([[:space:]]*\)' PKGBUILD; then
+            echo "PKGBUILD 無非空 source 陣列，跳過校驗和更新"
+            sums_updated=true
+          fi
           for attempt in 1 2 3 4 5; do
             [ "$attempt" -eq 1 ] || rm -f linux-*.tar.xz linux-*.tar.xz.part
             rm -f linux-*.tar.xz.part

@@ -1,7 +1,11 @@
 # 2026-11-02 in-tree override：AUR 版 makedepends 缺 cmake，capstone 的 Makefile
 # 內部呼叫 cmake（run 41338311663 實測 sh: cmake: command not found → 產物缺 libcapstone.so.6）。補 cmake。
+# 2026-11-26：python 子包退出——獨立的 python-capstone-git（in-tree）已接管
+# python 綁定；兩個來源同時產出 python-capstone-git 會讓 repo-add 撞同名
+# 不同版本號（20261125.5542 vs 5.0.9.r2827），整批部署被拒
+# （run 45702340540 deploy 實錘「Package database was not modified」）。
 pkgbase=capstone-git
-pkgname=(capstone-git python-capstone-git)
+pkgname=(capstone-git)
 pkgver=20250730.5302.ccbc41d3d
 pkgrel=2
 pkgdesc="A lightweight multi-platform, multi-architecture disassembly framework."
@@ -11,11 +15,6 @@ license=(BSD-3-Clause)
 makedepends=(
   'glibc'
   'cmake'
-  'python'
-  'python-build'
-  'python-installer'
-  'python-setuptools'
-  'python-wheel'
   'git')
 # if you want the bindings uncomment the appropriae line below, and
 # comment out the line above
@@ -40,9 +39,6 @@ build() {
   cd "${srcdir}/${pkgname}"
   CFLAGS+=" ${CPPFLAGS} -ffat-lto-objects"
   make V=1
-
-  cd bindings/python
-  python -m build --wheel --no-isolation
 }
 
 check() {
@@ -66,16 +62,4 @@ package_capstone-git() {
   install -Dm 644 LICENSES/LICENSE.TXT -t "${pkgdir}/usr/share/licenses/${pkgname}"
 }
 
-package_python-capstone-git() {
-  depends=(
-    capstone-git
-    python
-  )
-  conflicts=(python-capstone)
-  provides=(python-capstone)
-
-  cd "${srcdir}/${pkgbase}/bindings/python"
-  python -m installer --destdir="${pkgdir}" dist/*.whl
-  install -Dm 644 LICENSE.TXT -t "${pkgdir}/usr/share/licenses/${pkgname}"
-}
 # vim:set ts=2 sw=2 et:
