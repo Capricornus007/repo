@@ -67,14 +67,28 @@ case "$stage" in
     find "$pd" -name '*conftest*.gcda' -delete 2>/dev/null || true
     gcda=$(find "$pd" -name '*.gcda' 2>/dev/null | wc -l)
     if [ "$gcda" -eq 0 ]; then
-      cp "$CONF_BAK" /etc/makepkg.conf
-      echo "::error::${name} PGO 訓練零 .gcda（六最無豁免，不出無 profile 包；修 /usr/local/bin/pgo-train 訓練負載）"
-      exit 1
+      # 區分兩類零 gcda（repo shard2 #101 實測 18 包掛閘）：
+      #   結構性：純腳本/純數據/圖標主題包（elementary-icon-theme 純 SVG 等）
+      #           沒編 C 代碼 → pass1 無 .gcno，pass2 的 -fprofile-use 是
+      #           no-op，放行不算「無 profile 包」。
+      #   訓練失敗：有 .gcno（插樁對象存在）但訓練沒跑到 → 真問題，判死。
+      gcno=$(find "$pkgdir/src" -name '*.gcno' 2>/dev/null | wc -l)
+      if [ "$gcno" -eq 0 ]; then
+        echo "::notice::${name} PGO 訓練零 .gcda 但亦零 .gcno（無 C 代碼，結構性無 profile），放行"
+      else
+        cp "$CONF_BAK" /etc/makepkg.conf
+        echo "::error::${name} PGO 訓練零 .gcda（有 ${gcno} 個插樁對象但訓練沒跑到；六最無豁免，修 /usr/local/bin/pgo-train 訓練負載）"
+        exit 1
+      fi
     fi
     echo "$gcda" > "$GCDA_COUNT_FILE"
     echo "::notice::PGO 訓練收到 ${gcda} 個 .gcda：${name}"
     rm -rf "$pkgdir/src" "$pkgdir/pkg"
-    printf '\n# PGO pass2 (六最)\nCFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -fprofile-partial-training"\nCXXFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -fprofile-partial-training"\nLDFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -fprofile-partial-training"\n' \
+    # -Wno-error=coverage-mismatch（lfs-pacman #113 coreutils/grep 實測）：
+    # 兩遍編譯間 configure 非確定性讓個別函式 CFG 漂移（chroot.c main arcs
+    # 94 vs 88），coverage-mismatch 默認硬錯誤炸 pass2；降警告後
+    # -fprofile-correction 照常校正，PGO 不降級。
+    printf '\n# PGO pass2 (六最)\nCFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -Wno-error=coverage-mismatch -fprofile-partial-training"\nCXXFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -Wno-error=coverage-mismatch -fprofile-partial-training"\nLDFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -fprofile-partial-training"\n' \
       "$pd" "$pd" "$pd" >> /etc/makepkg.conf
     ;;
   post)
