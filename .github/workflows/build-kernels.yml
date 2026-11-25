@@ -79,8 +79,8 @@ jobs:
           {"key": "linux-ltscjk", "repo_name": "linux-ltscjk", "variant": "none"},
           {"key": "linux-cachyos-cjktty-release", "repo_name": "linux-cachyos-cjktty", "variant": "release"},
           {"key": "linux-cachyos-cjktty-rc", "repo_name": "linux-cachyos-cjktty", "variant": "rc"},
-          {"key": "nvidia-utils-openrc", "repo_name": "nvidia-utils-openrc", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel"},
-          {"key": "nvidia-utils-beta", "repo_name": "nvidia-utils-beta", "variant": "none", "kind": "aur"},
-          {"key": "nvidia-beta-dkms", "repo_name": "nvidia-beta-dkms", "variant": "none", "kind": "aur"},
-          {"key": "lib32-nvidia-utils-beta", "repo_name": "lib32-nvidia-utils-beta", "variant": "none", "kind": "aur"}
+          {"key": "nvidia-utils-openrc", "repo_name": "nvidia-utils-openrc", "variant": "none", "kind": "artix", "image": "artixlinux/artixlinux:base-devel", "in_tree": true},
+          {"key": "nvidia-utils-beta", "repo_name": "nvidia-utils-beta", "variant": "none", "kind": "aur", "in_tree": true},
+          {"key": "nvidia-beta-dkms", "repo_name": "nvidia-beta-dkms", "variant": "none", "kind": "aur", "in_tree": true},
+          {"key": "lib32-nvidia-utils-beta", "repo_name": "lib32-nvidia-utils-beta", "variant": "none", "kind": "aur", "in_tree": true}
         ]
