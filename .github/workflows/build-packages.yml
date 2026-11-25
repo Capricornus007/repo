@@ -4736,6 +4736,8 @@ jobs:
       # 已摘除包）先刪，資產數恆等於「包數 + db/files」，遠離上限。
       - name: 上传前修剪（GitHub 1000 资产硬上限）
         if: steps.check_artifacts.outputs.has_artifacts == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PERSONAL_BUILD_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           cd deploy
