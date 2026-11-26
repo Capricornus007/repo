@@ -7,6 +7,9 @@ pkgdesc='shadow (LFS 同源構建，六最納管)'
 arch=(x86_64)
 url='https://github.com/shadow-maint/shadow/releases/download/4.19.2/shadow-4.19.2.tar.xz'
 license=(GPL-3.0-or-later)
+# 2026-11-26 shard3 #94：configure 報 readpassphrase() is missing from libc or libbsd。
+# shadow 4.19.2 的 chfn/chsh 用 libbsd 的 readpassphrase，Arch 官方包亦依賴 libbsd。
+depends=(libbsd)
 
 source=("https://github.com/shadow-maint/shadow/releases/download/4.19.2/shadow-4.19.2.tar.xz")
 sha256sums=('SKIP')

@@ -65,7 +65,10 @@ case "$stage" in
     _gcov_a="$(gcc -print-file-name=libgcov.a 2>/dev/null || true)"
     if [ -f "$_gcov_a" ]; then
       _gcov_dir="$(dirname "$_gcov_a")"
-      printf 'LDFLAGS+=" -L%s -lgcov"\n' "$_gcov_dir" >> /etc/makepkg.conf
+      # 不寫 LDFLAGS：-fprofile-generate 已讓 gcc 自動鏈「正確位元寬」的 libgcov；
+      # 手動 -L<64 位元目錄> -lgcov 會被 multilib(-m32) 包繼承 →
+      # ld.lld: libgcov.a is incompatible with elf32-i386（mesa-tkg #1044 實錘）。
+      # rustc 不讀 LDFLAGS，只靠這條 RUSTFLAGS link-arg 補 __gcov_*。
       printf 'RUSTFLAGS+=" -Clink-arg=-L%s -Clink-arg=-lgcov"\n' "$_gcov_dir" >> /etc/makepkg.conf
     fi
     # pass1 只編插樁樹、不出包(--noarchive)；去掉 -f(force 重建由 rm src/pkg 保證)。
