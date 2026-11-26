@@ -109,6 +109,16 @@ package() {
     install -dm755 "${pkgdir}/opt/workbuddy-international"
     cp -a "${srcdir}/workbuddy-app/." "${pkgdir}/opt/workbuddy-international/"
 
+    # 2026-11-27 降溫保險：workbuddy-update.sh 更新時只同步 PKGBUILD/.SRCINFO，
+    # 不同步 install.sh——若獨立倉的 install.sh 還是舊版（無 nice），這裡在
+    # 打包時補上。冪等（已有 nice 不重複加）；子進程自動繼承低優先序。
+    _start="${pkgdir}/opt/workbuddy-international/start.sh"
+    if [ -f "$_start" ] && ! grep -q 'exec nice -n 10' "$_start"; then
+        sed -i 's|^exec "\$APP_DIR/electron"|exec nice -n 10 "$APP_DIR/electron"|' "$_start"
+        grep -q 'exec nice -n 10' "$_start" \
+            || { echo "ERROR: 無法為 start.sh 加 nice（Electron 高溫問題）" >&2; exit 1; }
+    fi
+
     # The helper desktop file written by install.sh embeds the build-time
     # srcdir in Exec=; point it at the final install location instead.
     sed -i "s|${srcdir}/workbuddy-app|/opt/workbuddy-international|g" \
