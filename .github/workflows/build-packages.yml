@@ -1463,7 +1463,15 @@ jobs:
               # run #88 實測「Dependency msgraph-1 not found」）。官方 extra 已有
               # msgraph 包，補依賴保功能（goa 探測在 assert 中已通過才會走到這）。
               printf "\n%s\n" "makedepends+=('msgraph')" >> pkg_dir/PKGBUILD
-              echo "gvfs: libgdata 已移除、msgraph 已補" ;;
+              # 2026-11-26（shard4 #118 實錘）：上游 gvfs 新版不再構建 google
+              # backend，但 AUR PKGBUILD 的 _split() 仍 mv lib/gvfsd-google →
+              # `mv: cannot stat 'lib/gvfsd-google'` → package() 死。
+              # 給 _split 加檔案存在守衛：backend 產物不存在就跳過，其他 backend
+              # 照常拆分；功能不降（google backend 上游已無，拆不出來是正常的）。
+              sed -i '/^  for src; do$/a\    [ -e "$src" ] || { echo "$name: $src 不存在（上游已移除此 backend），跳過"; continue; }' pkg_dir/PKGBUILD
+              grep -q '不存在（上游已移除此 backend）' pkg_dir/PKGBUILD \
+                || { echo "::error::gvfs 的 _split 檔案存在守衛沒注入"; exit 1; }
+              echo "gvfs: libgdata 已移除、msgraph 已補、_split 缺檔容錯已加" ;;
             xdg-desktop-portal-git)
               # 上游 meson.build 要求 wireplumber-0.5（run #86：
               #   Dependency "wireplumber-0.5" not found (tried pkg-config)

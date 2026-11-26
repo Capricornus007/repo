@@ -73,6 +73,14 @@ case "$stage" in
     # 進不了連結指令。故同時透過 RUSTFLAGS 傳 link-arg；對純 Rust/非 Rust
     # 包無害（無 __gcov 引用時 lld --gc-sections 直接丟掉）。
     _gcov_a="$(gcc -print-file-name=libgcov.a 2>/dev/null || true)"
+    # 2026-11-26（shard4 #118 實錘）：CI 裡 gcc 被 setup-sixmax 的包裝腳本
+    # 取代，`gcc -print-file-name=libgcov.a` 回傳的路徑 [ -f ] 判斷失敗 →
+    # RUSTFLAGS 整段沒寫進去 → rustup 的 aws-lc-sys C 依賴插樁符號
+    # __gcov_*_atomic 全部 undefined。三層 fallback：gcc 探測 → 標準路徑 find
+    # → 直接 -lgcov（lld 自己從 default lib path 找）。
+    if [ ! -f "$_gcov_a" ]; then
+      _gcov_a="$(find /usr/lib/gcc -name libgcov.a -type f 2>/dev/null | grep -v '/32/' | head -1 || true)"
+    fi
     if [ -f "$_gcov_a" ]; then
       _gcov_dir="$(dirname "$_gcov_a")"
       # 不寫 LDFLAGS：-fprofile-generate 已讓 gcc 自動鏈「正確位元寬」的 libgcov；
@@ -80,6 +88,11 @@ case "$stage" in
       # ld.lld: libgcov.a is incompatible with elf32-i386（mesa-tkg #1044 實錘）。
       # rustc 不讀 LDFLAGS，只靠這條 RUSTFLAGS link-arg 補 __gcov_*。
       printf 'RUSTFLAGS+=" -Clink-arg=-L%s -Clink-arg=-lgcov"\n' "$_gcov_dir" >> /etc/makepkg.conf
+    else
+      # 連 find 都找不到時不帶 -L：gcc driver 的 default search path 仍含
+      # libgcov，-Clink-arg=-lgcov 讓 lld 自己解析（總比不注入強）。
+      echo '::warning::找不到 libgcov.a 檔案，RUSTFLAGS 改用 -lgcov 由 linker 解析'
+      printf 'RUSTFLAGS+=" -Clink-arg=-lgcov"\n' >> /etc/makepkg.conf
     fi
     # pass1 只編插樁樹、不出包(--noarchive)；去掉 -f(force 重建由 rm src/pkg 保證)。
     p1flags=$(printf '%s' "$flags" | sed -E 's/ -f([ ]|$)/ /g')
