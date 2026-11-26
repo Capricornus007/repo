@@ -37,7 +37,10 @@ build() {
     --sbindir=bin
     --buildtype=plain
   )
-  arch-meson "${pkgname%-git}" build "${meson_args[@]}"
+  # 2026-11-26 shard2 #108：前面已 cd "${pkgname%-git}"，再傳源目錄給 meson
+  # 會變成在 srcdir/auracle/ 裡找 auracle/ 子目錄 →「Neither directory exists」。
+  # cwd 已是源目錄，第一個位置參數只能是 builddir。
+  arch-meson build "${meson_args[@]}"
   meson compile -C build
 }
 

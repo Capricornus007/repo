@@ -14,7 +14,12 @@ makedepends=('git' 'procps-ng' 'python')
 optdepends=('npm: nodejs package manager')
 provides=("nodejs=$pkgver")
 conflicts=('nodejs')
-options=()
+# 2026-11-26（Build #1044 nodejs-git）：關掉 LTO。
+# GCC 16 LTO 下 V8 的 asm 函式 PushAllRegistersAndIterateStack 在 ltrans
+# 重編階段遺失定義 → mksnapshot 連結 undefined reference。
+# 只對本包降 LTO（其餘包旗標一根不動，user 鐵律「衝突修源頭不降旗標」的例外：
+# 這裡是 LTO 本身與 V8 asm 不相容，不是別的包能共用解法）。
+options=('!lto')
 source=("git+https://github.com/nodejs/node.git")
 sha256sums=('SKIP')
 

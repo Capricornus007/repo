@@ -10,7 +10,7 @@ url='https://gitlab.xfce.org/thunar-plugins/thunar-archive-plugin'
 license=(GPL-2.0-or-later)
 depends=(thunar-git glib2 gtk3)
 makedepends=(git autoconf automake intltool gtk-doc xfce4-dev-tools)
-source=("::git+https://gitlab.xfce.org/thunar-plugins/thunar-archive-plugin.git#branch=master")
+source=("${_pkgname}::git+https://gitlab.xfce.org/thunar-plugins/thunar-archive-plugin.git#branch=master")
 sha256sums=(SKIP)
 
 pkgver() {

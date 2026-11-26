@@ -80,7 +80,8 @@ build() {
 package() {
 	cd "$srcdir/$_name"
 	install -Dm755 "dae" -t "${pkgdir}/usr/bin/"
-	install -Dm644 "install/${_name}.service" -t "${pkgdir}/usr/lib/systemd/system/"
+	# 2026-11-26（Build #1044 dae-git）：移除 systemd unit——用戶鐵律不容許
+	# 產物含任何 systemd 文件。開機啟動走 OpenRC /etc/init.d/（見 workflow 認可路徑）。
 	install -Dm640 "install/empty.dae" "${pkgdir}/etc/dae/config.dae"
 	install -Dm644 "example.dae" "${pkgdir}/etc/dae/config.dae.example"
 

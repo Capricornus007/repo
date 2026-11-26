@@ -144,11 +144,14 @@ build() {
   CPPFLAGS+=" -I/usr/include/openssl-1.1"
   LDFLAGS+=" -L/usr/lib/openssl-1.1"
   export OPT="${CFLAGS}"
+  # 2026-11-26（Build #1044 python2-git）：砍掉 --enable-optimizations / --with-lto。
+  # 外層 CI 已做全量兩段式 PGO（-fprofile-generate → train → -fprofile-use），
+  # Python 自己再跑一遍 profile-opt 會與外層插樁雙重計數：協程堆疊
+  # PushAllRegistersAndIterateStack 型別被改、gcda checksum 衝突 →
+  # profile-opt 階段 pybuilddir.txt 失敗（cannot run C compiled programs）。
   ./configure --prefix=/usr \
               --enable-shared \
               --with-threads \
-              --enable-optimizations \
-              --with-lto \
               --enable-ipv6 \
               --enable-unicode=ucs4 \
               --with-system-expat \
