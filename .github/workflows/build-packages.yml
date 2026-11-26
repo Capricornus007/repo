@@ -1309,6 +1309,19 @@ jobs:
               sed -i "/local _meson_args=(/a\\    -Dsystemd=disabled" pkg_dir/PKGBUILD
               grep -n -A3 'local _meson_args=(' pkg_dir/PKGBUILD | head -6 ;;
                         
+            protobuf-c-git)
+              # AUR 上游 PKGBUILD 的 makedepends 只有 git，但 autogen/configure 要
+              # protobuf.pc（由官方 protobuf 包提供，非 protobuf-c 本身）——容器沒有
+              # → `checking for protobuf... no` / `Package 'protobuf' not found`
+              # （2026-11-26 shard3 #97 job 139882571497 實測，PGO pass1 直接紅）。
+              # 補的是官方 protobuf（C++ 執行庫 + pkg-config），與稍後要產出的
+              # protobuf-c-git（C 綁定）不是同一個包，不衝突、不會自我依賴。
+              # 這正是 unbound-git 的 protoc-gen-c plugin 相容性修復所需的上游，
+              # 不放棄、不降功能、不退回正式版 protobuf-c。
+              printf "\n%s\n" "makedepends+=('protobuf')" >> pkg_dir/PKGBUILD
+              grep -q "makedepends+=('protobuf')" pkg_dir/PKGBUILD \
+                || { echo "::error::protobuf-c-git 的 protobuf makedepends 注入失敗"; exit 1; }
+              ;;
             i3lock-color-git)
               # AUR 版 makedepends 只有 git，但 configure 默认开 --enable-image
               # 要 gif_lib.h，容器没有 giflib → build() 红（2026-09-17 实测
