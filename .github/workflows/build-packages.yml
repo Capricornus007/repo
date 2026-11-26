@@ -744,10 +744,7 @@ jobs:
       - name: 拉取对应的套件仓库
         run: |
           set -euo pipefail
-          # 2026-10-21：AUR 的 git 服務偶發 TLS 斷線
-          # `fatal: unable to access …: TLS connect error: …unexpected eof while reading`
-          # → exit 128，一次就把整個 AUR job 判死（run 39582717995 有 8 顆同時中）。
-          # 所有 AUR clone 一律走這個重試；失敗要清掉半截目錄再來。
+          # AUR clone 統一重試（TLS 瞬斷曾一次判死 8 顆 job）。
           git config --global http.version HTTP/1.1
           _aur_clone() {
             _ac=0
@@ -775,9 +772,7 @@ jobs:
           # pysolfc-git / protonvpn-cli-community-git 同理只取各自目录下的 PKGBUILD
           # （protonvpn 的上游 url 改成了 jonasjancarik 的续命 fork，不能取 AUR 版）
           #
-          # 2026-11-02：矩陣可帶 "in_tree": true，改由本倉同名目錄提供 PKGBUILD
-          # 與所有附屬檔（patch / .install / .hook）。用 Contents API 一次抓齊，
-          # 不再為每顆復活的包加一條 raw URL case；API 失敗時退回只抓 PKGBUILD。
+          # in_tree：本倉同名目錄提供 PKGBUILD + 附屬檔（Contents API 抓齊）。
           if [ "${{ matrix.in_tree }}" = 'true' ]; then
             mkdir -p pkg_dir
             _api="https://api.github.com/repos/${GITHUB_REPOSITORY}/contents/${{ matrix.repo_name }}?ref=master"
