@@ -129,7 +129,9 @@ package() {
     install -dm755 "${pkgdir}/usr/bin"
     cat > "${pkgdir}/usr/bin/workbuddy-international" <<'EOF'
 #!/usr/bin/env bash
-exec /opt/workbuddy-international/start.sh "$@"
+# 2026-11-27 降溫：CLI wrapper 也用 nice 10，與 start.sh 一致，確保從
+# 終端機啟動時 Electron 子進程同樣繼承低優先序（zygote/renderer 不再搶 CPU）。
+exec nice -n 10 /opt/workbuddy-international/start.sh "$@"
 EOF
     chmod 755 "${pkgdir}/usr/bin/workbuddy-international"
 

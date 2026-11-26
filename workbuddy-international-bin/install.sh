@@ -191,7 +191,12 @@ APP_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
 export CHROME_DESKTOP="${APP_ID}.desktop"
 export ELECTRON_FORCE_IS_PACKAGED=1
 
-exec "\$APP_DIR/electron" \\
+# 2026-11-27 降溫：WorkBuddy（Electron）在主機上常見 zygote/renderer 進程
+# 長期 60~100% CPU（實測 90°C+ 風扇狂轉）。用 nice 10 啟動，讓它与所有
+# Electron 子進程（zygote/renderer/GPU）自動繼承較低排程優先序：
+# 使用者前台工作優先、背景 AI 代理不搶 CPU，功能零影響。
+# 如需即時恢復正常優先序，管理員可 renice -n 0 -p <pid>。
+exec nice -n 10 "\$APP_DIR/electron" \\
   --no-sandbox \\
   --disable-dev-shm-usage \\
   --disable-gpu-sandbox \\
