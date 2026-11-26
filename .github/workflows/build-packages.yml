@@ -1330,9 +1330,11 @@ jobs:
               # 只改這一種精確形式（上游全庫都是這個寫法），不碰其他 label 標識符。
               # makepkg 會在 build() 前自動呼叫 prepare()（PKGBUILD 原本沒有，
               # 直接追加一個即可，不必改 build() 本體，避免 awk 嵌引號地獄）。
-              printf '\nprepare() {\n  cd "protobuf-c"\n  sed -i "s/descriptor_->label()/descriptor_->Label()/g" protoc-gen-c/*.cc\n  grep -q "descriptor_->label()" protoc-gen-c/*.cc && { echo "::error::protobuf-c-git label()→Label() 補丁未生效"; exit 1; } || true\n}\n' >> pkg_dir/PKGBUILD
+              printf '\nprepare() {\n  cd "protobuf-c"\n  # 第一層：FieldDescriptor::label() → Label()（protobuf 36 改名）\n  sed -i "s/descriptor_->label()/descriptor_->Label()/g" protoc-gen-c/*.cc\n  # 第二層（#99 實錘）：Label() 返回的 enum 定義在 FieldDescriptorLite，\n  # 舊 case 標籤 FieldDescriptor::LABEL_* 已不可訪問 → invalid use of enum。\n  sed -i "s/google::protobuf::FieldDescriptor::LABEL_/google::protobuf::FieldDescriptorLite::LABEL_/g" protoc-gen-c/*.cc\n  grep -q "descriptor_->label()" protoc-gen-c/*.cc && { echo "::error::protobuf-c-git label()→Label() 補丁未生效"; exit 1; } || true\n  grep -q "FieldDescriptor::LABEL_" protoc-gen-c/*.cc && { echo "::error::protobuf-c-git LABEL_ 命名空間補丁未生效"; exit 1; } || true\n}\n' >> pkg_dir/PKGBUILD
               grep -q 'descriptor_->Label()' pkg_dir/PKGBUILD \
                 || { echo "::error::protobuf-c-git 的 label()→Label() 注入失敗"; exit 1; }
+              grep -q 'FieldDescriptorLite::LABEL_' pkg_dir/PKGBUILD \
+                || { echo "::error::protobuf-c-git 的 LABEL_ 命名空間注入失敗"; exit 1; }
               ;;
             i3lock-color-git)
               # AUR 版 makedepends 只有 git，但 configure 默认开 --enable-image
