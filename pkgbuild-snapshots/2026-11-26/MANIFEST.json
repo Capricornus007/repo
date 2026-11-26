@@ -1,0 +1,87 @@
+{
+ "ci": {
+  "ci/docs/in-tree-packages.md": "bfb1e43fe6b6260831dd8aba65896b93c613390efc7c5937cab9e9aa8b3ce6e3",
+  "ci/docs/upstream-pkgbuilds/clang.PKGBUILD": "3b569b3f056c6a857c285f7a6c2415ab8bdf9bdd40f4a46e4de2c76b273c7875",
+  "ci/docs/upstream-pkgbuilds/compiler-rt.PKGBUILD": "825464ccac403e26ef5a35b06029c59809605beb751abfa832c6cff3ee9515b5",
+  "ci/docs/upstream-pkgbuilds/doxygen.PKGBUILD": "cd7c1369450dd9b7de316d2b48644e1b90fea22542fd376bf048fab3826740e0",
+  "ci/docs/upstream-pkgbuilds/lib32-clang.PKGBUILD": "dd49dd7651fa98ee6cc2aa95f47ed2100630ce108cfd8fee66d2f8eb6381c4bc",
+  "ci/docs/upstream-pkgbuilds/lib32-llvm.PKGBUILD": "c56860a8081bfdc263a51aa8cb06f10fcba37ad7e32e77b844020293a86388c1",
+  "ci/docs/upstream-pkgbuilds/lldb.PKGBUILD": "bcc89177034356805da6610ed070d9e493b5f0694347335a76bdf05e0839e169",
+  "ci/docs/upstream-pkgbuilds/llvm.PKGBUILD": "14818377c2cdd06fe1ef26014b647c99ce38a4ff96eeb2974ca69c7d35aa5e7b",
+  "ci/docs/upstream-pkgbuilds/pyside6.PKGBUILD": "c8600f2d1c737fb8ac71a64cf51e289bd6ce128f9ede36154c4be69a58935140",
+  "ci/scripts/bump-pkgrel": "a7499e9b5b5accba271768c31d9c606dd62939b6044568a2ca9cd5d7d886f396",
+  "ci/scripts/check-pkg-split-overlap.py": "f0927c32787dc6a1a9d8b14befe0c6b1f248604eb1bc78fa639db11ed2ba6b0e",
+  "ci/scripts/install-git-hooks.sh": "8892f9348ed57943d1dc92c4f34749cb2be1022bcae7bd8f2672f0b5f8216768",
+  "ci/scripts/workbuddy-update.sh": "5862f43c0dd0e1ccbc279f9035cdf3dd10e611fa1613f09629c81ccdabad6d9d",
+  "ci/scripts/workflow-step-budget.py": "10953b06cc1c58a3869e2a8bb90c15a7c6775d28358dec874fcd8571aed88daf",
+  "ci/tools/aur_update.py": "adc1d5a9841f87f98f5c0609b79d58e63b42e3f3e9d23eda0856494d5137e4b0",
+  "ci/tools/pkgbuild_snapshot.py": "a4f03b4517ef0d42494c207f692d3096ea7dacedd273107f8db5e6159762279b",
+  "ci/workflows/aur-update.yml": "6ccbb4b070b86a9ee7baf5eccebe55a2370761f1861feacb8f194874414386f7",
+  "ci/workflows/backup-pkgbuilds.yml": "63dfabedcafd4d3c01a15f5874a0788a360329957a01d4025993b8b291072158",
+  "ci/workflows/build-git-packages-2.yml": "82a99b3d9b7bf083f9a581b5ec2a790d8e7ceeab32bc34b303cb71bcb6914cf5",
+  "ci/workflows/build-git-packages-3.yml": "0b31f2106755d0ae05b4c4563d9d0e39392dfba479908f7278856e33a8af7919",
+  "ci/workflows/build-git-packages-4.yml": "e09391410f6daa4f61c0549dd8b568237357e405c17ecc19637f80cc9b3fdea6",
+  "ci/workflows/build-git-packages.yml": "11df3fbd95738688b4756d44c061f332aab729af3898f8a0ba006eb2b7ceec37",
+  "ci/workflows/build-kernels.yml": "ab0190f09af7d7c34172ac8d525d01a4a2857909be3b2e4b5f422b7badd2c4ed",
+  "ci/workflows/build-one-package.yml": "dac687388bcc1f63814c8bbb7b1f298e9d24d3438b558dec944dd08d58129115",
+  "ci/workflows/build-packages.yml": "b73fb27fd5deaceda8acc34dce3224f7ae3b99388035a48bf53750b491ddb051",
+  "ci/workflows/build-restored.yml": "d9b8bf801357f1c466e99757510937af9c7fd181462451aef8ff5a333b8f71a4",
+  "ci/workflows/perch-cli-toolchain.yml": "f418834d90aefe195f32354b0c04623fb98d3eea0995f2de2ca54061731cb52b",
+  "ci/workflows/workbuddy-update.yml": "84c4b5c2b0b1b4dc7f9e18d446edff1120ab26de8f07048af89b5dfbd542747e"
+ },
+ "date": "2026-11-26",
+ "missing_aur": [],
+ "note": "每日自動快照：in-tree 包取 master 現檔，AUR 包取 AUR 現檔，外加 CI 定義檔。缺的 AUR 包列在 missing_aur（幽靈／改名包）。",
+ "packages": {
+  "lib32-nvidia-utils-beta": {
+   "files": {
+    "PKGBUILD": "9cf2f602b77f5c32ddb227ad9841043158a89b494da047026e4dd67ec6830811"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "nvidia-beta-dkms": {
+   "files": {
+    ".SRCINFO": "b42ef7fab03783bb03c21620d0933cfef680be03c2bc8e8b7ec444c50bb4f072",
+    "110-nvidia-change-dkms-conf.patch": "5d68186863c94fe239663fb439811e73d1a4a8eea9a9bd4a6311c22447a81baf",
+    "120-nvidia-linux-rt-gift.patch": "291bc6568e18496a4c2e732fd8616f6d536d8e9f3ab51f1959e3fc08f0de126b",
+    "PKGBUILD": "eee3c9597493400b975e5d490412d3664f4347c6567083589cb3f7d0242c6319"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "nvidia-utils-beta": {
+   "files": {
+    "10-gsk.conf": "05af96f86b7b3b40b93160fdcb702572401579f8756c0831b5de5f8e9afebeba",
+    "120-nvidia-settings-change-desktop-paths.patch": "6f0f4a23706241e9e37e0fe30a09bd30ca29bb446d8fe7861cb4959f0a010ef4",
+    "PKGBUILD": "8a0b93ec3b19a6791c7fa3b0880e219f6f54e556bc4f0b34e311aa874da0b01f",
+    "gsk-renderer.sh": "67eac203e7de4cf979b82c1e43439ac0e7c951d8901ebd9e4555c5d186a1b2ec",
+    "nvidia-drm-outputclass.conf": "be99ff3def641bb900c2486cce96530394c5dc60548fc4642f19d3a4c784134d",
+    "nvidia-utils.conf": "8ed91802c2a2d5b46c0692c624caf01dcde62a885dc617dda6694f4666de4c8e",
+    "nvidia-utils.sysusers": "f77a5247a3ba63e9fad3a3b2822d0fcfa51e0f79b5a90bd79bf08ea34b64ab07",
+    "nvidia.rules": "e30714f9b473d810c28763d067e0b85c75f86f23618d968b49b9d1fced9a1dd6"
+   },
+   "kind": "aur",
+   "source": "in-tree"
+  },
+  "nvidia-utils-openrc": {
+   "files": {
+    "90-nvidia-sleep": "23a2815811045589ab0bee0db8da04071c145e388d25899895e65e4c4e10dba3",
+    "PKGBUILD": "2f3ffe515bbb1a824ea6978419b61666cedd7682c1672f26daa5b6d9bd83b80d",
+    "nvidia-persistenced.confd": "347437868119e8ae12852a574597936e855f534a9ad290fef3f62b4083a38516",
+    "nvidia-persistenced.initd": "b672a70260d1370f462d3f0f9e027708118bb46e087c2be63890e97260dd2686"
+   },
+   "kind": "artix",
+   "source": "in-tree"
+  },
+  "snd-pcsp-dkms": {
+   "files": {
+    ".SRCINFO": "2686302b1625d28bcdab0c3cacf0d8eec193a8de88e983440eb3db4751afef14",
+    "PKGBUILD": "fb1ecba73bf27ade635610f3f96daa56140f4ca722a8e621f80ec0524e5fb12b",
+    "dkms.conf": "d63cc99b5a4d2392504bcfc0a3cc173447e514d27bc42de67cec18be8dea31d1"
+   },
+   "kind": "",
+   "source": "aur"
+  }
+ }
+}
