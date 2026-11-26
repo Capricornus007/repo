@@ -56,17 +56,17 @@ case "$stage" in
     if [ -d "$_rt_dir" ]; then
       printf 'LDFLAGS+=" -L%s -lclang_rt.profile-x86_64"\n' "$_rt_dir" >> /etc/makepkg.conf
     fi
-    # 2026-11-26（rustup-git / shard4 #111 實錘）：混合工具鏈包——Rust 的
-    # cc crate 用系統 gcc 編 C 依賴（aws-lc-sys 等），CFLAGS 的
-    # -fprofile-generate -fprofile-update=atomic 讓 gcc 產生 __gcov_* 符號
-    #（GCC 14+ 的 __gcov_interval_profiler_atomic），但最終連結由 rustc 的
-    # lld 掌控，它只吃上面 clang 的 -lclang_rt.profile（__llvm_profile_*），
-    # 不認 gcc -fprofile-generate 隱含的 -lgcov → undefined symbol。
-    # 顯式把 GCC libgcov 加進 LDFLAGS；純 clang 包多連結一個未引用的
-    # static lib 無害（符號 __gcov_* 與 __llvm_profile_* 不相衝）。
+    # 2026-11-26（rustup / shard4 #113 實錘）：混合工具鏈包——Rust 的
+    # cc crate 用系統 gcc 編 C 依賴（aws-lc-sys/zstd-sys 等），gcc 插樁產生
+    # __gcov_* 符號，但最終連結由 rustc 掌控：`gcc -fuse-ld=lld -nodefaultlibs`
+    # 且**不讀 LDFLAGS**（cargo 只吃 RUSTFLAGS）→ LDFLAGS 補的 -lgcov 根本
+    # 進不了連結指令。故同時透過 RUSTFLAGS 傳 link-arg；對純 Rust/非 Rust
+    # 包無害（無 __gcov 引用時 lld --gc-sections 直接丟掉）。
     _gcov_a="$(gcc -print-file-name=libgcov.a 2>/dev/null || true)"
     if [ -f "$_gcov_a" ]; then
-      printf 'LDFLAGS+=" -L%s -lgcov"\n' "$(dirname "$_gcov_a")" >> /etc/makepkg.conf
+      _gcov_dir="$(dirname "$_gcov_a")"
+      printf 'LDFLAGS+=" -L%s -lgcov"\n' "$_gcov_dir" >> /etc/makepkg.conf
+      printf 'RUSTFLAGS+=" -Clink-arg=-L%s -Clink-arg=-lgcov"\n' "$_gcov_dir" >> /etc/makepkg.conf
     fi
     # pass1 只編插樁樹、不出包(--noarchive)；去掉 -f(force 重建由 rm src/pkg 保證)。
     p1flags=$(printf '%s' "$flags" | sed -E 's/ -f([ ]|$)/ /g')
