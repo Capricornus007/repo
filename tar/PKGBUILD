@@ -11,6 +11,23 @@ license=(GPL-3.0-or-later)
 source=("https://ftp.gnu.org/gnu/tar/tar-1.35.tar.xz")
 sha256sums=('SKIP')
 
+prepare() {
+  cd "tar-1.35"
+  # 2026-11-26 shard3 #94：tar 1.35 自帶 3 參數 acl_*_at wrapper，與容器新
+  # libacl（4 參數、多 at_flags）撞名 → xattrs.c:142 conflicting types。
+  # 在 wrapper 宣告（sys/acl.h include 之後）插入 #define 重新命名，讓 tar
+  # 自己的 static wrapper 全部改叫 tar_acl_*，避開系統宣告。用錨點而非行號。
+  local _x
+  _x=$(find . -name xattrs.c -print -quit)
+  [ -n "$_x" ] || { echo "tar: 找不到 xattrs.c" >&2; return 1; }
+  sed -i '/^static acl_t acl_get_file_at/i\
+#define acl_get_file_at tar_acl_get_file_at\
+#define acl_set_file_at tar_acl_set_file_at\
+#define acl_delete_def_file_at tar_acl_delete_def_file_at' "$_x"
+  grep -q 'define acl_get_file_at tar_acl_get_file_at' "$_x" || {
+    echo "tar: acl wrapper 重新命名 patch 沒落地（上游改寫法？）" >&2; return 1; }
+}
+
 build() {
   cd "tar-1.35"
   ./configure --prefix=/usr

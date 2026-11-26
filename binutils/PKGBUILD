@@ -13,7 +13,11 @@ sha256sums=('SKIP')
 
 build() {
   cd "binutils-2.47"
-  ./configure --prefix=/usr
+  # 2026-11-26 shard3 #94：configure 自動帶 -Wstack-usage=262144 -Werror，
+  # LTO 下 lto1 重編 ltrans 時 back-end 報 stack usage unbounded → -Werror 打成
+  # error（make as-new Error 1 → lto-wrapper fatal）。關掉上游的 -Werror 即可，
+  # 六最旗標（-O3/LTO/PGO/znver3）一根不動。
+  ./configure --prefix=/usr --disable-werror
   make
 }
 
