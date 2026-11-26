@@ -98,7 +98,11 @@ _cmakeargs=(
   -DLLVM_BUILD_LLVM_DYLIB=ON
   -DLLVM_LINK_LLVM_DYLIB=ON
   -DLLVM_DYLIB_COMPONENTS=all
-  -DLLVM_ENABLE_LLD=ON
+  # 2026-11-26 shard2 #108 / Build #1044（lib32-llvm-git prepare 失敗）：
+  # -m32 下 CMake 的 CXX_SUPPORTS_CUSTOM_LINKER 探測過不了 -fuse-ld=lld
+  # （HandleLLVMOptions.cmake:446 → Host compiler does not support -fuse-ld=lld）。
+  # 32 位元改用系統預設 linker；64 位元的 llvm-git 仍保留 LLD，不受影響。
+  -DLLVM_ENABLE_LLD=OFF
   -DLLVM_PARALLEL_LINK_JOBS=2
   -DLLVM_VERSION_SUFFIX=git
   -DCLANG_DEFAULT_PIE_ON_LINUX=ON
