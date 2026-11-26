@@ -32,8 +32,26 @@ prepare() {
 build() {
   cd gcc-16.2.0
   mkdir -p build && cd build
+  # 六最 PGO 源头修（不改 PGO、不豁免）：autoconf 的 conftest（尤其 libatomic 的
+  # checking for suffix of executables / whether we are cross compiling）用 CFLAGS_FOR_TARGET
+  # 編譯，而 configure 會把傳進去的 CFLAGS 同時烙進 CFLAGS_FOR_TARGET。若帶著
+  # -fprofile-generate，自我插樁的 xgcc 執行 conftest 時 libgcov 要寫 .gcda，
+  # 讓 conftest 非零結束 → 誤判 "cannot run C compiled programs"（shard3 #94 實錘）。
+  # 解法：configure 用乾淨 CFLAGS/LDFLAGS（conftest 不插樁、CFLAGS_FOR_TARGET 乾淨），
+  # 真正產品代碼的插樁改在 make 命令列補回——gcc 本體照樣全量 PGO，零降級。
+  _clean_cflags=$(printf '%s' "$CFLAGS" | sed -E \
+    -e 's/[[:space:]]+-fprofile-(generate|use)=[^[:space:]]+//g' \
+    -e 's/[[:space:]]+-fprofile-update=atomic//g' \
+    -e 's/[[:space:]]+-fprofile-correction//g' \
+    -e 's/[[:space:]]+-fprofile-partial-training//g')
+  _clean_ldflags=$(printf '%s' "$LDFLAGS" | sed -E \
+    -e 's/[[:space:]]+-fprofile-(generate|use)=[^[:space:]]+//g' \
+    -e 's/[[:space:]]+-fprofile-update=atomic//g' \
+    -e 's/[[:space:]]+-fprofile-correction//g' \
+    -e 's/[[:space:]]+-fprofile-partial-training//g')
+  CFLAGS="$_clean_cflags" LDFLAGS="$_clean_ldflags" \
   ../configure --prefix=/usr     --enable-languages=c,c++     --disable-multilib     --disable-bootstrap     --with-system-zlib     --enable-default-pie     --enable-default-ssp
-  make
+  make CFLAGS="$CFLAGS" LDFLAGS="$LDFLAGS"
 }
 
 package() {

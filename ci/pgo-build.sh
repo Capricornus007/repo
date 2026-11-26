@@ -43,8 +43,18 @@ case "$stage" in
     cp /etc/makepkg.conf "$CONF_BAK"
     rm -rf "$pd" "$pkgdir/src" "$pkgdir/pkg"
     mkdir -p "$pd"; chown -R builder "$pd" 2>/dev/null || true
-    printf '\n# PGO pass1 (六最)\nCFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nCXXFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nLDFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nOPTIONS=(!strip docs !libtool staticlibs emptydirs zipman purge !debug lto)\n' \
-      "$pd" "$pd" "$pd" >> /etc/makepkg.conf
+    # 2026-11-26 gcc 自我插樁實錘（shard3 #94）：gcc 是本倉唯一用 xgcc 邊編邊跑
+    # autoconf conftest 的包，LDFLAGS 的 -fprofile-generate 會滲進 conftest 連結，
+    # 讓 libatomic 的 "cannot run C compiled programs" 誤判。gcc 本體的插樁完全由
+    # CFLAGS 提供、gcc driver 自動鏈 libgcov，LDFLAGS 不需要 PGO（ gcc 也是 !lto ）。
+    # 其餘包照舊注入 LDFLAGS——LTO 下 lto1 重編需要它（dhcpcd 實錘），不能一刀切。
+    if [ "$name" = gcc ]; then
+      printf '\n# PGO pass1 (六最)\nCFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nCXXFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nOPTIONS=(!strip docs !libtool staticlibs emptydirs zipman purge !debug lto)\n' \
+        "$pd" "$pd" >> /etc/makepkg.conf
+    else
+      printf '\n# PGO pass1 (六最)\nCFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nCXXFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nLDFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nOPTIONS=(!strip docs !libtool staticlibs emptydirs zipman purge !debug lto)\n' \
+        "$pd" "$pd" "$pd" >> /etc/makepkg.conf
+    fi
     # 2026-11-25（librewolf 實測）：Rust 的 cargo-linker 用 -nodefaultlibs 連結，
     # clang 的 -fprofile-generate 不會自動補 compiler-rt profile 執行庫 →
     #   ld.lld: undefined symbol: __llvm_profile_instrument_target / _memop
@@ -114,8 +124,14 @@ case "$stage" in
     # 兩遍編譯間 configure 非確定性讓個別函式 CFG 漂移（chroot.c main arcs
     # 94 vs 88），coverage-mismatch 默認硬錯誤炸 pass2；降警告後
     # -fprofile-correction 照常校正，PGO 不降級。
-    printf '\n# PGO pass2 (六最)\nCFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -Wno-error=coverage-mismatch -fprofile-partial-training"\nCXXFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -Wno-error=coverage-mismatch -fprofile-partial-training"\nLDFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -fprofile-partial-training"\n' \
-      "$pd" "$pd" "$pd" >> /etc/makepkg.conf
+    # gcc 同 pass1：LDFLAGS 不注入 PGO，避免自我插樁污染 conftest（CFLAGS 已足夠）。
+    if [ "$name" = gcc ]; then
+      printf '\n# PGO pass2 (六最)\nCFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -Wno-error=coverage-mismatch -fprofile-partial-training"\nCXXFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -Wno-error=coverage-mismatch -fprofile-partial-training"\n' \
+        "$pd" "$pd" >> /etc/makepkg.conf
+    else
+      printf '\n# PGO pass2 (六最)\nCFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -Wno-error=coverage-mismatch -fprofile-partial-training"\nCXXFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -Wno-error=coverage-mismatch -fprofile-partial-training"\nLDFLAGS+=" -fprofile-use=%s -fprofile-correction -Wno-missing-profile -fprofile-partial-training"\n' \
+        "$pd" "$pd" "$pd" >> /etc/makepkg.conf
+    fi
     ;;
   post)
     [ -f "$CONF_BAK" ] && cp "$CONF_BAK" /etc/makepkg.conf

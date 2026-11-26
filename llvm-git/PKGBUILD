@@ -302,6 +302,23 @@ prepare() {
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_C_FLAGS_RELEASE='-O2 -DNDEBUG' \
     -DCMAKE_CXX_FLAGS_RELEASE='-O2 -DNDEBUG'
+  # 2026-11-26 源头修（run #1044 compiler-rt 沒 asan runtime，六最無豁免）：
+  # 主 build 用 GCC 編 LLVM/clang，CFLAGS 帶 GCC 專有 PGO 旗標；in-tree clang
+  # bootstrap 編 runtimes(compiler-rt) 時，這份 initial cache 把同組旗標原樣
+  # 繼承過去 → clang try_compile 全掛（Detecting C compiler ABI info - failed、
+  # CMAKE_HAVE_LIBC_PTHREAD - Failed、Threads_FOUND=false）→ sanitizer 不建。
+  # 只剝 runtimes 那一份 cache；主 build 的 LLVM/clang 本體 PGO 完全不動。
+  while IFS= read -r _rconf; do
+    sed -i -E \
+      -e 's/[[:space:]]+-fprofile-generate=[^"[:space:]]+//g' \
+      -e 's/[[:space:]]+-fprofile-use=[^"[:space:]]+//g' \
+      -e 's/[[:space:]]+-fprofile-update=atomic//g' \
+      -e 's/[[:space:]]+-fprofile-correction//g' \
+      -e 's/[[:space:]]+-fprofile-partial-training//g' \
+      -e 's/[[:space:]]+-Wno-missing-profile//g' \
+      -e 's/[[:space:]]+-Wno-error=coverage-mismatch//g' \
+      "$_rconf"
+  done < <(find build -path '*/runtimes/tmp/*cache*.cmake' -type f 2>/dev/null)
 }
 
 build() {
