@@ -98,6 +98,10 @@ build() {
   #   官方spirv-tools 1:1.4.363.0-1 的檔單（`pacman -Ql spirv-tools`）也只有那批
   #   .so、零 .a，所以照官方旗標補齊：BUILD_SHARED_LIBS=ON + STATIC=OFF。
   #   SPIRV_WERROR=OFF 同官方：trunk 的 -Wodr／新警告不該把 -Werror 帶進來紅。
+  # 2026-11-26（Build #1044 spirv-tools-git）：PGO 的 libgcov.a 被 static link
+  # 進 libSPIRV-Tools*.so，__gcov_* / mangle_path 洩漏到 dynamic symbol table →
+  # check() 的 7 條 symbol-exports ABI hygiene 測試全紅。用 --exclude-libs 把
+  # libgcov 符號轉 local（不 export），PGO 資料收集不受影響，ABI 測試恢復乾淨。
   cmake -S . -B build -G Ninja \
     -D BUILD_SHARED_LIBS=ON \
     -D CMAKE_BUILD_TYPE=Release \
@@ -108,7 +112,8 @@ build() {
     -D SPIRV_WERROR=OFF \
     -D SPIRV_TOOLS_INSTALL_SDK=ON \
     -D SPIRV_TOOLS_BUILD_EXECUTABLES=ON \
-    -D Python_SITELIB=/dev/null
+    -D Python_SITELIB=/dev/null \
+    -D CMAKE_SHARED_LINKER_FLAGS="-Wl,--exclude-libs,libgcov.a"
   cmake --build build
 }
 
