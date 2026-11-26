@@ -51,6 +51,14 @@ case "$stage" in
     if [ "$name" = gcc ]; then
       printf '\n# PGO pass1 (六最)\nCFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nCXXFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nOPTIONS=(!strip docs !libtool staticlibs emptydirs zipman purge !debug lto)\n' \
         "$pd" "$pd" >> /etc/makepkg.conf
+      # 2026-11-26（shard3 #101 gcc 實錘）：gcc 特殊分支刻意不加 LDFLAGS
+      # 的 -fprofile-generate（避免 xgcc conftest 誤判），但 gcc 自建 gcov-tool
+      # 用 g++ 連結並帶 -static-libgcc → libiberty.a 的插樁對象需要 __gcov_*
+      # 而 static libgcc 不會自動拉 libgcov → undefined reference __gcov_merge_add。
+      # 只補 -lgcov（不帶 -fprofile-generate）：conftest 不會產生 .gcda，
+      # 不影響「cannot run C compiled programs」判斷；靜態庫無符號引用時
+      # linker 也會 --gc-sections 丟掉，對純 C 包無害。
+      printf 'LDFLAGS+=" -lgcov"\n' >> /etc/makepkg.conf
     else
       printf '\n# PGO pass1 (六最)\nCFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nCXXFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nLDFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nOPTIONS=(!strip docs !libtool staticlibs emptydirs zipman purge !debug lto)\n' \
         "$pd" "$pd" "$pd" >> /etc/makepkg.conf
