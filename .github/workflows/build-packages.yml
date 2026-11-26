@@ -1321,6 +1321,18 @@ jobs:
               printf "\n%s\n" "makedepends+=('protobuf')" >> pkg_dir/PKGBUILD
               grep -q "makedepends+=('protobuf')" pkg_dir/PKGBUILD \
                 || { echo "::error::protobuf-c-git 的 protobuf makedepends 注入失敗"; exit 1; }
+              # 第二層（#98 實錘）：protobuf 36.2 把 FieldDescriptor::label() 改名
+              # Label()，而 protobuf-c 1.5.2 的 protoc-gen-c/*.cc 仍用舊名 →
+              # `error: 'const class google::protobuf::FieldDescriptor' has no member
+              # named 'label'; did you mean 'Label'?`，PGO pass1 照樣紅。
+              # 上游 protobuf-c master 至今未修，在 build() 的 cd 之後、autogen 之前
+              # 注入 sed 把所有 descriptor_->label() 改為 Label()（API 等價、功能不變）。
+              # 只改這一種精確形式（上游全庫都是這個寫法），不碰其他 label 標識符。
+              # makepkg 會在 build() 前自動呼叫 prepare()（PKGBUILD 原本沒有，
+              # 直接追加一個即可，不必改 build() 本體，避免 awk 嵌引號地獄）。
+              printf '\nprepare() {\n  cd "protobuf-c"\n  sed -i "s/descriptor_->label()/descriptor_->Label()/g" protoc-gen-c/*.cc\n  grep -q "descriptor_->label()" protoc-gen-c/*.cc && { echo "::error::protobuf-c-git label()→Label() 補丁未生效"; exit 1; } || true\n}\n' >> pkg_dir/PKGBUILD
+              grep -q 'descriptor_->Label()' pkg_dir/PKGBUILD \
+                || { echo "::error::protobuf-c-git 的 label()→Label() 注入失敗"; exit 1; }
               ;;
             i3lock-color-git)
               # AUR 版 makedepends 只有 git，但 configure 默认开 --enable-image
