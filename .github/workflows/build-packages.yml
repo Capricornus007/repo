@@ -1607,7 +1607,13 @@ jobs:
               # 上游初始化邏輯在 LTO 跨模組分析下被誤判；精準降該警告為非錯誤，
               # 功能與 LTO 都保留（6最原則）。
               printf "\n%s\n" "export CFLAGS=\"\${CFLAGS:-} -Wno-error=maybe-uninitialized\"" >> pkg_dir/PKGBUILD
-              tail -2 pkg_dir/PKGBUILD ;;
+              # 2026-11-26 shard2 #107：GCC 16 + LTO 對 xstrndup.c:43 的
+              # strnlen(string, n) 誤判 stringop-overread——n 源自 32 位
+              # SIZE_MAX（-1 轉 unsigned），LTO 跨模組推導成 0xFFFFFFFF80000000
+              # 並當成超出 object size（[-Werror=stringop-overread]）。
+              # 與上面同型：精準降該警告，保留 LTO + 功能。
+              printf "\n%s\n" "export CFLAGS=\"\${CFLAGS:-} -Wno-error=stringop-overread\"" >> pkg_dir/PKGBUILD
+              tail -3 pkg_dir/PKGBUILD ;;
 
             *) : ;;
           esac
