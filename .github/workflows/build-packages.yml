@@ -1047,10 +1047,28 @@ jobs:
                 # （連下面 sway 那條舊寫法都拉不到了，同批修正）。
                 # pkgbase 欄位可選：拆分包（smbclient→samba、python-nautilus→nautilus-python）
                 # 的 repo 目錄名跟包名不同，用 pkgbase 覆寫。
+                # 2026-11-26（shard4 #111 實錘 gsm-shared.patch not found）：Arch 官方
+                # PKGBUILD 常引用同目錄的伴隨檔（*.patch / *.install / *.hook），
+                # 舊寫法只抓 PKGBUILD 一個檔 → makepkg 「was not found in the build
+                # directory and is not a URL」。仿 in_tree 模式用 GitLab tree API
+                # 一次抓齊根目錄所有 blob；API 失敗退回只抓 PKGBUILD。
                 mkdir pkg_dir
                 _pkgbase="${{ matrix.pkgbase }}"
                 [ -n "$_pkgbase" ] || _pkgbase="${{ matrix.repo_name }}"
-                curl -sfL "https://gitlab.archlinux.org/archlinux/packaging/packages/${_pkgbase}/-/raw/main/PKGBUILD" -o pkg_dir/PKGBUILD
+                _arch_raw="https://gitlab.archlinux.org/archlinux/packaging/packages/${_pkgbase}/-/raw/main"
+                curl -sfL "${_arch_raw}/PKGBUILD" -o pkg_dir/PKGBUILD
+                _arch_proj="archlinux%2Fpackaging%2Fpackages%2F${_pkgbase}"
+                if curl -sfL "https://gitlab.archlinux.org/api/v4/projects/${_arch_proj}/repository/tree?ref=main&per_page=100" \
+                     -o /tmp/_arch_tree.json \
+                   && jq -e 'type == "array"' /tmp/_arch_tree.json >/dev/null 2>&1; then
+                  jq -r '.[] | select(.type == "blob") | select(.path | contains("/") | not) | .name' /tmp/_arch_tree.json \
+                    | while IFS= read -r _af; do
+                        [ -n "$_af" ] && [ "$_af" != 'PKGBUILD' ] || continue
+                        curl -sfL "${_arch_raw}/${_af}" -o "pkg_dir/${_af}"
+                      done
+                else
+                  echo "::warning::GitLab tree API 取不到 ${_pkgbase}，退回只抓 PKGBUILD"
+                fi
               elif echo "${{ matrix.repo_name }}" | grep -qE '^(sway|wlroots|waybar|i3status)'; then
                 # 官方穩定版包（無 -git 後綴）：從 Arch 官方 GitLab 取 PKGBUILD
                 mkdir pkg_dir
