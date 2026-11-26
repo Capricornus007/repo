@@ -2689,7 +2689,9 @@ jobs:
                 spirv-llvm-translator-git) _extra_gate_deps="spirv-tools-git spirv-headers-git" ;;
                 mesa-tkg-git)              _extra_gate_deps="spirv-llvm-translator-git" ;;
                 links-git|fstrm-git|libverto-git) _extra_gate_deps="libevent-git" ;;
-                unbound-git)               _extra_gate_deps="libevent-git fstrm-git" ;;
+                # protobuf-c-git 必須列進門檻：unbound 的 makedepends 已從正式版
+                # protobuf-c 換成它，沒等它進 feed 就建會拿到舊 plugin 而失敗。
+                unbound-git)               _extra_gate_deps="libevent-git fstrm-git protobuf-c-git" ;;
                 # shiboken6-git 的 makedepends 寫裸名 clang／llvm（同 translator 的手法：
                 # 靠「把容器 LLVM 換成自有 llvm-*-git」那步把裸名解析到我方 trunk）。
                 # 那步在 plan **之後**才跑，所以這裡先問一次兩顆進沒進 feed：

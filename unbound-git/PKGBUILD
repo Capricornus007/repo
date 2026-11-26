@@ -7,6 +7,9 @@
 # （pacman -Qql unbound）裝的就是同一組檔案，unbound 使用者 958 也在。
 # 明確依賴 libevent-git 與 fstrm-git，保證 CI 對本倉 2.2 重建；
 # 裸 libevent 會被同步庫 2.1 的同名實包搶走，無法完成 ABI 遷移。
+# 2026-11-26：dnstap 改用 protobuf-c-git（從原始碼現場編譯，protoc-gen-c 跟本倉
+# protobuf 36.x 的 protoc 同版）。正式版 protobuf-c 1.5.2 的 plugin 是舊 protoc
+# 產物，與 protobuf 36.2 不相容。禁止改回 protobuf-c，禁止 --disable-dnstap 降功能。
 # Maintainer: Petr Špaček <pspacek@isc.org>
 
 basen=unbound
@@ -18,7 +21,7 @@ arch=(x86_64)
 url="https://unbound.net/"
 license=(BSD)
 depends=(dnssec-anchors fstrm-git hiredis ldns libevent-git libevent-2.2.so libnghttp2 libsodium openssl)
-makedepends=(git expat protobuf-c python swig)
+makedepends=(git expat protobuf-c-git python swig)
 optdepends=(
   'expat: for unbound-anchor'
   'sh: for unbound-control-setup'

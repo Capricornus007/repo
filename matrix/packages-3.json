@@ -529,6 +529,12 @@
   "kind": "aur"
  },
  {
+  "key": "protobuf-c-git",
+  "repo_name": "protobuf-c-git",
+  "variant": "none",
+  "kind": "aur"
+ },
+ {
   "key": "protobuf-git",
   "repo_name": "protobuf-git",
   "variant": "none",
