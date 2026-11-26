@@ -2717,6 +2717,11 @@ jobs:
                 # protobuf-c-git 必須列進門檻：unbound 的 makedepends 已從正式版
                 # protobuf-c 換成它，沒等它進 feed 就建會拿到舊 plugin 而失敗。
                 unbound-git)               _extra_gate_deps="libevent-git fstrm-git protobuf-c-git" ;;
+                # syslog-ng-openrc 是 in-tree 純腳本包，depends 的 syslog-ng-git 本倉自建、
+                # openrc 已補進矩陣（AUR 0.64.1，産品無任何 systemd 檔案）。兩顆沒進
+                # junlin03-aur 之前 makepkg -s 會直接 `target not found` 判紅，
+                # 照本倉既有 DAG 收斂設計本輪跳過等下一輪。
+                syslog-ng-openrc)          _extra_gate_deps="syslog-ng-git openrc" ;;
                 # shiboken6-git 的 makedepends 寫裸名 clang／llvm（同 translator 的手法：
                 # 靠「把容器 LLVM 換成自有 llvm-*-git」那步把裸名解析到我方 trunk）。
                 # 那步在 plan **之後**才跑，所以這裡先問一次兩顆進沒進 feed：
@@ -4103,10 +4108,24 @@ jobs:
           pacman -Q ffmpeg >/dev/null 2>&1 \
             || { echo "::error::容器裡裝不上同步庫 ffmpeg，無法按上面的順序換 libplacebo"; exit 1; }
 
-          # ①.5 舊 soname 先留一份：容器裡 ffmpeg 的 NEEDED 是 libplacebo.so.360，
-          #      拔掉同步庫後這顆檔案會一起消失。留著它，mpv 用 387、ffmpeg 照跑
-          #      （兩個 soname 並存＝新舊通吃；不留下就變成拆東牆補西牆）。
-          mkdir -p /tmp/lp360 && cp -a /usr/lib/libplacebo.so.360* /tmp/lp360/ 2>/dev/null || true
+          # ①.5 舊 soname 先留一份：同步庫 libplacebo 會被拔掉，而同步庫 ffmpeg
+          #      的 NEEDED 指向它的 soname。2026-11-26 實物：Arch 已把 extra/
+          #      libplacebo 升到 7.387，soname 從寫死的 .360 變成 .387；只留
+          #      .360 的舊寫法讓拔包後 ffmpeg 找不到 .387（log 實物
+          #      `libplacebo.so.387 => not found`），mpv_protocols 目標直接
+          #      code 127。改成：先把目前在場的所有 libplacebo.so.* 都留一份，
+          #      再從 ffmpeg / libavfilter 的 NEEDED 動態抓出真正需要的 soname
+          #      （新舊通吃；同步庫再升版也不會再寫死）。
+          mkdir -p /tmp/lp-old
+          for _f in /usr/lib/libplacebo.so.*; do
+            [ -e "$_f" ] || continue
+            cp -a "$_f" /tmp/lp-old/ 2>/dev/null || true
+          done
+          _lp_needed=$(for _b in /usr/bin/ffmpeg /usr/lib/libavfilter.so*; do
+            [ -e "$_b" ] || continue
+            readelf -d "$_b" 2>/dev/null
+          done | sed -nE 's/.*NEEDED.*\[(libplacebo\.so\.[0-9]+)\].*/\1/p' | sort -u | tr '\n' ' ')
+          echo "ffmpeg 需要的 libplacebo soname：${_lp_needed:-查不到}；已保留：$(ls /tmp/lp-old 2>/dev/null | tr '\n' ' ')"
 
           # ② 拔同步庫 libplacebo（-Rdd 跳過依賴檢查：它此時是 ffmpeg 的依賴，
           #    普通 -R 會被擋。與「把 Go 工具鏈換成自有 go-git」那步同一手法）
@@ -4119,9 +4138,15 @@ jobs:
             sleep $((_t * 8))
           done
 
-          # ③.5 把 .so.360 放回去（ffmpeg 仍需要它），並讓 ldconfig 認得兩個版本
-          cp -a /tmp/lp360/. /usr/lib/ 2>/dev/null || true
+          # ③.5 把所有舊 soname 放回去（ffmpeg 仍需要它），並讓 ldconfig 認得
+          #      新舊兩版；再按 ①.5 抓到的真實 NEEDED 逐個自證，缺一個就紅，
+          #      不再用「只看 .360 在不在」的假檢查放過 .387 消失。
+          cp -a /tmp/lp-old/. /usr/lib/ 2>/dev/null || true
           ldconfig
+          for _n in $_lp_needed; do
+            [ -e "/usr/lib/$_n" ] \
+              || { echo "::error::ffmpeg 需要的 $_n 在換包後消失了（舊 soname 沒留住）"; exit 1; }
+          done
           ldd /usr/bin/ffmpeg 2>/dev/null | grep -i placebo || true
 
           # ④ 產物端自證：不是「裝了就算」，問的是三道實際閘門

@@ -1144,5 +1144,11 @@
   "repo_name": "auracle-git",
   "variant": "none",
   "in_tree": true
+ },
+ {
+  "key": "openrc",
+  "repo_name": "openrc",
+  "variant": "none",
+  "kind": "aur"
  }
 ]

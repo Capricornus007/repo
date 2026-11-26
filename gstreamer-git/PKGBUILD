@@ -303,6 +303,20 @@ prepare() {
     # upstream main 已合入 faac>=2.0 支援（0002 補丁語義），git apply -3
     # 因此報 "Applied patch ... with conflicts"。用反向檢查判定「已上游化」
     # 就跳過；真衝突（既不能正向也不能反向套用）才當錯誤，不靜默漏功能。
+    #
+    # 2026-11-26 更新：上游把 0002 的支援再升級——除了 FAAC_VERSION_MAJOR>=1
+    # 的 faac_encoder_* 新 API，還多了 >=2 的 faac_params_init(&params,
+    # sizeof(params)) 新簽名分支（faac 2.x 改了簽名），meson 探測也重構過。
+    #  粗糙的文字反向檢查因此失效，但功能不但沒丟還比補丁更完整。
+    #  按取捨規則「對方更好 → 拿過來、重複 → 去重」：先做功能等價偵測，
+    #  確認上游有更新版就跳過；補丁檔仍留在倉內，上游若退回舊版再自動套用。
+    if [ "$src" = 0002-faac-support-faac-2.0-faac_-API.patch ] \
+       && [ -f subprojects/gst-plugins-bad/ext/faac/gstfaac.c ] \
+       && grep -q 'FAAC_VERSION_MAJOR >= 2' subprojects/gst-plugins-bad/ext/faac/gstfaac.c \
+       && grep -q 'faac_encoder_open' subprojects/gst-plugins-bad/ext/faac/meson.build; then
+      echo "  -> $src 上游已以更完整形式吸收（faac 2.x 新簽名分支 + 雙 API 探測），去重跳過"
+      continue
+    fi
     if git apply -3 < "../$src"; then
       :
     elif git apply --reverse --check < "../$src" 2>/dev/null; then
