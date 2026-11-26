@@ -1416,7 +1416,7 @@ jobs:
             *) : ;;
           esac
       - name: 2026-11-22 紅包修復特例（獨立 step——主 step 已破 21000 表達式上限）
-        if: contains(fromJSON('["gvfs-git","xdg-desktop-portal-git","gjs-git","fwupd-git","nvme-cli-git","openvpn-git","tesseract-data-eng-git","tesseract-data-chi_sim-git","tesseract-data-chi_tra-git","tesseract-data-osd-git","tesseract-data-jpn-git","sccache-git","kvazaar-git","libx11-git","localsend-git","rsync-git","tumbler-git","unbound-git","tpm2-tss-git","elfutils-git","lxsession-git","seahorse-git","thunar-git","krb5-git","strace-git","capnproto-git","abseil-cpp-git","bzip3-git"]'), matrix.repo_name)
+        if: contains(fromJSON('["gvfs-git","xdg-desktop-portal-git","gjs-git","fwupd-git","nvme-cli-git","openvpn-git","tesseract-data-eng-git","tesseract-data-chi_sim-git","tesseract-data-chi_tra-git","tesseract-data-osd-git","tesseract-data-jpn-git","sccache-git","kvazaar-git","libx11-git","localsend-git","rsync-git","tumbler-git","unbound-git","tpm2-tss-git","elfutils-git","lxsession-git","seahorse-git","thunar-git","krb5-git","strace-git","capnproto-git","abseil-cpp-git","bzip3-git","xfce4-notifyd-git"]'), matrix.repo_name)
         run: |
           set -euo pipefail
           # 為什麼是獨立 step：上面的「逐包修正」run 塊已破 GitHub「max expression
