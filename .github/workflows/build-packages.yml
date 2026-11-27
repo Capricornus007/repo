@@ -1725,6 +1725,15 @@ jobs:
             || { echo "::error::lrzip-git 的 perl 依賴沒注入"; exit 1; }
           echo "lrzip-git: pod2man（perl）依賴已補"
 
+      - name: nss 的 certdata2pem.py 補執行權限（獨立 step——大 step 已貼 21000 上限）
+        if: matrix.repo_name == 'nss'
+        run: |
+          set -euo pipefail
+          # 2026-11-27（#121 實錘）：PKGBUILD build() 直接跑 ../certdata2pem.py，
+          # 但 AUR 來源檔沒有 +x → Permission denied。chmod 補上。
+          chmod +x pkg_dir/certdata2pem.py 2>/dev/null || true
+          echo "nss: certdata2pem.py 執行權限已補"
+
       - name: i3lock-color-git 的 fancy×color 合一（獨立 step——大 step 已貼著 21000 表達式上限）
         if: matrix.repo_name == 'i3lock-color-git'
         run: |
