@@ -1068,14 +1068,7 @@ jobs:
           set -euo pipefail
           # Artix 禁 systemd：全局剝 PKGBUILD 的 systemd-libs（可選 feature 自動關；
           # 真鏈 libsystemd.so.0 會被 NEEDED 檢查攔下）。
-          # 2026-11-27（#121 sdl_gfx 實錘）：部分包（如 sdl_gfx）走非 PKGBUILD
-          # 路徑，此 step 執行時 pkg_dir/PKGBUILD 還不存在 → sed 直接死。
-          # 加存在守衛：無 PKGBUILD 時跳過手術，不阻斷構建。
-          if [ -f pkg_dir/PKGBUILD ]; then
-            sed -i "s/'systemd-libs[^']*'//g" pkg_dir/PKGBUILD
-          else
-            echo "::notice::無 pkg_dir/PKGBUILD（非 PKGBUILD 包），跳過 systemd-libs 手術"
-          fi
+          sed -i "s/'systemd-libs[^']*'//g" pkg_dir/PKGBUILD
           # 這些都是 AUR／上游自己的小毛病，與本倉打包流程無關。原先連同 clone 寫在
           # 上一步的 case 裡，結果那一步腳本太長，撞上 GitHub「max expression length
           # 21000」的解析上限（run #231 整個 workflow 因此無效、一個 job 都沒起）。
