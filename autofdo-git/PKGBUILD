@@ -50,15 +50,24 @@ build() {
   export CXXFLAGS="${CFLAGS}"
 # Note: "-DCMAKE_INSTALL_PREFIX=." must be used, because there is a bug in the basil cmakelist. (check: README.rst)
 # Build LLVM variant
+	# protobuf 36 的 FindProtobuf 模組只給 imported target，autofdo 的舊
+	# CMakeLists 直接讀 Protobuf_LIBRARIES → 明確餵三個變數，別讓它找不到。
+	_protobuf_cmake_args=(
+		-DProtobuf_LIBRARIES=/usr/lib/libprotobuf.so
+		-DProtobuf_INCLUDE_DIRS=/usr/include
+		-DProtobuf_PROTOC_EXECUTABLE=/usr/bin/protoc
+	)
 	cmake -G Ninja -S "$srcdir/${_pkgname}" -B build_with_llvm \
 		-DCMAKE_INSTALL_PREFIX=. \
 		-DLLVM_PATH=/usr \
 		-DCMAKE_C_COMPILER=clang \
-		-DCMAKE_CXX_COMPILER=clang++
+		-DCMAKE_CXX_COMPILER=clang++ \
+		"${_protobuf_cmake_args[@]}"
 	ninja -C build_with_llvm
 # Build GCC variant
 	cmake -G Ninja -S "$srcdir/${_pkgname}" -B build_without_llvm \
-		-DCMAKE_INSTALL_PREFIX=.
+		-DCMAKE_INSTALL_PREFIX=. \
+		"${_protobuf_cmake_args[@]}"
 	ninja -C build_without_llvm
 }
 
