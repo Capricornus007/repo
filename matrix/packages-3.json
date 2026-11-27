@@ -897,12 +897,6 @@
   "kind": "aur"
  },
  {
-  "key": "wezterm-git",
-  "repo_name": "wezterm-git",
-  "variant": "none",
-  "kind": "aur"
- },
- {
   "key": "which-git",
   "repo_name": "which-git",
   "variant": "none",
