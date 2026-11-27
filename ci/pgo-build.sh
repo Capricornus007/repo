@@ -65,15 +65,6 @@ case "$stage" in
       # 不影響「cannot run C compiled programs」判斷；靜態庫無符號引用時
       # linker 也會 --gc-sections 丟掉，對純 C 包無害。
       printf 'LDFLAGS+=" -lgcov"\n' >> /etc/makepkg.conf
-    elif [ "$name" = binutils ]; then
-      # 2026-11-26（shard3 #101 binutils 實錘）：binutils 的 gprofng 子包
-      # 自己加 -fno-lto（Makefile.am），但全域 LTOFLAGS=-flto=auto 被 makepkg
-      # 追加到連結命令尾部 → 覆蓋 -fno-lto → LTO 物件無 plugin →
-      # `plugin needed to handle lto object` + `__start undefined reference to main`。
-      # gprofng 本就不支援 LTO，清空 LTOFLAGS 尊重它的 -fno-lto（其餘 binutils
-      # 子工具照常 PGO 插樁，功能不降）。
-      printf '\n# PGO pass1 (六最) — binutils: gprofng 與 LTO 不相容\nCFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nCXXFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nLDFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nLTOFLAGS=""\nOPTIONS=(!strip docs !libtool staticlibs emptydirs zipman purge !debug lto)\n' \
-        "$pd" "$pd" "$pd" >> /etc/makepkg.conf
     else
       printf '\n# PGO pass1 (六最)\nCFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nCXXFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nLDFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nOPTIONS=(!strip docs !libtool staticlibs emptydirs zipman purge !debug lto)\n' \
         "$pd" "$pd" "$pd" >> /etc/makepkg.conf

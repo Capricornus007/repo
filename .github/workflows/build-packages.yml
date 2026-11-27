@@ -1680,6 +1680,19 @@ jobs:
               grep -q 'return PclmulProduct<0>{};' "$_crc" \
                 || { echo "::error::abseil CRC vector initializer 補丁沒落地"; exit 1; }
               echo "abseil: GCC16 vector brace-init 已改顯式建構" ;;
+            binutils)
+              # 2026-11-26（用戶裁定：所有包都上全套 LTO/PGO，不替任何包
+              # 決定「不支援」）：gprofng 的 configure 探測 gcc 支援 -fno-lto
+              # 就設 NOLTO_CFLAGS=-fno-lto，與全域 LDFLAGS 的 -flto=auto 衝突
+              # → plugin needed to handle lto object + __start undefined main。
+              # 正解：在 build() 的 configure 之前 sed 掉 gprofng/configure
+              # 裡的 NOLTO_CFLAGS=-fno-lto，讓 gprofng 照樣吃 LTO+PGO。
+              # 插在 build() { 之後——源碼此時已由 prepare() 解壓。
+              awk '/^build\(\) \{/ {print; print "  find src -path '\''*/gprofng/configure'\'' -type f -exec sed -i '\''s/NOLTO_CFLAGS=-fno-lto/NOLTO_CFLAGS=/g'\'' {} +"; next} {print}' \
+                pkg_dir/PKGBUILD > pkg_dir/PKGBUILD.t && mv pkg_dir/PKGBUILD.t pkg_dir/PKGBUILD
+              grep -q 'NOLTO_CFLAGS=-fno-lto/NOLTO_CFLAGS=' pkg_dir/PKGBUILD \
+                || { echo "::error::binutils 的 gprofng LTO 補丁沒注入"; exit 1; }
+              echo "binutils: gprofng 已改吃全套 LTO+PGO" ;;
             bzip3-git)
               # 2026-11-26 run #1044：上游已刪 bootstrap.sh（實查 master 僅存
               # configure.ac/Makefile.am），AUR 配方還在跑 ./bootstrap.sh →
