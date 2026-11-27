@@ -1478,7 +1478,15 @@ jobs:
               sed -i 's#^  mv "\$srcdir/google" "\$pkgdir/usr"$#  [ -d "$srcdir/google" ] \&\& mv "$srcdir/google" "$pkgdir/usr" || echo "gvfs-google: $srcdir/google 不存在，上游已移除此 backend，跳過"#' pkg_dir/PKGBUILD
               grep -q 'gvfs-google: \$srcdir/google 不存在' pkg_dir/PKGBUILD \
                 || { echo "::error::gvfs-google 的 mv 檔案存在守衛沒注入"; exit 1; }
-              echo "gvfs: libgdata 已移除、msgraph 已補、_split 與 google 拆包缺檔容錯已加" ;;
+              # 2026-11-27（shard4 #121 實錘）：AUR PKGBUILD 的 _split() 把
+              # lib/systemd/user/*.service 也移進 5 個 gvfs 子包 → 產物含
+              # systemd 文件，違反用戶鐵律「不容許一切存在」。删掉 PKGBUILD
+              # 中所有 systemd service 行（_split 逐行參數，删行即跳過），
+              # dbus activation 的 share/dbus-1/services/* 保留（非 systemd）。
+              sed -i '/lib\/systemd\/user/d' pkg_dir/PKGBUILD
+              grep -q 'lib/systemd/user' pkg_dir/PKGBUILD \
+                && { echo "::error::gvfs 的 systemd _service 引用沒刪乾淨"; exit 1; } || true
+              echo "gvfs: libgdata 已移除、msgraph 已補、_split/google 缺檔容錯 + systemd 檔已清" ;;
             xdg-desktop-portal-git)
               # 上游 meson.build 要求 wireplumber-0.5（run #86：
               #   Dependency "wireplumber-0.5" not found (tried pkg-config)
