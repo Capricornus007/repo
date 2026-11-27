@@ -682,6 +682,43 @@ if (source.includes(marker)) {
 
     fs.writeFileSync(indexPath, source);
     log('patched main/index.js (env shim + tray context menu + tray icon path + disabled updater + anti-white-flash)');
+
+    // -----------------------------------------------------------------------
+    // Fix 9 (Linux): 斬掉 renderer/index.html 的首屏白底兜底。
+    //
+    // Fix 8 只改了 main 進程的原生底色，但实测重啟後「從別的視窗切回來」仍舊
+    // 白屏一下。真正那一幀是 renderer 層：renderer/index.html 的 inline <style>
+    // 寫死 `html { background-color: #ffffff; }`，且骨架屏變數 --sk-bg /
+    // --sk-content-bg 等也全是白。上游註解明說「背景兜底刻意不跟隨 prefers-
+    // color-scheme，預設主題是 IDE Light」——切回視窗時 ThemeManager 還沒執行
+    // 到寫 class，就先露出這個純白兜底，就是刺眼白屏的來源。
+    //
+    // 在 Linux port 上把這些兜底改成深灰（等長，#xxxxxx → #xxxxxx），不影響
+    // 功能/i18n；亮色皮膚使用者會看到深灰骨架而非純白，正好不刺眼。
+    // -----------------------------------------------------------------------
+    const rendererHtmlPath = path.join(tmpDir, 'renderer', 'index.html');
+    if (fs.existsSync(rendererHtmlPath)) {
+        let html = fs.readFileSync(rendererHtmlPath, 'utf8');
+        const htmlRepls = [
+            ['html { background-color: #ffffff; }', 'html { background-color: #1e1e1e; }'],
+            ['--sk-bg: #ffffff', '--sk-bg: #1e1e1e'],
+            ['--sk-content-bg: #ffffff', '--sk-content-bg: #1e1e1e'],
+            ['--sk-sidebar-bg: #f7f7f8', '--sk-sidebar-bg: #252526'],
+            ['--sk-statusbar-bg: #f8f8f8', '--sk-statusbar-bg: #252526'],
+            ['--sk-titlebar-bg: #f5f5f5', '--sk-titlebar-bg: #252526'],
+        ];
+        let htmlPatched = 0;
+        for (const [oldStr, newStr] of htmlRepls) {
+            if (html.includes(oldStr)) {
+                html = html.split(oldStr).join(newStr);
+                htmlPatched++;
+            }
+        }
+        fs.writeFileSync(rendererHtmlPath, html);
+        log('patched renderer/index.html: ' + htmlPatched + '/6 white-flash background fallbacks (Fix 9)');
+    } else {
+        log('renderer/index.html not found; Fix 9 white-flash patch is a no-op');
+    }
 }
 
 // ---------------------------------------------------------------------------
