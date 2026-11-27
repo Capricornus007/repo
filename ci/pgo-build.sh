@@ -125,6 +125,17 @@ case "$stage" in
       export RUSTFLAGS="${RUSTFLAGS:-} -Clink-arg=-lgcov"
       printf 'RUSTFLAGS+=" -Clink-arg=-lgcov"\n' >> /etc/makepkg.conf
     fi
+    # 2026-11-28（run 45941539760 實錘）：pass2 的 makepkg 由 workflow **另一個
+    # step** 執行，上面 export 的 RUSTFLAGS 在 step 間遺失；而 makepkg.conf 的
+    # RUSTFLAGS+= 又因 makepkg 不把 shell 變數 export 給 su/setpriv 子進程而無效
+    # → rustc 看不到 link-arg → __gcov_merge_add/__gcov_merge_time_profile
+    # undefined。寫成 env 片段，讓 workflow 把 RUSTFLAGS 直接放進 pass2 的
+    # makepkg 命令字串（su -c / bash -c 才會帶進 cargo/rustc）。
+    if [ -n "${RUSTFLAGS:-}" ]; then
+      printf "RUSTFLAGS='%s' " "$RUSTFLAGS" > "/tmp/pgo-rustflags-${name}.env"
+    else
+      : > "/tmp/pgo-rustflags-${name}.env"
+    fi
     # pass1 只編插樁樹、不出包(--noarchive)；去掉 -f(force 重建由 rm src/pkg 保證)。
     p1flags=$(printf '%s' "$flags" | sed -E 's/ -f([ ]|$)/ /g')
     if ! (cd "$pkgdir" && run_makepkg "$p1flags --noarchive") 2>&1 | tee /tmp/makepkg-pgo-pass1.log; then

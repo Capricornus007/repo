@@ -4387,7 +4387,13 @@ jobs:
           PGO_RUNAS="$_runas" PGO_MP_ENV="$_mp_env" \
             /usr/local/bin/pgo-build pre "$_pgo_name" "$flags" "$_pgo_pd" "$PWD"
           # 下面 until 迴圈即 pass2 最終構建（讀 -fprofile-use，出 .pkg.tar.zst）。
-          until $_runas "${_mp_env}makepkg $flags" 2>&1 | tee /tmp/makepkg.log; do
+          # pgo-build pre 寫出的 RUSTFLAGS env 片段必須直接進 makepkg 命令字串：
+          # pass1 的 export 在 step 間丟失、makepkg.conf 的 RUSTFLAGS+= 又進不了
+          # su/setpriv 子進程（run 45941539760 的 __gcov_merge_* undefined）。
+          _pgo_rf=""
+          [ -f "/tmp/pgo-rustflags-${_pgo_name}.env" ] \
+            && _pgo_rf="$(cat /tmp/pgo-rustflags-${_pgo_name}.env)"
+          until $_runas "${_mp_env}${_pgo_rf}makepkg $flags" 2>&1 | tee /tmp/makepkg.log; do
             _mp=$((_mp + 1))
             bad=$(grep -oE '^:: File [^ ]+ is corrupted' /tmp/makepkg.log | awk '{print $3}' | sort -u || true)
             dl=$(grep -qE 'Failure while downloading|RPC failed|returned error: 50[0-9]|reset by server|HTTP/2 stream|curl: \([0-9]+\)|failed retrieving file|failed to commit transaction' /tmp/makepkg.log && echo yes)
