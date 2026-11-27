@@ -79,6 +79,12 @@ case "$stage" in
     _rt_dir="$(clang -print-resource-dir 2>/dev/null)/lib/linux"
     if [ -d "$_rt_dir" ]; then
       printf 'LDFLAGS+=" -L%s -lclang_rt.profile-x86_64"\n' "$_rt_dir" >> /etc/makepkg.conf
+      # 2026-11-27（shard4 #121 librewolf 實錘）：Rust 的 build script
+      # （webrender 等）用 clang 連結、不吃 LDFLAGS，只吃 RUSTFLAGS →
+      # __llvm_profile_instrument_target/_memop undefined。與 gcc 側
+      # __gcov_* 對稱：同一個 compiler-rt 也經 RUSTFLAGS link-arg 注入。
+      # append（不覆蓋 librewolf 的 -C target-cpu、sccache 的 allow-shlib）。
+      export RUSTFLAGS="${RUSTFLAGS:-} -Clink-arg=-L$_rt_dir -Clink-arg=-lclang_rt.profile-x86_64"
     fi
     # 2026-11-26（rustup / shard4 #113 實錘）：混合工具鏈包——Rust 的
     # cc crate 用系統 gcc 編 C 依賴（aws-lc-sys/zstd-sys 等），gcc 插樁產生
