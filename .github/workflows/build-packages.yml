@@ -1716,14 +1716,16 @@ jobs:
         if: matrix.repo_name == 'lrzip-git'
         run: |
           set -euo pipefail
-          # 2026-11-27（shard3 #104 實錘）：CI 最小鏡像無 pod2man（属 perl 包），
+          # 2026-11-27（shard3 #104 實錘）：CI 最小鏡像無 pod2man，
           # lrzip 的 configure 要它生成 man page →
           # "configure: error: pod2man is needed to generate manual from POD"。
-          # 補 makedepends=perl（提供 /usr/bin/pod2man）。
-          printf "\n%s\n" "makedepends+=('perl')" >> pkg_dir/PKGBUILD
-          grep -q "makedepends+=('perl')" pkg_dir/PKGBUILD \
-            || { echo "::error::lrzip-git 的 perl 依賴沒注入"; exit 1; }
-          echo "lrzip-git: pod2man（perl）依賴已補"
+          # 2026-11-28（shard3 45994741237 實錘）：只補 perl 不夠——
+          # Arch/Artix 已把 pod2man 拆到 perl-podlators，perl 本體不再提供
+          # /usr/bin/pod2man。兩個都補，makepkg -s 才會裝到真正的 pod2man。
+          printf "\n%s\n" "makedepends+=('perl' 'perl-podlators')" >> pkg_dir/PKGBUILD
+          grep -q "makedepends+=('perl' 'perl-podlators')" pkg_dir/PKGBUILD \
+            || { echo "::error::lrzip-git 的 pod2man 依賴沒注入"; exit 1; }
+          echo "lrzip-git: pod2man（perl-podlators）依賴已補"
 
       - name: nss 的 certdata2pem.py 補執行權限（獨立 step——大 step 已貼 21000 上限）
         if: matrix.repo_name == 'nss'
