@@ -719,6 +719,27 @@ if (source.includes(marker)) {
     } else {
         log('renderer/index.html not found; Fix 9 white-flash patch is a no-op');
     }
+
+    // -----------------------------------------------------------------------
+    // Fix 10 (Linux): 斬掉 main/index.js 裡兩個原生白底 BrowserWindow。
+    //
+    // Fix 9 改了 renderer 兜底，但实测重裝新版後「切回窗口」仍舊白屏——真正
+    // 那一帧是 main 進程建立的原生 BrowserWindow 底色：
+    //   splash 啟動窗（backgroundColor:`#ffffff`）與 HTML cover 截圖窗。
+    // 上游把舊的雙引號三元式 (? "#1e1e1e" : "#ffffff") 改成反引號字面量，
+    // 所以 Fix 8 的 pattern 在新版完全匹配不到。這裡用反引號 pattern 精準改。
+    // 兩處都是等長替換、不影響功能/i18n。
+    // -----------------------------------------------------------------------
+    const splashBg = 'backgroundColor:`#ffffff`';
+    const splashCount = source.split(splashBg).length - 1;
+    if (splashCount > 0) {
+        source = source.split(splashBg).join('backgroundColor:`#1e1e1e`');
+        log('patched ' + splashCount + ' native BrowserWindow background(s) (splash/cover): #ffffff -> #1e1e1e (Fix 10)');
+    } else {
+        log('no splash/cover white background found; Fix 10 is a no-op (upstream may use a different form)');
+    }
+
+    fs.writeFileSync(indexPath, source);
 }
 
 // ---------------------------------------------------------------------------
