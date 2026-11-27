@@ -4804,11 +4804,18 @@ jobs:
           # 產物」的半截庫；上傳後別輪的包全成孤兒，下一輪清理照半截庫把它們連環刪掉
           # （2026-11-02 實測：Xfce 全鏈／gst-*／llvm 反覆從 DB 消失，deploy 卻報 success）。
           # 所以：重試抓舊庫；連續失敗就中止本輪部署——寧可這輪不發佈，也絕不上傳半截庫。
+          # Release 上 actual asset 只有無後綴的 junlin03-aur.db；它的格式就是 gzip
+          # tar（與 .db.tar.gz 同一份內容），但下面全流程都吃 .db.tar.gz。舊版死盯
+          # .db.tar.gz 判斷 → download 明明成功卻空轉 5 次中止（run 46013879072）。
+          # 修法：抓到 .db 就補一份 .db.tar.gz，判斷兩者皆可。
           db_restored=false
           for _try in 1 2 3 4 5; do
             if gh release download "$REPO_RELEASE_TAG" --repo "${{ github.repository }}" \
                  -p "junlin03-aur.db*" -p "junlin03-aur.files*" --clobber \
-               && [ -s junlin03-aur.db.tar.gz ]; then
+               && { [ -s junlin03-aur.db ] || [ -s junlin03-aur.db.tar.gz ]; }; then
+              if [ -s junlin03-aur.db ] && [ ! -s junlin03-aur.db.tar.gz ]; then
+                cp -f junlin03-aur.db junlin03-aur.db.tar.gz
+              fi
               db_restored=true; break
             fi
             echo ">> 第 $_try 次取舊庫失敗，8 秒後重試"
