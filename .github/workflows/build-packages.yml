@@ -1471,18 +1471,12 @@ jobs:
               sed -i '/^  for src; do$/a\    [ -e "$src" ] || { echo "$name: $src 不存在（上游已移除此 backend），跳過"; continue; }' pkg_dir/PKGBUILD
               grep -q '不存在（上游已移除此 backend）' pkg_dir/PKGBUILD \
                 || { echo "::error::gvfs 的 _split 檔案存在守衛沒注入"; exit 1; }
-              # 2026-11-26（shard4 #120 實錘）：第二個 Google 後端已從 upstream
-              # 移除，$srcdir/google 根本不存在，但 package_gvfs-google-git()
-              # 仍 mv 它 → `mv: cannot stat '/.../src/google'` → 拆包死。
-              # 給這行也加存在守衛（與 _split 同一策略，功能不降）。
+              # #120：package_gvfs-google-git() 的 mv $srcdir/google 也加守衛。
               sed -i 's#^  mv "\$srcdir/google" "\$pkgdir/usr"$#  [ -d "$srcdir/google" ] \&\& mv "$srcdir/google" "$pkgdir/usr" || echo "gvfs-google: $srcdir/google 不存在，上游已移除此 backend，跳過"#' pkg_dir/PKGBUILD
               grep -q 'gvfs-google: \$srcdir/google 不存在' pkg_dir/PKGBUILD \
                 || { echo "::error::gvfs-google 的 mv 檔案存在守衛沒注入"; exit 1; }
-              # 2026-11-27（shard4 #121 實錘）：AUR PKGBUILD 的 _split() 把
-              # lib/systemd/user/*.service 也移進 5 個 gvfs 子包 → 產物含
-              # systemd 文件，違反用戶鐵律「不容許一切存在」。删掉 PKGBUILD
-              # 中所有 systemd service 行（_split 逐行參數，删行即跳過），
-              # dbus activation 的 share/dbus-1/services/* 保留（非 systemd）。
+              # #121：_split() 把 systemd service 移進子包 → 違鐵律；刪之，
+              # dbus activation（share/dbus-1/services/*）保留。
               sed -i '/lib\/systemd\/user/d' pkg_dir/PKGBUILD
               grep -q 'lib/systemd/user' pkg_dir/PKGBUILD \
                 && { echo "::error::gvfs 的 systemd _service 引用沒刪乾淨"; exit 1; } || true
