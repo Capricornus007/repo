@@ -1172,7 +1172,7 @@
     "key": "sdl_gfx",
     "repo_name": "sdl_gfx",
     "variant": "none",
-    "kind": "aur"
+    "kind": "arch"
   },
   {
     "key": "tinysparql",
