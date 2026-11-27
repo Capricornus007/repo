@@ -1112,7 +1112,15 @@ jobs:
               # _additional_meson_flags 追加 -Db_pie=false——該變數在 arch-meson
               # 參數列末尾，meson 後者覆蓋前者。b_pie 只是 ASLR 特性。
               sed -i 's/^_additional_meson_flags="\(--strip --buildtype release\)"/_additional_meson_flags="\1 -Db_pie=false"/' pkg_dir/customization.cfg
-              grep -q 'Db_pie=false' pkg_dir/customization.cfg || echo "::warning::b_pie 注入未匹配，chaotic cfg 可能已改，檢查"
+              # 2026-11-28：chaotic cfg 現有 32 位專用 _additional_meson_flags_32，
+              # PKGBUILD 的 _build32 arch-meson 同時拼通用與 _32 兩個變數。再往
+              # _32 注入一道，確保 b_pie=false 一定落到 32 位構建（vtn_bindgen2
+              # R_386_32 那條路徑）；任一注入沒匹配就直接紅，不再靜默放過。
+              sed -i 's/^_additional_meson_flags_32=""/_additional_meson_flags_32="-Db_pie=false"/' pkg_dir/customization.cfg
+              grep -q '_additional_meson_flags="[^"]*Db_pie=false' pkg_dir/customization.cfg \
+                || { echo "::error::b_pie 通用注入未匹配，chaotic cfg 格式已變"; exit 1; }
+              grep -q '_additional_meson_flags_32="-Db_pie=false"' pkg_dir/customization.cfg \
+                || { echo "::error::b_pie 32 位注入未匹配，chaotic cfg 格式已變"; exit 1; }
               # ── LLVM 24 的 llvm-c/Target.h 要自己 include（2026-10-20 本地實測定位）
               # 症狀：build() 紅在
               #   src/amd/llvm/ac_llvm_util.c:20:4: error: call to undeclared function
@@ -4283,6 +4291,39 @@ jobs:
             pacman -Rdd --noconfirm flex
             echo "::notice::已移除同步庫 flex，改由 makedepends 的 flex-git 提供"
           fi
+
+      - name: 通用清除 systemd 死檔案（所有包——避免硬閘逐包漏網）
+        if: steps.plan.outputs.build == 'true'
+        run: |
+          set -euo pipefail
+          # 用戶鐵律：產物內一切 systemd 文件/目錄不容許存在（Artix/OpenRC 目標機
+          # 根本沒 systemd，那些 .service/sysusers.d 全是死檔案）。
+          #
+          # 2026-11-27 shard4 run #129 實測：xfconf-git、gvfs-git、rustup-git、
+          # nemo-git、sccache-git 等 20 顆同時被後段硬閘攔下，全部是
+          #   "產物含 systemd 文件/目錄：.../usr/lib/systemd/user/xxx.service"
+          # 根因不是 20 顆各自壞，而是原本 1581 行那段清理只對少數包名生效
+          # （rsync/tumbler/unbound/xfce4-notifyd 等），其餘包沒清到，
+          # 上游 package() 照樣裝 service → 硬閘全紅。
+          #
+          # 這裡改成通用清理：對每一顆要 build 的包，在 package() 結束大括號前
+          # 插入 rm -rf systemd 路徑。檢查硬閘完全保留（不是關掉 checking），
+          # 只是讓產物先被清乾淨，硬閘永遠看到合規結果。幂等：已清過的包
+          # （1581 行那段 case）會跳過，不重複插入。
+          [ -f pkg_dir/PKGBUILD ] || { echo "::error::找不到 pkg_dir/PKGBUILD"; exit 1; }
+          if grep -q '零 systemd 鐵律\|通用清除 systemd' pkg_dir/PKGBUILD; then
+            echo "::notice::PKGBUILD 已有 systemd 清理，跳過（幂等）"
+            exit 0
+          fi
+          _pkg_line=$(grep -n '^package()' pkg_dir/PKGBUILD | head -1 | cut -d: -f1)
+          [ -n "$_pkg_line" ] || { echo "::error::找不到 package()"; exit 1; }
+          _close=$(awk -v s="$_pkg_line" 'NR>s && /^}/ {print NR; exit}' pkg_dir/PKGBUILD)
+          [ -n "$_close" ] || { echo "::error::找不到 package() 結束大括號"; exit 1; }
+          sed -i "${_close}i\  # 通用清除 systemd 死檔案（用戶鐵律：Artix/OpenRC 目標不容許）" pkg_dir/PKGBUILD
+          sed -i "${_close}i\  rm -rf \"\$pkgdir/usr/lib/systemd\" \"\$pkgdir/etc/systemd\" \"\$pkgdir/usr/lib/sysusers.d\" \"\$pkgdir/usr/share/sysusers.d\" 2>/dev/null || true" pkg_dir/PKGBUILD
+          grep -q '通用清除 systemd 死檔案' pkg_dir/PKGBUILD \
+            || { echo "::error::通用 systemd 清理沒插進 pkg_dir/PKGBUILD"; exit 1; }
+          echo "::notice::已為 ${{ matrix.repo_name }} 插入通用 systemd 死檔案清理"
 
       - name: 云端编译 `.pkg.tar.zst`
         if: matrix.repo_name != 'ffmpeg-full-git' && steps.plan.outputs.build == 'true'
