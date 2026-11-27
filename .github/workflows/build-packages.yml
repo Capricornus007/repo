@@ -1715,6 +1715,19 @@ jobs:
             || { echo "::error::binutils 的 gprofng LTO 補丁沒注入"; exit 1; }
           echo "binutils: gprofng 已改吃全套 LTO+PGO"
 
+      - name: lrzip-git 補 pod2man 依賴（獨立 step——大 step 已貼著 21000 上限）
+        if: matrix.repo_name == 'lrzip-git'
+        run: |
+          set -euo pipefail
+          # 2026-11-27（shard3 #104 實錘）：CI 最小鏡像無 pod2man（属 perl 包），
+          # lrzip 的 configure 要它生成 man page →
+          # "configure: error: pod2man is needed to generate manual from POD"。
+          # 補 makedepends=perl（提供 /usr/bin/pod2man）。
+          printf "\n%s\n" "makedepends+=('perl')" >> pkg_dir/PKGBUILD
+          grep -q "makedepends+=('perl')" pkg_dir/PKGBUILD \
+            || { echo "::error::lrzip-git 的 perl 依賴沒注入"; exit 1; }
+          echo "lrzip-git: pod2man（perl）依賴已補"
+
       - name: i3lock-color-git 的 fancy×color 合一（獨立 step——大 step 已貼著 21000 表達式上限）
         if: matrix.repo_name == 'i3lock-color-git'
         run: |
