@@ -22,10 +22,16 @@ GCDA_COUNT_FILE="/tmp/pgo-gcda-count-${name}"
 
 run_makepkg() {  # $1 = 額外 makepkg 參數字串（flags）
   local extra="$1"
+  # 2026-11-26（shard4 #120）：export RUSTFLAGS 不會被 su/eval 帶進 makepkg
+  # 子進程，必須顯式注入命令字串。值自己帶引號，避免 eval 雙層拆分。
+  local _rust=""
+  if [ -n "${RUSTFLAGS:-}" ]; then
+    _rust="RUSTFLAGS='${RUSTFLAGS}' "
+  fi
   if [ -n "${PGO_RUNAS:-}" ]; then
-    eval "${PGO_RUNAS} \"${PGO_MP_ENV:-}makepkg ${extra}\""
+    eval "${PGO_RUNAS} \"${PGO_MP_ENV:-}${_rust}makepkg ${extra}\""
   else
-    su builder -c "makepkg ${extra}"
+    su builder -c "${_rust}makepkg ${extra}"
   fi
 }
 run_train() {
@@ -89,17 +95,24 @@ case "$stage" in
     if [ ! -f "$_gcov_a" ]; then
       _gcov_a="$(find /usr/lib/gcc -name libgcov.a -type f 2>/dev/null | grep -v '/32/' | head -1 || true)"
     fi
+    # 2026-11-26（shard4 #120 實錘）：只寫 makepkg.conf 的 RUSTFLAGS+="..." 不夠——
+    # makepkg 預設不把 makepkg.conf 的 shell 變數 export 給構建子進程，rustc 根本
+    # 看不到 link-arg（job 日誌 RUSTFLAGS 0 命中、rustc 指令無 -Clink-arg）。
+    # 改為直接 export 到 pgo-build 的環境（makepkg 及其 cargo/rustc 子進程繼承），
+    # 同時保留 makepkg.conf 寫入作雙保險。
     if [ -f "$_gcov_a" ]; then
       _gcov_dir="$(dirname "$_gcov_a")"
       # 不寫 LDFLAGS：-fprofile-generate 已讓 gcc 自動鏈「正確位元寬」的 libgcov；
       # 手動 -L<64 位元目錄> -lgcov 會被 multilib(-m32) 包繼承 →
       # ld.lld: libgcov.a is incompatible with elf32-i386（mesa-tkg #1044 實錘）。
       # rustc 不讀 LDFLAGS，只靠這條 RUSTFLAGS link-arg 補 __gcov_*。
+      export RUSTFLAGS="${RUSTFLAGS:-} -Clink-arg=-L$_gcov_dir -Clink-arg=-lgcov"
       printf 'RUSTFLAGS+=" -Clink-arg=-L%s -Clink-arg=-lgcov"\n' "$_gcov_dir" >> /etc/makepkg.conf
     else
       # 連 find 都找不到時不帶 -L：gcc driver 的 default search path 仍含
       # libgcov，-Clink-arg=-lgcov 讓 lld 自己解析（總比不注入強）。
       echo '::warning::找不到 libgcov.a 檔案，RUSTFLAGS 改用 -lgcov 由 linker 解析'
+      export RUSTFLAGS="${RUSTFLAGS:-} -Clink-arg=-lgcov"
       printf 'RUSTFLAGS+=" -Clink-arg=-lgcov"\n' >> /etc/makepkg.conf
     fi
     # pass1 只編插樁樹、不出包(--noarchive)；去掉 -f(force 重建由 rm src/pkg 保證)。

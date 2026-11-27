@@ -1471,7 +1471,14 @@ jobs:
               sed -i '/^  for src; do$/a\    [ -e "$src" ] || { echo "$name: $src 不存在（上游已移除此 backend），跳過"; continue; }' pkg_dir/PKGBUILD
               grep -q '不存在（上游已移除此 backend）' pkg_dir/PKGBUILD \
                 || { echo "::error::gvfs 的 _split 檔案存在守衛沒注入"; exit 1; }
-              echo "gvfs: libgdata 已移除、msgraph 已補、_split 缺檔容錯已加" ;;
+              # 2026-11-26（shard4 #120 實錘）：第二個 Google 後端已從 upstream
+              # 移除，$srcdir/google 根本不存在，但 package_gvfs-google-git()
+              # 仍 mv 它 → `mv: cannot stat '/.../src/google'` → 拆包死。
+              # 給這行也加存在守衛（與 _split 同一策略，功能不降）。
+              sed -i 's#^  mv "\$srcdir/google" "\$pkgdir/usr"$#  [ -d "$srcdir/google" ] \&\& mv "$srcdir/google" "$pkgdir/usr" || echo "gvfs-google: $srcdir/google 不存在，上游已移除此 backend，跳過"#' pkg_dir/PKGBUILD
+              grep -q 'gvfs-google: \$srcdir/google 不存在' pkg_dir/PKGBUILD \
+                || { echo "::error::gvfs-google 的 mv 檔案存在守衛沒注入"; exit 1; }
+              echo "gvfs: libgdata 已移除、msgraph 已補、_split 與 google 拆包缺檔容錯已加" ;;
             xdg-desktop-portal-git)
               # 上游 meson.build 要求 wireplumber-0.5（run #86：
               #   Dependency "wireplumber-0.5" not found (tried pkg-config)
