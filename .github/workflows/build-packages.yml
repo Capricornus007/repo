@@ -1600,10 +1600,13 @@ jobs:
               printf "\n%s\n" "makedepends+=('libadwaita')" >> pkg_dir/PKGBUILD
               tail -2 pkg_dir/PKGBUILD ;;
             thunar-git)
-              # 上游新加 libxfce4session-client-1 依賴（meson.build:72，
-              # run #88 實測 not found）。官方 extra 有 libxfce4session，補上。
-              printf "\n%s\n" "makedepends+=('libxfce4session')" >> pkg_dir/PKGBUILD
-              tail -2 pkg_dir/PKGBUILD ;;
+              # 2026-11-27（#121 實錘）：此特例原本硬加 makedepends=libxfce4session，
+              # 但 (1) AUR 上游 PKGBUILD 根本沒列該依賴（實查 aur thunar-git
+              # makedepends 只有 meson/xfce4-dev-tools/xfce4-panel/gtk-doc/gobject-introspection）；
+              # (2) 該 pkgname 在 CI 所有倉庫都解析不到 → `error: target not found:
+              # libxfce4session`，pacman 依賴解析直接死。這是自我傷害，移除注入，
+              # 回到 AUR PKGBUILD 原樣。若 meson 真的缺模組，應由上游套件提供。
+              echo "thunar: 移除錯誤的 libxfce4session 依賴注入（AUR 原樣）" ;;
             lxsession-git)
               # intltoolize 要複製 m4/intltool.m4，但源碼樹沒有 m4/ 目錄
               # （run #88 實測「cp: cannot create regular file 'm4/intltool.m4'」
