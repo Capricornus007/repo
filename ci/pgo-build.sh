@@ -62,9 +62,13 @@ case "$stage" in
       # 用 g++ 連結並帶 -static-libgcc → libiberty.a 的插樁對象需要 __gcov_*
       # 而 static libgcc 不會自動拉 libgcov → undefined reference __gcov_merge_add。
       # 只補 -lgcov（不帶 -fprofile-generate）：conftest 不會產生 .gcda，
-      # 不影響「cannot run C compiled programs」判斷；靜態庫無符號引用時
-      # linker 也會 --gc-sections 丟掉，對純 C 包無害。
-      printf 'LDFLAGS+=" -lgcov"\n' >> /etc/makepkg.conf
+      # 不影響「cannot run C compiled programs」判斷。
+      # 2026-11-27（shard3 #107 gcc 實錘）：gcc 自己的 Makefile 把 $(LDFLAGS)
+      # 放在物件檔**前面**，而 binutils 的 --as-needed 在還沒看到 __gcov_*
+      # 引用時就把 libgcov.a 丟掉 → 後面 libiberty/libcody 的插樁對象全紅。
+      # 本機實測：`gcc -Wl,--as-needed -lgcov foo.o` 必 undefined；
+      # 加 --whole-archive 後順序無關（libgcov.a 很小，整包拉進來無害）。
+      printf 'LDFLAGS+=" -Wl,--whole-archive -lgcov -Wl,--no-whole-archive"\n' >> /etc/makepkg.conf
     else
       printf '\n# PGO pass1 (六最)\nCFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nCXXFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nLDFLAGS+=" -fprofile-generate=%s -fprofile-update=atomic"\nOPTIONS=(!strip docs !libtool staticlibs emptydirs zipman purge !debug lto)\n' \
         "$pd" "$pd" "$pd" >> /etc/makepkg.conf
