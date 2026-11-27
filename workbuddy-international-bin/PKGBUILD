@@ -12,9 +12,10 @@ pkgver=${_pkgver}_${_build}
 # entirely (zero references left in app.asar / cli tree), so the check list
 # loses that line and gains the @lydell node-pty Linux prebuild that 5.9.x
 # actually ships; pkgrel 2 was the workbuddyStorage at-rest shim (Fix 7).
+# pkgrel 2: Fix 8 — 防止 Linux 切回 WorkBuddy 時白屏耀眼（原生底色 #ffffff → #1e1e1e）
 # pkgrel 1: upstream 5.11.4.44121853-0026dff0 (workbuddy-update.yml auto-bump)
 # pkgrel 1: upstream 5.11.7.44923190-525fde10 (workbuddy-update.yml auto-bump)
-pkgrel=1
+pkgrel=2
 pkgdesc="AI Agent for everyday office work (international edition, unofficial Linux port)"
 arch=('x86_64')
 url="https://www.workbuddy.ai"

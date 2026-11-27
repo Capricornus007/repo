@@ -653,8 +653,35 @@ if (source.includes(marker)) {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // Fix 8 (Linux): 防止切換回 WorkBuddy 時「白屏耀眼」。
+    //
+    // 根本原因：main/index.js 建立主視窗時用原生背景色
+    //   backgroundColor: shouldUseDarkColors ? "#1e1e1e" : "#ffffff"
+    // 在主題判定為亮色（或判定不穩）時底色是純白 #ffffff。從別的視窗切回
+    // 焦點時，Chromium renderer 還沒把內容畫上去前，先畫那一幀原生白底，
+    // 就是使用者看到的「白屏一下耀我眼」。上游自己在註解裡承認 Windows
+    // 有同樣的「深色主題白色邊框閃現」(#58621)，但 Linux 這條沒修。
+    //
+    // 在 Linux port 上，把這個三元式裡的白底一律改成深灰 (#1e1e1e)，
+    // 讓那一瞬間的原生底色永遠是深色。這只改 Electron 原生底色（視窗還沒
+    // 被 renderer 覆蓋前的那一幀），不影響 app 功能、不影響各視窗的內容、
+    // 不影響 i18n；亮色主題使用者切回時會看到深灰而非純白，正好不刺眼。
+    // pattern 在 5 處出現（Mac traffic light、主視窗建立、主題切換、Win32
+    // setBackgroundColor×2）；在 Linux port 上 Mac/Win32 分支本就不執行，
+    // 統一改掉無副作用，也順手避免其它平台移植時踩到同一個白閃。
+    // -----------------------------------------------------------------------
+    const whiteBgPattern = '? "#1e1e1e" : "#ffffff"';
+    const whiteBgCount = source.split(whiteBgPattern).length - 1;
+    if (whiteBgCount > 0) {
+        source = source.split(whiteBgPattern).join('? "#1e1e1e" : "#1e1e1e"');
+        log('patched ' + whiteBgCount + ' native window background(s): #ffffff -> #1e1e1e (anti white-flash on Linux)');
+    } else {
+        log('no white native background pattern found; anti-white-flash patch is a no-op (upstream may have fixed it)');
+    }
+
     fs.writeFileSync(indexPath, source);
-    log('patched main/index.js (env shim + tray context menu + tray icon path + disabled updater)');
+    log('patched main/index.js (env shim + tray context menu + tray icon path + disabled updater + anti-white-flash)');
 }
 
 // ---------------------------------------------------------------------------
